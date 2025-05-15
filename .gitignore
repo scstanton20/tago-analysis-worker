@@ -1,0 +1,19 @@
+# Dependencies
+node_modules*
+
+# Misc
+.DS_Store
+.env*
+npm-debug.log*
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+
+# Project specific
+backend/analyses*
+backend/config*
+backend/dist*
+backend/tsconfig*
+backend/development-storage*
+frontend/dist*
