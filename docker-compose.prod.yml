@@ -2,7 +2,7 @@
 ---
 services:
   frontend:
-    image: ghcr.io/scstanton20/tago-runner/frontend:latest
+    image: ghcr.io/scstanton20/tago-analysis-runner/frontend:latest
     container_name: tago-runner-frontend
     networks:
       - traefik-public
@@ -24,7 +24,7 @@ services:
       traefik.docker.network: "traefik-public"
 
   backend:
-    image: ghcr.io/scstanton20/tago-runner/backend:latest
+    image: ghcr.io/scstanton20/tago-analysis-runner/backend:latest
     container_name: tago-runner-backend
     restart: unless-stopped
     volumes:
