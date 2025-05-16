@@ -11,7 +11,7 @@ class AnalysisService {
     this.connectionMonitors = new Map();
   }
   validateTimeRange(timeRange) {
-    const validRanges = ["24h", "7d", "30d", "all"];
+    const validRanges = ["1h", "24h", "7d", "30d", "all"];
     return validRanges.includes(timeRange);
   }
 
@@ -63,7 +63,7 @@ class AnalysisService {
     const filePath = path.join(basePath, "index.js");
 
     await file.mv(filePath);
-    const analysis = new AnalysisProcess(analysisName, type);
+    const analysis = new AnalysisProcess(analysisName, type, this);
     this.analyses.set(analysisName, analysis);
     await this.initializeConnectionMonitor(analysisName, type);
 
@@ -583,6 +583,9 @@ class AnalysisService {
       // Filter logs based on timestamp
       const cutoffDate = new Date();
       switch (timeRange) {
+        case "1h":
+          cutoffDate.setHours(cutoffDate.getHours() - 1);
+          break;
         case "24h":
           cutoffDate.setHours(cutoffDate.getHours() - 24);
           break;

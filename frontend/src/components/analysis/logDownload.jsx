@@ -5,7 +5,7 @@ import * as Select from "@radix-ui/react-select";
 import { Check, ChevronDown, Download, X } from "lucide-react";
 
 const LogDownloadDialog = ({ isOpen, onClose, onDownload }) => {
-  const [timeRange, setTimeRange] = useState("24h");
+  const [timeRange, setTimeRange] = useState("1h");
   const [isLoading, setIsLoading] = useState(false);
 
   const handleDownload = async () => {
@@ -54,6 +54,7 @@ const LogDownloadDialog = ({ isOpen, onClose, onDownload }) => {
                   <Select.Viewport className="p-1">
                     <Select.Group>
                       {[
+                        { value: "1h", label: "Last Hour" },
                         { value: "24h", label: "Last 24 Hours" },
                         { value: "7d", label: "Last 7 Days" },
                         { value: "30d", label: "Last 30 Days" },

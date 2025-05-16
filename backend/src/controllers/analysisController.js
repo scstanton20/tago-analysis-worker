@@ -283,7 +283,7 @@ const analysisController = {
       // Validate time range
       if (!analysisService.validateTimeRange(timeRange)) {
         return res.status(400).json({
-          error: "Invalid time range. Must be one of: 24h, 7d, 30d, all",
+          error: "Invalid time range. Must be one of: 1h, 24h, 7d, 30d, all",
         });
       }
 
