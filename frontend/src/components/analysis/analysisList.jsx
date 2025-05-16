@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useWebSocket } from "../../contexts/websocketContext";
 import AnalysisItem from "./analysisItem";
+import { Loader2 } from "lucide-react";
 
 export default function AnalysisList() {
   const { analyses = [], connectionStatus } = useWebSocket();
@@ -30,7 +31,10 @@ export default function AnalysisList() {
     return (
       <div className="bg-white p-6 rounded-lg shadow-md">
         <h2 className="text-xl font-semibold mb-4">Available Analyses</h2>
-        <div className="text-center text-gray-500">Connecting to server...</div>
+        <div className="flex items-center justify-center gap-2 text-gray-500">
+          <span>Connecting to server...</span>
+          <Loader2 className="w-5 h-5 animate-spin" />
+        </div>
       </div>
     );
   }

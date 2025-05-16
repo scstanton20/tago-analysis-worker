@@ -1,7 +1,12 @@
 // controllers/statusController.js
 class StatusController {
-  constructor(analysisService) {
+  constructor(analysisService, containerState) {
     this.analysisService = analysisService;
+    this.containerState = containerState || {
+      status: "ready",
+      startTime: new Date(),
+      message: "Container is ready",
+    };
     this.getSystemStatus = this.getSystemStatus.bind(this);
   }
 
@@ -16,7 +21,13 @@ class StatusController {
 
       const status = {
         health: {
-          status: "healthy",
+          status:
+            this.containerState.status === "ready" ? "healthy" : "initializing",
+          containerState: this.containerState.status,
+          message: this.containerState.message,
+          uptime: Math.floor(
+            (new Date() - this.containerState.startTime) / 1000,
+          ), // in seconds
         },
         tagoConnection: {
           sdkVersion: tagoVersion,
@@ -42,18 +53,17 @@ class StatusController {
         }
       }
 
-      res.json(status);
+      // Return appropriate HTTP status code based on container state
+      const httpStatus =
+        this.containerState.status === "ready"
+          ? 200
+          : this.containerState.status === "error"
+            ? 500
+            : 203; // 203 = Non-Authoritative Information
+
+      res.status(httpStatus).json(status);
     } catch (error) {
-      console.error("Status check error:", error);
-      res.status(500).json({
-        health: { status: "unhealthy" },
-        tagoConnection: {
-          sdkVersion: "unknown",
-          status: "unknown",
-          runningAnalyses: 0,
-        },
-        message: error.message,
-      });
+      throw error;
     }
   }
 }

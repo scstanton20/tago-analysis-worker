@@ -10,6 +10,7 @@ export function WebSocketProvider({ children }) {
   const lastMessageRef = useRef({ type: null, timestamp: 0 });
   const reconnectAttemptsRef = useRef(0);
   const maxReconnectDelay = 5000; // Maximum reconnection delay of 5 seconds
+  const connectingRef = useRef(false); // New ref to track connection attempts
 
   const getWebSocketUrl = () => {
     // Use the environment variable in development, fallback to window.location in production
@@ -134,39 +135,76 @@ export function WebSocketProvider({ children }) {
         clearTimeout(reconnectTimeout);
       }
 
-      ws = new WebSocket(getWebSocketUrl());
+      // Set status to connecting
+      setConnectionStatus("connecting");
+      connectingRef.current = true;
 
-      ws.onopen = () => {
-        console.log("WebSocket connected");
-        setConnectionStatus("connected");
-        setSocket(ws);
-        reconnectAttemptsRef.current = 0; // Reset reconnect attempts on successful connection
-      };
+      try {
+        ws = new WebSocket(getWebSocketUrl());
 
-      ws.onmessage = handleMessage;
+        // Set a connection timeout - if we don't connect within 5 seconds, consider it a failure
+        const connectionTimeout = setTimeout(() => {
+          if (connectingRef.current && ws.readyState !== WebSocket.OPEN) {
+            console.log("WebSocket connection timeout");
+            // Don't update the status here - let the onclose handler do it
+            ws.close();
+          }
+        }, 5000);
 
-      ws.onclose = (event) => {
-        console.log("WebSocket disconnected", event.code, event.reason);
-        setConnectionStatus("disconnected");
-        setSocket(null);
+        ws.onopen = () => {
+          clearTimeout(connectionTimeout);
+          connectingRef.current = false;
+          console.log("WebSocket connected");
+          setConnectionStatus("connected");
+          setSocket(ws);
+          reconnectAttemptsRef.current = 0; // Reset reconnect attempts on successful connection
+        };
 
-        // Calculate reconnection delay with exponential backoff
+        ws.onmessage = handleMessage;
+
+        ws.onclose = (event) => {
+          clearTimeout(connectionTimeout);
+          console.log("WebSocket disconnected", event.code, event.reason);
+
+          // Only change to disconnected if we were previously connected
+          // If we're still in the connecting phase, keep it as connecting
+          if (!connectingRef.current) {
+            setConnectionStatus("disconnected");
+          }
+
+          setSocket(null);
+
+          // Calculate reconnection delay with exponential backoff
+          const delay = Math.min(
+            100 * Math.pow(2, reconnectAttemptsRef.current),
+            maxReconnectDelay,
+          );
+          reconnectAttemptsRef.current++;
+
+          console.log(
+            `Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current})`,
+          );
+          reconnectTimeout = setTimeout(connect, delay);
+        };
+
+        ws.onerror = (error) => {
+          console.error("WebSocket error:", error);
+          // We keep the connecting status until onclose is called
+          // Let onclose handle reconnection
+        };
+      } catch (error) {
+        console.error("Error creating WebSocket connection:", error);
+        connectingRef.current = false;
+        setConnectionStatus("connecting"); // Stay in connecting state
+
+        // Try to reconnect
         const delay = Math.min(
           100 * Math.pow(2, reconnectAttemptsRef.current),
           maxReconnectDelay,
         );
         reconnectAttemptsRef.current++;
-
-        console.log(
-          `Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current})`,
-        );
         reconnectTimeout = setTimeout(connect, delay);
-      };
-
-      ws.onerror = (error) => {
-        console.error("WebSocket error:", error);
-        // Let onclose handle reconnection
-      };
+      }
     };
 
     connect();
@@ -185,6 +223,10 @@ export function WebSocketProvider({ children }) {
   const reconnect = useCallback(() => {
     if (socket?.readyState === WebSocket.OPEN) {
       socket.close();
+    } else {
+      // If we're not connected, force a reconnection attempt
+      setConnectionStatus("connecting");
+      reconnectAttemptsRef.current = 0; // Reset the attempts counter for a fresh start
     }
   }, [socket]);
 
