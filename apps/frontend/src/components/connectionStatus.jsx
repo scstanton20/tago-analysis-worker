@@ -115,7 +115,7 @@ const ConnectionStatus = () => {
     if (connectionStatus !== "connecting") return null;
 
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 backdrop-blur-xs z-50 flex items-center justify-center">
         <div className="bg-white p-6 rounded-lg shadow-lg flex flex-col items-center">
           <Loader2 className="animate-spin h-10 w-10 text-blue-500 mb-4" />
           <p className="text-lg font-medium">Connecting to server...</p>

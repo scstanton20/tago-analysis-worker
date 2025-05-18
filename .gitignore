@@ -11,9 +11,9 @@ npm-debug.log*
 !.vscode/extensions.json
 
 # Project specific
-backend/analyses*
-backend/config*
-backend/dist*
-backend/tsconfig*
-backend/development-storage*
-frontend/dist*
+apps/server/analyses*
+apps/server/config*
+apps/server/dist*
+apps/server/tsconfig*
+apps/server/development-storage*
+apps/frontend/dist*

@@ -2,20 +2,14 @@
   "name": "@scstanton20/tago-runner-monorepo",
   "private": true,
   "version": "1.0.0",
-  "workspaces": [
-    "frontend",
-    "backend"
-  ],
   "scripts": {
-    "dev": "npm run dev:frontend & npm run dev:backend",
-    "dev:frontend": "cd frontend && npm run dev",
-    "dev:backend": "cd backend && npm run dev",
+    "dev": "pnpm run dev:frontend & pnpm run dev:server",
+    "dev:frontend": "pnpm --filter \"frontend\" run dev",
+    "dev:server": "pnpm --filter \"server\" run dev",
     "prettify": "npx prettier . --write"
-  },
-  "dependencies": {
-    "npm": "^10.9.2"
   },
   "devDependencies": {
     "prettier": "3.5.3"
-  }
+  },
+  "packageManager": "pnpm@10.11.0"
 }

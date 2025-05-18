@@ -1,7 +1,7 @@
 {
-  "name": "backend",
+  "name": "server",
   "private": true,
-  "version": "1.0.0",
+  "version": "0.0.0",
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon --config nodemon.json src/server.js",

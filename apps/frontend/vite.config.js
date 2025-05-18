@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
+import react from "@vitejs/plugin-react-swc";
 import fs from "fs";
+import tailwindcss from '@tailwindcss/vite'
 
 // Docker detection
 const isDocker = (() => {
@@ -12,11 +13,11 @@ const isDocker = (() => {
 })();
 
 // Base URL for backend
-const backendUrl = isDocker ? "http://backend:3000" : "http://localhost:3000";
-const wsBackendUrl = isDocker ? "ws://backend:3000" : "ws://localhost:3000";
+const backendUrl = isDocker ? "http://server:3000" : "http://localhost:3000";
+const wsBackendUrl = isDocker ? "ws://server:3000" : "ws://localhost:3000";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   server: {
     host: true,
     port: 5173,
