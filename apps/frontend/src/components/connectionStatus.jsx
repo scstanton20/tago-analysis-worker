@@ -1,7 +1,7 @@
-import { useState, useEffect, useContext, useRef } from "react";
-import { WebSocketContext } from "../contexts/websocketContext";
-import { ChevronDown, ChevronUp, Loader2 } from "lucide-react";
-import { statusService } from "../services/statusServices";
+import { useState, useEffect, useContext, useRef } from 'react';
+import { WebSocketContext } from '../contexts/websocketContext';
+import { ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import { statusService } from '../services/statusServices';
 
 const ConnectionStatus = () => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -10,43 +10,43 @@ const ConnectionStatus = () => {
   const containerRef = useRef(null);
 
   const getOverallStatusColor = () => {
-    if (!backendStatus) return "bg-red-500";
+    if (!backendStatus) return 'bg-red-500';
 
     // Count disconnected services
     let disconnectedCount = 0;
 
     // Check backend
-    if (backendStatus.health.status !== "healthy") disconnectedCount++;
+    if (backendStatus.health.status !== 'healthy') disconnectedCount++;
     // Check WebSocket
-    if (connectionStatus !== "connected") disconnectedCount++;
+    if (connectionStatus !== 'connected') disconnectedCount++;
     // Tago is considered disconnected if no analyses are running
     if (
       backendStatus.tagoConnection?.runningAnalyses === 0 ||
-      backendStatus.tagoConnection?.status !== "connected"
+      backendStatus.tagoConnection?.status !== 'connected'
     ) {
       disconnectedCount++;
     }
 
     // If all services are down, show red
-    if (disconnectedCount === 3) return "bg-red-500";
+    if (disconnectedCount === 3) return 'bg-red-500';
     // If any service is down or no analyses running, show yellow
-    if (disconnectedCount > 0) return "bg-yellow-500";
+    if (disconnectedCount > 0) return 'bg-yellow-500';
     // All services are up
-    return "bg-green-500";
+    return 'bg-green-500';
   };
 
   const getStatusText = () => {
-    if (!backendStatus) return "Loading...";
-    if (connectionStatus !== "connected") return "Disconnected from Server";
-    if (backendStatus.health.status !== "healthy")
-      return "Partially Disconnected";
+    if (!backendStatus) return 'Loading...';
+    if (connectionStatus !== 'connected') return 'Disconnected from Server';
+    if (backendStatus.health.status !== 'healthy')
+      return 'Partially Disconnected';
     if (backendStatus.tagoConnection?.runningAnalyses === 0) {
-      return "No Running Analyses";
+      return 'No Running Analyses';
     }
-    if (backendStatus.tagoConnection?.status !== "connected") {
-      return "Tago Connection Lost";
+    if (backendStatus.tagoConnection?.status !== 'connected') {
+      return 'Tago Connection Lost';
     }
-    return "Connected";
+    return 'Connected';
   };
 
   const fetchBackendStatus = async () => {
@@ -71,35 +71,35 @@ const ConnectionStatus = () => {
     };
 
     const handleEscape = (event) => {
-      if (event.key === "Escape") {
+      if (event.key === 'Escape') {
         setIsExpanded(false);
       }
     };
 
     if (isExpanded) {
-      document.addEventListener("mousedown", handleClickOutside);
-      document.addEventListener("keydown", handleEscape);
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleEscape);
     }
 
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
     };
   }, [isExpanded]);
 
   if (!backendStatus) return null;
 
   const isDisconnected =
-    connectionStatus !== "connected" ||
-    backendStatus.health.status !== "healthy" ||
+    connectionStatus !== 'connected' ||
+    backendStatus.health.status !== 'healthy' ||
     backendStatus.tagoConnection?.runningAnalyses === 0 ||
-    backendStatus.tagoConnection?.status !== "connected";
+    backendStatus.tagoConnection?.status !== 'connected';
 
   const getTagoStatusDisplay = () => {
     if (backendStatus.tagoConnection?.runningAnalyses === 0) {
       return {
-        status: "disconnected",
-        message: "One Running Analysis Required",
+        status: 'disconnected',
+        message: 'One Running Analysis Required',
       };
     }
     return {
@@ -112,7 +112,7 @@ const ConnectionStatus = () => {
 
   // Loading overlay that appears when connection status is "connecting"
   const ConnectionLoadingOverlay = () => {
-    if (connectionStatus !== "connecting") return null;
+    if (connectionStatus !== 'connecting') return null;
 
     return (
       <div className="fixed inset-0 backdrop-blur-xs z-50 flex items-center justify-center">
@@ -160,13 +160,13 @@ const ConnectionStatus = () => {
                   <div className="flex items-center">
                     <div
                       className={`w-2 h-2 rounded-full mr-2 ${
-                        backendStatus?.health?.status === "healthy"
-                          ? "bg-green-500"
-                          : "bg-red-500"
+                        backendStatus?.health?.status === 'healthy'
+                          ? 'bg-green-500'
+                          : 'bg-red-500'
                       }`}
                     />
                     <span className="text-sm capitalize">
-                      {backendStatus?.health?.status || "unknown"}
+                      {backendStatus?.health?.status || 'unknown'}
                     </span>
                   </div>
                 </div>
@@ -176,9 +176,9 @@ const ConnectionStatus = () => {
                   <div className="flex items-center">
                     <div
                       className={`w-2 h-2 rounded-full mr-2 ${
-                        connectionStatus === "connected"
-                          ? "bg-green-500"
-                          : "bg-red-500"
+                        connectionStatus === 'connected'
+                          ? 'bg-green-500'
+                          : 'bg-red-500'
                       }`}
                     />
                     <span className="text-sm capitalize">
@@ -192,9 +192,9 @@ const ConnectionStatus = () => {
                   <div className="flex items-center">
                     <div
                       className={`w-2 h-2 rounded-full mr-2 ${
-                        tagoStatus.status === "connected"
-                          ? "bg-green-500"
-                          : "bg-red-500"
+                        tagoStatus.status === 'connected'
+                          ? 'bg-green-500'
+                          : 'bg-red-500'
                       }`}
                     />
                     <span className="text-sm capitalize">

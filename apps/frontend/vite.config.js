@@ -1,20 +1,20 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react-swc";
-import fs from "fs";
-import tailwindcss from '@tailwindcss/vite'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react-swc';
+import fs from 'fs';
+import tailwindcss from '@tailwindcss/vite';
 
 // Docker detection
 const isDocker = (() => {
   try {
-    return fs.existsSync("/.dockerenv");
+    return fs.existsSync('/.dockerenv');
   } catch {
     return false;
   }
 })();
 
 // Base URL for backend
-const backendUrl = isDocker ? "http://server:3000" : "http://localhost:3000";
-const wsBackendUrl = isDocker ? "ws://server:3000" : "ws://localhost:3000";
+const backendUrl = isDocker ? 'http://backend:3000' : 'http://localhost:3000';
+const wsBackendUrl = isDocker ? 'ws://backend:3000' : 'ws://localhost:3000';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -22,16 +22,16 @@ export default defineConfig({
     host: true,
     port: 5173,
     proxy: {
-      "/status": {
+      '/status': {
         target: backendUrl,
         changeOrigin: true,
       },
-      "/api": {
+      '/api': {
         target: backendUrl,
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ""),
+        rewrite: (path) => path.replace(/^\/api/, ''),
       },
-      "/ws": {
+      '/ws': {
         target: wsBackendUrl,
         ws: true,
       },

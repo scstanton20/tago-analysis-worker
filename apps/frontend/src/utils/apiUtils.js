@@ -3,16 +3,16 @@ const getBaseUrl = () => {
   if (import.meta.env.DEV && import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL; // Use Docker URL in Docker dev
   }
-  return "/api"; // Use /api prefix for local dev and production
+  return '/api'; // Use /api prefix for local dev and production
 };
 
 export async function fetchWithHeaders(url, options = {}) {
   const defaultHeaders = {
-    Accept: "application/json",
+    Accept: 'application/json',
   };
 
   if (options.body && !(options.body instanceof FormData)) {
-    defaultHeaders["Content-Type"] = "application/json";
+    defaultHeaders['Content-Type'] = 'application/json';
   }
 
   const baseUrl = getBaseUrl();

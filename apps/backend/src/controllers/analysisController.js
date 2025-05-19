@@ -1,29 +1,29 @@
 // backend/src/controllers/analysisController.js
-const { analysisService } = require("../services/analysisService");
-const { broadcastUpdate } = require("../utils/websocket");
-const path = require("path");
-const config = require("../config/default");
-const fs = require("fs").promises;
+const { analysisService } = require('../services/analysisService');
+const { broadcastUpdate } = require('../utils/websocket');
+const path = require('path');
+const config = require('../config/default');
+const fs = require('fs').promises;
 
 const analysisController = {
   async uploadAnalysis(req, res) {
     try {
       if (!req.files || !req.files.analysis) {
-        return res.status(400).json({ error: "No file uploaded" });
+        return res.status(400).json({ error: 'No file uploaded' });
       }
 
       const analysis = req.files.analysis;
-      const type = req.body.type || "listener";
+      const type = req.body.type || 'listener';
 
       const result = await analysisService.uploadAnalysis(analysis, type);
 
       // Broadcast the complete analysis object
-      broadcastUpdate("analysisCreated", {
+      broadcastUpdate('analysisCreated', {
         fileName: result.analysisName,
         analysis: {
           name: result.analysisName,
           type: type,
-          status: "stopped",
+          status: 'stopped',
           enabled: false,
           logs: [],
         },
@@ -31,7 +31,7 @@ const analysisController = {
 
       res.json(result);
     } catch (error) {
-      console.error("Upload error:", error);
+      console.error('Upload error:', error);
       res.status(500).json({ error: error.message });
     }
   },
@@ -41,7 +41,7 @@ const analysisController = {
       const analyses = await analysisService.getRunningAnalyses();
       res.json(analyses);
     } catch (error) {
-      console.error("List analyses error:", error);
+      console.error('List analyses error:', error);
       res.status(500).json({ error: error.message });
     }
   },
@@ -54,16 +54,16 @@ const analysisController = {
       const result = await analysisService.runAnalysis(fileName, type);
 
       // Broadcast status change
-      broadcastUpdate("status", {
+      broadcastUpdate('status', {
         fileName,
-        status: "running",
+        status: 'running',
         enabled: true,
         type,
       });
 
       res.json(result);
     } catch (error) {
-      console.error("Run analysis error:", error);
+      console.error('Run analysis error:', error);
       res.status(500).json({
         success: false,
         error: error.message,
@@ -77,15 +77,15 @@ const analysisController = {
       const result = await analysisService.stopAnalysis(fileName);
 
       // Broadcast status change
-      broadcastUpdate("status", {
+      broadcastUpdate('status', {
         fileName,
-        status: "stopped",
+        status: 'stopped',
         enabled: false,
       });
 
       res.json(result);
     } catch (error) {
-      console.error("Stop analysis error:", error);
+      console.error('Stop analysis error:', error);
       res.status(500).json({
         success: false,
         error: error.message,
@@ -99,11 +99,11 @@ const analysisController = {
       await analysisService.deleteAnalysis(fileName);
 
       // Broadcast deletion
-      broadcastUpdate("analysisDeleted", { fileName });
+      broadcastUpdate('analysisDeleted', { fileName });
 
       res.json({ success: true });
     } catch (error) {
-      console.error("Delete analysis error:", error);
+      console.error('Delete analysis error:', error);
       res.status(500).json({ error: error.message });
     }
   },
@@ -111,15 +111,15 @@ const analysisController = {
   async getAnalysisContent(req, res) {
     try {
       const { fileName } = req.params;
-      console.log("Getting content for analysis:", fileName);
+      console.log('Getting content for analysis:', fileName);
 
       try {
         const content = await analysisService.getAnalysisContent(fileName);
-        res.set("Content-Type", "text/plain");
+        res.set('Content-Type', 'text/plain');
         res.send(content);
       } catch (error) {
-        console.error("Error getting analysis content:", error);
-        if (error.code === "ENOENT") {
+        console.error('Error getting analysis content:', error);
+        if (error.code === 'ENOENT') {
           return res.status(404).json({
             error: `Analysis file ${fileName} not found`,
           });
@@ -127,7 +127,7 @@ const analysisController = {
         throw error;
       }
     } catch (error) {
-      console.error("Controller error:", error);
+      console.error('Controller error:', error);
       res.status(500).json({
         error: error.message,
       });
@@ -140,35 +140,35 @@ const analysisController = {
       const { content } = req.body;
 
       if (!content) {
-        console.warn("No content provided in request body");
+        console.warn('No content provided in request body');
         return res.status(400).json({
-          error: "Content is required",
+          error: 'Content is required',
         });
       }
 
-      if (typeof content !== "string") {
-        console.warn("Invalid content type:", typeof content);
+      if (typeof content !== 'string') {
+        console.warn('Invalid content type:', typeof content);
         return res.status(400).json({
-          error: "Content must be a string",
+          error: 'Content must be a string',
         });
       }
 
       const result = await analysisService.updateAnalysis(fileName, content);
 
       // Broadcast update with restart status
-      broadcastUpdate("analysisUpdated", {
+      broadcastUpdate('analysisUpdated', {
         fileName,
-        status: "updated",
+        status: 'updated',
         restarted: result.restarted,
       });
 
       res.json({
         success: true,
-        message: "Analysis updated successfully",
+        message: 'Analysis updated successfully',
         restarted: result.restarted,
       });
     } catch (error) {
-      console.error("Controller error:", error);
+      console.error('Controller error:', error);
       res.status(500).json({
         error: error.message,
       });
@@ -181,16 +181,16 @@ const analysisController = {
       const { newFileName } = req.body;
 
       if (!newFileName) {
-        console.warn("No new filename provided in request body");
+        console.warn('No new filename provided in request body');
         return res.status(400).json({
-          error: "newFileName is required",
+          error: 'newFileName is required',
         });
       }
 
-      if (typeof newFileName !== "string") {
-        console.warn("Invalid content type:", typeof newFileName);
+      if (typeof newFileName !== 'string') {
+        console.warn('Invalid content type:', typeof newFileName);
         return res.status(400).json({
-          error: "newFIleName must be a string",
+          error: 'newFIleName must be a string',
         });
       }
 
@@ -200,20 +200,20 @@ const analysisController = {
       );
 
       // Broadcast update with restart status
-      broadcastUpdate("analysisRenamed", {
+      broadcastUpdate('analysisRenamed', {
         oldFileName: fileName,
         newFileName: newFileName,
-        status: "updated",
+        status: 'updated',
         restarted: result.restarted,
       });
 
       res.json({
         success: true,
-        message: "Analysis updated successfully",
+        message: 'Analysis updated successfully',
         restarted: result.restarted,
       });
     } catch (error) {
-      console.error("Controller error:", error);
+      console.error('Controller error:', error);
       res.status(500).json({
         error: error.message,
       });
@@ -227,22 +227,22 @@ const analysisController = {
       const logFile = path.join(
         config.paths.analysis,
         fileName,
-        "logs",
-        "analysis.log",
+        'logs',
+        'analysis.log',
       );
 
       try {
-        const content = await fs.readFile(logFile, "utf8");
+        const content = await fs.readFile(logFile, 'utf8');
         const allLogs = content
           .trim()
-          .split("\n")
+          .split('\n')
           .map((line) => {
             const match = line.match(/\[(.*?)\] (.*)/);
             return match
               ? {
-                  timestamp: match[1],
-                  message: match[2],
-                }
+                timestamp: match[1],
+                message: match[2],
+              }
               : null;
           })
           .filter(Boolean)
@@ -255,14 +255,14 @@ const analysisController = {
 
         res.json(paginatedLogs);
       } catch (error) {
-        if (error.code === "ENOENT") {
+        if (error.code === 'ENOENT') {
           res.json([]);
         } else {
           throw error;
         }
       }
     } catch (error) {
-      console.error("Get logs error:", error);
+      console.error('Get logs error:', error);
       res.status(500).json({ error: error.message });
     }
   },
@@ -273,17 +273,17 @@ const analysisController = {
       const { timeRange } = req.query;
 
       if (!fileName) {
-        return res.status(400).json({ error: "fileName is required" });
+        return res.status(400).json({ error: 'fileName is required' });
       }
 
       if (!timeRange) {
-        return res.status(400).json({ error: "timeRange is required" });
+        return res.status(400).json({ error: 'timeRange is required' });
       }
 
       // Validate time range
       if (!analysisService.validateTimeRange(timeRange)) {
         return res.status(400).json({
-          error: "Invalid time range. Must be one of: 1h, 24h, 7d, 30d, all",
+          error: 'Invalid time range. Must be one of: 1h, 24h, 7d, 30d, all',
         });
       }
 
@@ -297,18 +297,18 @@ const analysisController = {
       const analysisLogsDir = path.join(
         config.paths.analysis,
         fileName,
-        "logs",
+        'logs',
       );
       await fs.mkdir(analysisLogsDir, { recursive: true });
 
-      if (timeRange === "all") {
+      if (timeRange === 'all') {
         // Directly download the full log file
         return res.download(
           logFile,
           `${path.parse(fileName).name}.log`,
           (err) => {
             if (err && !res.headersSent) {
-              return res.status(500).json({ error: "Failed to download file" });
+              return res.status(500).json({ error: 'Failed to download file' });
             }
           },
         );
@@ -328,19 +328,19 @@ const analysisController = {
           fs.unlink(tempLogFile).catch(console.error); // Clean up temp file
 
           if (err && !res.headersSent) {
-            return res.status(500).json({ error: "Failed to download file" });
+            return res.status(500).json({ error: 'Failed to download file' });
           }
         });
       } catch (writeError) {
-        console.error("Error writing temporary file:", writeError);
+        console.error('Error writing temporary file:', writeError);
         return res
           .status(500)
-          .json({ error: "Failed to generate download file" });
+          .json({ error: 'Failed to generate download file' });
       }
     } catch (error) {
-      console.error("Download logs error:", error);
+      console.error('Download logs error:', error);
 
-      if (error.message.includes("Log file not found")) {
+      if (error.message.includes('Log file not found')) {
         return res.status(404).json({ error: error.message });
       }
 
@@ -352,20 +352,20 @@ const analysisController = {
       const { fileName } = req.params;
 
       if (!fileName) {
-        return res.status(400).json({ error: "fileName is required" });
+        return res.status(400).json({ error: 'fileName is required' });
       }
 
       const result = await analysisService.clearLogs(fileName);
 
       // Broadcast to all clients that logs were cleared
-      broadcastUpdate("clearLogs", {
+      broadcastUpdate('clearLogs', {
         fileName,
-        status: "cleared",
+        status: 'cleared',
       });
 
       res.json(result);
     } catch (error) {
-      console.error("Clear logs error:", error);
+      console.error('Clear logs error:', error);
       res.status(500).json({ error: error.message });
     }
   },
@@ -374,14 +374,14 @@ const analysisController = {
       const { fileName } = req.params;
 
       if (!fileName) {
-        return res.status(400).json({ error: "fileName is required" });
+        return res.status(400).json({ error: 'fileName is required' });
       }
 
       // Define the path to the analysis file
       const analysisPath = path.join(
         config.paths.analysis,
         fileName,
-        "index.js",
+        'index.js',
       );
 
       try {
@@ -389,26 +389,26 @@ const analysisController = {
         await fs.access(analysisPath);
 
         // Set headers for file download
-        res.setHeader("Content-Type", "application/javascript");
+        res.setHeader('Content-Type', 'application/javascript');
         res.setHeader(
-          "Content-Disposition",
+          'Content-Disposition',
           `attachment; filename=${fileName}.js`,
         );
 
         // Stream the file to response
         res.download(analysisPath, `${fileName}.js`, (err) => {
           if (err && !res.headersSent) {
-            return res.status(500).json({ error: "Failed to download file" });
+            return res.status(500).json({ error: 'Failed to download file' });
           }
         });
       } catch (error) {
-        if (error.code === "ENOENT") {
-          return res.status(404).json({ error: "Analysis file not found" });
+        if (error.code === 'ENOENT') {
+          return res.status(404).json({ error: 'Analysis file not found' });
         }
         throw error;
       }
     } catch (error) {
-      console.error("Download analysis error:", error);
+      console.error('Download analysis error:', error);
       res.status(500).json({ error: error.message });
     }
   },
@@ -419,28 +419,28 @@ const environmentController = {
       const { fileName } = req.params;
       const { env } = req.body;
 
-      if (!env || typeof env !== "object") {
+      if (!env || typeof env !== 'object') {
         return res.status(400).json({
-          error: "Environment variables must be provided as an object",
+          error: 'Environment variables must be provided as an object',
         });
       }
 
       const result = await analysisService.updateEnvironment(fileName, env);
 
       // Broadcast update with restart status
-      broadcastUpdate("environmentUpdated", {
+      broadcastUpdate('environmentUpdated', {
         fileName,
-        status: "updated",
+        status: 'updated',
         restarted: result.restarted,
       });
 
       res.json({
         success: true,
-        message: "Environment updated successfully",
+        message: 'Environment updated successfully',
         restarted: result.restarted,
       });
     } catch (error) {
-      console.error("Update environment error:", error);
+      console.error('Update environment error:', error);
       res.status(500).json({ error: error.message });
     }
   },
@@ -450,9 +450,9 @@ const environmentController = {
       const { fileName } = req.params;
       const env = await analysisService.getEnvironment(fileName);
       res.json(env);
-      console.log("Getting ENV content for analysis:", fileName);
+      console.log('Getting ENV content for analysis:', fileName);
     } catch (error) {
-      console.error("Get environment error:", error);
+      console.error('Get environment error:', error);
       res.status(500).json({ error: error.message });
     }
   },

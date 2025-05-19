@@ -5,28 +5,28 @@
 
 // MachineQ API configuration
 const MQ_CONFIG = {
-  tokenUrl: "https://oauth.machineq.net/oauth2/token",
-  apiUrl: "https://api.machineq.net/v1",
+  tokenUrl: 'https://oauth.machineq.net/oauth2/token',
+  apiUrl: 'https://api.machineq.net/v1',
 };
 
 // Default headers
 const DEFAULT_HEADERS = {
-  Accept: "application/json",
-  "Content-Type": "application/json",
+  Accept: 'application/json',
+  'Content-Type': 'application/json',
 };
 // Login via OAuth to get access token
 async function getToken(clientId, clientSecret) {
   const formData = new URLSearchParams();
-  formData.append("grant_type", "client_credentials");
+  formData.append('grant_type', 'client_credentials');
 
   try {
     const response = await fetch(MQ_CONFIG.tokenUrl, {
-      method: "POST",
+      method: 'POST',
       body: formData,
       headers: {
-        Authorization: "Basic " + btoa(`${clientId}:${clientSecret}`),
-        "Content-Type": "application/x-www-form-urlencoded",
-        Accept: "application/json",
+        Authorization: 'Basic ' + btoa(`${clientId}:${clientSecret}`),
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
       },
     });
 
@@ -54,11 +54,11 @@ async function getAPIVersion() {
       return data;
     } else {
       // /version wasn't implemented before 1.0.0, set it to 0.4.0
-      return { Semantic: "0.4.0", Major: "0", Minor: "4", Patch: "0" };
+      return { Semantic: '0.4.0', Major: '0', Minor: '4', Patch: '0' };
     }
   } catch (error) {
     console.error(`Error getting API version: ${error.message}`);
-    return { Semantic: "0.4.0", Major: "0", Minor: "4", Patch: "0" };
+    return { Semantic: '0.4.0', Major: '0', Minor: '4', Patch: '0' };
   }
 }
 
@@ -85,17 +85,17 @@ async function getAPICall(endpoint, token) {
 
 // Get devices
 async function getDevices(token) {
-  return getAPICall("devices", token);
+  return getAPICall('devices', token);
 }
 
 // Get gateways
 async function getGateways(token) {
-  return getAPICall("gateways", token);
+  return getAPICall('gateways', token);
 }
 
 // Get account
 async function getAccount(token) {
-  return getAPICall("account", token);
+  return getAPICall('account', token);
 }
 
 //* POST Functions
@@ -106,11 +106,11 @@ async function createDevice(token, deviceData) {
 
   // Provide default values for required fields if not provided
   const defaultDeviceData = {
-    ActivationType: "OTAA",
-    ServiceProfile: "UyLtjJAT",
-    DeviceProfile: "zsi0h2lg",
-    DecoderType: "Nez4HkZe",
-    OutputProfile: "VvvcmU0o",
+    ActivationType: 'OTAA',
+    ServiceProfile: 'UyLtjJAT',
+    DeviceProfile: 'zsi0h2lg',
+    DecoderType: 'Nez4HkZe',
+    OutputProfile: 'VvvcmU0o',
     PrivateData: false,
   };
 
@@ -119,7 +119,7 @@ async function createDevice(token, deviceData) {
 
   try {
     const response = await fetch(finalUrl, {
-      method: "POST",
+      method: 'POST',
       headers,
       body: JSON.stringify(finalDeviceData),
     });

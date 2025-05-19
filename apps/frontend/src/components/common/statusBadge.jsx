@@ -1,14 +1,14 @@
 // frontend/src/components/common/StatusBadge.jsx
-import PropTypes from "prop-types";
+import PropTypes from 'prop-types';
 
 const statusColors = {
-  running: "bg-green-100 text-green-800",
-  stopped: "bg-gray-100 text-gray-800",
-  error: "bg-red-100 text-red-800",
+  running: 'bg-green-100 text-green-800',
+  stopped: 'bg-gray-100 text-gray-800',
+  error: 'bg-red-100 text-red-800',
 };
 
 export default function StatusBadge({ status }) {
-  const colorClasses = statusColors[status] || "bg-gray-100 text-gray-800";
+  const colorClasses = statusColors[status] || 'bg-gray-100 text-gray-800';
 
   return (
     <span
@@ -20,5 +20,5 @@ export default function StatusBadge({ status }) {
 }
 
 StatusBadge.propTypes = {
-  status: PropTypes.oneOf(["running", "stopped", "error"]).isRequired,
+  status: PropTypes.oneOf(['running', 'stopped', 'error']).isRequired,
 };

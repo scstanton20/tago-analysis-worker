@@ -1,11 +1,11 @@
-import { useState } from "react";
-import PropTypes from "prop-types";
-import * as Dialog from "@radix-ui/react-dialog";
-import * as Select from "@radix-ui/react-select";
-import { Check, ChevronDown, Download, X } from "lucide-react";
+import { useState } from 'react';
+import PropTypes from 'prop-types';
+import * as Dialog from '@radix-ui/react-dialog';
+import * as Select from '@radix-ui/react-select';
+import { Check, ChevronDown, Download, X } from 'lucide-react';
 
 const LogDownloadDialog = ({ isOpen, onClose, onDownload }) => {
-  const [timeRange, setTimeRange] = useState("1h");
+  const [timeRange, setTimeRange] = useState('1h');
   const [isLoading, setIsLoading] = useState(false);
 
   const handleDownload = async () => {
@@ -54,11 +54,11 @@ const LogDownloadDialog = ({ isOpen, onClose, onDownload }) => {
                   <Select.Viewport className="p-1">
                     <Select.Group>
                       {[
-                        { value: "1h", label: "Last Hour" },
-                        { value: "24h", label: "Last 24 Hours" },
-                        { value: "7d", label: "Last 7 Days" },
-                        { value: "30d", label: "Last 30 Days" },
-                        { value: "all", label: "All Logs" },
+                        { value: '1h', label: 'Last Hour' },
+                        { value: '24h', label: 'Last 24 Hours' },
+                        { value: '7d', label: 'Last 7 Days' },
+                        { value: '30d', label: 'Last 30 Days' },
+                        { value: 'all', label: 'All Logs' },
                       ].map(({ value, label }) => (
                         <Select.Item
                           key={value}
@@ -91,7 +91,7 @@ const LogDownloadDialog = ({ isOpen, onClose, onDownload }) => {
               className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:bg-blue-300"
             >
               <Download className="w-4 h-4" />
-              {isLoading ? "Downloading..." : "Download"}
+              {isLoading ? 'Downloading...' : 'Download'}
             </button>
           </div>
         </Dialog.Content>

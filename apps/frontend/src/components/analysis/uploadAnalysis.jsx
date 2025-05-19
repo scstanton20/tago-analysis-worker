@@ -1,25 +1,25 @@
-import { useState, useRef, useEffect } from "react";
-import { analysisService } from "../../services/analysisService";
-import { useWebSocket } from "../../contexts/websocketContext/index";
-import Editor from "@monaco-editor/react";
-import { ChevronDown, ChevronUp } from "lucide-react";
-import { statusService } from "../../services/statusServices";
+import { useState, useRef, useEffect } from 'react';
+import { analysisService } from '../../services/analysisService';
+import { useWebSocket } from '../../contexts/websocketContext/index';
+import Editor from '@monaco-editor/react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
+import { statusService } from '../../services/statusServices';
 
 export default function AnalysisCreator() {
-  const [mode, setMode] = useState("upload");
+  const [mode, setMode] = useState('upload');
   const [selectedFile, setSelectedFile] = useState(null);
-  const [analysisType, setAnalysisType] = useState("listener");
+  const [analysisType, setAnalysisType] = useState('listener');
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
-  const [analysisName, setAnalysisName] = useState("");
-  const [editableFileName, setEditableFileName] = useState("");
+  const [analysisName, setAnalysisName] = useState('');
+  const [editableFileName, setEditableFileName] = useState('');
   const [editorContent, setEditorContent] = useState(
-    "// Write your analysis code here",
+    '// Write your analysis code here',
   );
   const [isExpanded, setIsExpanded] = useState(false);
   const fileInputRef = useRef(null);
   const { connectionStatus } = useWebSocket();
-  const [sdkVersion, setSdkVersion] = useState("");
+  const [sdkVersion, setSdkVersion] = useState('');
 
   useEffect(() => {
     const fetchVersion = async () => {
@@ -32,23 +32,23 @@ export default function AnalysisCreator() {
   const handleFileChange = (event) => {
     const file = event.target.files[0];
     if (file) {
-      if (!file.name.endsWith(".js")) {
-        setError("Please select a JavaScript file (.js)");
+      if (!file.name.endsWith('.js')) {
+        setError('Please select a JavaScript file (.js)');
         setSelectedFile(null);
-        setEditableFileName("");
+        setEditableFileName('');
         event.target.value = null;
         return;
       }
       setError(null);
       setSelectedFile(file);
       setEditableFileName(file.name);
-      setAnalysisName(file.name.replace(".js", ""));
+      setAnalysisName(file.name.replace('.js', ''));
     }
   };
 
   const handleUpload = async () => {
-    if (mode === "create" && !analysisName) {
-      setError("Please provide a name for the analysis");
+    if (mode === 'create' && !analysisName) {
+      setError('Please provide a name for the analysis');
       return;
     }
 
@@ -56,7 +56,7 @@ export default function AnalysisCreator() {
     setError(null);
 
     try {
-      if (mode === "upload") {
+      if (mode === 'upload') {
         if (!selectedFile) return;
         // Create a new file with the edited filename
         const newFile = new File([selectedFile], editableFileName, {
@@ -66,27 +66,27 @@ export default function AnalysisCreator() {
       } else {
         // Create new analysis - automatically append .js extension
         const fileName = `${analysisName}.js`;
-        const blob = new Blob([editorContent], { type: "text/javascript" });
-        const file = new File([blob], fileName, { type: "text/javascript" });
+        const blob = new Blob([editorContent], { type: 'text/javascript' });
+        const file = new File([blob], fileName, { type: 'text/javascript' });
         await analysisService.uploadAnalysis(file, analysisType);
       }
 
       window.alert(
-        `Successfully ${mode === "upload" ? "uploaded" : "created"} analysis ${mode === "upload" ? editableFileName : analysisName}`,
+        `Successfully ${mode === 'upload' ? 'uploaded' : 'created'} analysis ${mode === 'upload' ? editableFileName : analysisName}`,
       );
 
       // Reset form
       setSelectedFile(null);
-      setEditableFileName("");
-      setEditorContent("// Write your analysis code here");
-      setAnalysisName("");
+      setEditableFileName('');
+      setEditorContent('// Write your analysis code here');
+      setAnalysisName('');
       setIsExpanded(false);
       if (fileInputRef.current) {
-        fileInputRef.current.value = "";
+        fileInputRef.current.value = '';
       }
     } catch (error) {
-      setError(error.message || "Failed to save analysis");
-      console.error("Save failed:", error);
+      setError(error.message || 'Failed to save analysis');
+      console.error('Save failed:', error);
     } finally {
       setUploading(false);
     }
@@ -94,21 +94,21 @@ export default function AnalysisCreator() {
 
   const handleCancel = () => {
     setSelectedFile(null);
-    setEditableFileName("");
+    setEditableFileName('');
     setError(null);
-    setAnalysisName("");
-    setEditorContent("// Write your analysis code here");
+    setAnalysisName('');
+    setEditorContent('// Write your analysis code here');
     if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+      fileInputRef.current.value = '';
     }
   };
 
   const isDisabled =
     uploading ||
-    connectionStatus !== "connected" ||
-    (mode === "create" && !analysisName);
+    connectionStatus !== 'connected' ||
+    (mode === 'create' && !analysisName);
   const isTabDisabled =
-    (selectedFile || editorContent !== "// Write your analysis code here") &&
+    (selectedFile || editorContent !== '// Write your analysis code here') &&
     !uploading;
 
   return (
@@ -131,32 +131,32 @@ export default function AnalysisCreator() {
               <div className="border-b border-gray-200 mb-6">
                 <nav className="-mb-px flex space-x-8">
                   <button
-                    onClick={() => !isTabDisabled && setMode("upload")}
+                    onClick={() => !isTabDisabled && setMode('upload')}
                     className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                      mode === "upload"
-                        ? "border-blue-500 text-blue-600"
-                        : "border-transparent text-gray-500"
+                      mode === 'upload'
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500'
                     } ${
-                      isTabDisabled && mode !== "upload"
-                        ? "opacity-50 cursor-not-allowed"
-                        : "hover:text-gray-700 hover:border-gray-300"
+                      isTabDisabled && mode !== 'upload'
+                        ? 'opacity-50 cursor-not-allowed'
+                        : 'hover:text-gray-700 hover:border-gray-300'
                     }`}
-                    disabled={isTabDisabled && mode !== "upload"}
+                    disabled={isTabDisabled && mode !== 'upload'}
                   >
                     Upload Existing File
                   </button>
                   <button
-                    onClick={() => !isTabDisabled && setMode("create")}
+                    onClick={() => !isTabDisabled && setMode('create')}
                     className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                      mode === "create"
-                        ? "border-blue-500 text-blue-600"
-                        : "border-transparent text-gray-500"
+                      mode === 'create'
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500'
                     } ${
-                      isTabDisabled && mode !== "create"
-                        ? "opacity-50 cursor-not-allowed"
-                        : "hover:text-gray-700 hover:border-gray-300"
+                      isTabDisabled && mode !== 'create'
+                        ? 'opacity-50 cursor-not-allowed'
+                        : 'hover:text-gray-700 hover:border-gray-300'
                     }`}
-                    disabled={isTabDisabled && mode !== "create"}
+                    disabled={isTabDisabled && mode !== 'create'}
                   >
                     Create New Analysis
                   </button>
@@ -164,7 +164,7 @@ export default function AnalysisCreator() {
               </div>
 
               {/* Analysis Name - Only shown in create mode */}
-              {mode === "create" && (
+              {mode === 'create' && (
                 <div className="space-y-2">
                   <label
                     htmlFor="analysis-name"
@@ -191,7 +191,7 @@ export default function AnalysisCreator() {
                 </div>
               )}
 
-              {mode === "upload" ? (
+              {mode === 'upload' ? (
                 /* File Upload UI */
                 <div className="space-y-4">
                   <div className="flex items-center space-x-4">
@@ -207,15 +207,15 @@ export default function AnalysisCreator() {
                     <label
                       htmlFor="analysis-file"
                       className={`px-4 py-2 rounded cursor-pointer text-white ${
-                        connectionStatus === "connected"
-                          ? "bg-blue-500 hover:bg-blue-600"
-                          : "bg-gray-400 cursor-not-allowed"
+                        connectionStatus === 'connected'
+                          ? 'bg-blue-500 hover:bg-blue-600'
+                          : 'bg-gray-400 cursor-not-allowed'
                       }`}
                     >
                       Choose File
                     </label>
                     <span className="text-gray-600">
-                      {selectedFile ? selectedFile.name : "No file chosen"}
+                      {selectedFile ? selectedFile.name : 'No file chosen'}
                     </span>
                   </div>
 
@@ -254,8 +254,8 @@ export default function AnalysisCreator() {
                       scrollBeyondLastLine: false,
                       fontSize: 14,
                       automaticLayout: true,
-                      wordWrap: "on",
-                      lineNumbers: "on",
+                      wordWrap: 'on',
+                      lineNumbers: 'on',
                     }}
                   />
                 </div>
@@ -268,7 +268,7 @@ export default function AnalysisCreator() {
                     type="radio"
                     name="analysisType"
                     value="listener"
-                    checked={analysisType === "listener"}
+                    checked={analysisType === 'listener'}
                     onChange={(e) => setAnalysisType(e.target.value)}
                     className="form-radio text-blue-500"
                     disabled={uploading}
@@ -287,8 +287,8 @@ export default function AnalysisCreator() {
                   disabled={isDisabled}
                   className={`px-4 py-2 rounded text-white ${
                     isDisabled
-                      ? "bg-gray-400 cursor-not-allowed"
-                      : "bg-green-500 hover:bg-green-600"
+                      ? 'bg-gray-400 cursor-not-allowed'
+                      : 'bg-green-500 hover:bg-green-600'
                   }`}
                 >
                   {uploading ? (
@@ -316,11 +316,11 @@ export default function AnalysisCreator() {
                       Saving...
                     </span>
                   ) : (
-                    "Save Analysis"
+                    'Save Analysis'
                   )}
                 </button>
                 {(selectedFile ||
-                  editorContent !== "// Write your analysis code here") && (
+                  editorContent !== '// Write your analysis code here') && (
                   <button
                     onClick={handleCancel}
                     className="px-4 py-2 rounded text-gray-600 hover:text-gray-800"
@@ -333,7 +333,7 @@ export default function AnalysisCreator() {
             </div>
 
             {/* Connection Status */}
-            {connectionStatus !== "connected" && (
+            {connectionStatus !== 'connected' && (
               <div className="mt-4 p-2 bg-yellow-100 text-yellow-700 rounded">
                 Not connected to server. Please wait for connection to be
                 established.

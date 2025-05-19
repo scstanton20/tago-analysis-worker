@@ -1,10 +1,10 @@
 packages:
   - ./apps/*
 ignoredBuiltDependencies:
-  - '@tailwindcss/oxide'
+  - "@tailwindcss/oxide"
 injectWorkspacePackages: true
 onlyBuiltDependencies:
-  - '@swc/core'
+  - "@swc/core"
   - esbuild
 syncInjectedDepsAfterScripts:
   - build

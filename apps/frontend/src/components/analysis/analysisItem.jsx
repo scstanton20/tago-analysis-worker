@@ -1,5 +1,5 @@
-import { useState } from "react";
-import PropTypes from "prop-types";
+import { useState } from 'react';
+import PropTypes from 'prop-types';
 import {
   Play,
   Square,
@@ -8,14 +8,14 @@ import {
   Edit,
   Trash2,
   MoreVertical,
-} from "lucide-react";
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { analysisService } from "../../services/analysisService";
-import AnalysisLogs from "./analysisLogs";
-import StatusBadge from "../common/statusBadge";
-import EditAnalysisModal from "./analysisEdit";
-import EditAnalysisENVModal from "./analysisEditENV";
-import LogDownloadDialog from "./logDownload";
+} from 'lucide-react';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { analysisService } from '../../services/analysisService';
+import AnalysisLogs from './analysisLogs';
+import StatusBadge from '../common/statusBadge';
+import EditAnalysisModal from './analysisEdit';
+import EditAnalysisENVModal from './analysisEditENV';
+import LogDownloadDialog from './logDownload';
 
 export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
   const [isLoading, setIsLoading] = useState(false);
@@ -32,7 +32,7 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
     try {
       await analysisService.runAnalysis(analysis.name, analysis.type);
     } catch (error) {
-      console.error("Failed to run analysis:", error);
+      console.error('Failed to run analysis:', error);
     } finally {
       setIsLoading(false);
     }
@@ -43,21 +43,21 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
     try {
       await analysisService.stopAnalysis(analysis.name);
     } catch (error) {
-      console.error("Failed to stop analysis:", error);
+      console.error('Failed to stop analysis:', error);
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleDeleteAnalysis = async () => {
-    if (!window.confirm("Are you sure you want to delete this analysis?")) {
+    if (!window.confirm('Are you sure you want to delete this analysis?')) {
       return;
     }
 
     try {
       await analysisService.deleteAnalysis(analysis.name);
     } catch (error) {
-      console.error("Failed to delete analysis:", error);
+      console.error('Failed to delete analysis:', error);
     }
   };
 
@@ -66,7 +66,7 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
       await analysisService.updateAnalysis(analysis.name, content);
       setShowEditAnalysisModal(false);
     } catch (error) {
-      console.error("Failed to save analysis:", error);
+      console.error('Failed to save analysis:', error);
       throw error;
     }
   };
@@ -76,7 +76,7 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
       await analysisService.updateAnalysisENV(analysis.name, content);
       setShowEditENVModal(false);
     } catch (error) {
-      console.error("Failed to save analysis:", error);
+      console.error('Failed to save analysis:', error);
       throw error;
     }
   };
@@ -85,7 +85,7 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
     try {
       await analysisService.downloadLogs(analysis.name, timeRange);
     } catch (error) {
-      console.error("Failed to download logs:", error);
+      console.error('Failed to download logs:', error);
     }
   };
 
@@ -94,7 +94,7 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
   const handleDeleteLogs = async () => {
     if (
       !window.confirm(
-        "Are you sure you want to delete all logs for this analysis?",
+        'Are you sure you want to delete all logs for this analysis?',
       )
     ) {
       return;
@@ -114,7 +114,7 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
         onToggleLogs();
       }
     } catch (error) {
-      console.error("Failed to delete logs:", error);
+      console.error('Failed to delete logs:', error);
     }
   };
 
@@ -122,7 +122,7 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
     try {
       await analysisService.downloadAnalysis(analysis.name);
     } catch (error) {
-      console.error("Failed to download analysis:", error);
+      console.error('Failed to download analysis:', error);
     }
   };
 
@@ -132,15 +132,15 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
         <div>
           <h3 className="font-semibold">{analysis.name}</h3>
           <div className="flex items-center space-x-2 text-sm text-gray-500">
-            <span>{analysis.type || "oneshot"}</span>
-            <StatusBadge status={analysis.status || "stopped"} />
+            <span>{analysis.type || 'oneshot'}</span>
+            <StatusBadge status={analysis.status || 'stopped'} />
           </div>
         </div>
 
         <div className="flex items-center space-x-2">
           {/* Primary Actions */}
           <div className="flex items-center space-x-2">
-            {analysis.status === "running" ? (
+            {analysis.status === 'running' ? (
               <button
                 onClick={handleStop}
                 disabled={isLoading}
@@ -168,7 +168,7 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
               className="flex items-center gap-1 bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600"
             >
               <FileText className="w-4 h-4" />
-              {showLogs ? "Hide Logs" : "Show Logs"}
+              {showLogs ? 'Hide Logs' : 'Show Logs'}
             </button>
           </div>
 
@@ -270,7 +270,7 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
 AnalysisItem.propTypes = {
   analysis: PropTypes.shape({
     name: PropTypes.string.isRequired,
-    type: PropTypes.oneOf(["oneshot", "listener"]),
+    type: PropTypes.oneOf(['oneshot', 'listener']),
     status: PropTypes.string,
     logs: PropTypes.arrayOf(
       PropTypes.shape({

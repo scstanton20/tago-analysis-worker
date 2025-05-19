@@ -1,9 +1,9 @@
 // models/AnalysisProcess.js
-const path = require("path");
-const fs = require("fs").promises;
-const { fork } = require("child_process");
-const { broadcastUpdate } = require("../utils/websocket");
-const config = require("../config/default");
+const path = require('path');
+const fs = require('fs').promises;
+const { fork } = require('child_process');
+const { broadcastUpdate } = require('../utils/websocket');
+const config = require('../config/default');
 
 class AnalysisProcess {
   constructor(analysisName, type, service) {
@@ -13,16 +13,16 @@ class AnalysisProcess {
     this.process = null;
     this.logs = [];
     this.enabled = false;
-    this.status = "stopped";
+    this.status = 'stopped';
     this.lastRun = null;
     this.startTime = null;
-    this.stdoutBuffer = "";
-    this.stderrBuffer = "";
+    this.stdoutBuffer = '';
+    this.stderrBuffer = '';
     this.logFile = path.join(
       config.paths.analysis,
       analysisName,
-      "logs",
-      "analysis.log",
+      'logs',
+      'analysis.log',
     );
   }
 
@@ -39,8 +39,8 @@ class AnalysisProcess {
     this.logFile = path.join(
       config.paths.analysis,
       newName,
-      "logs",
-      "analysis.log",
+      'logs',
+      'analysis.log',
     );
 
     console.log(
@@ -49,23 +49,23 @@ class AnalysisProcess {
   }
 
   setupProcessHandlers() {
-    this.stdoutBuffer = "";
-    this.stderrBuffer = "";
+    this.stdoutBuffer = '';
+    this.stderrBuffer = '';
 
     if (this.process.stdout) {
-      this.process.stdout.on("data", this.handleOutput.bind(this, false));
+      this.process.stdout.on('data', this.handleOutput.bind(this, false));
     }
 
     if (this.process.stderr) {
-      this.process.stderr.on("data", this.handleOutput.bind(this, true));
+      this.process.stderr.on('data', this.handleOutput.bind(this, true));
     }
 
-    this.process.once("exit", this.handleExit.bind(this));
+    this.process.once('exit', this.handleExit.bind(this));
   }
 
   handleOutput(isError, data) {
     const buffer = isError ? this.stderrBuffer : this.stdoutBuffer;
-    const lines = data.toString().split("\n");
+    const lines = data.toString().split('\n');
 
     lines.forEach((line, index) => {
       if (index === lines.length - 1) {
@@ -80,9 +80,9 @@ class AnalysisProcess {
           this.addLog(isError ? `ERROR: ${fullLine}` : fullLine);
         }
         if (isError) {
-          this.stderrBuffer = "";
+          this.stderrBuffer = '';
         } else {
-          this.stdoutBuffer = "";
+          this.stdoutBuffer = '';
         }
       }
     });
@@ -94,7 +94,7 @@ class AnalysisProcess {
       const filePath = path.join(
         config.paths.analysis,
         this.analysisName,
-        "index.js",
+        'index.js',
       );
       await this.addLog(`Node.js ${process.version}`);
 
@@ -110,15 +110,15 @@ class AnalysisProcess {
           ...storedEnv,
           STORAGE_BASE: config.storage.base,
         },
-        stdio: ["inherit", "pipe", "pipe", "ipc"],
+        stdio: ['inherit', 'pipe', 'pipe', 'ipc'],
       });
 
       if (!this.process) {
-        throw new Error("Failed to start analysis process");
+        throw new Error('Failed to start analysis process');
       }
 
       this.setupProcessHandlers();
-      this.updateStatus("running", true);
+      this.updateStatus('running', true);
       await this.saveConfig();
     } catch (error) {
       await this.addLog(`ERROR: ${error.message}`);
@@ -146,7 +146,7 @@ class AnalysisProcess {
       console.error(`Error writing to log file ${this.logFile}:`, error);
     }
 
-    broadcastUpdate("log", {
+    broadcastUpdate('log', {
       fileName: this.analysisName,
       log: { timestamp, message },
     });
@@ -156,12 +156,12 @@ class AnalysisProcess {
     this.status = status;
     this.enabled = enabled;
 
-    if (this.type === "listener" && status === "running") {
+    if (this.type === 'listener' && status === 'running') {
       this.startTime = new Date().toISOString();
-    } else if (status === "running") {
+    } else if (status === 'running') {
       this.lastRun = new Date().toISOString();
     }
-    broadcastUpdate("status", {
+    broadcastUpdate('status', {
       fileName: this.analysisName,
       status: this.status,
       enabled: this.enabled,
@@ -171,27 +171,27 @@ class AnalysisProcess {
   }
 
   async stop() {
-    if (!this.process || this.status !== "running") {
+    if (!this.process || this.status !== 'running') {
       return;
     }
 
-    await this.addLog("Stopping analysis...");
+    await this.addLog('Stopping analysis...');
 
     return new Promise((resolve) => {
-      this.process.kill("SIGTERM");
+      this.process.kill('SIGTERM');
 
       const forceKillTimeout = setTimeout(() => {
         if (this.process) {
-          this.addLog("Force stopping process...").then(() => {
-            this.process.kill("SIGKILL");
+          this.addLog('Force stopping process...').then(() => {
+            this.process.kill('SIGKILL');
           });
         }
       }, config.analysis.forceKillTimeout);
 
-      this.process.once("exit", () => {
+      this.process.once('exit', () => {
         clearTimeout(forceKillTimeout);
-        this.updateStatus("stopped", false);
-        this.addLog("Analysis stopped").then(() => {
+        this.updateStatus('stopped', false);
+        this.addLog('Analysis stopped').then(() => {
           this.process = null;
           this.saveConfig().then(resolve);
         });
@@ -220,10 +220,10 @@ class AnalysisProcess {
     await this.addLog(`Process exited with code ${code}`);
     this.process = null;
 
-    this.updateStatus("stopped", false);
+    this.updateStatus('stopped', false);
     await this.saveConfig();
 
-    if (this.type === "listener" && this.enabled && this.status === "running") {
+    if (this.type === 'listener' && this.enabled && this.status === 'running') {
       console.log(`Auto-restarting listener: ${this.analysisName}`);
       setTimeout(() => this.start(), config.analysis.autoRestartDelay);
     }

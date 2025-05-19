@@ -1,5 +1,5 @@
 // config/default.js
-const path = require("path");
+const path = require('path');
 
 function determineStorageBase() {
   // If explicitly set through environment variable, use that
@@ -8,7 +8,7 @@ function determineStorageBase() {
   }
 
   // For both Docker and local development, use a directory in the backend project
-  return path.join(process.cwd(), "analyses-storage");
+  return path.join(process.cwd(), 'analyses-storage');
 }
 
 const config = {
@@ -27,20 +27,20 @@ const config = {
     env: {
       NODE_PATH:
         process.env.NODE_PATH ||
-        `${path.join(process.cwd(), "../node_modules")}:${path.join(process.cwd(), "src")}`,
+        `${path.join(process.cwd(), '../node_modules')}:${path.join(process.cwd(), 'src')}`,
     },
   },
 };
 
 // Derive paths from base storage
 config.paths = {
-  analysis: path.join(config.storage.base, "analyses"),
-  config: path.join(config.storage.base, "config"),
+  analysis: path.join(config.storage.base, 'analyses'),
+  config: path.join(config.storage.base, 'config'),
 };
 
 // Derived files
 config.files = {
-  config: path.join(config.paths.config, "analyses-config.json"),
+  config: path.join(config.paths.config, 'analyses-config.json'),
 };
 
 module.exports = config;

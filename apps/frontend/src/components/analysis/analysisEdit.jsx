@@ -1,14 +1,14 @@
-import { useState, useEffect, useContext } from "react";
-import PropTypes from "prop-types";
-import Editor from "@monaco-editor/react";
-import { analysisService } from "../../services/analysisService";
-import { WebSocketContext } from "../../contexts/websocketContext/context";
+import { useState, useEffect, useContext } from 'react';
+import PropTypes from 'prop-types';
+import Editor from '@monaco-editor/react';
+import { analysisService } from '../../services/analysisService';
+import { WebSocketContext } from '../../contexts/websocketContext/context';
 
 export default function EditAnalysisModal({
   onClose,
   analysis: initialAnalysis,
 }) {
-  const [content, setContent] = useState("");
+  const [content, setContent] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -34,13 +34,13 @@ export default function EditAnalysisModal({
       try {
         setIsLoading(true);
         setError(null);
-        console.log("Loading content for:", currentAnalysis.name);
+        console.log('Loading content for:', currentAnalysis.name);
         const fileContent = await analysisService.getAnalysisContent(
           currentAnalysis.name,
         );
         setContent(fileContent);
       } catch (error) {
-        console.error("Failed to load analysis content:", error);
+        console.error('Failed to load analysis content:', error);
         setError(error.message);
       } finally {
         setIsLoading(false);
@@ -64,12 +64,12 @@ export default function EditAnalysisModal({
 
       await analysisService.updateAnalysis(currentAnalysis.name, content);
 
-      alert("Analysis content updated successfully!");
+      alert('Analysis content updated successfully!');
       setHasChanges(false);
       onClose();
     } catch (error) {
-      console.error("Save failed:", error);
-      setError(error.message || "Failed to update analysis content.");
+      console.error('Save failed:', error);
+      setError(error.message || 'Failed to update analysis content.');
     } finally {
       setIsLoading(false);
     }
@@ -78,7 +78,7 @@ export default function EditAnalysisModal({
   const handleRename = async () => {
     try {
       if (!newFileName.trim()) {
-        setError("Filename cannot be empty");
+        setError('Filename cannot be empty');
         return;
       }
 
@@ -95,8 +95,8 @@ export default function EditAnalysisModal({
       // Don't close the modal - WebSockets will update the name
       setIsEditingName(false);
     } catch (error) {
-      console.error("Rename failed:", error);
-      setError(error.message || "Failed to rename analysis.");
+      console.error('Rename failed:', error);
+      setError(error.message || 'Failed to rename analysis.');
       // Reset the filename input to the current name if rename fails
       setNewFileName(currentAnalysis.name);
     } finally {
@@ -119,13 +119,13 @@ export default function EditAnalysisModal({
   // Handle escape key
   useEffect(() => {
     const handleEscape = (e) => {
-      if (e.key === "Escape") {
+      if (e.key === 'Escape') {
         onClose();
       }
     };
 
-    window.addEventListener("keydown", handleEscape);
-    return () => window.removeEventListener("keydown", handleEscape);
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
   }, [onClose]);
 
   return (
@@ -266,10 +266,10 @@ export default function EditAnalysisModal({
                 scrollBeyondLastLine: false,
                 fontSize: 14,
                 automaticLayout: true,
-                wordWrap: "on",
-                lineNumbers: "on",
+                wordWrap: 'on',
+                lineNumbers: 'on',
                 folding: true,
-                foldingStrategy: "indentation",
+                foldingStrategy: 'indentation',
               }}
             />
           )}
@@ -288,12 +288,12 @@ export default function EditAnalysisModal({
             disabled={!hasChanges || isLoading}
             className={`px-4 py-2 rounded ${
               hasChanges && !isLoading
-                ? "bg-blue-500 text-white hover:bg-blue-600"
-                : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                ? 'bg-blue-500 text-white hover:bg-blue-600'
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
             }`}
             type="button"
           >
-            {isLoading ? "Saving..." : "Save Changes"}
+            {isLoading ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
       </div>
@@ -304,7 +304,7 @@ export default function EditAnalysisModal({
 EditAnalysisModal.propTypes = {
   analysis: PropTypes.shape({
     name: PropTypes.string.isRequired,
-    type: PropTypes.oneOf(["oneshot", "listener"]),
+    type: PropTypes.oneOf(['oneshot', 'listener']),
     status: PropTypes.string,
     enabled: PropTypes.bool,
     logs: PropTypes.arrayOf(

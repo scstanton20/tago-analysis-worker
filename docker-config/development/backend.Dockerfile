@@ -1,4 +1,4 @@
-FROM node:22-alpine
+FROM node:23-alpine
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
@@ -8,17 +8,16 @@ WORKDIR /app
 
 # Copy package.json files for the monorepo
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
-COPY apps/frontend/package.json ./apps/frontend/
-COPY apps/server/package.json ./apps/server/
+COPY apps/backend/package.json ./apps/backend/
 
 # Install dependencies
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --filter backend --frozen-lockfile
 
-# Set working directory to server app
-WORKDIR /app/apps/server
+# Set working directory to backend app
+WORKDIR /app/apps/backend
 
 # Set development environment
 ENV NODE_ENV=development
-
+EXPOSE 3000
 # Start in development mode
 CMD ["pnpm", "dev"]

@@ -1,6 +1,6 @@
 // utils/storage.js
-const fs = require("fs").promises;
-const config = require("../config/default");
+const fs = require('fs').promises;
+const config = require('../config/default');
 
 async function initializeStorage() {
   if (!config.storage.createDirs) return;
@@ -20,14 +20,14 @@ async function initializeStorage() {
       await fs.writeFile(
         config.files.config,
         JSON.stringify(
-          { version: "1.0", created: new Date().toISOString() },
+          { version: '1.0', created: new Date().toISOString() },
           null,
           2,
         ),
       );
     }
   } catch (error) {
-    console.error("Failed to initialize storage:", error);
+    console.error('Failed to initialize storage:', error);
     throw error;
   }
 }

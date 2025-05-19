@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
-import PropTypes from "prop-types";
-import Editor from "@monaco-editor/react";
-import { analysisService } from "../../services/analysisService";
+import { useState, useEffect } from 'react';
+import PropTypes from 'prop-types';
+import Editor from '@monaco-editor/react';
+import { analysisService } from '../../services/analysisService';
 
 export default function EditAnalysisENVModal({ onClose, analysis }) {
-  const [content, setContent] = useState("");
+  const [content, setContent] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -14,13 +14,13 @@ export default function EditAnalysisENVModal({ onClose, analysis }) {
       try {
         setIsLoading(true);
         setError(null);
-        console.log("Loading ENV content for:", analysis.name);
+        console.log('Loading ENV content for:', analysis.name);
         const fileContent = await analysisService.getAnalysisENVContent(
           analysis.name,
         );
         setContent(fileContent);
       } catch (error) {
-        console.error("Failed to load analysis content:", error);
+        console.error('Failed to load analysis content:', error);
         setError(error.message);
       } finally {
         setIsLoading(false);
@@ -34,25 +34,25 @@ export default function EditAnalysisENVModal({ onClose, analysis }) {
 
   const handleEditorChange = (value) => {
     // Ensure value is a string
-    if (typeof value !== "string") return;
+    if (typeof value !== 'string') return;
 
     // Process the content to enforce "KEY=value" format
     const formattedContent = value
-      .split("\n")
+      .split('\n')
       .map((line) => {
-        if (line.trim().startsWith("#") || line.trim() === "") {
+        if (line.trim().startsWith('#') || line.trim() === '') {
           return line; // Keep comments and empty lines as they are
         }
 
-        const [key, ...valueParts] = line.split("="); // Split only on first `=`
-        if (!key || valueParts.length === 0) return ""; // Ignore invalid lines
+        const [key, ...valueParts] = line.split('='); // Split only on first `=`
+        if (!key || valueParts.length === 0) return ''; // Ignore invalid lines
 
-        const formattedKey = key.trim().replace(/\s+/g, "_").toUpperCase(); // Normalize key
-        const formattedValue = valueParts.join("=").trim(); // Preserve values
+        const formattedKey = key.trim().replace(/\s+/g, '_').toUpperCase(); // Normalize key
+        const formattedValue = valueParts.join('=').trim(); // Preserve values
 
         return `${formattedKey}=${formattedValue}`;
       })
-      .join("\n");
+      .join('\n');
 
     setContent(formattedContent);
     setHasChanges(true);
@@ -65,12 +65,12 @@ export default function EditAnalysisENVModal({ onClose, analysis }) {
 
       await analysisService.updateAnalysisENV(analysis.name, content);
 
-      alert("Analysis ENV updated successfully!");
+      alert('Analysis ENV updated successfully!');
       setHasChanges(false);
       onClose(); // Close modal after successful save
     } catch (error) {
-      console.error("Save failed:", error);
-      setError(error.message || "Failed to update analysis ENV content.");
+      console.error('Save failed:', error);
+      setError(error.message || 'Failed to update analysis ENV content.');
     } finally {
       setIsLoading(false);
     }
@@ -91,13 +91,13 @@ export default function EditAnalysisENVModal({ onClose, analysis }) {
   // Handle escape key
   useEffect(() => {
     const handleEscape = (e) => {
-      if (e.key === "Escape") {
+      if (e.key === 'Escape') {
         onClose();
       }
     };
 
-    window.addEventListener("keydown", handleEscape);
-    return () => window.removeEventListener("keydown", handleEscape);
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
   }, [onClose]);
 
   return (
@@ -158,10 +158,10 @@ export default function EditAnalysisENVModal({ onClose, analysis }) {
                 scrollBeyondLastLine: false,
                 fontSize: 14,
                 automaticLayout: true,
-                wordWrap: "on",
-                lineNumbers: "on",
+                wordWrap: 'on',
+                lineNumbers: 'on',
                 folding: true,
-                foldingStrategy: "indentation",
+                foldingStrategy: 'indentation',
               }}
             />
           )}
@@ -180,12 +180,12 @@ export default function EditAnalysisENVModal({ onClose, analysis }) {
             disabled={!hasChanges || isLoading}
             className={`px-4 py-2 rounded ${
               hasChanges && !isLoading
-                ? "bg-blue-500 text-white hover:bg-blue-600"
-                : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                ? 'bg-blue-500 text-white hover:bg-blue-600'
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
             }`}
             type="button"
           >
-            {isLoading ? "Saving..." : "Save Changes"}
+            {isLoading ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
       </div>

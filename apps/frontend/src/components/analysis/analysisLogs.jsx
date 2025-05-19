@@ -1,7 +1,7 @@
-import PropTypes from "prop-types";
-import { useState, useEffect, useRef } from "react";
-import { analysisService } from "../../services/analysisService";
-import { RotateCw } from "lucide-react";
+import PropTypes from 'prop-types';
+import { useState, useEffect, useRef } from 'react';
+import { analysisService } from '../../services/analysisService';
+import { RotateCw } from 'lucide-react';
 
 const LOGS_PER_PAGE = 100;
 
@@ -26,7 +26,7 @@ const AnalysisLogs = ({ logs: websocketLogs = [], analysis }) => {
       setHasMore(logs.length === LOGS_PER_PAGE);
       setPage(1);
     } catch (error) {
-      console.error("Failed to fetch logs:", error);
+      console.error('Failed to fetch logs:', error);
     } finally {
       setIsLoading(false);
     }
@@ -47,7 +47,7 @@ const AnalysisLogs = ({ logs: websocketLogs = [], analysis }) => {
       setHasMore(moreLogs.length === LOGS_PER_PAGE);
       setPage(nextPage);
     } catch (error) {
-      console.error("Failed to fetch more logs:", error);
+      console.error('Failed to fetch more logs:', error);
     } finally {
       isLoadingMore.current = false;
     }
@@ -79,8 +79,8 @@ const AnalysisLogs = ({ logs: websocketLogs = [], analysis }) => {
 
   return (
     <div
-      className={`mt-4 bg-gray-50 rounded-md overflow-hidden ${isResizing ? "select-none" : ""}`}
-      style={{ minHeight: "96px", maxHeight: "800px" }}
+      className={`mt-4 bg-gray-50 rounded-md overflow-hidden ${isResizing ? 'select-none' : ''}`}
+      style={{ minHeight: '96px', maxHeight: '800px' }}
     >
       <div className="p-4 sticky top-0 bg-gray-100 border-b flex justify-between items-center">
         <h4 className="text-sm font-semibold">Logs</h4>
@@ -118,11 +118,11 @@ const AnalysisLogs = ({ logs: websocketLogs = [], analysis }) => {
                   </span>
                   <span
                     className={`${
-                      log.message?.toLowerCase().includes("error")
-                        ? "text-red-600"
-                        : log.message?.toLowerCase().includes("warn")
-                          ? "text-yellow-600"
-                          : ""
+                      log.message?.toLowerCase().includes('error')
+                        ? 'text-red-600'
+                        : log.message?.toLowerCase().includes('warn')
+                          ? 'text-yellow-600'
+                          : ''
                     }`}
                   >
                     {log.message}
@@ -144,7 +144,7 @@ const AnalysisLogs = ({ logs: websocketLogs = [], analysis }) => {
         className={`
           h-2 bg-gray-100 border-t cursor-row-resize hover:bg-gray-200 
           flex items-center justify-center
-          ${isResizing ? "bg-gray-300" : ""}
+          ${isResizing ? 'bg-gray-300' : ''}
         `}
         onMouseDown={(e) => {
           e.preventDefault();
@@ -160,12 +160,12 @@ const AnalysisLogs = ({ logs: websocketLogs = [], analysis }) => {
 
           function onMouseUp() {
             setIsResizing(false);
-            document.removeEventListener("mousemove", onMouseMove);
-            document.removeEventListener("mouseup", onMouseUp);
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
           }
 
-          document.addEventListener("mousemove", onMouseMove);
-          document.addEventListener("mouseup", onMouseUp);
+          document.addEventListener('mousemove', onMouseMove);
+          document.addEventListener('mouseup', onMouseUp);
         }}
       >
         <div className="w-16 h-1 bg-gray-300 rounded-full" />

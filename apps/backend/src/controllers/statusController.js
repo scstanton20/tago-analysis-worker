@@ -3,9 +3,9 @@ class StatusController {
   constructor(analysisService, containerState) {
     this.analysisService = analysisService;
     this.containerState = containerState || {
-      status: "ready",
+      status: 'ready',
       startTime: new Date(),
-      message: "Container is ready",
+      message: 'Container is ready',
     };
     this.getSystemStatus = this.getSystemStatus.bind(this);
   }
@@ -14,15 +14,15 @@ class StatusController {
     try {
       const runningAnalyses = Array.from(
         this.analysisService.analyses.values(),
-      ).filter((analysis) => analysis.status === "running");
+      ).filter((analysis) => analysis.status === 'running');
 
       // Get Tago SDK version from package.json
-      const tagoVersion = require("@tago-io/sdk/package.json").version;
+      const tagoVersion = require('@tago-io/sdk/package.json').version;
 
       const status = {
         health: {
           status:
-            this.containerState.status === "ready" ? "healthy" : "initializing",
+            this.containerState.status === 'ready' ? 'healthy' : 'initializing',
           containerState: this.containerState.status,
           message: this.containerState.message,
           uptime: Math.floor(
@@ -31,7 +31,7 @@ class StatusController {
         },
         tagoConnection: {
           sdkVersion: tagoVersion,
-          status: "disconnected",
+          status: 'disconnected',
           runningAnalyses: runningAnalyses.length,
         },
         serverTime: new Date().toString(),
@@ -48,16 +48,16 @@ class StatusController {
         if (monitor) {
           const isConnected = await monitor.checkConnection();
           status.tagoConnection.status = isConnected
-            ? "connected"
-            : "disconnected";
+            ? 'connected'
+            : 'disconnected';
         }
       }
 
       // Return appropriate HTTP status code based on container state
       const httpStatus =
-        this.containerState.status === "ready"
+        this.containerState.status === 'ready'
           ? 200
-          : this.containerState.status === "error"
+          : this.containerState.status === 'error'
             ? 500
             : 203; // 203 = Non-Authoritative Information
 

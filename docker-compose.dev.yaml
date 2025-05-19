@@ -1,4 +1,4 @@
-# ./docker-compose.dev.yml
+# ./docker-compose.dev.yaml
 ---
 services:
   frontend:
@@ -6,21 +6,19 @@ services:
       context: .
       dockerfile: ./docker-config/development/frontend.Dockerfile
     volumes:
-      - .:/app
+      - ./apps/frontend:/app/apps/frontend
       - /app/node_modules
-    command: pnpm --filter frontend dev
     ports:
       - "5173:5173"
     environment:
       - NODE_ENV=development
 
-  server:
+  backend:
     build:
       context: .
-      dockerfile: ./docker-config/development/server.Dockerfile
+      dockerfile: ./docker-config/development/backend.Dockerfile
     volumes:
-      - .:/app
-    command: pnpm --filter server dev
+      - ./apps/backend:/app/apps/backend
     ports:
       - "3000:3000"
     environment:

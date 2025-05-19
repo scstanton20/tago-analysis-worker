@@ -27,7 +27,7 @@ class ConnectionMonitor {
         // Connection restored
         await this.analysisService.addLog(
           this.fileName,
-          "Connection restored, checking process state...",
+          'Connection restored, checking process state...',
         );
         this.connectionState.history.lastRestored = currentTime;
         this.connectionState.disconnectedAt = null;
@@ -56,7 +56,7 @@ class ConnectionMonitor {
             ) {
               await this.analysisService.addLog(
                 this.fileName,
-                "Restarting process based on saved state...",
+                'Restarting process based on saved state...',
               );
               await this.analysisService.runAnalysis(this.fileName, this.type);
               this.connectionState.shouldRestart = false;
@@ -78,7 +78,7 @@ class ConnectionMonitor {
         // Connection lost
         await this.analysisService.addLog(
           this.fileName,
-          "Connection lost, saving process state...",
+          'Connection lost, saving process state...',
         );
 
         try {
@@ -86,7 +86,7 @@ class ConnectionMonitor {
           const processStatus = await this.analysisService.getProcessStatus(
             this.fileName,
           );
-          this.connectionState.wasRunning = processStatus === "running";
+          this.connectionState.wasRunning = processStatus === 'running';
           this.connectionState.shouldRestart = true;
           this.connectionState.disconnectedAt = currentTime;
           this.connectionState.history.lastDisconnected = currentTime;
@@ -121,7 +121,7 @@ class ConnectionMonitor {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-      const response = await fetch("https://api.tago.io/status", {
+      const response = await fetch('https://api.tago.io/status', {
         signal: controller.signal,
       });
 
@@ -153,7 +153,7 @@ class ConnectionMonitor {
         const connectionStatus = await this.checkConnection();
         await this.handleConnectionChange(connectionStatus);
       } catch (error) {
-        console.error("Error checking connection:", error);
+        console.error('Error checking connection:', error);
         await this.handleConnectionChange(false);
       }
     }, this.checkInterval);

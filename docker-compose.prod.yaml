@@ -28,10 +28,12 @@ services:
     container_name: tago-runner-backend
     restart: unless-stopped
     volumes:
-      - analysis-data:/app/backend/analyses-storage
+      - analysis-data:/app/analyses-storage
     networks:
       - backend
     env_file: stack.env
+    ports:
+      - 3000:3000
     environment:
       TZ: "America/New_York"
       SECRET_KEY: ${SECRET_KEY}

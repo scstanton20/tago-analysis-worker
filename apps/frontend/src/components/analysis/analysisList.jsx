@@ -1,7 +1,7 @@
-import { useState } from "react";
-import { useWebSocket } from "../../contexts/websocketContext";
-import AnalysisItem from "./analysisItem";
-import { Loader2 } from "lucide-react";
+import { useState } from 'react';
+import { useWebSocket } from '../../contexts/websocketContext';
+import AnalysisItem from './analysisItem';
+import { Loader2 } from 'lucide-react';
 
 export default function AnalysisList() {
   const { analyses = [], connectionStatus } = useWebSocket();
@@ -27,7 +27,7 @@ export default function AnalysisList() {
     });
   };
 
-  if (connectionStatus === "connecting") {
+  if (connectionStatus === 'connecting') {
     return (
       <div className="bg-white p-6 rounded-lg shadow-md">
         <h2 className="text-xl font-semibold mb-4">Available Analyses</h2>
@@ -51,8 +51,8 @@ export default function AnalysisList() {
             className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600"
           >
             {openLogIds.size === analyses.length
-              ? "Close All Logs"
-              : "Open All Logs"}
+              ? 'Close All Logs'
+              : 'Open All Logs'}
           </button>
         )}
       </div>

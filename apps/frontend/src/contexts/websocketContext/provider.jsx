@@ -1,12 +1,12 @@
 // frontend/src/contexts/websocketContext/provider.jsx
-import { useState, useEffect, useCallback, useRef } from "react";
-import PropTypes from "prop-types";
-import { WebSocketContext } from "./context";
+import { useState, useEffect, useCallback, useRef } from 'react';
+import PropTypes from 'prop-types';
+import { WebSocketContext } from './context';
 
 export function WebSocketProvider({ children }) {
   const [socket, setSocket] = useState(null);
   const [analyses, setAnalyses] = useState([]);
-  const [connectionStatus, setConnectionStatus] = useState("connecting");
+  const [connectionStatus, setConnectionStatus] = useState('connecting');
   const lastMessageRef = useRef({ type: null, timestamp: 0 });
   const reconnectAttemptsRef = useRef(0);
   const maxReconnectDelay = 5000; // Maximum reconnection delay of 5 seconds
@@ -18,7 +18,7 @@ export function WebSocketProvider({ children }) {
       return import.meta.env.VITE_WS_URL;
     }
     // Production fallback
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${protocol}//${window.location.host}/ws`;
   };
 
@@ -39,87 +39,87 @@ export function WebSocketProvider({ children }) {
       // console.log('Processing WebSocket message:', data.type);
 
       switch (data.type) {
-        case "init":
-          setAnalyses(data.analyses || []);
-          break;
+      case 'init':
+        setAnalyses(data.analyses || []);
+        break;
 
-        case "analysisCreated":
-          if (data.data?.analysis) {
-            setAnalyses((prev) => {
-              // Check if analysis already exists
-              const exists = prev.some(
-                (a) => a.name === data.data.analysis.name,
+      case 'analysisCreated':
+        if (data.data?.analysis) {
+          setAnalyses((prev) => {
+            // Check if analysis already exists
+            const exists = prev.some(
+              (a) => a.name === data.data.analysis.name,
+            );
+            if (exists) {
+              return prev.map((a) =>
+                a.name === data.data.analysis.name ? data.data.analysis : a,
               );
-              if (exists) {
-                return prev.map((a) =>
-                  a.name === data.data.analysis.name ? data.data.analysis : a,
-                );
-              }
-              return [...prev, data.data.analysis];
-            });
-          }
-          break;
+            }
+            return [...prev, data.data.analysis];
+          });
+        }
+        break;
 
-        case "analysisDeleted":
-          if (data.data?.fileName) {
-            setAnalyses((prev) =>
-              prev.filter((a) => a.name !== data.data.fileName),
-            );
-          }
-          break;
+      case 'analysisDeleted':
+        if (data.data?.fileName) {
+          setAnalyses((prev) =>
+            prev.filter((a) => a.name !== data.data.fileName),
+          );
+        }
+        break;
 
-        case "analysisRenamed":
-          if (data.data?.oldFileName && data.data?.newFileName) {
-            setAnalyses((prev) =>
-              prev.map((analysis) =>
-                analysis.name === data.data.oldFileName
-                  ? { ...analysis, name: data.data.newFileName }
-                  : analysis,
-              ),
-            );
-          }
-          break;
+      case 'analysisRenamed':
+        if (data.data?.oldFileName && data.data?.newFileName) {
+          setAnalyses((prev) =>
+            prev.map((analysis) =>
+              analysis.name === data.data.oldFileName
+                ? { ...analysis, name: data.data.newFileName }
+                : analysis,
+            ),
+          );
+        }
+        break;
 
-        case "status":
-          if (data.data?.fileName) {
-            setAnalyses((prev) =>
-              prev.map((analysis) =>
-                analysis.name === data.data.fileName
-                  ? { ...analysis, ...data.data }
-                  : analysis,
-              ),
-            );
-          }
-          break;
+      case 'status':
+        if (data.data?.fileName) {
+          setAnalyses((prev) =>
+            prev.map((analysis) =>
+              analysis.name === data.data.fileName
+                ? { ...analysis, ...data.data }
+                : analysis,
+            ),
+          );
+        }
+        break;
 
-        case "log":
-          if (data.data?.fileName && data.data?.log) {
-            setAnalyses((prev) =>
-              prev.map((analysis) =>
-                analysis.name === data.data.fileName
-                  ? {
-                      ...analysis,
-                      logs: [data.data.log, ...(analysis.logs || [])],
-                    }
-                  : analysis,
-              ),
-            );
-          }
-          break;
-        case "clearLogs":
-          if (data.data?.fileName) {
-            setAnalyses((prev) =>
-              prev.map((analysis) =>
-                analysis.name === data.data.fileName
-                  ? { ...analysis, logs: [] }
-                  : analysis,
-              ),
-            );
-          }
-          break;
+      case 'log':
+        if (data.data?.fileName && data.data?.log) {
+          setAnalyses((prev) =>
+            prev.map((analysis) =>
+              analysis.name === data.data.fileName
+                ? {
+                  ...analysis,
+                  logs: [data.data.log, ...(analysis.logs || [])],
+                }
+                : analysis,
+            ),
+          );
+        }
+        break;
+      case 'clearLogs':
+        if (data.data?.fileName) {
+          setAnalyses((prev) =>
+            prev.map((analysis) =>
+              analysis.name === data.data.fileName
+                ? { ...analysis, logs: [] }
+                : analysis,
+            ),
+          );
+        }
+        break;
       }
     } catch (error) {
-      console.error("Error handling WebSocket message:", error);
+      console.error('Error handling WebSocket message:', error);
     }
   }, []);
 
@@ -136,7 +136,7 @@ export function WebSocketProvider({ children }) {
       }
 
       // Set status to connecting
-      setConnectionStatus("connecting");
+      setConnectionStatus('connecting');
       connectingRef.current = true;
 
       try {
@@ -145,7 +145,7 @@ export function WebSocketProvider({ children }) {
         // Set a connection timeout - if we don't connect within 5 seconds, consider it a failure
         const connectionTimeout = setTimeout(() => {
           if (connectingRef.current && ws.readyState !== WebSocket.OPEN) {
-            console.log("WebSocket connection timeout");
+            console.log('WebSocket connection timeout');
             // Don't update the status here - let the onclose handler do it
             ws.close();
           }
@@ -154,8 +154,8 @@ export function WebSocketProvider({ children }) {
         ws.onopen = () => {
           clearTimeout(connectionTimeout);
           connectingRef.current = false;
-          console.log("WebSocket connected");
-          setConnectionStatus("connected");
+          console.log('WebSocket connected');
+          setConnectionStatus('connected');
           setSocket(ws);
           reconnectAttemptsRef.current = 0; // Reset reconnect attempts on successful connection
         };
@@ -164,12 +164,12 @@ export function WebSocketProvider({ children }) {
 
         ws.onclose = (event) => {
           clearTimeout(connectionTimeout);
-          console.log("WebSocket disconnected", event.code, event.reason);
+          console.log('WebSocket disconnected', event.code, event.reason);
 
           // Only change to disconnected if we were previously connected
           // If we're still in the connecting phase, keep it as connecting
           if (!connectingRef.current) {
-            setConnectionStatus("disconnected");
+            setConnectionStatus('disconnected');
           }
 
           setSocket(null);
@@ -188,14 +188,14 @@ export function WebSocketProvider({ children }) {
         };
 
         ws.onerror = (error) => {
-          console.error("WebSocket error:", error);
+          console.error('WebSocket error:', error);
           // We keep the connecting status until onclose is called
           // Let onclose handle reconnection
         };
       } catch (error) {
-        console.error("Error creating WebSocket connection:", error);
+        console.error('Error creating WebSocket connection:', error);
         connectingRef.current = false;
-        setConnectionStatus("connecting"); // Stay in connecting state
+        setConnectionStatus('connecting'); // Stay in connecting state
 
         // Try to reconnect
         const delay = Math.min(
@@ -225,7 +225,7 @@ export function WebSocketProvider({ children }) {
       socket.close();
     } else {
       // If we're not connected, force a reconnection attempt
-      setConnectionStatus("connecting");
+      setConnectionStatus('connecting');
       reconnectAttemptsRef.current = 0; // Reset the attempts counter for a fresh start
     }
   }, [socket]);
