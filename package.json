@@ -6,9 +6,9 @@
     "node": ">=22.0.0"
   },
   "scripts": {
-    "dev": "pnpm run dev:frontend & pnpm run dev:server",
+    "dev": "pnpm run dev:frontend & pnpm run dev:backend",
     "dev:frontend": "pnpm --filter \"frontend\" run dev",
-    "dev:server": "pnpm --filter \"server\" run dev",
+    "dev:backend": "pnpm --filter \"backend\" run dev",
     "prettify": "npx prettier . --write",
     "lint": "npx eslint .",
     "lint:fix": "npx eslint . --fix"
