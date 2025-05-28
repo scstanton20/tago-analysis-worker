@@ -1,9 +1,9 @@
-const path = require('path');
-const fs = require('fs').promises;
-const config = require('../config/default');
-const { encrypt, decrypt } = require('../utils/cryptoUtils');
-const AnalysisProcess = require('../models/analysisProcess');
-const ConnectionMonitor = require('../models/connectionMonitor');
+import path from 'path';
+import { promises as fs } from 'fs';
+import config from '../config/default.js';
+import { encrypt, decrypt } from '../utils/cryptoUtils.js';
+import AnalysisProcess from '../models/analysisProcess.js';
+import ConnectionMonitor from '../models/connectionMonitor.js';
 
 class AnalysisService {
   constructor() {
@@ -105,62 +105,6 @@ class AnalysisService {
         }
       }),
     ).then((results) => results.filter(Boolean));
-  }
-
-  async getAnalysisContent(analysisName) {
-    try {
-      // Ensure the correct file path inside the analysis subfolder
-      const filePath = path.join(
-        config.paths.analysis,
-        analysisName,
-        'index.js',
-      );
-
-      // Check if the path is a directory instead of a file
-      const stats = await fs.stat(filePath);
-      if (stats.isDirectory()) {
-        throw new Error(`Expected a file but found a directory: ${filePath}`);
-      }
-
-      // Read and return the content of the index.js file
-      const content = await fs.readFile(filePath, 'utf8');
-      return content;
-    } catch (error) {
-      console.error('Error reading analysis content:', error);
-      throw new Error(`Failed to get analysis content: ${error.message}`);
-    }
-  }
-
-  async updateAnalysis(analysisName, content) {
-    try {
-      const analysis = this.analyses.get(analysisName);
-      const wasRunning = analysis && analysis.status === 'running';
-
-      // If running, stop the analysis first
-      if (wasRunning) {
-        await this.stopAnalysis(analysisName);
-      }
-
-      const filePath = path.join(
-        config.paths.analysis,
-        analysisName,
-        'index.js',
-      );
-      await fs.writeFile(filePath, content, 'utf8');
-
-      // If it was running before, restart it
-      if (wasRunning) {
-        await this.runAnalysis(analysisName, analysis.type);
-      }
-
-      return {
-        success: true,
-        restarted: wasRunning,
-      };
-    } catch (error) {
-      console.error('Error updating analysis:', error);
-      throw new Error(`Failed to update analysis: ${error.message}`);
-    }
   }
 
   async renameAnalysis(analysisName, newFileName) {
@@ -394,7 +338,7 @@ class AnalysisService {
       );
       configuration = JSON.parse(configData);
       console.log('Loaded analysis configuration');
-    } catch (error) {
+    } catch {
       console.log('No existing config found, creating new');
       await this.saveConfig();
     }
@@ -504,7 +448,7 @@ class AnalysisService {
             : null;
         })
         .filter(Boolean);
-    } catch (error) {
+    } catch {
       // No previous logs found, that's okay
     }
 
@@ -725,7 +669,11 @@ class AnalysisService {
 
 // Create and export a singleton instance
 const analysisService = new AnalysisService();
-module.exports = {
+export {
   analysisService,
-  initializeAnalyses: () => analysisService.initialize(),
+  initializeAnalyses,
 };
+
+function initializeAnalyses() {
+  return analysisService.initialize();
+}

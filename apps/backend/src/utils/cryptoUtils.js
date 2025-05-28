@@ -1,30 +1,29 @@
-const crypto = require('crypto');
+// utils/cryptoUtils.js
+import crypto from 'crypto';
+import config from '../config/default.js';
 
-const SECRET_KEY = process.env.SECRET_KEY;
+const SECRET_KEY = config.secretKey;
 
 if (!SECRET_KEY) {
-  throw new Error('SECRET_KEY is missing from environment variables!');
+  throw new Error('SECRET_KEY is missing from config!');
 }
 
-// Securely derive a 32-byte encryption key from the secret
 function deriveKey(secret) {
   return crypto.pbkdf2Sync(secret, 'analysis_salt', 100000, 32, 'sha256');
 }
 
-// Encrypt a value using AES-256-CBC with a random IV
 function encrypt(text) {
   const key = deriveKey(SECRET_KEY);
-  const iv = crypto.randomBytes(16); // Generate a random IV
+  const iv = crypto.randomBytes(16);
   const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
   let encrypted = cipher.update(text, 'utf8', 'hex');
   encrypted += cipher.final('hex');
-  return iv.toString('hex') + ':' + encrypted; // Store IV with ciphertext
+  return iv.toString('hex') + ':' + encrypted;
 }
 
-// Decrypt a value using AES-256-CBC
 function decrypt(encryptedText) {
   const key = deriveKey(SECRET_KEY);
-  const [ivHex, encrypted] = encryptedText.split(':'); // Extract IV
+  const [ivHex, encrypted] = encryptedText.split(':');
   const iv = Buffer.from(ivHex, 'hex');
   const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
   let decrypted = decipher.update(encrypted, 'hex', 'utf8');
@@ -32,4 +31,4 @@ function decrypt(encryptedText) {
   return decrypted;
 }
 
-module.exports = { encrypt, decrypt };
+export { encrypt, decrypt };

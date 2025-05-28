@@ -1,6 +1,6 @@
 // utils/storage.js
-const fs = require('fs').promises;
-const config = require('../config/default');
+import { promises as fs } from 'fs';
+import config from '../config/default.js';
 
 async function initializeStorage() {
   if (!config.storage.createDirs) return;
@@ -32,4 +32,4 @@ async function initializeStorage() {
   }
 }
 
-module.exports = { initializeStorage };
+export default { initializeStorage };

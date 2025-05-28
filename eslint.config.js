@@ -1,17 +1,18 @@
-// eslint.config.js - CommonJS format
-const js = require('@eslint/js');
-const globals = require('globals');
-const react = require('eslint-plugin-react');
-const reactHooks = require('eslint-plugin-react-hooks');
-const reactRefresh = require('eslint-plugin-react-refresh');
-const nodePlugin = require('eslint-plugin-n');
-const securityPlugin = require('eslint-plugin-security');
-const ymlPlugin = require('eslint-plugin-yml');
+// eslint.config.js - ESM format
+import js from '@eslint/js';
+import globals from 'globals';
+import react from 'eslint-plugin-react';
+import reactHooks from 'eslint-plugin-react-hooks';
+import reactRefresh from 'eslint-plugin-react-refresh';
+import nodePlugin from 'eslint-plugin-n';
+import securityPlugin from 'eslint-plugin-security';
+import ymlPlugin from 'eslint-plugin-yml';
+import eslintConfigPrettier from 'eslint-config-prettier/flat';
 
-module.exports = [
+export default [
+  eslintConfigPrettier,
   // Common ignores
   { ignores: ['dist', 'node_modules', 'build', '.pnpm'] },
-
   // Common base configuration for all JavaScript files
   {
     files: ['**/*.{js,jsx}'],
@@ -73,7 +74,6 @@ module.exports = [
     },
     rules: {
       // Error prevention for Node.js
-      'no-console': 'warn',
       'no-return-await': 'error',
       'require-atomic-updates': 'error',
 

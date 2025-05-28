@@ -2,6 +2,10 @@
   "name": "backend",
   "private": true,
   "version": "0.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon --config nodemon.json src/server.js"
@@ -9,7 +13,6 @@
   "dependencies": {
     "@tago-io/sdk": "^11.3.9",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.7",
     "express": "^5.1.0",
     "express-fileupload": "^1.5.1",
     "helmet": "^8.1.0",

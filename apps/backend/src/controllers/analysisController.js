@@ -1,9 +1,9 @@
 // backend/src/controllers/analysisController.js
-const { analysisService } = require('../services/analysisService');
-const { broadcastUpdate } = require('../utils/websocket');
-const path = require('path');
-const config = require('../config/default');
-const fs = require('fs').promises;
+import { analysisService } from '../services/analysisService.js';
+import { broadcastUpdate } from '../utils/websocket.js';
+import path from 'path';
+import config from '../config/default.js';
+import { promises as fs } from 'fs';
 
 const analysisController = {
   async uploadAnalysis(req, res) {
@@ -413,6 +413,7 @@ const analysisController = {
     }
   },
 };
+
 const environmentController = {
   async updateEnvironment(req, res) {
     try {
@@ -458,7 +459,22 @@ const environmentController = {
   },
 };
 
-module.exports = {
+export const {
+  uploadAnalysis,
+  getAnalyses,
+  runAnalysis,
+  stopAnalysis,
+  deleteAnalysis,
+  getAnalysisContent,
+  updateAnalysis,
+  renameAnalysis,
+  getLogs,
+  downloadLogs,
+  clearLogs,
+  downloadAnalysis,
+  updateEnvironment,
+  getEnvironment,
+} = {
   ...analysisController,
   ...environmentController,
 };
