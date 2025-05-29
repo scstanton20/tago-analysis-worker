@@ -381,7 +381,7 @@ const analysisController = {
       const analysisPath = path.join(
         config.paths.analysis,
         fileName,
-        'index.js',
+        'index.cjs',
       );
 
       try {
@@ -392,11 +392,11 @@ const analysisController = {
         res.setHeader('Content-Type', 'application/javascript');
         res.setHeader(
           'Content-Disposition',
-          `attachment; filename=${fileName}.js`,
+          `attachment; filename=${fileName}.cjs`,
         );
 
         // Stream the file to response
-        res.download(analysisPath, `${fileName}.js`, (err) => {
+        res.download(analysisPath, `${fileName}.cjs`, (err) => {
           if (err && !res.headersSent) {
             return res.status(500).json({ error: 'Failed to download file' });
           }

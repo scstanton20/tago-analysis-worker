@@ -94,7 +94,7 @@ class AnalysisProcess {
       const filePath = path.join(
         config.paths.analysis,
         this.analysisName,
-        'index.js',
+        'index.cjs',
       );
       await this.addLog(`Node.js ${process.version}`);
 

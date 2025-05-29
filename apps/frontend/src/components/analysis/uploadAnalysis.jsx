@@ -33,7 +33,7 @@ export default function AnalysisCreator() {
     const file = event.target.files[0];
     if (file) {
       if (!file.name.endsWith('.js')) {
-        setError('Please select a JavaScript file (.js)');
+        setError('Please select a JavaScript file (.cjs)');
         setSelectedFile(null);
         setEditableFileName('');
         event.target.value = null;
@@ -42,7 +42,7 @@ export default function AnalysisCreator() {
       setError(null);
       setSelectedFile(file);
       setEditableFileName(file.name);
-      setAnalysisName(file.name.replace('.js', ''));
+      setAnalysisName(file.name.replace('.cjs', ''));
     }
   };
 
@@ -64,8 +64,8 @@ export default function AnalysisCreator() {
         });
         await analysisService.uploadAnalysis(newFile, analysisType);
       } else {
-        // Create new analysis - automatically append .js extension
-        const fileName = `${analysisName}.js`;
+        // Create new analysis - automatically append .cjs extension
+        const fileName = `${analysisName}.cjs`;
         const blob = new Blob([editorContent], { type: 'text/javascript' });
         const file = new File([blob], fileName, { type: 'text/javascript' });
         await analysisService.uploadAnalysis(file, analysisType);
@@ -182,7 +182,7 @@ export default function AnalysisCreator() {
                     disabled={uploading}
                   />
                   <p className="text-sm text-gray-500">
-                    .js extension will be added automatically.
+                    This application uses ESM modules which Tago.IO does not support, therefore a '.cjs' extension will be added automatically.
                   </p>
                   <p className="text-sm text-gray-500">
                     You will be able to edit the environment variables after

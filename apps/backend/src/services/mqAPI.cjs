@@ -144,7 +144,7 @@ async function createDevice(token, deviceData) {
   }
 }
 
-export default {
+module.exports = {
   getAPIVersion,
   getDevices,
   getGateways,

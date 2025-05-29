@@ -1,11 +1,8 @@
 // controllers/statusController.js
-import { readFile } from 'fs/promises';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { createRequire } from 'module';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
+const require = createRequire(import.meta.url);
 class StatusController {
   constructor(analysisService, containerState) {
     this.analysisService = analysisService;
@@ -25,10 +22,10 @@ class StatusController {
     // Get Tago SDK version from package.json
     let tagoVersion;
     try {
-      const packageJsonPath = join(__dirname, '../../node_modules/@tago-io/sdk/package.json');
-      const packageJson = JSON.parse(await readFile(packageJsonPath, 'utf8'));
+      const packageJson = require('@tago-io/sdk/package.json');
       tagoVersion = packageJson.version;
     } catch (error) {
+      console.error('Error reading tago SDK version:', error);
       tagoVersion = 'unknown';
     }
 

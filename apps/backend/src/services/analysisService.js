@@ -60,7 +60,7 @@ class AnalysisService {
   async uploadAnalysis(file, type) {
     const analysisName = path.parse(file.name).name;
     const basePath = await this.createAnalysisDirectories(analysisName);
-    const filePath = path.join(basePath, 'index.js');
+    const filePath = path.join(basePath, 'index.cjs');
 
     await file.mv(filePath);
     const analysis = new AnalysisProcess(analysisName, type, this);
@@ -80,7 +80,7 @@ class AnalysisService {
 
     return Promise.all(
       analysisDirectories.map(async (dirName) => {
-        const indexPath = path.join(config.paths.analysis, dirName, 'index.js');
+        const indexPath = path.join(config.paths.analysis, dirName, 'index.cjs');
         try {
           const stats = await fs.stat(indexPath);
           const analysis = this.analyses.get(dirName);
@@ -213,7 +213,7 @@ class AnalysisService {
 
     if (!analysis) {
       console.log(`Creating new analysis instance: ${analysisName}`);
-      analysis = new AnalysisProcess(analysisName, type, this); // ✅ Pass `this`
+      analysis = new AnalysisProcess(analysisName, type, this);
       this.analyses.set(analysisName, analysis);
       await this.initializeConnectionMonitor(analysisName, type);
       await this.saveConfig();
@@ -350,7 +350,7 @@ class AnalysisService {
           const indexPath = path.join(
             config.paths.analysis,
             dirName,
-            'index.js',
+            'index.cjs',
           );
           const stats = await fs.stat(indexPath);
           if (stats.isFile()) {
@@ -461,7 +461,7 @@ class AnalysisService {
       const filePath = path.join(
         config.paths.analysis,
         analysisName,
-        'index.js',
+        'index.cjs',
       );
       const content = await fs.readFile(filePath, 'utf8');
       return content;
@@ -485,7 +485,7 @@ class AnalysisService {
       const filePath = path.join(
         config.paths.analysis,
         analysisName,
-        'index.js',
+        'index.cjs',
       );
       await fs.writeFile(filePath, content, 'utf8');
 
