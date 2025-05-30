@@ -15,11 +15,11 @@ export function WebSocketProvider({ children }) {
 
   // Loading state management
   const addLoadingAnalysis = useCallback((analysisName) => {
-    setLoadingAnalyses(prev => new Set([...prev, analysisName]));
+    setLoadingAnalyses((prev) => new Set([...prev, analysisName]));
   }, []);
 
   const removeLoadingAnalysis = useCallback((analysisName) => {
-    setLoadingAnalyses(prev => {
+    setLoadingAnalyses((prev) => {
       const newSet = new Set(prev);
       newSet.delete(analysisName);
       return newSet;
@@ -34,110 +34,115 @@ export function WebSocketProvider({ children }) {
     return `${protocol}//${window.location.host}/ws`;
   };
 
-  const handleMessage = useCallback((event) => {
-    try {
-      const data = JSON.parse(event.data);
-      const now = Date.now();
+  const handleMessage = useCallback(
+    (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        const now = Date.now();
 
-      if (
-        data.type === lastMessageRef.current.type &&
-        now - lastMessageRef.current.timestamp < 50
-      ) {
-        return;
-      }
+        if (
+          data.type === lastMessageRef.current.type &&
+          now - lastMessageRef.current.timestamp < 50
+        ) {
+          return;
+        }
 
-      lastMessageRef.current = { type: data.type, timestamp: now };
+        lastMessageRef.current = { type: data.type, timestamp: now };
 
-      switch (data.type) {
-      case 'init':
-        setAnalyses(data.analyses || []);
-        break;
+        switch (data.type) {
+          case 'init':
+            setAnalyses(data.analyses || []);
+            break;
 
-      case 'analysisCreated':
-        if (data.data?.analysis) {
-          
-          // Remove from loading state
-          removeLoadingAnalysis(data.data.analysis.name);
-          
-          setAnalyses((prev) => {
-            const exists = prev.some(
-              (a) => a.name === data.data.analysis.name,
-            );
-            if (exists) {
-              return prev.map((a) =>
-                a.name === data.data.analysis.name ? data.data.analysis : a,
+          case 'analysisCreated':
+            if (data.data?.analysis) {
+              // Remove from loading state
+              removeLoadingAnalysis(data.data.analysis.name);
+
+              setAnalyses((prev) => {
+                const exists = prev.some(
+                  (a) => a.name === data.data.analysis.name,
+                );
+                if (exists) {
+                  return prev.map((a) =>
+                    a.name === data.data.analysis.name ? data.data.analysis : a,
+                  );
+                }
+                // Add new analysis at the beginning
+                return [data.data.analysis, ...prev];
+              });
+            }
+            break;
+
+          case 'analysisDeleted':
+            if (data.data?.fileName) {
+              removeLoadingAnalysis(data.data.fileName);
+              setAnalyses((prev) =>
+                prev.filter((a) => a.name !== data.data.fileName),
               );
             }
-            // Add new analysis at the beginning
-            return [data.data.analysis, ...prev];
-          });
-        }
-        break;
+            break;
 
-      case 'analysisDeleted':
-        if (data.data?.fileName) {
-          removeLoadingAnalysis(data.data.fileName);
-          setAnalyses((prev) =>
-            prev.filter((a) => a.name !== data.data.fileName),
-          );
-        }
-        break;
+          case 'analysisRenamed':
+            if (data.data?.oldFileName && data.data?.newFileName) {
+              setAnalyses((prev) =>
+                prev.map((analysis) =>
+                  analysis.name === data.data.oldFileName
+                    ? {
+                        ...analysis,
+                        name: data.data.newFileName,
+                      }
+                    : analysis,
+                ),
+              );
+            }
+            break;
 
-      case 'analysisRenamed':
-        if (data.data?.oldFileName && data.data?.newFileName) {
-          setAnalyses((prev) =>
-            prev.map((analysis) =>
-              analysis.name === data.data.oldFileName
-                ? { ...analysis, name: data.data.newFileName }
-                : analysis,
-            ),
-          );
-        }
-        break;
+          case 'status':
+            if (data.data?.fileName) {
+              setAnalyses((prev) =>
+                prev.map((analysis) =>
+                  analysis.name === data.data.fileName
+                    ? { ...analysis, ...data.data }
+                    : analysis,
+                ),
+              );
+            }
+            break;
 
-      case 'status':
-        if (data.data?.fileName) {
-          setAnalyses((prev) =>
-            prev.map((analysis) =>
-              analysis.name === data.data.fileName
-                ? { ...analysis, ...data.data }
-                : analysis,
-            ),
-          );
-        }
-        break;
+          case 'log':
+            if (data.data?.fileName && data.data?.log) {
+              setAnalyses((prev) =>
+                prev.map((analysis) =>
+                  analysis.name === data.data.fileName
+                    ? {
+                        ...analysis,
+                        logs: [data.data.log, ...(analysis.logs || [])],
+                      }
+                    : analysis,
+                ),
+              );
+            }
+            break;
 
-      case 'log':
-        if (data.data?.fileName && data.data?.log) {
-          setAnalyses((prev) =>
-            prev.map((analysis) =>
-              analysis.name === data.data.fileName
-                ? {
-                  ...analysis,
-                  logs: [data.data.log, ...(analysis.logs || [])],
-                }
-                : analysis,
-            ),
-          );
+          case 'clearLogs':
+            if (data.data?.fileName) {
+              setAnalyses((prev) =>
+                prev.map((analysis) =>
+                  analysis.name === data.data.fileName
+                    ? { ...analysis, logs: [] }
+                    : analysis,
+                ),
+              );
+            }
+            break;
         }
-        break;
-
-      case 'clearLogs':
-        if (data.data?.fileName) {
-          setAnalyses((prev) =>
-            prev.map((analysis) =>
-              analysis.name === data.data.fileName
-                ? { ...analysis, logs: [] }
-                : analysis,
-            ),
-          );
-        }
-        break;
+      } catch (error) {
+        console.error('Error handling WebSocket message:', error);
       }
-    } catch (error) {
-      console.error('Error handling WebSocket message:', error);
-    }
-  }, [removeLoadingAnalysis]);
+    },
+    [removeLoadingAnalysis],
+  );
 
   useEffect(() => {
     let ws = null;

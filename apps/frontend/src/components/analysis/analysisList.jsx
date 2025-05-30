@@ -60,7 +60,10 @@ export default function AnalysisList() {
       <div className="space-y-4">
         {/* Loading analyses */}
         {Array.from(loadingAnalyses).map((analysisName) => (
-          <div key={`loading-${analysisName}`} className="bg-gray-50 p-4 rounded border">
+          <div
+            key={`loading-${analysisName}`}
+            className="bg-gray-50 p-4 rounded border"
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
@@ -77,22 +80,20 @@ export default function AnalysisList() {
         ))}
 
         {/* Actual analyses */}
-        {hasAnalyses ? (
-          analyses.map((analysis) => (
-            <AnalysisItem
-              key={`${analysis.name}-${analysis.created || Date.now()}`}
-              analysis={analysis}
-              showLogs={openLogIds.has(analysis.name)}
-              onToggleLogs={() => toggleLog(analysis.name)}
-            />
-          ))
-        ) : (
-          !hasLoadingAnalyses && (
-            <div className="text-center text-gray-500">
-              No analyses available. Upload one to get started.
-            </div>
-          )
-        )}
+        {hasAnalyses
+          ? analyses.map((analysis) => (
+              <AnalysisItem
+                key={`${analysis.name}-${analysis.created || Date.now()}`}
+                analysis={analysis}
+                showLogs={openLogIds.has(analysis.name)}
+                onToggleLogs={() => toggleLog(analysis.name)}
+              />
+            ))
+          : !hasLoadingAnalyses && (
+              <div className="text-center text-gray-500">
+                No analyses available. Upload one to get started.
+              </div>
+            )}
       </div>
     </div>
   );

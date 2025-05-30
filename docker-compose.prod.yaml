@@ -15,13 +15,13 @@ services:
       backend:
         condition: service_healthy
     labels:
-      traefik.enable: "true"
-      traefik.http.routers.tago-runner.rule: "Host(`tago-runner.scstanton.net`)"
-      traefik.http.routers.tago-runner.middlewares: "secured@file,tago-auth"
-      traefik.http.routers.tago-runner.entrypoints: "https"
-      traefik.http.middlewares.tago-auth.basicauth.users: "parkwide:${BASIC_AUTH_PASS}"
-      traefik.http.routers.tago-runner.tls: "true"
-      traefik.docker.network: "traefik-public"
+      traefik.enable: 'true'
+      traefik.http.routers.tago-runner.rule: 'Host(`tago-runner.scstanton.net`)'
+      traefik.http.routers.tago-runner.middlewares: 'secured@file,tago-auth'
+      traefik.http.routers.tago-runner.entrypoints: 'https'
+      traefik.http.middlewares.tago-auth.basicauth.users: 'parkwide:${BASIC_AUTH_PASS}'
+      traefik.http.routers.tago-runner.tls: 'true'
+      traefik.docker.network: 'traefik-public'
 
   backend:
     image: ghcr.io/scstanton20/tago-analysis-runner/backend:latest
@@ -35,12 +35,12 @@ services:
     ports:
       - 3000:3000
     environment:
-      TZ: "America/New_York"
+      TZ: 'America/New_York'
       SECRET_KEY: ${SECRET_KEY}
     healthcheck:
       test:
         [
-          "CMD-SHELL",
+          'CMD-SHELL',
           'node -e "require(''http'').request(''http://localhost:3000/status'', { timeout: 2000 }, (res) => { const allowed = [200, 203]; process.exit(allowed.includes(res.statusCode) ? 0 : 1); }).on(''error'', () => process.exit(1)).end()"',
         ]
       interval: 10s

@@ -9,7 +9,7 @@ services:
       - ./apps/frontend:/app/apps/frontend
       - /app/apps/frontend/node_modules
     ports:
-      - "5173:5173"
+      - '5173:5173'
     environment:
       - NODE_ENV=development
 
@@ -20,6 +20,6 @@ services:
     volumes:
       - ./apps/backend:/app/apps/backend
     ports:
-      - "3000:3000"
+      - '3000:3000'
     environment:
       - NODE_ENV=development

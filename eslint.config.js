@@ -7,12 +7,13 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import nodePlugin from 'eslint-plugin-n';
 import securityPlugin from 'eslint-plugin-security';
 import ymlPlugin from 'eslint-plugin-yml';
-import eslintConfigPrettier from 'eslint-config-prettier/flat';
+import prettierPlugin from 'eslint-plugin-prettier';
+import prettierConfig from 'eslint-config-prettier';
 
 export default [
-  eslintConfigPrettier,
   // Common ignores
   { ignores: ['dist', 'node_modules', 'build', '.pnpm'] },
+
   // Common base configuration for all JavaScript files
   {
     files: ['**/*.{js,jsx}'],
@@ -20,16 +21,15 @@ export default [
       ecmaVersion: 2021,
       sourceType: 'module',
     },
+    plugins: {
+      prettier: prettierPlugin,
+    },
     rules: {
       ...js.configs.recommended.rules,
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
-      'indent': ['error', 2],
-      'linebreak-style': ['error', 'unix'],
-      'quotes': ['error', 'single', { 'avoidEscape': true }],
-      'semi': ['error', 'always'],
-      'comma-dangle': ['error', 'always-multiline'],
       'no-var': 'error',
       'prefer-const': 'error',
+      'prettier/prettier': 'error',
     },
   },
 
@@ -47,7 +47,7 @@ export default [
       },
     },
     plugins: {
-      'react': react,
+      react: react,
       'react-hooks': reactHooks,
       'react-refresh': reactRefresh,
     },
@@ -69,8 +69,8 @@ export default [
       },
     },
     plugins: {
-      'node': nodePlugin,
-      'security': securityPlugin,
+      node: nodePlugin,
+      security: securityPlugin,
     },
     rules: {
       // Error prevention for Node.js
@@ -101,11 +101,12 @@ export default [
       'node/no-unpublished-require': 'off',
     },
   },
+
   // YAML configuration for Docker files
   {
     files: ['*.{yaml}'],
     plugins: {
-      'yml': ymlPlugin,
+      yml: ymlPlugin,
     },
     languageOptions: {
       parser: ymlPlugin.parser,
@@ -121,4 +122,7 @@ export default [
       'yml/spaced-comment': ['error', 'always'],
     },
   },
+
+  // Must be last - disables conflicting ESLint rules
+  prettierConfig,
 ];

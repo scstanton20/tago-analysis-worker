@@ -1,7 +1,6 @@
 // controllers/statusController.js
 import { createRequire } from 'module';
 
-
 const require = createRequire(import.meta.url);
 class StatusController {
   constructor(analysisService, containerState) {
@@ -35,9 +34,7 @@ class StatusController {
           this.containerState.status === 'ready' ? 'healthy' : 'initializing',
         containerState: this.containerState.status,
         message: this.containerState.message,
-        uptime: Math.floor(
-          (new Date() - this.containerState.startTime) / 1000,
-        ), // in seconds
+        uptime: Math.floor((new Date() - this.containerState.startTime) / 1000), // in seconds
       },
       tagoConnection: {
         sdkVersion: tagoVersion,
@@ -72,7 +69,6 @@ class StatusController {
           : 203; // 203 = Non-Authoritative Information
 
     res.status(httpStatus).json(status);
-    
   }
 }
 

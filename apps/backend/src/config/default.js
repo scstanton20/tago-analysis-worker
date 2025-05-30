@@ -13,7 +13,10 @@ function determineStorageBase() {
 
 const config = {
   env: process.env.NODE_ENV,
-  secretKey: process.env.NODE_ENV === 'development' ? 'development' : process.env.SECRET_KEY,
+  secretKey:
+    process.env.NODE_ENV === 'development'
+      ? 'development'
+      : process.env.SECRET_KEY,
   storage: {
     base: determineStorageBase(),
     createDirs: true,

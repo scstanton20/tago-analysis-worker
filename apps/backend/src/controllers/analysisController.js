@@ -240,9 +240,9 @@ const analysisController = {
             const match = line.match(/\[(.*?)\] (.*)/);
             return match
               ? {
-                timestamp: match[1],
-                message: match[2],
-              }
+                  timestamp: match[1],
+                  message: match[2],
+                }
               : null;
           })
           .filter(Boolean)

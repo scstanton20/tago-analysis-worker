@@ -54,11 +54,26 @@ const LogDownloadDialog = ({ isOpen, onClose, onDownload }) => {
                   <Select.Viewport className="p-1">
                     <Select.Group>
                       {[
-                        { value: '1h', label: 'Last Hour' },
-                        { value: '24h', label: 'Last 24 Hours' },
-                        { value: '7d', label: 'Last 7 Days' },
-                        { value: '30d', label: 'Last 30 Days' },
-                        { value: 'all', label: 'All Logs' },
+                        {
+                          value: '1h',
+                          label: 'Last Hour',
+                        },
+                        {
+                          value: '24h',
+                          label: 'Last 24 Hours',
+                        },
+                        {
+                          value: '7d',
+                          label: 'Last 7 Days',
+                        },
+                        {
+                          value: '30d',
+                          label: 'Last 30 Days',
+                        },
+                        {
+                          value: 'all',
+                          label: 'All Logs',
+                        },
                       ].map(({ value, label }) => (
                         <Select.Item
                           key={value}

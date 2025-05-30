@@ -24,7 +24,9 @@ function setupWebSocket(server) {
     clients.add(ws);
 
     try {
-      const { analysisService } = await import('../services/analysisService.js');
+      const { analysisService } = await import(
+        '../services/analysisService.js'
+      );
       const analyses = await analysisService.getRunningAnalyses();
 
       if (ws.readyState === WebSocket.OPEN) {

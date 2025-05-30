@@ -18,32 +18,37 @@ export default function AnalysisCreator() {
   );
   const [isExpanded, setIsExpanded] = useState(false);
   const fileInputRef = useRef(null);
-  const { connectionStatus, addLoadingAnalysis, removeLoadingAnalysis, loadingAnalyses } = useWebSocket();
+  const {
+    connectionStatus,
+    addLoadingAnalysis,
+    removeLoadingAnalysis,
+    loadingAnalyses,
+  } = useWebSocket();
   const [sdkVersion, setSdkVersion] = useState('');
 
   const validateFilename = (filename) => {
     if (!filename) return 'Filename cannot be empty';
-    
+
     // Don't allow periods at all - backend will add extension
     if (filename.includes('.')) {
       return 'Filename cannot contain periods. Extension will be added automatically.';
     }
-    
+
     const sanitized = sanitize(filename, { replacement: '_' });
-    
+
     if (filename !== sanitized) {
       return 'Filename contains invalid characters. Please remove: < > : " / \\ | ? * and control characters';
     }
-    
-    // Additional checks that sanitize might miss  
+
+    // Additional checks that sanitize might miss
     if (filename.trim() !== filename) {
       return 'Filename cannot start or end with spaces';
     }
-    
+
     if (filename.length > 200) {
       return 'Filename is too long (max 200 characters)';
     }
-    
+
     return null;
   };
 
@@ -87,7 +92,7 @@ export default function AnalysisCreator() {
   const handleEditableFileNameChange = (e) => {
     const value = e.target.value;
     setEditableFileName(value);
-    
+
     const validationError = validateFilename(value);
     setError(validationError);
   };
@@ -95,14 +100,14 @@ export default function AnalysisCreator() {
   const handleAnalysisNameChange = (e) => {
     const value = e.target.value;
     setAnalysisName(value);
-    
+
     const validationError = validateFilename(value);
     setError(validationError);
   };
 
   const handleUpload = async () => {
     console.log('handleUpload called');
-    
+
     if (mode === 'create' && !analysisName) {
       setError('Please provide a name for the analysis');
       return;
@@ -111,7 +116,7 @@ export default function AnalysisCreator() {
     // Validate filenames before submission
     let finalFileName;
     let validationError;
-    
+
     if (mode === 'upload') {
       if (!selectedFile || !editableFileName) return;
       validationError = validateFilename(editableFileName);
@@ -140,8 +145,12 @@ export default function AnalysisCreator() {
           type: selectedFile.type,
         });
       } else {
-        const blob = new Blob([editorContent], { type: 'text/javascript' });
-        file = new File([blob], finalFileName, { type: 'text/javascript' });
+        const blob = new Blob([editorContent], {
+          type: 'text/javascript',
+        });
+        file = new File([blob], finalFileName, {
+          type: 'text/javascript',
+        });
       }
 
       // Add to loading state immediately
@@ -170,7 +179,7 @@ export default function AnalysisCreator() {
       if (finalFileName) {
         removeLoadingAnalysis(finalFileName);
       }
-      
+
       setError(error.message || 'Failed to save analysis');
       console.error('Save failed:', error);
     }
@@ -195,7 +204,11 @@ export default function AnalysisCreator() {
   const isCurrentAnalysisLoading = () => {
     const currentName = getCurrentAnalysisName();
     const isLoading = currentName && loadingAnalyses.has(currentName);
-    console.log('isCurrentAnalysisLoading check:', { currentName, isLoading, loadingAnalyses: Array.from(loadingAnalyses) });
+    console.log('isCurrentAnalysisLoading check:', {
+      currentName,
+      isLoading,
+      loadingAnalyses: Array.from(loadingAnalyses),
+    });
     return isLoading;
   };
 
@@ -203,7 +216,6 @@ export default function AnalysisCreator() {
     isCurrentAnalysisLoading() ||
     connectionStatus !== 'connected' ||
     (mode === 'create' && !analysisName) ||
-    (mode === 'upload' && !selectedFile) ||
     error;
 
   const isTabDisabled =
@@ -281,7 +293,8 @@ export default function AnalysisCreator() {
                     disabled={isCurrentAnalysisLoading()}
                   />
                   <p className="text-sm text-gray-500">
-                    The backend will automatically add a .cjs extension since Tago.IO requires CommonJS modules.
+                    The .cjs extension will be added automatically by the
+                    backend as Tago.IO requires CommonJS modules.
                   </p>
                   <p className="text-sm text-gray-500">
                     You will be able to edit the environment variables after
@@ -298,7 +311,7 @@ export default function AnalysisCreator() {
                       type="file"
                       onChange={handleFileChange}
                       ref={fileInputRef}
-                      accept=".js,.cjs"
+                      accept=".cjs"
                       className="hidden"
                       id="analysis-file"
                       disabled={isDisabled}
@@ -317,7 +330,6 @@ export default function AnalysisCreator() {
                       {selectedFile ? selectedFile.name : 'No file chosen'}
                     </span>
                   </div>
-
                   {/* Editable filename field */}
                   {selectedFile && (
                     <div className="space-y-2">
@@ -336,11 +348,12 @@ export default function AnalysisCreator() {
                         placeholder="Enter filename (no extension)"
                         disabled={isCurrentAnalysisLoading()}
                       />
-                      <p className="text-sm text-gray-500">
-                        The .cjs extension will be added automatically by the backend.
-                      </p>
                     </div>
                   )}
+                  <p className="text-sm text-gray-500">
+                    The .cjs extension will be added automatically by the
+                    backend as Tago.IO requires CommonJS modules.
+                  </p>
                 </div>
               ) : (
                 /* Editor UI */
@@ -394,7 +407,9 @@ export default function AnalysisCreator() {
                       : 'bg-green-500 hover:bg-green-600'
                   }`}
                 >
-                  {isCurrentAnalysisLoading() ? 'Processing...' : 'Save Analysis'}
+                  {isCurrentAnalysisLoading()
+                    ? 'Processing...'
+                    : 'Save Analysis'}
                 </button>
                 {(selectedFile ||
                   editorContent !== '// Write your analysis code here') && (

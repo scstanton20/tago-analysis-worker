@@ -80,7 +80,11 @@ class AnalysisService {
 
     return Promise.all(
       analysisDirectories.map(async (dirName) => {
-        const indexPath = path.join(config.paths.analysis, dirName, 'index.cjs');
+        const indexPath = path.join(
+          config.paths.analysis,
+          dirName,
+          'index.cjs',
+        );
         try {
           const stats = await fs.stat(indexPath);
           const analysis = this.analyses.get(dirName);
@@ -442,9 +446,9 @@ class AnalysisService {
           const match = line.match(/\[(.*?)\] (.*)/);
           return match
             ? {
-              timestamp: match[1],
-              message: match[2],
-            }
+                timestamp: match[1],
+                message: match[2],
+              }
             : null;
         })
         .filter(Boolean);
@@ -527,20 +531,20 @@ class AnalysisService {
       // Filter logs based on timestamp
       const cutoffDate = new Date();
       switch (timeRange) {
-      case '1h':
-        cutoffDate.setHours(cutoffDate.getHours() - 1);
-        break;
-      case '24h':
-        cutoffDate.setHours(cutoffDate.getHours() - 24);
-        break;
-      case '7d':
-        cutoffDate.setDate(cutoffDate.getDate() - 7);
-        break;
-      case '30d':
-        cutoffDate.setDate(cutoffDate.getDate() - 30);
-        break;
-      default:
-        throw new Error('Invalid time range specified');
+        case '1h':
+          cutoffDate.setHours(cutoffDate.getHours() - 1);
+          break;
+        case '24h':
+          cutoffDate.setHours(cutoffDate.getHours() - 24);
+          break;
+        case '7d':
+          cutoffDate.setDate(cutoffDate.getDate() - 7);
+          break;
+        case '30d':
+          cutoffDate.setDate(cutoffDate.getDate() - 30);
+          break;
+        default:
+          throw new Error('Invalid time range specified');
       }
 
       const filteredLogs = lines.filter((line) => {
@@ -669,10 +673,7 @@ class AnalysisService {
 
 // Create and export a singleton instance
 const analysisService = new AnalysisService();
-export {
-  analysisService,
-  initializeAnalyses,
-};
+export { analysisService, initializeAnalyses };
 
 function initializeAnalyses() {
   return analysisService.initialize();
