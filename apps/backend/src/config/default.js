@@ -1,5 +1,5 @@
 // config/default.js
-const path = require('path');
+import path from 'path';
 
 function determineStorageBase() {
   // If explicitly set through environment variable, use that
@@ -13,7 +13,7 @@ function determineStorageBase() {
 
 const config = {
   env: process.env.NODE_ENV,
-  secretKey: process.env.SECRET_KEY,
+  secretKey: process.env.NODE_ENV === 'development' ? 'development' : process.env.SECRET_KEY,
   storage: {
     base: determineStorageBase(),
     createDirs: true,
@@ -43,4 +43,4 @@ config.files = {
   config: path.join(config.paths.config, 'analyses-config.json'),
 };
 
-module.exports = config;
+export default config;

@@ -4,12 +4,12 @@ import { useWebSocket } from '../../contexts/websocketContext/index';
 import Editor from '@monaco-editor/react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { statusService } from '../../services/statusServices';
+import sanitize from 'sanitize-filename';
 
 export default function AnalysisCreator() {
   const [mode, setMode] = useState('upload');
   const [selectedFile, setSelectedFile] = useState(null);
   const [analysisType, setAnalysisType] = useState('listener');
-  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
   const [analysisName, setAnalysisName] = useState('');
   const [editableFileName, setEditableFileName] = useState('');
@@ -18,8 +18,34 @@ export default function AnalysisCreator() {
   );
   const [isExpanded, setIsExpanded] = useState(false);
   const fileInputRef = useRef(null);
-  const { connectionStatus } = useWebSocket();
+  const { connectionStatus, addLoadingAnalysis, removeLoadingAnalysis, loadingAnalyses } = useWebSocket();
   const [sdkVersion, setSdkVersion] = useState('');
+
+  const validateFilename = (filename) => {
+    if (!filename) return 'Filename cannot be empty';
+    
+    // Don't allow periods at all - backend will add extension
+    if (filename.includes('.')) {
+      return 'Filename cannot contain periods. Extension will be added automatically.';
+    }
+    
+    const sanitized = sanitize(filename, { replacement: '_' });
+    
+    if (filename !== sanitized) {
+      return 'Filename contains invalid characters. Please remove: < > : " / \\ | ? * and control characters';
+    }
+    
+    // Additional checks that sanitize might miss  
+    if (filename.trim() !== filename) {
+      return 'Filename cannot start or end with spaces';
+    }
+    
+    if (filename.length > 200) {
+      return 'Filename is too long (max 200 characters)';
+    }
+    
+    return null;
+  };
 
   useEffect(() => {
     const fetchVersion = async () => {
@@ -32,47 +58,101 @@ export default function AnalysisCreator() {
   const handleFileChange = (event) => {
     const file = event.target.files[0];
     if (file) {
-      if (!file.name.endsWith('.js')) {
-        setError('Please select a JavaScript file (.js)');
+      if (!file.name.endsWith('.js') && !file.name.endsWith('.cjs')) {
+        setError('Please select a JavaScript file (.js or .cjs)');
         setSelectedFile(null);
         setEditableFileName('');
         event.target.value = null;
         return;
       }
+
+      // Strip extension from filename for editing
+      const nameWithoutExtension = file.name.replace(/\.(js|cjs)$/, '');
+      const validationError = validateFilename(nameWithoutExtension);
+      if (validationError) {
+        setError(validationError);
+        setSelectedFile(null);
+        setEditableFileName('');
+        event.target.value = null;
+        return;
+      }
+
       setError(null);
       setSelectedFile(file);
-      setEditableFileName(file.name);
-      setAnalysisName(file.name.replace('.js', ''));
+      setEditableFileName(nameWithoutExtension);
+      setAnalysisName(nameWithoutExtension);
     }
   };
 
+  const handleEditableFileNameChange = (e) => {
+    const value = e.target.value;
+    setEditableFileName(value);
+    
+    const validationError = validateFilename(value);
+    setError(validationError);
+  };
+
+  const handleAnalysisNameChange = (e) => {
+    const value = e.target.value;
+    setAnalysisName(value);
+    
+    const validationError = validateFilename(value);
+    setError(validationError);
+  };
+
   const handleUpload = async () => {
+    console.log('handleUpload called');
+    
     if (mode === 'create' && !analysisName) {
       setError('Please provide a name for the analysis');
       return;
     }
 
-    setUploading(true);
+    // Validate filenames before submission
+    let finalFileName;
+    let validationError;
+    
+    if (mode === 'upload') {
+      if (!selectedFile || !editableFileName) return;
+      validationError = validateFilename(editableFileName);
+      if (validationError) {
+        setError(validationError);
+        return;
+      }
+      finalFileName = editableFileName;
+    } else {
+      if (!analysisName) return;
+      validationError = validateFilename(analysisName);
+      if (validationError) {
+        setError(validationError);
+        return;
+      }
+      finalFileName = `${analysisName}`;
+    }
+
     setError(null);
+
+    let file;
 
     try {
       if (mode === 'upload') {
-        if (!selectedFile) return;
-        // Create a new file with the edited filename
-        const newFile = new File([selectedFile], editableFileName, {
+        file = new File([selectedFile], finalFileName, {
           type: selectedFile.type,
         });
-        await analysisService.uploadAnalysis(newFile, analysisType);
       } else {
-        // Create new analysis - automatically append .js extension
-        const fileName = `${analysisName}.js`;
         const blob = new Blob([editorContent], { type: 'text/javascript' });
-        const file = new File([blob], fileName, { type: 'text/javascript' });
-        await analysisService.uploadAnalysis(file, analysisType);
+        file = new File([blob], finalFileName, { type: 'text/javascript' });
       }
 
+      // Add to loading state immediately
+      console.log('Adding to loading state:', finalFileName);
+      addLoadingAnalysis(finalFileName);
+
+      console.log('Calling analysisService.uploadAnalysis');
+      await analysisService.uploadAnalysis(file, analysisType);
+
       window.alert(
-        `Successfully ${mode === 'upload' ? 'uploaded' : 'created'} analysis ${mode === 'upload' ? editableFileName : analysisName}`,
+        `Successfully ${mode === 'upload' ? 'uploaded' : 'created'} analysis ${finalFileName}`,
       );
 
       // Reset form
@@ -85,10 +165,14 @@ export default function AnalysisCreator() {
         fileInputRef.current.value = '';
       }
     } catch (error) {
+      console.log('Upload error, removing from loading state:', finalFileName);
+      // Remove from loading state on error
+      if (finalFileName) {
+        removeLoadingAnalysis(finalFileName);
+      }
+      
       setError(error.message || 'Failed to save analysis');
       console.error('Save failed:', error);
-    } finally {
-      setUploading(false);
     }
   };
 
@@ -103,13 +187,28 @@ export default function AnalysisCreator() {
     }
   };
 
+  // Check if current analysis is being processed
+  const getCurrentAnalysisName = () => {
+    return mode === 'upload' ? editableFileName : `${analysisName}`;
+  };
+
+  const isCurrentAnalysisLoading = () => {
+    const currentName = getCurrentAnalysisName();
+    const isLoading = currentName && loadingAnalyses.has(currentName);
+    console.log('isCurrentAnalysisLoading check:', { currentName, isLoading, loadingAnalyses: Array.from(loadingAnalyses) });
+    return isLoading;
+  };
+
   const isDisabled =
-    uploading ||
+    isCurrentAnalysisLoading() ||
     connectionStatus !== 'connected' ||
-    (mode === 'create' && !analysisName);
+    (mode === 'create' && !analysisName) ||
+    (mode === 'upload' && !selectedFile) ||
+    error;
+
   const isTabDisabled =
     (selectedFile || editorContent !== '// Write your analysis code here') &&
-    !uploading;
+    !isCurrentAnalysisLoading();
 
   return (
     <>
@@ -176,13 +275,13 @@ export default function AnalysisCreator() {
                     type="text"
                     id="analysis-name"
                     value={analysisName}
-                    onChange={(e) => setAnalysisName(e.target.value)}
+                    onChange={handleAnalysisNameChange}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Enter analysis name"
-                    disabled={uploading}
+                    placeholder="Enter analysis name (no extension)"
+                    disabled={isCurrentAnalysisLoading()}
                   />
                   <p className="text-sm text-gray-500">
-                    .js extension will be added automatically.
+                    The backend will automatically add a .cjs extension since Tago.IO requires CommonJS modules.
                   </p>
                   <p className="text-sm text-gray-500">
                     You will be able to edit the environment variables after
@@ -199,7 +298,7 @@ export default function AnalysisCreator() {
                       type="file"
                       onChange={handleFileChange}
                       ref={fileInputRef}
-                      accept=".js"
+                      accept=".js,.cjs"
                       className="hidden"
                       id="analysis-file"
                       disabled={isDisabled}
@@ -232,11 +331,14 @@ export default function AnalysisCreator() {
                         type="text"
                         id="filename"
                         value={editableFileName}
-                        onChange={(e) => setEditableFileName(e.target.value)}
+                        onChange={handleEditableFileNameChange}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Enter filename (with .js extension)"
-                        disabled={uploading}
+                        placeholder="Enter filename (no extension)"
+                        disabled={isCurrentAnalysisLoading()}
                       />
+                      <p className="text-sm text-gray-500">
+                        The .cjs extension will be added automatically by the backend.
+                      </p>
                     </div>
                   )}
                 </div>
@@ -256,6 +358,7 @@ export default function AnalysisCreator() {
                       automaticLayout: true,
                       wordWrap: 'on',
                       lineNumbers: 'on',
+                      readOnly: isCurrentAnalysisLoading(),
                     }}
                   />
                 </div>
@@ -271,7 +374,7 @@ export default function AnalysisCreator() {
                     checked={analysisType === 'listener'}
                     onChange={(e) => setAnalysisType(e.target.value)}
                     className="form-radio text-blue-500"
-                    disabled={uploading}
+                    disabled={isCurrentAnalysisLoading()}
                   />
                   <span>Connect via Tago SDK {sdkVersion}</span>
                 </label>
@@ -291,40 +394,14 @@ export default function AnalysisCreator() {
                       : 'bg-green-500 hover:bg-green-600'
                   }`}
                 >
-                  {uploading ? (
-                    <span className="flex items-center">
-                      <svg
-                        className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                      >
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                        ></circle>
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        ></path>
-                      </svg>
-                      Saving...
-                    </span>
-                  ) : (
-                    'Save Analysis'
-                  )}
+                  {isCurrentAnalysisLoading() ? 'Processing...' : 'Save Analysis'}
                 </button>
                 {(selectedFile ||
                   editorContent !== '// Write your analysis code here') && (
                   <button
                     onClick={handleCancel}
                     className="px-4 py-2 rounded text-gray-600 hover:text-gray-800"
-                    disabled={uploading}
+                    disabled={isCurrentAnalysisLoading()}
                   >
                     Cancel
                   </button>

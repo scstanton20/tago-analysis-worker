@@ -175,17 +175,17 @@ const AnalysisLogs = ({ logs: websocketLogs = [], analysis }) => {
 };
 
 AnalysisLogs.propTypes = {
-  logs: PropTypes.arrayOf(
-    PropTypes.shape({
-      timestamp: PropTypes.string,
-      message: PropTypes.string,
-    }),
-  ),
   analysis: PropTypes.shape({
     name: PropTypes.string.isRequired,
-    type: PropTypes.string,
+    type: PropTypes.oneOf(['listener']),
     status: PropTypes.string,
-    logs: PropTypes.array,
+    enabled: PropTypes.bool,
+    logs: PropTypes.arrayOf(
+      PropTypes.shape({
+        timestamp: PropTypes.string,
+        message: PropTypes.string,
+      }),
+    ),
   }).isRequired,
 };
 

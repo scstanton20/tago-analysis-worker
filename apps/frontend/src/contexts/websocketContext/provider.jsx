@@ -6,18 +6,30 @@ import { WebSocketContext } from './context';
 export function WebSocketProvider({ children }) {
   const [socket, setSocket] = useState(null);
   const [analyses, setAnalyses] = useState([]);
+  const [loadingAnalyses, setLoadingAnalyses] = useState(new Set());
   const [connectionStatus, setConnectionStatus] = useState('connecting');
   const lastMessageRef = useRef({ type: null, timestamp: 0 });
   const reconnectAttemptsRef = useRef(0);
-  const maxReconnectDelay = 5000; // Maximum reconnection delay of 5 seconds
-  const connectingRef = useRef(false); // New ref to track connection attempts
+  const maxReconnectDelay = 5000;
+  const connectingRef = useRef(false);
+
+  // Loading state management
+  const addLoadingAnalysis = useCallback((analysisName) => {
+    setLoadingAnalyses(prev => new Set([...prev, analysisName]));
+  }, []);
+
+  const removeLoadingAnalysis = useCallback((analysisName) => {
+    setLoadingAnalyses(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(analysisName);
+      return newSet;
+    });
+  }, []);
 
   const getWebSocketUrl = () => {
-    // Use the environment variable in development, fallback to window.location in production
     if (import.meta.env.DEV && import.meta.env.VITE_WS_URL) {
       return import.meta.env.VITE_WS_URL;
     }
-    // Production fallback
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${protocol}//${window.location.host}/ws`;
   };
@@ -27,7 +39,6 @@ export function WebSocketProvider({ children }) {
       const data = JSON.parse(event.data);
       const now = Date.now();
 
-      // Deduplicate messages that arrive within 50ms of each other
       if (
         data.type === lastMessageRef.current.type &&
         now - lastMessageRef.current.timestamp < 50
@@ -36,7 +47,6 @@ export function WebSocketProvider({ children }) {
       }
 
       lastMessageRef.current = { type: data.type, timestamp: now };
-      // console.log('Processing WebSocket message:', data.type);
 
       switch (data.type) {
       case 'init':
@@ -45,8 +55,11 @@ export function WebSocketProvider({ children }) {
 
       case 'analysisCreated':
         if (data.data?.analysis) {
+          
+          // Remove from loading state
+          removeLoadingAnalysis(data.data.analysis.name);
+          
           setAnalyses((prev) => {
-            // Check if analysis already exists
             const exists = prev.some(
               (a) => a.name === data.data.analysis.name,
             );
@@ -55,13 +68,15 @@ export function WebSocketProvider({ children }) {
                 a.name === data.data.analysis.name ? data.data.analysis : a,
               );
             }
-            return [...prev, data.data.analysis];
+            // Add new analysis at the beginning
+            return [data.data.analysis, ...prev];
           });
         }
         break;
 
       case 'analysisDeleted':
         if (data.data?.fileName) {
+          removeLoadingAnalysis(data.data.fileName);
           setAnalyses((prev) =>
             prev.filter((a) => a.name !== data.data.fileName),
           );
@@ -106,6 +121,7 @@ export function WebSocketProvider({ children }) {
           );
         }
         break;
+
       case 'clearLogs':
         if (data.data?.fileName) {
           setAnalyses((prev) =>
@@ -121,7 +137,7 @@ export function WebSocketProvider({ children }) {
     } catch (error) {
       console.error('Error handling WebSocket message:', error);
     }
-  }, []);
+  }, [removeLoadingAnalysis]);
 
   useEffect(() => {
     let ws = null;
@@ -130,23 +146,19 @@ export function WebSocketProvider({ children }) {
     const connect = () => {
       if (ws?.readyState === WebSocket.OPEN) return;
 
-      // Clear any existing reconnect timeout
       if (reconnectTimeout) {
         clearTimeout(reconnectTimeout);
       }
 
-      // Set status to connecting
       setConnectionStatus('connecting');
       connectingRef.current = true;
 
       try {
         ws = new WebSocket(getWebSocketUrl());
 
-        // Set a connection timeout - if we don't connect within 5 seconds, consider it a failure
         const connectionTimeout = setTimeout(() => {
           if (connectingRef.current && ws.readyState !== WebSocket.OPEN) {
             console.log('WebSocket connection timeout');
-            // Don't update the status here - let the onclose handler do it
             ws.close();
           }
         }, 5000);
@@ -157,7 +169,7 @@ export function WebSocketProvider({ children }) {
           console.log('WebSocket connected');
           setConnectionStatus('connected');
           setSocket(ws);
-          reconnectAttemptsRef.current = 0; // Reset reconnect attempts on successful connection
+          reconnectAttemptsRef.current = 0;
         };
 
         ws.onmessage = handleMessage;
@@ -166,15 +178,12 @@ export function WebSocketProvider({ children }) {
           clearTimeout(connectionTimeout);
           console.log('WebSocket disconnected', event.code, event.reason);
 
-          // Only change to disconnected if we were previously connected
-          // If we're still in the connecting phase, keep it as connecting
           if (!connectingRef.current) {
             setConnectionStatus('disconnected');
           }
 
           setSocket(null);
 
-          // Calculate reconnection delay with exponential backoff
           const delay = Math.min(
             100 * Math.pow(2, reconnectAttemptsRef.current),
             maxReconnectDelay,
@@ -189,15 +198,12 @@ export function WebSocketProvider({ children }) {
 
         ws.onerror = (error) => {
           console.error('WebSocket error:', error);
-          // We keep the connecting status until onclose is called
-          // Let onclose handle reconnection
         };
       } catch (error) {
         console.error('Error creating WebSocket connection:', error);
         connectingRef.current = false;
-        setConnectionStatus('connecting'); // Stay in connecting state
+        setConnectionStatus('connecting');
 
-        // Try to reconnect
         const delay = Math.min(
           100 * Math.pow(2, reconnectAttemptsRef.current),
           maxReconnectDelay,
@@ -219,14 +225,12 @@ export function WebSocketProvider({ children }) {
     };
   }, [handleMessage]);
 
-  // Expose a reconnect method to manually trigger reconnection
   const reconnect = useCallback(() => {
     if (socket?.readyState === WebSocket.OPEN) {
       socket.close();
     } else {
-      // If we're not connected, force a reconnection attempt
       setConnectionStatus('connecting');
-      reconnectAttemptsRef.current = 0; // Reset the attempts counter for a fresh start
+      reconnectAttemptsRef.current = 0;
     }
   }, [socket]);
 
@@ -235,8 +239,11 @@ export function WebSocketProvider({ children }) {
       value={{
         socket,
         analyses,
+        loadingAnalyses,
         connectionStatus,
-        reconnect, // Expose reconnect method to consumers
+        reconnect,
+        addLoadingAnalysis,
+        removeLoadingAnalysis,
       }}
     >
       {children}

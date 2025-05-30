@@ -1,9 +1,9 @@
 // models/AnalysisProcess.js
-const path = require('path');
-const fs = require('fs').promises;
-const { fork } = require('child_process');
-const { broadcastUpdate } = require('../utils/websocket');
-const config = require('../config/default');
+import path from 'path';
+import { promises as fs } from 'fs';
+import { fork } from 'child_process';
+import { broadcastUpdate } from '../utils/websocket.js';
+import config from '../config/default.js';
 
 class AnalysisProcess {
   constructor(analysisName, type, service) {
@@ -94,7 +94,7 @@ class AnalysisProcess {
       const filePath = path.join(
         config.paths.analysis,
         this.analysisName,
-        'index.js',
+        'index.cjs',
       );
       await this.addLog(`Node.js ${process.version}`);
 
@@ -230,4 +230,4 @@ class AnalysisProcess {
   }
 }
 
-module.exports = AnalysisProcess;
+export default AnalysisProcess;

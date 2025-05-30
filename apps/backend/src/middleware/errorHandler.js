@@ -1,5 +1,5 @@
 // backend/src/middleware/errorHandler.js
-function errorHandler(err, req, res, next) {
+function errorHandler(err, _req, res) {
   console.error(err.stack);
   res.status(500).json({
     error: err.message || 'Internal Server Error',
@@ -7,4 +7,4 @@ function errorHandler(err, req, res, next) {
   });
 }
 
-module.exports = errorHandler;
+export default errorHandler;

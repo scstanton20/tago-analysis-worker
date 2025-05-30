@@ -1,9 +1,9 @@
 // backend/src/controllers/analysisController.js
-const { analysisService } = require('../services/analysisService');
-const { broadcastUpdate } = require('../utils/websocket');
-const path = require('path');
-const config = require('../config/default');
-const fs = require('fs').promises;
+import { analysisService } from '../services/analysisService.js';
+import { broadcastUpdate } from '../utils/websocket.js';
+import path from 'path';
+import config from '../config/default.js';
+import { promises as fs } from 'fs';
 
 const analysisController = {
   async uploadAnalysis(req, res) {
@@ -381,7 +381,7 @@ const analysisController = {
       const analysisPath = path.join(
         config.paths.analysis,
         fileName,
-        'index.js',
+        'index.cjs',
       );
 
       try {
@@ -392,11 +392,11 @@ const analysisController = {
         res.setHeader('Content-Type', 'application/javascript');
         res.setHeader(
           'Content-Disposition',
-          `attachment; filename=${fileName}.js`,
+          `attachment; filename=${fileName}.cjs`,
         );
 
         // Stream the file to response
-        res.download(analysisPath, `${fileName}.js`, (err) => {
+        res.download(analysisPath, `${fileName}.cjs`, (err) => {
           if (err && !res.headersSent) {
             return res.status(500).json({ error: 'Failed to download file' });
           }
@@ -413,6 +413,7 @@ const analysisController = {
     }
   },
 };
+
 const environmentController = {
   async updateEnvironment(req, res) {
     try {
@@ -458,7 +459,22 @@ const environmentController = {
   },
 };
 
-module.exports = {
+export const {
+  uploadAnalysis,
+  getAnalyses,
+  runAnalysis,
+  stopAnalysis,
+  deleteAnalysis,
+  getAnalysisContent,
+  updateAnalysis,
+  renameAnalysis,
+  getLogs,
+  downloadLogs,
+  clearLogs,
+  downloadAnalysis,
+  updateEnvironment,
+  getEnvironment,
+} = {
   ...analysisController,
   ...environmentController,
 };

@@ -133,7 +133,7 @@ class ConnectionMonitor {
       }
 
       return false;
-    } catch (error) {
+    } catch {
       return false;
     }
   }
@@ -171,4 +171,4 @@ class ConnectionMonitor {
   }
 }
 
-module.exports = ConnectionMonitor;
+export default ConnectionMonitor;

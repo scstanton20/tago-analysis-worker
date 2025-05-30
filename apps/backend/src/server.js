@@ -1,19 +1,19 @@
 // backend/src/server.js
-require('dotenv').config();
-const express = require('express');
-const http = require('http');
-const cors = require('cors');
-const helmet = require('helmet');
-const fileUpload = require('express-fileupload');
-const config = require('./config/default');
-const { setupWebSocket } = require('./utils/websocket');
-const analysisController = require('./controllers/analysisController');
-const errorHandler = require('./middleware/errorHandler');
-const {
+//import '@dotenvx/dotenvx/config';
+import express from 'express';
+import http from 'http';
+import cors from 'cors';
+import helmet from 'helmet';
+import fileUpload from 'express-fileupload';
+import config from './config/default.js';
+import { setupWebSocket } from './utils/websocket.js';
+import * as analysisController from './controllers/analysisController.js';
+import errorHandler from './middleware/errorHandler.js';
+import {
   analysisService,
   initializeAnalyses,
-} = require('./services/analysisService');
-const StatusController = require('./controllers/statusController');
+} from './services/analysisService.js';
+import StatusController from './controllers/statusController.js';
 
 const app = express();
 const server = http.createServer(app);

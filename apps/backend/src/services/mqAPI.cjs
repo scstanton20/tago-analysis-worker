@@ -132,7 +132,7 @@ async function createDevice(token, deviceData) {
       let errorData;
       try {
         errorData = await response.json();
-      } catch (e) {
+      } catch {
         errorData = response.statusText;
       }
 
@@ -144,7 +144,6 @@ async function createDevice(token, deviceData) {
   }
 }
 
-// Don't forget to add this to your module.exports
 module.exports = {
   getAPIVersion,
   getDevices,

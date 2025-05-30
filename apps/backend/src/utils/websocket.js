@@ -1,5 +1,5 @@
-// backend/src/utils/websocket.js
-const WebSocket = require('ws');
+// utils/websocketz.js
+import { WebSocketServer } from 'ws';
 
 let wss = null;
 const clients = new Set();
@@ -11,7 +11,7 @@ function setupWebSocket(server) {
     return wss;
   }
 
-  wss = new WebSocket.Server({
+  wss = new WebSocketServer({
     server,
     path: '/ws',
     clientTracking: true,
@@ -24,7 +24,7 @@ function setupWebSocket(server) {
     clients.add(ws);
 
     try {
-      const { analysisService } = require('../services/analysisService');
+      const { analysisService } = await import('../services/analysisService.js');
       const analyses = await analysisService.getRunningAnalyses();
 
       if (ws.readyState === WebSocket.OPEN) {
@@ -71,7 +71,4 @@ function broadcastUpdate(type, data) {
   });
 }
 
-module.exports = {
-  setupWebSocket,
-  broadcastUpdate,
-};
+export { setupWebSocket, broadcastUpdate };
