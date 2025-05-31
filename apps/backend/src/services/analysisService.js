@@ -5,6 +5,16 @@ import { encrypt, decrypt } from '../utils/cryptoUtils.js';
 import AnalysisProcess from '../models/analysisProcess.js';
 import ConnectionMonitor from '../models/connectionMonitor.js';
 
+function formatFileSize(bytes) {
+  if (bytes === 0) return '0 B';
+
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
 class AnalysisService {
   constructor() {
     this.analyses = new Map();
@@ -95,7 +105,7 @@ class AnalysisService {
 
           return {
             name: dirName,
-            size: stats.size,
+            size: formatFileSize(stats.size),
             created: stats.birthtime,
             type: analysis?.type || 'listener',
             status: analysis?.status || 'stopped',
