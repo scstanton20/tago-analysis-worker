@@ -10,7 +10,7 @@ export const statusService = {
     } catch (error) {
       console.error('Failed to fetch system status:', error);
       return {
-        health: { status: 'unhealthy' },
+        container_health: { status: 'unhealthy' },
         tagoConnection: {
           status: 'disconnected',
           runningAnalyses: 0,

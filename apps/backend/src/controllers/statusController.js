@@ -1,5 +1,6 @@
 // controllers/statusController.js
 import { createRequire } from 'module';
+import ms from 'ms';
 
 const require = createRequire(import.meta.url);
 class StatusController {
@@ -29,12 +30,18 @@ class StatusController {
     }
 
     const status = {
-      health: {
+      container_health: {
         status:
           this.containerState.status === 'ready' ? 'healthy' : 'initializing',
-        containerState: this.containerState.status,
         message: this.containerState.message,
-        uptime: Math.floor((new Date() - this.containerState.startTime) / 1000), // in seconds
+        uptime: {
+          seconds: Math.floor(
+            (new Date() - this.containerState.startTime) / 1000,
+          ),
+          formatted: ms(new Date() - this.containerState.startTime, {
+            long: true,
+          }),
+        },
       },
       tagoConnection: {
         sdkVersion: tagoVersion,

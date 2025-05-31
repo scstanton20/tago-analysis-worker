@@ -16,7 +16,8 @@ const ConnectionStatus = () => {
     let disconnectedCount = 0;
 
     // Check backend
-    if (backendStatus.health.status !== 'healthy') disconnectedCount++;
+    if (backendStatus.container_health.status !== 'healthy')
+      disconnectedCount++;
     // Check WebSocket
     if (connectionStatus !== 'connected') disconnectedCount++;
     // Tago is considered disconnected if no analyses are running
@@ -38,7 +39,7 @@ const ConnectionStatus = () => {
   const getStatusText = () => {
     if (!backendStatus) return 'Loading...';
     if (connectionStatus !== 'connected') return 'Disconnected from Server';
-    if (backendStatus.health.status !== 'healthy')
+    if (backendStatus.container_health.status !== 'healthy')
       return 'Partially Disconnected';
     if (backendStatus.tagoConnection?.runningAnalyses === 0) {
       return 'No Running Analyses';
@@ -91,7 +92,7 @@ const ConnectionStatus = () => {
 
   const isDisconnected =
     connectionStatus !== 'connected' ||
-    backendStatus.health.status !== 'healthy' ||
+    backendStatus.container_health.status !== 'healthy' ||
     backendStatus.tagoConnection?.runningAnalyses === 0 ||
     backendStatus.tagoConnection?.status !== 'connected';
 
@@ -160,13 +161,13 @@ const ConnectionStatus = () => {
                   <div className="flex items-center">
                     <div
                       className={`w-2 h-2 rounded-full mr-2 ${
-                        backendStatus?.health?.status === 'healthy'
+                        backendStatus?.container_health?.status === 'healthy'
                           ? 'bg-green-500'
                           : 'bg-red-500'
                       }`}
                     />
                     <span className="text-sm capitalize">
-                      {backendStatus?.health?.status || 'unknown'}
+                      {backendStatus?.health_container_?.status || 'unknown'}
                     </span>
                   </div>
                 </div>
