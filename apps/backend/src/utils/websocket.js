@@ -27,7 +27,7 @@ function setupWebSocket(server) {
       const { analysisService } = await import(
         '../services/analysisService.js'
       );
-      const analyses = await analysisService.getRunningAnalyses();
+      const analyses = await analysisService.getAllAnalyses();
 
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(

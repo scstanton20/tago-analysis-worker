@@ -75,7 +75,7 @@ class AnalysisService {
     return { analysisName };
   }
 
-  async getRunningAnalyses() {
+  async getAllAnalyses() {
     const analysisDirectories = await fs.readdir(config.paths.analysis);
 
     return Promise.all(

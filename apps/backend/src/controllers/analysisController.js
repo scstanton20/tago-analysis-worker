@@ -36,9 +36,9 @@ const analysisController = {
     }
   },
 
-  async getAnalyses(res) {
+  async getAnalyses(_req, res) {
     try {
-      const analyses = await analysisService.getRunningAnalyses();
+      const analyses = await analysisService.getAllAnalyses();
       res.json(analyses);
     } catch (error) {
       console.error('List analyses error:', error);
