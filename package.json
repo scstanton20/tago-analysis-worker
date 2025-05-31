@@ -6,6 +6,9 @@
   "engines": {
     "node": ">=22.0.0"
   },
+  "imports": {
+    "#services/mqAPI": "../../../apps/backend/src/services/mqAPI.cjs"
+  },
   "scripts": {
     "dev": "pnpm run dev:frontend & pnpm run dev:backend",
     "dev:frontend": "pnpm --filter \"frontend\" run dev",

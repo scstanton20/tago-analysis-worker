@@ -7,8 +7,7 @@
     "node": ">=22.0.0"
   },
   "imports": {
-    "#dev/services/mqAPI": "./src/services/mqAPI.cjs",
-    "#prod/services/mqAPI": "../../../apps/backend/src/services/mqAPI.cjs"
+    "#services/mqAPI": "./src/services/mqAPI.cjs"
   },
   "scripts": {
     "start": "node src/server.js",
