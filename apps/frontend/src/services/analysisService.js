@@ -4,7 +4,7 @@ import { fetchWithHeaders, handleResponse } from '../utils/apiUtils';
 export const analysisService = {
   async uploadAnalysis(file, type) {
     try {
-      console.log('Uploading analysis:', file.name, 'type:', type);
+      console.log('Uploading analysis:', file.name);
       const formData = new FormData();
       formData.append('analysis', file);
       formData.append('type', type);

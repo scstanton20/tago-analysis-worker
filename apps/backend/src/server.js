@@ -80,9 +80,7 @@ async function restartRunningProcesses() {
     // Loop through and restart any that were previously running or enabled
     for (const [analysisName, config] of Object.entries(configuration)) {
       if (config.status === 'running' || config.enabled === true) {
-        console.log(
-          `Restarting analysis: ${analysisName} (type: ${config.type})`,
-        );
+        console.log(`Restarting analysis: ${analysisName}`);
         await analysisService.runAnalysis(analysisName, config.type);
       }
     }
