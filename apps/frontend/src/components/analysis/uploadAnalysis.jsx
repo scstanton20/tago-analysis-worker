@@ -17,14 +17,54 @@ export default function AnalysisCreator() {
     '// Write your analysis code here',
   );
   const [isExpanded, setIsExpanded] = useState(false);
+  const [sdkVersion, setSdkVersion] = useState('');
+  const [fetchedAnalyses, setFetchedAnalyses] = useState([]);
+  const [isFetchingAnalyses, setIsFetchingAnalyses] = useState(false);
+
   const fileInputRef = useRef(null);
   const {
     connectionStatus,
     addLoadingAnalysis,
     removeLoadingAnalysis,
     loadingAnalyses,
+    analyses,
   } = useWebSocket();
-  const [sdkVersion, setSdkVersion] = useState('');
+
+  // Get existing analysis names from WebSocket context
+  const existingAnalyses = analyses
+    ? analyses.map((analysis) => analysis.name)
+    : [];
+
+  // Use WebSocket data if available, otherwise use fetched data
+  const finalExistingAnalyses =
+    existingAnalyses.length > 0 ? existingAnalyses : fetchedAnalyses;
+
+  // Debug: Log the analyses to see what we're getting
+  console.log('WebSocket analyses:', analyses);
+  console.log('Existing analysis names:', existingAnalyses);
+  console.log('Final existing analyses:', finalExistingAnalyses);
+
+  useEffect(() => {
+    const fetchAnalyses = async () => {
+      // Only fetch if we don't have WebSocket data and component is expanded
+      if (isExpanded && (!analyses || analyses.length === 0)) {
+        setIsFetchingAnalyses(true);
+        try {
+          const response = await fetch('/api/analyses');
+          if (response.ok) {
+            const data = await response.json();
+            setFetchedAnalyses(data.map((analysis) => analysis.name));
+          }
+        } catch (error) {
+          console.error('Error fetching analyses:', error);
+        } finally {
+          setIsFetchingAnalyses(false);
+        }
+      }
+    };
+
+    fetchAnalyses();
+  }, [isExpanded, analyses]);
 
   const validateFilename = (filename) => {
     if (!filename) return 'Filename cannot be empty';
@@ -47,6 +87,18 @@ export default function AnalysisCreator() {
 
     if (filename.length > 200) {
       return 'Filename is too long (max 200 characters)';
+    }
+
+    // Check for duplicate names (case-insensitive)
+    const existingNamesLower = finalExistingAnalyses.map((name) =>
+      name.toLowerCase(),
+    );
+    if (existingNamesLower.includes(filename.toLowerCase())) {
+      // Find the actual existing name with different casing
+      const existingName = finalExistingAnalyses.find(
+        (name) => name.toLowerCase() === filename.toLowerCase(),
+      );
+      return `An analysis with this name already exists${existingName !== filename ? ` (as "${existingName}")` : ''}. Please choose a different name.`;
     }
 
     return null;
@@ -106,8 +158,6 @@ export default function AnalysisCreator() {
   };
 
   const handleUpload = async () => {
-    console.log('handleUpload called');
-
     if (mode === 'create' && !analysisName) {
       setError('Please provide a name for the analysis');
       return;
@@ -154,10 +204,8 @@ export default function AnalysisCreator() {
       }
 
       // Add to loading state immediately
-      console.log('Adding to loading state:', finalFileName);
       addLoadingAnalysis(finalFileName);
 
-      console.log('Calling analysisService.uploadAnalysis');
       await analysisService.uploadAnalysis(file, analysisType);
 
       window.alert(
@@ -204,22 +252,24 @@ export default function AnalysisCreator() {
   const isCurrentAnalysisLoading = () => {
     const currentName = getCurrentAnalysisName();
     const isLoading = currentName && loadingAnalyses.has(currentName);
-    // console.log('isCurrentAnalysisLoading check:', {
-    //   currentName,
-    //   isLoading,
-    //   loadingAnalyses: Array.from(loadingAnalyses),
-    // });
     return isLoading;
   };
 
-  const isDisabled =
+  // Separate conditions for different UI elements
+  const isInputDisabled =
+    isCurrentAnalysisLoading() || connectionStatus !== 'connected';
+
+  const isSaveDisabled =
     isCurrentAnalysisLoading() ||
     connectionStatus !== 'connected' ||
     (mode === 'create' && !analysisName) ||
+    (mode === 'upload' && (!selectedFile || !editableFileName)) ||
     error;
 
   const isTabDisabled =
-    (selectedFile || editorContent !== '// Write your analysis code here') &&
+    (selectedFile ||
+      editorContent !== '// Write your analysis code here' ||
+      analysisName) &&
     !isCurrentAnalysisLoading();
 
   return (
@@ -227,7 +277,23 @@ export default function AnalysisCreator() {
       <div className="bg-white rounded-lg shadow-md mb-8">
         <div
           className="p-4 flex justify-between items-center cursor-pointer hover:bg-gray-50"
-          onClick={() => setIsExpanded(!isExpanded)}
+          onClick={() => {
+            const newExpanded = !isExpanded;
+            setIsExpanded(newExpanded);
+
+            // Reset to default state when closing
+            if (!newExpanded) {
+              setMode('upload');
+              setSelectedFile(null);
+              setEditableFileName('');
+              setAnalysisName('');
+              setEditorContent('// Write your analysis code here');
+              setError(null);
+              if (fileInputRef.current) {
+                fileInputRef.current.value = '';
+              }
+            }
+          }}
         >
           <h2 className="text-xl font-semibold">Analysis Creator</h2>
           <button className="text-gray-500 hover:text-gray-700">
@@ -274,6 +340,13 @@ export default function AnalysisCreator() {
                 </nav>
               </div>
 
+              {/* Loading indicator for fetching analyses */}
+              {isFetchingAnalyses && (
+                <div className="text-sm text-gray-500 italic">
+                  Loading existing analyses...
+                </div>
+              )}
+
               {/* Analysis Name - Only shown in create mode */}
               {mode === 'create' && (
                 <div className="space-y-2">
@@ -288,9 +361,13 @@ export default function AnalysisCreator() {
                     id="analysis-name"
                     value={analysisName}
                     onChange={handleAnalysisNameChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                      error && error.includes('already exists')
+                        ? 'border-red-300 bg-red-50'
+                        : 'border-gray-300'
+                    }`}
                     placeholder="Enter analysis name (no extension)"
-                    disabled={isCurrentAnalysisLoading()}
+                    disabled={isInputDisabled}
                   />
                   <p className="text-sm text-gray-500">
                     The .cjs extension will be added automatically by the
@@ -314,7 +391,7 @@ export default function AnalysisCreator() {
                       accept=".cjs"
                       className="hidden"
                       id="analysis-file"
-                      disabled={isDisabled}
+                      disabled={isInputDisabled}
                     />
                     <label
                       htmlFor="analysis-file"
@@ -344,9 +421,13 @@ export default function AnalysisCreator() {
                         id="filename"
                         value={editableFileName}
                         onChange={handleEditableFileNameChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                        className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                          error && error.includes('already exists')
+                            ? 'border-red-300 bg-red-50'
+                            : 'border-gray-300'
+                        }`}
                         placeholder="Enter filename (no extension)"
-                        disabled={isCurrentAnalysisLoading()}
+                        disabled={isInputDisabled}
                       />
                     </div>
                   )}
@@ -371,7 +452,7 @@ export default function AnalysisCreator() {
                       automaticLayout: true,
                       wordWrap: 'on',
                       lineNumbers: 'on',
-                      readOnly: isCurrentAnalysisLoading(),
+                      readOnly: isInputDisabled,
                     }}
                   />
                 </div>
@@ -387,7 +468,7 @@ export default function AnalysisCreator() {
                     checked={analysisType === 'listener'}
                     onChange={(e) => setAnalysisType(e.target.value)}
                     className="form-radio text-blue-500"
-                    disabled={isCurrentAnalysisLoading()}
+                    disabled={isInputDisabled}
                   />
                   <span>Connect via Tago SDK {sdkVersion}</span>
                 </label>
@@ -400,9 +481,9 @@ export default function AnalysisCreator() {
               <div className="flex space-x-4">
                 <button
                   onClick={handleUpload}
-                  disabled={isDisabled}
+                  disabled={isSaveDisabled}
                   className={`px-4 py-2 rounded text-white ${
-                    isDisabled
+                    isSaveDisabled
                       ? 'bg-gray-400 cursor-not-allowed'
                       : 'bg-green-500 hover:bg-green-600'
                   }`}
@@ -412,11 +493,12 @@ export default function AnalysisCreator() {
                     : 'Save Analysis'}
                 </button>
                 {(selectedFile ||
-                  editorContent !== '// Write your analysis code here') && (
+                  editorContent !== '// Write your analysis code here' ||
+                  analysisName) && (
                   <button
                     onClick={handleCancel}
                     className="px-4 py-2 rounded text-gray-600 hover:text-gray-800"
-                    disabled={isCurrentAnalysisLoading()}
+                    disabled={isInputDisabled}
                   >
                     Cancel
                   </button>
