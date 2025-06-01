@@ -50,6 +50,8 @@ jobs:
           context: .
           file: ./docker-config/production/backend.Dockerfile
           push: true
+          cache-from: gha
+          cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64/v8
           tags: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest
 
@@ -81,5 +83,7 @@ jobs:
           context: .
           file: ./docker-config/production/frontend.Dockerfile
           push: true
+          cache-from: gha
+          cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64/v8
           tags: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest
