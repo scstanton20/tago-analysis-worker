@@ -2,6 +2,24 @@
 import { fetchWithHeaders, handleResponse } from '../utils/apiUtils';
 
 export const analysisService = {
+  async getAnalyses() {
+    try {
+      console.log('Fetching analyses list');
+      const response = await fetchWithHeaders('/analyses', {
+        method: 'GET',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch analyses');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to fetch analyses:', error);
+      throw error;
+    }
+  },
+
   async uploadAnalysis(file, type) {
     try {
       console.log('Uploading analysis:', file.name);
@@ -304,7 +322,7 @@ export const analysisService = {
 
   async downloadAnalysis(fileName) {
     try {
-      console.log('Downloading analyis:', fileName);
+      console.log('Downloading analysis:', fileName);
       const response = await fetchWithHeaders(
         `/analyses/${fileName}/download`,
         { method: 'GET' },
