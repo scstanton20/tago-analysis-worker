@@ -204,11 +204,11 @@ export default function AnalysisCreator() {
   const isCurrentAnalysisLoading = () => {
     const currentName = getCurrentAnalysisName();
     const isLoading = currentName && loadingAnalyses.has(currentName);
-    console.log('isCurrentAnalysisLoading check:', {
-      currentName,
-      isLoading,
-      loadingAnalyses: Array.from(loadingAnalyses),
-    });
+    // console.log('isCurrentAnalysisLoading check:', {
+    //   currentName,
+    //   isLoading,
+    //   loadingAnalyses: Array.from(loadingAnalyses),
+    // });
     return isLoading;
   };
 

@@ -1,6 +1,6 @@
 // backend/src/controllers/analysisController.js
 import { analysisService } from '../services/analysisService.js';
-import { broadcastUpdate } from '../utils/websocket.js';
+import { broadcastUpdate, broadcastRefresh } from '../utils/websocket.js';
 import path from 'path';
 import config from '../config/default.js';
 import { promises as fs } from 'fs';
@@ -18,17 +18,8 @@ const analysisController = {
       const result = await analysisService.uploadAnalysis(analysis, type);
 
       // Broadcast the complete analysis object
-      broadcastUpdate('analysisCreated', {
-        fileName: result.analysisName,
-        analysis: {
-          name: result.analysisName,
-          type: type,
-          status: 'stopped',
-          enabled: false,
-          logs: [],
-        },
-      });
-
+      broadcastUpdate('analysisCreated', { analysis: result.analysisName });
+      await broadcastRefresh();
       res.json(result);
     } catch (error) {
       console.error('Upload error:', error);

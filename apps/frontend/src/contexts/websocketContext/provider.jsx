@@ -50,27 +50,35 @@ export function WebSocketProvider({ children }) {
         lastMessageRef.current = { type: data.type, timestamp: now };
 
         switch (data.type) {
-          case 'init':
+          case 'init': {
+            console.log(
+              'Received init message with analyses:',
+              data.analyses?.length || 0,
+            );
             setAnalyses(data.analyses || []);
+
+            // Clean up loading state - remove any analyses that now exist in the real list
+            const analysisNames = new Set(
+              (data.analyses || []).map((analysis) => analysis.name),
+            );
+            setLoadingAnalyses((prev) => {
+              const updatedLoadingSet = new Set();
+              prev.forEach((loadingName) => {
+                if (!analysisNames.has(loadingName)) {
+                  updatedLoadingSet.add(loadingName);
+                }
+              });
+              return updatedLoadingSet;
+            });
             break;
+          }
 
           case 'analysisCreated':
             if (data.data?.analysis) {
-              // Remove from loading state
-              removeLoadingAnalysis(data.data.analysis.name);
-
-              setAnalyses((prev) => {
-                const exists = prev.some(
-                  (a) => a.name === data.data.analysis.name,
-                );
-                if (exists) {
-                  return prev.map((a) =>
-                    a.name === data.data.analysis.name ? data.data.analysis : a,
-                  );
-                }
-                // Add new analysis at the beginning
-                return [data.data.analysis, ...prev];
-              });
+              // Don't add to the analyses list here - let the broadcastRefresh handle it
+              console.log(
+                'Analysis created, waiting for refresh with proper ordering...',
+              );
             }
             break;
 

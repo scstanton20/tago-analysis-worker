@@ -4,7 +4,7 @@ import AnalysisItem from './analysisItem';
 import { Loader2 } from 'lucide-react';
 
 export default function AnalysisList() {
-  const { analyses = [], loadingAnalyses, connectionStatus } = useWebSocket();
+  const { analyses = [], connectionStatus } = useWebSocket();
   const [openLogIds, setOpenLogIds] = useState(new Set());
 
   const toggleAllLogs = () => {
@@ -40,7 +40,6 @@ export default function AnalysisList() {
   }
 
   const hasAnalyses = Array.isArray(analyses) && analyses.length > 0;
-  const hasLoadingAnalyses = loadingAnalyses.size > 0;
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-md">
@@ -58,42 +57,20 @@ export default function AnalysisList() {
         )}
       </div>
       <div className="space-y-4">
-        {/* Loading analyses */}
-        {Array.from(loadingAnalyses).map((analysisName) => (
-          <div
-            key={`loading-${analysisName}`}
-            className="bg-gray-50 p-4 rounded border"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
-                <div>
-                  <h3 className="font-medium text-gray-900">{analysisName}</h3>
-                  <p className="text-sm text-gray-500">Processing upload...</p>
-                </div>
-              </div>
-              <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-xs">
-                Loading
-              </span>
-            </div>
+        {hasAnalyses ? (
+          analyses.map((analysis) => (
+            <AnalysisItem
+              key={`${analysis.name}-${analysis.created || Date.now()}`}
+              analysis={analysis}
+              showLogs={openLogIds.has(analysis.name)}
+              onToggleLogs={() => toggleLog(analysis.name)}
+            />
+          ))
+        ) : (
+          <div className="text-center text-gray-500">
+            No analyses available. Upload one to get started.
           </div>
-        ))}
-
-        {/* Actual analyses */}
-        {hasAnalyses
-          ? analyses.map((analysis) => (
-              <AnalysisItem
-                key={`${analysis.name}-${analysis.created || Date.now()}`}
-                analysis={analysis}
-                showLogs={openLogIds.has(analysis.name)}
-                onToggleLogs={() => toggleLog(analysis.name)}
-              />
-            ))
-          : !hasLoadingAnalyses && (
-              <div className="text-center text-gray-500">
-                No analyses available. Upload one to get started.
-              </div>
-            )}
+        )}
       </div>
     </div>
   );

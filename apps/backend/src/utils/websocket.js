@@ -1,4 +1,4 @@
-// utils/websocketz.js
+// utils/websocket.js
 import { WebSocketServer } from 'ws';
 
 let wss = null;
@@ -73,4 +73,31 @@ function broadcastUpdate(type, data) {
   });
 }
 
-export { setupWebSocket, broadcastUpdate };
+async function broadcastRefresh() {
+  if (!wss || clients.size === 0) return;
+
+  try {
+    const { analysisService } = await import('../services/analysisService.js');
+    const analyses = await analysisService.getAllAnalyses();
+
+    const message = JSON.stringify({
+      type: 'init',
+      analyses,
+    });
+
+    clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        try {
+          client.send(message);
+        } catch (error) {
+          console.error('Error broadcasting refresh to client:', error);
+          clients.delete(client);
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error broadcasting refresh:', error);
+  }
+}
+
+export { setupWebSocket, broadcastUpdate, broadcastRefresh };
