@@ -9,7 +9,7 @@ export function useIsMobile() {
   function detectMobileUserAgent() {
     if (typeof window === 'undefined') return false;
 
-    const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+    const userAgent = navigator.userAgent || window.opera;
 
     // Check for mobile user agents
     const mobileRegex =
