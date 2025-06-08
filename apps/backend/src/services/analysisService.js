@@ -210,6 +210,53 @@ class AnalysisService {
     }
   }
 
+  // Get initial logs for WebSocket connection
+  async getInitialLogs(analysisName, limit = 50) {
+    const analysis = this.analyses.get(analysisName);
+    if (!analysis) {
+      return { logs: [], totalCount: 0 };
+    }
+
+    const result = analysis.getMemoryLogs(1, limit);
+    return {
+      logs: result.logs,
+      totalCount: result.totalCount,
+    };
+  }
+
+  // Clear logs - reset everything
+  async clearLogs(analysisName) {
+    try {
+      const analysis = this.analyses.get(analysisName);
+      if (!analysis) {
+        throw new Error('Analysis not found');
+      }
+
+      const logFilePath = path.join(
+        config.paths.analysis,
+        analysisName,
+        'logs',
+        'analysis.log',
+      );
+
+      // Clear file
+      await fs.writeFile(logFilePath, '', 'utf8');
+
+      // Reset in-memory state
+      analysis.logs = [];
+      analysis.logSequence = 0;
+      analysis.totalLogCount = 0;
+
+      // Add cleared log entry
+      await analysis.addLog('Log file cleared');
+
+      return { success: true, message: 'Logs cleared successfully' };
+    } catch (error) {
+      console.error('Error clearing logs:', error);
+      throw new Error(`Failed to clear logs: ${error.message}`);
+    }
+  }
+
   getProcessStatus(analysisName) {
     const analysis = this.analyses.get(analysisName);
     return analysis ? analysis.status : 'stopped';
@@ -276,6 +323,30 @@ class AnalysisService {
   }
 
   async getLogs(analysisName, page = 1, limit = 100) {
+    const analysis = this.analyses.get(analysisName);
+
+    if (!analysis) {
+      throw new Error('Analysis not found');
+    }
+
+    // For page 1, try memory first
+    if (page === 1) {
+      const memoryResult = analysis.getMemoryLogs(page, limit);
+      if (memoryResult.logs.length > 0) {
+        return {
+          logs: memoryResult.logs,
+          hasMore: memoryResult.totalCount > limit,
+          totalCount: memoryResult.totalCount,
+          source: 'memory',
+        };
+      }
+    }
+
+    // For page 2+ or if no memory logs, always use file reading
+    return this.getLogsFromFile(analysisName, page, limit);
+  }
+
+  async getLogsFromFile(analysisName, page = 1, limit = 100) {
     try {
       const logFile = path.join(
         config.paths.analysis,
@@ -284,36 +355,46 @@ class AnalysisService {
         'analysis.log',
       );
 
-      // Ensure the log file exists
-      await fs.access(logFile);
-
       const content = await fs.readFile(logFile, 'utf8');
       if (!content.trim()) {
-        return []; // Return empty array if there are no logs
+        return { logs: [], hasMore: false, totalCount: 0, source: 'file' };
       }
 
       const allLogs = content
         .trim()
         .split('\n')
-        .map((line) => {
+        .map((line, index) => {
           const match = line.match(/\[(.*?)\] (.*)/);
-          return match ? { timestamp: match[1], message: match[2] } : null;
+          return match
+            ? {
+                sequence: index + 1,
+                timestamp: match[1],
+                message: match[2],
+                createdAt: new Date(match[1]).getTime(),
+              }
+            : null;
         })
         .filter(Boolean)
-        .reverse(); // Most recent logs first
+        .reverse(); // Most recent first
 
-      // Paginate logs
-      const startIndex = (parseInt(page) - 1) * parseInt(limit);
-      const endIndex = startIndex + parseInt(limit);
-      return allLogs.slice(startIndex, endIndex);
+      const startIndex = (page - 1) * limit;
+      const endIndex = startIndex + limit;
+      const paginatedLogs = allLogs.slice(startIndex, endIndex);
+
+      return {
+        logs: paginatedLogs,
+        hasMore: endIndex < allLogs.length,
+        totalCount: allLogs.length,
+        source: 'file',
+      };
     } catch (error) {
       if (error.code === 'ENOENT') {
-        return []; // Return empty array if the file doesn't exist
+        return { logs: [], hasMore: false, totalCount: 0, source: 'file' };
       }
-      console.error('Error retrieving logs:', error);
       throw new Error(`Failed to retrieve logs: ${error.message}`);
     }
   }
+
   async deleteAnalysis(analysisName) {
     const monitor = this.connectionMonitors.get(analysisName);
     if (monitor) {
@@ -406,68 +487,6 @@ class AnalysisService {
       monitor.startMonitoring();
     }
     return monitor;
-  }
-
-  async initializeAnalysis(analysisName, analysisConfig = {}) {
-    const defaultConfig = {
-      type: 'listener',
-      enabled: false,
-      status: 'stopped',
-      lastRun: null,
-      startTime: null,
-      connectionState: {
-        shouldRestart: false,
-        disconnectedAt: null,
-        history: {
-          lastDisconnected: null,
-          lastRestored: null,
-        },
-      },
-    };
-
-    const fullConfig = { ...defaultConfig, ...analysisConfig };
-    const analysis = new AnalysisProcess(analysisName, fullConfig.type, this);
-
-    Object.assign(analysis, {
-      enabled: fullConfig.enabled,
-      status: fullConfig.status,
-      lastRun: fullConfig.lastRun,
-      startTime: fullConfig.startTime,
-      connectionState: {
-        ...analysis.connectionState,
-        ...fullConfig.connectionState,
-      },
-    });
-
-    try {
-      const logFile = path.join(
-        config.paths.analysis,
-        analysisName,
-        'logs',
-        'analysis.log',
-      );
-      const logContent = await fs.readFile(logFile, 'utf8');
-      analysis.logs = logContent
-        .trim()
-        .split('\n')
-        .reverse()
-        .slice(0, config.analysis.maxLogsInMemory)
-        .map((line) => {
-          const match = line.match(/\[(.*?)\] (.*)/);
-          return match
-            ? {
-                timestamp: match[1],
-                message: match[2],
-              }
-            : null;
-        })
-        .filter(Boolean);
-    } catch {
-      // No previous logs found, that's okay
-    }
-
-    this.analyses.set(analysisName, analysis);
-    await this.initializeConnectionMonitor(analysisName, fullConfig.type);
   }
 
   async getAnalysisContent(analysisName) {
@@ -598,45 +617,7 @@ class AnalysisService {
       throw error;
     }
   }
-  async clearLogs(analysisName) {
-    try {
-      const logFilePath = path.join(
-        config.paths.analysis,
-        analysisName,
-        'logs',
-        'analysis.log',
-      );
 
-      // Check if the logs directory exists, create it if not
-      const logsDir = path.dirname(logFilePath);
-      await fs.mkdir(logsDir, { recursive: true });
-
-      // Delete the existing log file if it exists
-      try {
-        await fs.unlink(logFilePath);
-      } catch (error) {
-        // Ignore if file doesn't exist
-        if (error.code !== 'ENOENT') {
-          throw error;
-        }
-      }
-
-      // Create a new empty log file
-      await fs.writeFile(logFilePath, '', 'utf8');
-
-      // Update in-memory logs for this analysis
-      const analysis = this.analyses.get(analysisName);
-      if (analysis) {
-        analysis.logs = [];
-        await this.addLog(analysisName, 'Log file cleared');
-      }
-
-      return { success: true, message: 'Logs cleared successfully' };
-    } catch (error) {
-      console.error('Error clearing logs:', error);
-      throw new Error(`Failed to clear logs: ${error.message}`);
-    }
-  }
   async updateEnvironment(analysisName, env) {
     const envFile = path.join(
       config.paths.analysis,
@@ -678,6 +659,44 @@ class AnalysisService {
       console.error('Error updating environment:', error);
       throw new Error(`Failed to update environment: ${error.message}`);
     }
+  }
+
+  async initializeAnalysis(analysisName, analysisConfig = {}) {
+    const defaultConfig = {
+      type: 'listener',
+      enabled: false,
+      status: 'stopped',
+      lastRun: null,
+      startTime: null,
+      connectionState: {
+        shouldRestart: false,
+        disconnectedAt: null,
+        history: {
+          lastDisconnected: null,
+          lastRestored: null,
+        },
+      },
+    };
+
+    const fullConfig = { ...defaultConfig, ...analysisConfig };
+    const analysis = new AnalysisProcess(analysisName, fullConfig.type, this);
+
+    Object.assign(analysis, {
+      enabled: fullConfig.enabled,
+      status: fullConfig.status,
+      lastRun: fullConfig.lastRun,
+      startTime: fullConfig.startTime,
+      connectionState: {
+        ...analysis.connectionState,
+        ...fullConfig.connectionState,
+      },
+    });
+
+    // Initialize log state (this replaces the old log loading logic)
+    await analysis.initializeLogState();
+
+    this.analyses.set(analysisName, analysis);
+    await this.initializeConnectionMonitor(analysisName, fullConfig.type);
   }
 }
 

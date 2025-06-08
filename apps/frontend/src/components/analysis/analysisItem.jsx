@@ -130,9 +130,8 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
     <div className="border rounded-lg p-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="font-semibold">{analysis.name}</h3>
-          <div className="flex items-center space-x-2 text-sm text-gray-500">
-            <span>{analysis.type || 'oneshot'}</span>
+          <div className="flex items-center space-x-2">
+            <h3 className="font-semibold">{analysis.name}</h3>
             <StatusBadge status={analysis.status || 'stopped'} />
           </div>
         </div>

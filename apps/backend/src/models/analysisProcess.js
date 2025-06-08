@@ -1,4 +1,4 @@
-// models/AnalysisProcess.js
+// Enhanced AnalysisProcess.js
 import path from 'path';
 import { promises as fs } from 'fs';
 import { fork } from 'child_process';
@@ -11,7 +11,6 @@ class AnalysisProcess {
     this.type = type;
     this.service = service;
     this.process = null;
-    this.logs = [];
     this.enabled = false;
     this.status = 'stopped';
     this.lastRun = null;
@@ -24,9 +23,14 @@ class AnalysisProcess {
       'logs',
       'analysis.log',
     );
+
+    // Enhanced log management
+    this.logs = []; // In-memory buffer
+    this.logSequence = 0; // Unique sequence number for each log
+    this.totalLogCount = 0; // Total logs written to file
+    this.maxMemoryLogs = config.analysis.maxLogsInMemory || 1000;
   }
 
-  // Add getter and setter for analysisName
   get analysisName() {
     return this._analysisName;
   }
@@ -34,18 +38,105 @@ class AnalysisProcess {
   set analysisName(newName) {
     const oldName = this._analysisName;
     this._analysisName = newName;
-
-    // Update log file path when name changes
     this.logFile = path.join(
       config.paths.analysis,
       newName,
       'logs',
       'analysis.log',
     );
-
     console.log(
       `Updated analysis name from ${oldName} to ${newName} (logFile: ${this.logFile})`,
     );
+  }
+
+  async addLog(message) {
+    const timestamp = new Date().toLocaleString();
+    const logEntry = {
+      sequence: ++this.logSequence,
+      timestamp,
+      message,
+      createdAt: Date.now(), // For efficient sorting
+    };
+
+    const fileLogEntry = `[${timestamp}] ${message}\n`;
+
+    // Add to in-memory buffer (FIFO)
+    this.logs.unshift(logEntry);
+    if (this.logs.length > this.maxMemoryLogs) {
+      this.logs.pop();
+    }
+
+    // Increment total count
+    this.totalLogCount++;
+
+    try {
+      // Ensure the logs directory exists
+      const logsDir = path.dirname(this.logFile);
+      await fs.mkdir(logsDir, { recursive: true });
+
+      // Append to the log file
+      await fs.appendFile(this.logFile, fileLogEntry);
+    } catch (error) {
+      console.error(`Error writing to log file ${this.logFile}:`, error);
+    }
+
+    // Broadcast with sequence number for deduplication
+    broadcastUpdate('log', {
+      fileName: this.analysisName,
+      log: logEntry,
+      totalCount: this.totalLogCount,
+    });
+  }
+
+  // Get logs from memory buffer
+  getMemoryLogs(page = 1, limit = 100) {
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    const paginatedLogs = this.logs.slice(startIndex, endIndex);
+
+    return {
+      logs: paginatedLogs,
+      hasMore: endIndex < this.logs.length,
+      totalInMemory: this.logs.length,
+      totalCount: this.totalLogCount,
+    };
+  }
+
+  // Initialize log count and sequence from existing file
+  async initializeLogState() {
+    try {
+      const content = await fs.readFile(this.logFile, 'utf8');
+      const lines = content
+        .trim()
+        .split('\n')
+        .filter((line) => line.length > 0);
+      this.totalLogCount = lines.length;
+      this.logSequence = lines.length;
+
+      // Load recent logs into memory
+      const recentLines = lines.slice(-this.maxMemoryLogs);
+      this.logs = recentLines
+        .map((line, index) => {
+          const match = line.match(/\[(.*?)\] (.*)/);
+          return match
+            ? {
+                sequence: this.logSequence - recentLines.length + index + 1,
+                timestamp: match[1],
+                message: match[2],
+                createdAt: new Date(match[1]).getTime(),
+              }
+            : null;
+        })
+        .filter(Boolean)
+        .reverse();
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        console.error('Error initializing log state:', error);
+      }
+      // File doesn't exist yet, start fresh
+      this.totalLogCount = 0;
+      this.logSequence = 0;
+    }
   }
 
   setupProcessHandlers() {
@@ -87,10 +178,14 @@ class AnalysisProcess {
       }
     });
   }
+
   async start() {
     if (this.process) return;
 
     try {
+      // Initialize log state before starting
+      await this.initializeLogState();
+
       const filePath = path.join(
         config.paths.analysis,
         this.analysisName,
@@ -98,7 +193,6 @@ class AnalysisProcess {
       );
       await this.addLog(`Node.js ${process.version}`);
 
-      // Check if service exists before calling loadEnvironmentVariables
       const storedEnv = this.service
         ? await this.service.loadEnvironmentVariables(this.analysisName)
         : {};
@@ -126,32 +220,6 @@ class AnalysisProcess {
     }
   }
 
-  async addLog(message) {
-    const timestamp = new Date().toLocaleString();
-    const logEntry = `[${timestamp}] ${message}\n`;
-
-    this.logs.unshift({ timestamp, message });
-    if (this.logs.length > config.analysis.maxLogsInMemory) {
-      this.logs.pop();
-    }
-
-    try {
-      // Ensure the logs directory exists
-      const logsDir = path.dirname(this.logFile);
-      await fs.mkdir(logsDir, { recursive: true });
-
-      // Append to the log file
-      await fs.appendFile(this.logFile, logEntry);
-    } catch (error) {
-      console.error(`Error writing to log file ${this.logFile}:`, error);
-    }
-
-    broadcastUpdate('log', {
-      fileName: this.analysisName,
-      log: { timestamp, message },
-    });
-  }
-
   updateStatus(status, enabled = false) {
     this.status = status;
     this.enabled = enabled;
@@ -161,6 +229,7 @@ class AnalysisProcess {
     } else if (status === 'running') {
       this.lastRun = new Date().toISOString();
     }
+
     broadcastUpdate('status', {
       fileName: this.analysisName,
       status: this.status,

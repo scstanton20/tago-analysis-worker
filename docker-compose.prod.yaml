@@ -41,7 +41,7 @@ services:
       test:
         [
           'CMD-SHELL',
-          'node -e "require(''http'').request(''http://localhost:3000/status'', { timeout: 2000 }, (res) => { const allowed = [200, 203]; process.exit(allowed.includes(res.statusCode) ? 0 : 1); }).on(''error'', () => process.exit(1)).end()"',
+          'node -e "require(''http'').request(''http://localhost:3000/api/status'', { timeout: 2000 }, (res) => { const allowed = [200, 203]; process.exit(allowed.includes(res.statusCode) ? 0 : 1); }).on(''error'', () => process.exit(1)).end()"',
         ]
       interval: 10s
       timeout: 5s

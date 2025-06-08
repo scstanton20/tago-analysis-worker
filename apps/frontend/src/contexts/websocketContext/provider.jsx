@@ -13,7 +13,9 @@ export function WebSocketProvider({ children }) {
   const maxReconnectDelay = 5000;
   const connectingRef = useRef(false);
 
-  // Loading state management
+  // Track log sequences to prevent duplicates
+  const logSequences = useRef(new Map()); // fileName -> Set of sequence numbers
+
   const addLoadingAnalysis = useCallback((analysisName) => {
     setLoadingAnalyses((prev) => new Set([...prev, analysisName]));
   }, []);
@@ -57,7 +59,13 @@ export function WebSocketProvider({ children }) {
             );
             setAnalyses(data.analyses || []);
 
-            // Clean up loading state - remove any analyses that now exist in the real list
+            // Initialize log sequences tracking
+            (data.analyses || []).forEach((analysis) => {
+              if (!logSequences.current.has(analysis.name)) {
+                logSequences.current.set(analysis.name, new Set());
+              }
+            });
+
             const analysisNames = new Set(
               (data.analyses || []).map((analysis) => analysis.name),
             );
@@ -75,16 +83,16 @@ export function WebSocketProvider({ children }) {
 
           case 'analysisCreated':
             if (data.data?.analysis) {
-              // Don't add to the analyses list here - let the broadcastRefresh handle it
-              console.log(
-                'Analysis created, waiting for refresh with proper ordering...',
-              );
+              // Initialize log tracking for new analysis
+              logSequences.current.set(data.data.analysis, new Set());
+              console.log('Analysis created, waiting for refresh...');
             }
             break;
 
           case 'analysisDeleted':
             if (data.data?.fileName) {
               removeLoadingAnalysis(data.data.fileName);
+              logSequences.current.delete(data.data.fileName);
               setAnalyses((prev) =>
                 prev.filter((a) => a.name !== data.data.fileName),
               );
@@ -93,13 +101,19 @@ export function WebSocketProvider({ children }) {
 
           case 'analysisRenamed':
             if (data.data?.oldFileName && data.data?.newFileName) {
+              // Transfer log sequences to new name
+              const oldSequences = logSequences.current.get(
+                data.data.oldFileName,
+              );
+              if (oldSequences) {
+                logSequences.current.set(data.data.newFileName, oldSequences);
+                logSequences.current.delete(data.data.oldFileName);
+              }
+
               setAnalyses((prev) =>
                 prev.map((analysis) =>
                   analysis.name === data.data.oldFileName
-                    ? {
-                        ...analysis,
-                        name: data.data.newFileName,
-                      }
+                    ? { ...analysis, name: data.data.newFileName }
                     : analysis,
                 ),
               );
@@ -120,12 +134,27 @@ export function WebSocketProvider({ children }) {
 
           case 'log':
             if (data.data?.fileName && data.data?.log) {
+              const { fileName, log, totalCount } = data.data;
+
+              // Check for duplicate using sequence number
+              const sequences = logSequences.current.get(fileName) || new Set();
+              if (log.sequence && sequences.has(log.sequence)) {
+                return; // Skip duplicate
+              }
+
+              // Add sequence to tracking
+              if (log.sequence) {
+                sequences.add(log.sequence);
+                logSequences.current.set(fileName, sequences);
+              }
+
               setAnalyses((prev) =>
                 prev.map((analysis) =>
-                  analysis.name === data.data.fileName
+                  analysis.name === fileName
                     ? {
                         ...analysis,
-                        logs: [data.data.log, ...(analysis.logs || [])],
+                        logs: [log, ...(analysis.logs || [])].slice(0, 1000), // Keep recent 1000
+                        totalLogCount: totalCount,
                       }
                     : analysis,
                 ),
@@ -133,12 +162,20 @@ export function WebSocketProvider({ children }) {
             }
             break;
 
-          case 'clearLogs':
+          case 'logsCleared':
             if (data.data?.fileName) {
+              const fileName = data.data.fileName;
+              // Clear sequence tracking
+              logSequences.current.set(fileName, new Set());
+
               setAnalyses((prev) =>
                 prev.map((analysis) =>
-                  analysis.name === data.data.fileName
-                    ? { ...analysis, logs: [] }
+                  analysis.name === fileName
+                    ? {
+                        ...analysis,
+                        logs: [],
+                        totalLogCount: 0,
+                      }
                     : analysis,
                 ),
               );

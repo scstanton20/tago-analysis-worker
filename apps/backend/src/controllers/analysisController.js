@@ -215,45 +215,43 @@ const analysisController = {
     try {
       const { fileName } = req.params;
       const { page = 1, limit = 100 } = req.query;
-      const logFile = path.join(
-        config.paths.analysis,
+
+      const result = await analysisService.getLogs(
         fileName,
-        'logs',
-        'analysis.log',
+        parseInt(page),
+        parseInt(limit),
       );
 
-      try {
-        const content = await fs.readFile(logFile, 'utf8');
-        const allLogs = content
-          .trim()
-          .split('\n')
-          .map((line) => {
-            const match = line.match(/\[(.*?)\] (.*)/);
-            return match
-              ? {
-                  timestamp: match[1],
-                  message: match[2],
-                }
-              : null;
-          })
-          .filter(Boolean)
-          .reverse(); // Most recent first
-
-        // Calculate pagination
-        const startIndex = (parseInt(page) - 1) * parseInt(limit);
-        const endIndex = startIndex + parseInt(limit);
-        const paginatedLogs = allLogs.slice(startIndex, endIndex);
-
-        res.json(paginatedLogs);
-      } catch (error) {
-        if (error.code === 'ENOENT') {
-          res.json([]);
-        } else {
-          throw error;
-        }
-      }
+      res.json({
+        logs: result.logs,
+        hasMore: result.hasMore,
+        totalCount: result.totalCount,
+        source: result.source,
+        page: parseInt(page),
+        limit: parseInt(limit),
+      });
     } catch (error) {
       console.error('Get logs error:', error);
+      if (error.message === 'Analysis not found') {
+        return res.status(404).json({ error: error.message });
+      }
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  async getInitialLogs(req, res) {
+    try {
+      const { fileName } = req.params;
+      const { limit = 50 } = req.query;
+
+      const result = await analysisService.getInitialLogs(
+        fileName,
+        parseInt(limit),
+      );
+
+      res.json(result);
+    } catch (error) {
+      console.error('Get initial logs error:', error);
       res.status(500).json({ error: error.message });
     }
   },
@@ -349,9 +347,10 @@ const analysisController = {
       const result = await analysisService.clearLogs(fileName);
 
       // Broadcast to all clients that logs were cleared
-      broadcastUpdate('clearLogs', {
+      broadcastUpdate('logsCleared', {
         fileName,
         status: 'cleared',
+        totalCount: 0,
       });
 
       res.json(result);
