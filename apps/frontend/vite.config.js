@@ -22,14 +22,9 @@ export default defineConfig({
     host: true,
     port: 5173,
     proxy: {
-      '/status': {
-        target: backendUrl,
-        changeOrigin: true,
-      },
       '/api': {
         target: backendUrl,
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''),
       },
       '/ws': {
         target: wsBackendUrl,

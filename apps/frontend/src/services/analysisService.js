@@ -27,7 +27,7 @@ export const analysisService = {
       formData.append('analysis', file);
       formData.append('type', type);
 
-      const response = await fetchWithHeaders('/upload', {
+      const response = await fetchWithHeaders('/analyses/upload', {
         method: 'POST',
         body: formData,
       });
@@ -42,7 +42,7 @@ export const analysisService = {
   async runAnalysis(fileName, type) {
     try {
       console.log('Running analysis:', fileName, 'type:', type);
-      const response = await fetchWithHeaders(`/run/${fileName}`, {
+      const response = await fetchWithHeaders(`/analyses/${fileName}/run`, {
         method: 'POST',
         body: JSON.stringify({ type }),
       });
@@ -57,7 +57,7 @@ export const analysisService = {
   async stopAnalysis(fileName) {
     try {
       console.log('Stopping analysis:', fileName);
-      const response = await fetchWithHeaders(`/stop/${fileName}`, {
+      const response = await fetchWithHeaders(`/analyses/${fileName}/stop`, {
         method: 'POST',
       });
 
