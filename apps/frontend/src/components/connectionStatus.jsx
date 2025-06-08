@@ -22,8 +22,8 @@ const ConnectionStatus = () => {
     if (connectionStatus !== 'connected') disconnectedCount++;
     // Tago is considered disconnected if no analyses are running
     if (
-      backendStatus.tagoConnection?.runningAnalyses === 0 ||
-      backendStatus.tagoConnection?.status !== 'connected'
+      backendStatus.tagoConnection.runningAnalyses === 0 ||
+      backendStatus.tagoConnection.status !== 'connected'
     ) {
       disconnectedCount++;
     }
@@ -41,10 +41,10 @@ const ConnectionStatus = () => {
     if (connectionStatus !== 'connected') return 'Disconnected from Server';
     if (backendStatus.container_health.status !== 'healthy')
       return 'Partially Disconnected';
-    if (backendStatus.tagoConnection?.runningAnalyses === 0) {
+    if (backendStatus.tagoConnection.runningAnalyses === 0) {
       return 'No Running Analyses';
     }
-    if (backendStatus.tagoConnection?.status !== 'connected') {
+    if (backendStatus.tagoConnection.status !== 'connected') {
       return 'Tago Connection Lost';
     }
     return 'Connected';
@@ -93,8 +93,8 @@ const ConnectionStatus = () => {
   const isDisconnected =
     connectionStatus !== 'connected' ||
     backendStatus.container_health.status !== 'healthy' ||
-    backendStatus.tagoConnection?.runningAnalyses === 0 ||
-    backendStatus.tagoConnection?.status !== 'connected';
+    backendStatus.tagoConnection.runningAnalyses === 0 ||
+    backendStatus.tagoConnection.status !== 'connected';
 
   const getTagoStatusDisplay = () => {
     if (backendStatus.tagoConnection?.runningAnalyses === 0) {
@@ -161,13 +161,13 @@ const ConnectionStatus = () => {
                   <div className="flex items-center">
                     <div
                       className={`w-2 h-2 rounded-full mr-2 ${
-                        backendStatus?.container_health?.status === 'healthy'
+                        backendStatus.container_health.status === 'healthy'
                           ? 'bg-green-500'
                           : 'bg-red-500'
                       }`}
                     />
                     <span className="text-sm capitalize">
-                      {backendStatus?.health_container_?.status || 'unknown'}
+                      {backendStatus.container_health.status || 'unknown'}
                     </span>
                   </div>
                 </div>
