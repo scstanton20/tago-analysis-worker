@@ -178,12 +178,11 @@ class AnalysisProcess {
             fullLine.includes('¬ Analysis not found or not active')
           ) {
             this.addLog('Tago connection lost - restarting process');
-            // SDK has 15s keep-alive, so restart quickly
             setTimeout(() => {
               if (this.status === 'running') {
                 this.restartProcess();
               }
-            }, 5000); // Just 5 seconds delay
+            }, 5000);
           }
           this.addLog(isError ? `ERROR: ${fullLine}` : fullLine);
         }
@@ -248,7 +247,7 @@ class AnalysisProcess {
       this.lastRun = new Date().toISOString();
     }
 
-    broadcastUpdate('status', {
+    broadcastUpdate('analysisStatus', {
       fileName: this.analysisName,
       status: this.status,
       enabled: this.enabled,

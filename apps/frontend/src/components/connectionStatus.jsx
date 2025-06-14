@@ -1,12 +1,12 @@
+// frontend/src/components/connectionStatus.jsx
 import { useState, useEffect, useContext, useRef } from 'react';
 import { WebSocketContext } from '../contexts/websocketContext';
 import { ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
-import { statusService } from '../services/statusServices';
 
 const ConnectionStatus = () => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [backendStatus, setBackendStatus] = useState(null);
-  const { connectionStatus } = useContext(WebSocketContext);
+  const { connectionStatus, backendStatus, requestStatusUpdate } =
+    useContext(WebSocketContext);
   const containerRef = useRef(null);
 
   const getOverallStatusColor = () => {
@@ -42,16 +42,10 @@ const ConnectionStatus = () => {
     return 'Connected';
   };
 
-  const fetchBackendStatus = async () => {
-    const data = await statusService.getSystemStatus();
-    setBackendStatus(data);
+  const handleRetryConnection = () => {
+    // Request fresh status update through WebSocket
+    requestStatusUpdate();
   };
-
-  useEffect(() => {
-    fetchBackendStatus();
-    const interval = setInterval(fetchBackendStatus, 30000);
-    return () => clearInterval(interval);
-  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -80,12 +74,16 @@ const ConnectionStatus = () => {
     };
   }, [isExpanded]);
 
-  if (!backendStatus) return null;
+  // Don't render if we don't have any status data yet
+  if (!backendStatus && connectionStatus === 'connecting') {
+    return null;
+  }
 
   const isDisconnected =
     connectionStatus !== 'connected' ||
-    backendStatus.container_health.status !== 'healthy' ||
-    backendStatus.tagoConnection.runningAnalyses === 0;
+    (backendStatus &&
+      (backendStatus.container_health.status !== 'healthy' ||
+        backendStatus.tagoConnection.runningAnalyses === 0));
 
   // Loading overlay that appears when connection status is "connecting"
   const ConnectionLoadingOverlay = () => {
@@ -137,13 +135,14 @@ const ConnectionStatus = () => {
                   <div className="flex items-center">
                     <div
                       className={`w-2 h-2 rounded-full mr-2 ${
+                        backendStatus &&
                         backendStatus.container_health.status === 'healthy'
                           ? 'bg-green-500'
                           : 'bg-red-500'
                       }`}
                     />
                     <span className="text-sm capitalize">
-                      {backendStatus.container_health.status || 'unknown'}
+                      {backendStatus?.container_health.status || 'unknown'}
                     </span>
                   </div>
                 </div>
@@ -163,16 +162,52 @@ const ConnectionStatus = () => {
                     </span>
                   </div>
                 </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Tago Analyses:</span>
+                  <div className="flex items-center">
+                    <div
+                      className={`w-2 h-2 rounded-full mr-2 ${
+                        backendStatus &&
+                        backendStatus.tagoConnection.runningAnalyses > 0
+                          ? 'bg-green-500'
+                          : 'bg-yellow-500'
+                      }`}
+                    />
+                    <span className="text-sm">
+                      {backendStatus?.tagoConnection.runningAnalyses || 0}{' '}
+                      running
+                    </span>
+                  </div>
+                </div>
+
+                {backendStatus?.tagoConnection.sdkVersion && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">SDK Version:</span>
+                    <span className="text-sm text-gray-600">
+                      {backendStatus.tagoConnection.sdkVersion}
+                    </span>
+                  </div>
+                )}
+
+                {backendStatus?.container_health.uptime && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Uptime:</span>
+                    <span className="text-sm text-gray-600">
+                      {backendStatus.container_health.uptime.formatted}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {isDisconnected && (
                 <div className="mt-3 pt-3 border-t border-gray-200">
                   <p className="text-sm text-gray-600">{getStatusText()}</p>
                   <button
-                    onClick={fetchBackendStatus}
+                    onClick={handleRetryConnection}
                     className="mt-2 text-sm text-blue-500 hover:text-blue-600"
                   >
-                    Retry Connection
+                    Refresh Status
                   </button>
                 </div>
               )}

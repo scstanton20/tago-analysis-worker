@@ -5,7 +5,11 @@ import cors from 'cors';
 import helmet from 'helmet';
 import fileUpload from 'express-fileupload';
 import config from './config/default.js';
-import { setupWebSocket } from './utils/websocket.js';
+import {
+  setupWebSocket,
+  updateContainerState,
+  broadcastStatusUpdate,
+} from './utils/websocket.js';
 import errorHandler from './middleware/errorHandler.js';
 import {
   analysisService,
@@ -22,12 +26,12 @@ const API_PREFIX = '/api';
 const app = express();
 const server = http.createServer(app);
 
-// Container state tracking
-const containerState = {
+// Initialize container state
+updateContainerState({
   status: 'starting',
   startTime: new Date(),
   message: 'Container is starting',
-};
+});
 
 // Single WebSocket setup
 let wsInitialized = false;
@@ -44,7 +48,7 @@ app.use(express.json());
 app.use(fileUpload());
 
 // Routes
-app.use(`${API_PREFIX}/status`, statusRoutes(analysisService, containerState));
+app.use(`${API_PREFIX}/status`, statusRoutes(analysisService));
 app.use(`${API_PREFIX}/analyses`, analysisRoutes);
 
 // Error handling
@@ -55,8 +59,11 @@ const PORT = process.env.PORT || 3000;
 // Function to restart processes that were running before
 async function restartRunningProcesses() {
   try {
-    containerState.status = 'restarting_processes';
-    containerState.message = 'Restarting previously running analyses';
+    updateContainerState({
+      status: 'restarting_processes',
+      message: 'Restarting previously running analyses',
+    });
+
     console.log('Checking for analyses that need to be restarted...');
 
     const configuration = analysisService.getConfig();
@@ -64,16 +71,26 @@ async function restartRunningProcesses() {
     for (const [analysisName, config] of Object.entries(configuration)) {
       if (config.status === 'running' || config.enabled === true) {
         console.log(`Restarting analysis: ${analysisName}`);
-        await analysisService.runAnalysis(analysisName, config.type);
+        // Pass the type from config, but default to 'listener' if not found
+        await analysisService.runAnalysis(
+          analysisName,
+          config.type || 'listener',
+        );
       }
     }
 
-    containerState.status = 'ready';
-    containerState.message = 'Container is fully initialized and ready';
+    updateContainerState({
+      status: 'ready',
+      message: 'Container is fully initialized and ready',
+    });
+
     console.log('Process restart check completed');
   } catch (error) {
-    containerState.status = 'error';
-    containerState.message = `Error during process restart: ${error.message}`;
+    updateContainerState({
+      status: 'error',
+      message: `Error during process restart: ${error.message}`,
+    });
+
     console.error('Error restarting processes:', error);
   }
 }
@@ -81,43 +98,75 @@ async function restartRunningProcesses() {
 async function startServer() {
   try {
     console.log(`Starting server in ${config.env} mode`);
-    containerState.status = 'initializing';
-    containerState.message = 'Initializing analyses';
 
-    console.log('Storage configuration:', {
-      base: config.storage.base,
-      analysis: config.paths.analysis,
-      config: config.paths.config,
+    updateContainerState({
+      status: 'initializing',
+      message: 'Initializing server components',
     });
 
+    // Initialize analysis service
     await initializeAnalyses();
-    await restartRunningProcesses();
 
-    server.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
+    updateContainerState({
+      status: 'starting_processes',
+      message: 'Starting analysis processes',
     });
+
+    // Start the server
+    server.listen(PORT, async () => {
+      console.log(`Server is running on port ${PORT}`);
+
+      updateContainerState({
+        status: 'checking_processes',
+        message: 'Checking for processes to restart',
+      });
+
+      // Check for processes to restart
+      await restartRunningProcesses();
+
+      // Broadcast status update to all connected clients
+      broadcastStatusUpdate();
+    });
+
+    // Periodic status broadcasts (every 30 seconds)
+    setInterval(() => {
+      broadcastStatusUpdate();
+    }, 30000);
   } catch (error) {
-    containerState.status = 'error';
-    containerState.message = `Failed to start server: ${error.message}`;
     console.error('Failed to start server:', error);
+    updateContainerState({
+      status: 'error',
+      message: `Failed to start server: ${error.message}`,
+    });
     process.exit(1);
   }
 }
 
-// Handle uncaught exceptions
-process.on('uncaughtException', (error) => {
-  containerState.status = 'error';
-  containerState.message = `Uncaught Exception: ${error.message}`;
-  console.error('Uncaught Exception:', error);
-  process.exit(1);
+// Graceful shutdown
+process.on('SIGINT', () => {
+  console.log('Received SIGINT, shutting down gracefully');
+  updateContainerState({
+    status: 'shutting_down',
+    message: 'Server is shutting down',
+  });
+
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
 });
 
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (reason, promise) => {
-  containerState.status = 'error';
-  containerState.message = `Unhandled Rejection: ${reason}`;
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-  process.exit(1);
+process.on('SIGTERM', () => {
+  console.log('Received SIGTERM, shutting down gracefully');
+  updateContainerState({
+    status: 'shutting_down',
+    message: 'Server is shutting down',
+  });
+
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
 });
 
 startServer();

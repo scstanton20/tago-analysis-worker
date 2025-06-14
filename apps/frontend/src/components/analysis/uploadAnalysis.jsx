@@ -3,7 +3,6 @@ import { analysisService } from '../../services/analysisService';
 import { useWebSocket } from '../../contexts/websocketContext/index';
 import Editor from '@monaco-editor/react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { statusService } from '../../services/statusServices';
 import sanitize from 'sanitize-filename';
 
 const DEFAULT_EDITOR_CONTENT = '// Write your analysis code here';
@@ -12,7 +11,7 @@ export default function AnalysisCreator() {
   // Form state
   const [mode, setMode] = useState('upload');
   const [selectedFile, setSelectedFile] = useState(null);
-  const [analysisType, setAnalysisType] = useState('listener');
+  const [analysisType] = useState('listener');
   const [analysisName, setAnalysisName] = useState('');
   const [editableFileName, setEditableFileName] = useState('');
   const [editorContent, setEditorContent] = useState(DEFAULT_EDITOR_CONTENT);
@@ -21,7 +20,6 @@ export default function AnalysisCreator() {
   // UI state
   const [isExpanded, setIsExpanded] = useState(false);
   const [error, setError] = useState(null);
-  const [sdkVersion, setSdkVersion] = useState('');
   const [fetchedAnalyses, setFetchedAnalyses] = useState([]);
   const [isFetchingAnalyses, setIsFetchingAnalyses] = useState(false);
 
@@ -82,18 +80,6 @@ export default function AnalysisCreator() {
     };
     fetchAnalyses();
   }, [isExpanded, analyses]);
-
-  useEffect(() => {
-    const fetchVersion = async () => {
-      try {
-        const status = await statusService.getSystemStatus();
-        setSdkVersion(status.tagoConnection.sdkVersion);
-      } catch (error) {
-        console.error('Error fetching SDK version:', error);
-      }
-    };
-    fetchVersion();
-  }, []);
 
   // Validation
   const validateFilename = (filename) => {
@@ -428,22 +414,6 @@ export default function AnalysisCreator() {
 
             {/* Mode Content */}
             {mode === 'upload' ? renderUploadMode() : renderCreateMode()}
-
-            {/* Analysis Type Selection */}
-            <div className="flex items-center space-x-6">
-              <label className="flex items-center space-x-2">
-                <input
-                  type="radio"
-                  name="analysisType"
-                  value="listener"
-                  checked={analysisType === 'listener'}
-                  onChange={(e) => setAnalysisType(e.target.value)}
-                  className="form-radio text-blue-500"
-                  disabled={isInputDisabled}
-                />
-                <span>Connect via Tago SDK {sdkVersion}</span>
-              </label>
-            </div>
 
             {/* Error Message */}
             {error && <div className="text-red-500 text-sm">{error}</div>}

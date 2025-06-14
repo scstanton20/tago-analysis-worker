@@ -40,16 +40,14 @@ const analysisController = {
   async runAnalysis(req, res) {
     try {
       const { fileName } = req.params;
-      const { type } = req.body;
 
-      const result = await analysisService.runAnalysis(fileName, type);
+      const result = await analysisService.runAnalysis(fileName);
 
       // Broadcast status change
-      broadcastUpdate('status', {
+      broadcastUpdate('analysisStatus', {
         fileName,
         status: 'running',
         enabled: true,
-        type,
       });
 
       res.json(result);
@@ -68,7 +66,7 @@ const analysisController = {
       const result = await analysisService.stopAnalysis(fileName);
 
       // Broadcast status change
-      broadcastUpdate('status', {
+      broadcastUpdate('analysisStatus', {
         fileName,
         status: 'stopped',
         enabled: false,
@@ -419,7 +417,7 @@ const environmentController = {
       const result = await analysisService.updateEnvironment(fileName, env);
 
       // Broadcast update with restart status
-      broadcastUpdate('environmentUpdated', {
+      broadcastUpdate('analysisEnvironmentUpdated', {
         fileName,
         status: 'updated',
         restarted: result.restarted,

@@ -12,6 +12,7 @@ export function WebSocketProvider({ children }) {
   const [analyses, setAnalyses] = useState([]);
   const [loadingAnalyses, setLoadingAnalyses] = useState(new Set());
   const [connectionStatus, setConnectionStatus] = useState('connecting');
+  const [backendStatus, setBackendStatus] = useState(null);
   const lastMessageRef = useRef({ type: null, timestamp: 0 });
   const reconnectAttemptsRef = useRef(0);
   const maxReconnectDelay = 5000;
@@ -40,6 +41,13 @@ export function WebSocketProvider({ children }) {
     return `${protocol}//${window.location.host}/ws`;
   };
 
+  // Function to request status update from server
+  const requestStatusUpdate = useCallback(() => {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: 'requestStatus' }));
+    }
+  }, [socket]);
+
   const handleMessage = useCallback(
     (event) => {
       if (!mountedRef.current) return;
@@ -49,7 +57,7 @@ export function WebSocketProvider({ children }) {
         const now = Date.now();
 
         // Only deduplicate non-log messages by type and timestamp
-        if (data.type !== 'log') {
+        if (data.type !== 'log' && data.type !== 'statusUpdate') {
           if (
             data.type === lastMessageRef.current.type &&
             now - lastMessageRef.current.timestamp < 50
@@ -82,6 +90,14 @@ export function WebSocketProvider({ children }) {
               });
               return updatedLoadingSet;
             });
+            break;
+          }
+
+          case 'statusUpdate': {
+            // Handle status updates from WebSocket
+            if (data.data) {
+              setBackendStatus(data.data);
+            }
             break;
           }
 
@@ -127,44 +143,8 @@ export function WebSocketProvider({ children }) {
               );
             }
             break;
-
-          case 'analysisUpdated':
-            if (data.data?.fileName) {
-              setAnalyses((prev) =>
-                prev.map((analysis) =>
-                  analysis.name === data.data.fileName
-                    ? {
-                        ...analysis,
-                        status: data.data.restarted
-                          ? 'running'
-                          : analysis.status,
-                        enabled: data.data.restarted ? true : analysis.enabled,
-                      }
-                    : analysis,
-                ),
-              );
-            }
-            break;
-
-          case 'environmentUpdated':
-            if (data.data?.fileName) {
-              setAnalyses((prev) =>
-                prev.map((analysis) =>
-                  analysis.name === data.data.fileName
-                    ? {
-                        ...analysis,
-                        status: data.data.restarted
-                          ? 'running'
-                          : analysis.status,
-                        enabled: data.data.restarted ? true : analysis.enabled,
-                      }
-                    : analysis,
-                ),
-              );
-            }
-            break;
-
-          case 'status':
+          case 'analysisStatus':
+            removeLoadingAnalysis(data.data.fileName);
             if (data.data?.fileName) {
               setAnalyses((prev) =>
                 prev.map((analysis) =>
@@ -173,6 +153,21 @@ export function WebSocketProvider({ children }) {
                     : analysis,
                 ),
               );
+            }
+            break;
+          case 'analysisUpdated':
+            if (data.data?.analysis) {
+              const updatedAnalysis = data.data.analysis;
+              setAnalyses((prev) =>
+                prev.map((analysis) =>
+                  analysis.name === updatedAnalysis.name
+                    ? { ...analysis, ...updatedAnalysis }
+                    : analysis,
+                ),
+              );
+              if (updatedAnalysis.status !== 'running') {
+                removeLoadingAnalysis(updatedAnalysis.name);
+              }
             }
             break;
 
@@ -275,123 +270,135 @@ export function WebSocketProvider({ children }) {
         }
       };
 
-      websocket.onmessage = handleMessage;
-
-      websocket.onclose = (event) => {
-        clearTimeout(connectionTimeout);
-
-        // Clean up global references
-        if (globalWebSocket === websocket) {
-          globalWebSocket = null;
-        }
-        globalConnectionPromise = null;
-
-        if (mountedRef.current) {
-          setSocket(null);
-
-          // Only attempt reconnection if not intentionally closed and component is mounted
-          if (event.code !== 1000) {
-            setConnectionStatus('disconnected');
-
-            const delay = Math.min(
-              100 * Math.pow(2, reconnectAttemptsRef.current),
-              maxReconnectDelay,
-            );
-            reconnectAttemptsRef.current++;
-
-            setTimeout(() => {
-              if (mountedRef.current) {
-                createConnection().catch(() => {
-                  // Reconnection failed, will try again on next timeout
-                });
-              }
-            }, delay);
-          }
-        }
-      };
-
-      websocket.onerror = () => {
+      websocket.onerror = (error) => {
         if (!resolved) {
           resolved = true;
           clearTimeout(connectionTimeout);
           globalConnectionPromise = null;
-          reject(new Error('WebSocket error'));
+          reject(error);
         }
       };
+
+      websocket.onclose = () => {
+        if (mountedRef.current) {
+          setConnectionStatus('disconnected');
+          setSocket(null);
+          // Clear backend status when connection is lost
+          setBackendStatus(null);
+        }
+        globalWebSocket = null;
+        globalConnectionPromise = null;
+      };
+
+      websocket.onmessage = handleMessage;
     });
 
-    try {
-      return await globalConnectionPromise;
-    } catch (error) {
-      globalConnectionPromise = null;
-      if (mountedRef.current) {
-        setConnectionStatus('disconnected');
-      }
-      throw error;
-    }
+    return globalConnectionPromise;
   }, [handleMessage]);
+
+  const reconnect = useCallback(async () => {
+    if (!mountedRef.current) return;
+
+    const delay = Math.min(
+      1000 * Math.pow(2, reconnectAttemptsRef.current),
+      maxReconnectDelay,
+    );
+    reconnectAttemptsRef.current++;
+
+    console.log(
+      `Attempting to reconnect in ${delay}ms (attempt ${reconnectAttemptsRef.current})`,
+    );
+
+    setTimeout(async () => {
+      if (!mountedRef.current) return;
+
+      setConnectionStatus('connecting');
+      try {
+        await createConnection();
+      } catch (error) {
+        console.error('Reconnection failed:', error);
+        if (mountedRef.current) {
+          setConnectionStatus('disconnected');
+          reconnect();
+        }
+      }
+    }, delay);
+  }, [createConnection]);
 
   useEffect(() => {
     mountedRef.current = true;
-    setConnectionStatus('connecting');
 
-    createConnection().catch(() => {
-      if (mountedRef.current) {
-        setConnectionStatus('disconnected');
+    const connect = async () => {
+      try {
+        setConnectionStatus('connecting');
+        const ws = await createConnection();
+
+        if (ws && mountedRef.current) {
+          ws.onclose = () => {
+            if (mountedRef.current) {
+              setConnectionStatus('disconnected');
+              setSocket(null);
+              setBackendStatus(null); // Clear backend status on disconnect
+              reconnect();
+            }
+          };
+
+          ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+            if (mountedRef.current) {
+              setConnectionStatus('disconnected');
+              setSocket(null);
+              setBackendStatus(null); // Clear backend status on error
+            }
+          };
+        }
+      } catch (error) {
+        console.error('Initial connection failed:', error);
+        if (mountedRef.current) {
+          setConnectionStatus('disconnected');
+          reconnect();
+        }
       }
-    });
+    };
+
+    connect();
 
     return () => {
       mountedRef.current = false;
-      // Don't close the global connection here - let other instances use it
-      // Only close when the last component unmounts (handled by beforeunload)
-    };
-  }, [createConnection]);
-
-  // Clean up global connection when page unloads
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (globalWebSocket && globalWebSocket.readyState === WebSocket.OPEN) {
-        globalWebSocket.close(1000, 'Page unloading');
+      if (globalWebSocket) {
+        globalWebSocket.close();
+        globalWebSocket = null;
       }
-      globalWebSocket = null;
       globalConnectionPromise = null;
     };
+  }, [createConnection, reconnect]);
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, []);
+  // Request status updates periodically (fallback)
+  useEffect(() => {
+    if (connectionStatus === 'connected' && socket) {
+      // Request initial status
+      requestStatusUpdate();
 
-  const reconnect = useCallback(() => {
-    // Force close existing connection and create new one
-    if (globalWebSocket) {
-      globalWebSocket.close(1000, 'Manual reconnect');
-      globalWebSocket = null;
+      // Set up periodic status requests (as backup)
+      const interval = setInterval(requestStatusUpdate, 60000); // Every minute
+
+      return () => clearInterval(interval);
     }
-    globalConnectionPromise = null;
+  }, [connectionStatus, socket, requestStatusUpdate]);
 
-    setConnectionStatus('connecting');
-    reconnectAttemptsRef.current = 0;
-
-    createConnection().catch(() => {
-      if (mountedRef.current) {
-        setConnectionStatus('disconnected');
-      }
-    });
-  }, [createConnection]);
+  const value = {
+    socket,
+    analyses,
+    loadingAnalyses,
+    addLoadingAnalysis,
+    removeLoadingAnalysis,
+    connectionStatus,
+    backendStatus, // Expose backend status
+    requestStatusUpdate, // Expose manual status request function
+  };
 
   return (
-    <WebSocketContext.Provider
-      value={{
-        socket,
-        analyses,
-        loadingAnalyses,
-        connectionStatus,
-        reconnect,
-        addLoadingAnalysis,
-        removeLoadingAnalysis,
-      }}
-    >
+    <WebSocketContext.Provider value={value}>
       {children}
     </WebSocketContext.Provider>
   );

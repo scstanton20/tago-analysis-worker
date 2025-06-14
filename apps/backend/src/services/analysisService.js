@@ -95,7 +95,7 @@ class AnalysisService {
             name: dirName,
             size: formatFileSize(stats.size),
             created: stats.birthtime,
-            type: analysis?.type || 'listener',
+            type: 'listener',
             status: analysis?.status || 'stopped',
             enabled: analysis?.enabled || false,
             lastRun: analysis?.lastRun,
@@ -242,12 +242,12 @@ class AnalysisService {
     return analysis ? analysis.status : 'stopped';
   }
 
-  async runAnalysis(analysisName, type) {
+  async runAnalysis(analysisName) {
     let analysis = this.analyses.get(analysisName);
 
     if (!analysis) {
       console.log(`Creating new analysis instance: ${analysisName}`);
-      analysis = new AnalysisProcess(analysisName, type, this);
+      analysis = new AnalysisProcess(analysisName, this);
       this.analyses.set(analysisName, analysis);
       await this.saveConfig();
     }

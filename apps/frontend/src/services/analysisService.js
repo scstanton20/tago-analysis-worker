@@ -39,12 +39,11 @@ export const analysisService = {
     }
   },
 
-  async runAnalysis(fileName, type) {
+  async runAnalysis(fileName) {
     try {
-      console.log('Running analysis:', fileName, 'type:', type);
+      console.log('Running analysis:', fileName);
       const response = await fetchWithHeaders(`/analyses/${fileName}/run`, {
         method: 'POST',
-        body: JSON.stringify({ type }),
       });
 
       return await handleResponse(response);

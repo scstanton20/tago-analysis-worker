@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useContext } from 'react';
 import PropTypes from 'prop-types';
 import {
   Play,
@@ -16,36 +16,38 @@ import StatusBadge from '../common/statusBadge';
 import EditAnalysisModal from './analysisEdit';
 import EditAnalysisENVModal from './analysisEditENV';
 import LogDownloadDialog from './logDownload';
+import { WebSocketContext } from '../../contexts/websocketContext';
 
 export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
-  const [isLoading, setIsLoading] = useState(false);
   const [showEditAnalysisModal, setShowEditAnalysisModal] = useState(false);
   const [showEditENVModal, setShowEditENVModal] = useState(false);
   const [showLogDownloadDialog, setShowLogDownloadDialog] = useState(false);
+
+  const { loadingAnalyses, addLoadingAnalysis, removeLoadingAnalysis } =
+    useContext(WebSocketContext);
+  const isLoading = loadingAnalyses.has(analysis.name);
 
   if (!analysis || !analysis.name) {
     return null;
   }
 
   const handleRun = async () => {
-    setIsLoading(true);
+    addLoadingAnalysis(analysis.name);
     try {
-      await analysisService.runAnalysis(analysis.name, analysis.type);
+      await analysisService.runAnalysis(analysis.name);
     } catch (error) {
       console.error('Failed to run analysis:', error);
-    } finally {
-      setIsLoading(false);
+      removeLoadingAnalysis(analysis.name);
     }
   };
 
   const handleStop = async () => {
-    setIsLoading(true);
+    addLoadingAnalysis(analysis.name);
     try {
       await analysisService.stopAnalysis(analysis.name);
     } catch (error) {
       console.error('Failed to stop analysis:', error);
-    } finally {
-      setIsLoading(false);
+      removeLoadingAnalysis(analysis.name);
     }
   };
 
