@@ -3,7 +3,6 @@ import { promises as fs } from 'fs';
 import config from '../config/default.js';
 import { encrypt, decrypt } from '../utils/cryptoUtils.js';
 import AnalysisProcess from '../models/analysisProcess.js';
-import ConnectionMonitor from '../models/connectionMonitor.js';
 
 function formatFileSize(bytes) {
   if (bytes === 0) return '0 B';
@@ -18,7 +17,6 @@ function formatFileSize(bytes) {
 class AnalysisService {
   constructor() {
     this.analyses = new Map();
-    this.connectionMonitors = new Map();
   }
   validateTimeRange(timeRange) {
     const validRanges = ['1h', '24h', '7d', '30d', 'all'];
@@ -39,15 +37,6 @@ class AnalysisService {
         status: analysis.status,
         lastRun: analysis.lastRun,
         startTime: analysis.startTime,
-        connectionState: {
-          shouldRestart: analysis.connectionState?.shouldRestart,
-          disconnectedAt: analysis.connectionState?.disconnectedAt,
-          history: {
-            lastDisconnected:
-              analysis.connectionState?.history?.lastDisconnected,
-            lastRestored: analysis.connectionState?.history?.lastRestored,
-          },
-        },
       };
     });
 
@@ -75,7 +64,6 @@ class AnalysisService {
     await file.mv(filePath);
     const analysis = new AnalysisProcess(analysisName, type, this);
     this.analyses.set(analysisName, analysis);
-    await this.initializeConnectionMonitor(analysisName, type);
 
     const envFile = path.join(basePath, 'env', '.env');
     await fs.writeFile(envFile, '', 'utf8');
@@ -167,14 +155,6 @@ class AnalysisService {
       // Add the analysis with the new name
       this.analyses.set(newFileName, analysis);
 
-      // Update the connection monitor if it exists
-      const monitor = this.connectionMonitors.get(analysisName);
-      if (monitor) {
-        this.connectionMonitors.delete(analysisName);
-        monitor.analysisName = newFileName;
-        this.connectionMonitors.set(newFileName, monitor);
-      }
-
       // Log the rename operation
       await this.addLog(
         newFileName,
@@ -262,13 +242,6 @@ class AnalysisService {
     return analysis ? analysis.status : 'stopped';
   }
 
-  updateConnectionState(analysisName, state) {
-    const analysis = this.analyses.get(analysisName);
-    if (analysis) {
-      analysis.connectionState = state;
-      return this.saveConfig();
-    }
-  }
   async runAnalysis(analysisName, type) {
     let analysis = this.analyses.get(analysisName);
 
@@ -276,7 +249,6 @@ class AnalysisService {
       console.log(`Creating new analysis instance: ${analysisName}`);
       analysis = new AnalysisProcess(analysisName, type, this);
       this.analyses.set(analysisName, analysis);
-      await this.initializeConnectionMonitor(analysisName, type);
       await this.saveConfig();
     }
 
@@ -396,12 +368,6 @@ class AnalysisService {
   }
 
   async deleteAnalysis(analysisName) {
-    const monitor = this.connectionMonitors.get(analysisName);
-    if (monitor) {
-      monitor.stopMonitoring();
-      this.connectionMonitors.delete(analysisName);
-    }
-
     const analysis = this.analyses.get(analysisName);
     if (analysis) {
       await analysis.stop();
@@ -467,26 +433,6 @@ class AnalysisService {
       };
     });
     return configuration;
-  }
-
-  async initializeConnectionMonitor(analysisName, type) {
-    let monitor = this.connectionMonitors.get(analysisName);
-    if (!monitor) {
-      monitor = new ConnectionMonitor(analysisName, type, {
-        addLog: async (analysisName, message) =>
-          this.addLog(analysisName, message),
-        stopAnalysis: async (analysisName) => this.stopAnalysis(analysisName),
-        runAnalysis: async (analysisName, type) =>
-          this.runAnalysis(analysisName, type),
-        updateConnectionState: async (analysisName, state) =>
-          this.updateConnectionState(analysisName, state),
-        getProcessStatus: (analysisName) => this.getProcessStatus(analysisName),
-        getConfig: () => this.getConfig(),
-      });
-      this.connectionMonitors.set(analysisName, monitor);
-      monitor.startMonitoring();
-    }
-    return monitor;
   }
 
   async getAnalysisContent(analysisName) {
@@ -668,14 +614,6 @@ class AnalysisService {
       status: 'stopped',
       lastRun: null,
       startTime: null,
-      connectionState: {
-        shouldRestart: false,
-        disconnectedAt: null,
-        history: {
-          lastDisconnected: null,
-          lastRestored: null,
-        },
-      },
     };
 
     const fullConfig = { ...defaultConfig, ...analysisConfig };
@@ -686,17 +624,12 @@ class AnalysisService {
       status: fullConfig.status,
       lastRun: fullConfig.lastRun,
       startTime: fullConfig.startTime,
-      connectionState: {
-        ...analysis.connectionState,
-        ...fullConfig.connectionState,
-      },
     });
 
     // Initialize log state (this replaces the old log loading logic)
     await analysis.initializeLogState();
 
     this.analyses.set(analysisName, analysis);
-    await this.initializeConnectionMonitor(analysisName, fullConfig.type);
   }
 }
 

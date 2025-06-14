@@ -29,6 +29,10 @@ class AnalysisProcess {
     this.logSequence = 0; // Unique sequence number for each log
     this.totalLogCount = 0; // Total logs written to file
     this.maxMemoryLogs = config.analysis.maxLogsInMemory || 1000;
+
+    // Health check management
+    this.restartAttempts = 0;
+    this.maxRestartAttempts = 3;
   }
 
   get analysisName() {
@@ -168,6 +172,19 @@ class AnalysisProcess {
       } else {
         const fullLine = (buffer + line).trim();
         if (fullLine) {
+          // Check for SDK connection errors
+          if (
+            fullLine.includes('¬ Connection was closed, trying to reconnect') ||
+            fullLine.includes('¬ Analysis not found or not active')
+          ) {
+            this.addLog('Tago connection lost - restarting process');
+            // SDK has 15s keep-alive, so restart quickly
+            setTimeout(() => {
+              if (this.status === 'running') {
+                this.restartProcess();
+              }
+            }, 5000); // Just 5 seconds delay
+          }
           this.addLog(isError ? `ERROR: ${fullLine}` : fullLine);
         }
         if (isError) {
@@ -191,6 +208,7 @@ class AnalysisProcess {
         this.analysisName,
         'index.cjs',
       );
+
       await this.addLog(`Node.js ${process.version}`);
 
       const storedEnv = this.service
@@ -292,9 +310,10 @@ class AnalysisProcess {
     this.updateStatus('stopped', false);
     await this.saveConfig();
 
-    if (this.type === 'listener' && this.enabled && this.status === 'running') {
-      console.log(`Auto-restarting listener: ${this.analysisName}`);
-      setTimeout(() => this.start(), config.analysis.autoRestartDelay);
+    // Auto-restart listeners that exit unexpectedly
+    if (this.type === 'listener' && this.enabled && code !== 0) {
+      await this.addLog(`Listener exited unexpectedly, auto-restarting...`);
+      setTimeout(() => this.start(), config.analysis.autoRestartDelay || 5000);
     }
   }
 }

@@ -21,17 +21,12 @@ const ConnectionStatus = () => {
     // Check WebSocket
     if (connectionStatus !== 'connected') disconnectedCount++;
     // Tago is considered disconnected if no analyses are running
-    if (
-      backendStatus.tagoConnection.runningAnalyses === 0 ||
-      backendStatus.tagoConnection.status !== 'connected'
-    ) {
+    if (backendStatus.tagoConnection.runningAnalyses === 0) {
       disconnectedCount++;
     }
 
     // If all services are down, show red
     if (disconnectedCount === 3) return 'bg-red-500';
-    // If any service is down or no analyses running, show yellow
-    if (disconnectedCount > 0) return 'bg-yellow-500';
     // All services are up
     return 'bg-green-500';
   };
@@ -43,9 +38,6 @@ const ConnectionStatus = () => {
       return 'Partially Disconnected';
     if (backendStatus.tagoConnection.runningAnalyses === 0) {
       return 'No Running Analyses';
-    }
-    if (backendStatus.tagoConnection.status !== 'connected') {
-      return 'Tago Connection Lost';
     }
     return 'Connected';
   };
@@ -93,23 +85,7 @@ const ConnectionStatus = () => {
   const isDisconnected =
     connectionStatus !== 'connected' ||
     backendStatus.container_health.status !== 'healthy' ||
-    backendStatus.tagoConnection.runningAnalyses === 0 ||
-    backendStatus.tagoConnection.status !== 'connected';
-
-  const getTagoStatusDisplay = () => {
-    if (backendStatus.tagoConnection?.runningAnalyses === 0) {
-      return {
-        status: 'disconnected',
-        message: 'One Running Analysis Required',
-      };
-    }
-    return {
-      status: backendStatus.tagoConnection.status,
-      message: backendStatus.tagoConnection.status,
-    };
-  };
-
-  const tagoStatus = getTagoStatusDisplay();
+    backendStatus.tagoConnection.runningAnalyses === 0;
 
   // Loading overlay that appears when connection status is "connecting"
   const ConnectionLoadingOverlay = () => {
@@ -184,22 +160,6 @@ const ConnectionStatus = () => {
                     />
                     <span className="text-sm capitalize">
                       {connectionStatus}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">Tago SDK:</span>
-                  <div className="flex items-center">
-                    <div
-                      className={`w-2 h-2 rounded-full mr-2 ${
-                        tagoStatus.status === 'connected'
-                          ? 'bg-green-500'
-                          : 'bg-red-500'
-                      }`}
-                    />
-                    <span className="text-sm capitalize">
-                      {tagoStatus.message}
                     </span>
                   </div>
                 </div>

@@ -3,6 +3,10 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { WebSocketContext } from './context';
 
+// Global connection tracking to prevent multiple connections across StrictMode renders
+let globalWebSocket = null;
+let globalConnectionPromise = null;
+
 export function WebSocketProvider({ children }) {
   const [socket, setSocket] = useState(null);
   const [analyses, setAnalyses] = useState([]);
@@ -11,7 +15,7 @@ export function WebSocketProvider({ children }) {
   const lastMessageRef = useRef({ type: null, timestamp: 0 });
   const reconnectAttemptsRef = useRef(0);
   const maxReconnectDelay = 5000;
-  const connectingRef = useRef(false);
+  const mountedRef = useRef(true);
 
   // Track log sequences to prevent duplicates
   const logSequences = useRef(new Map()); // fileName -> Set of sequence numbers
@@ -38,25 +42,25 @@ export function WebSocketProvider({ children }) {
 
   const handleMessage = useCallback(
     (event) => {
+      if (!mountedRef.current) return;
+
       try {
         const data = JSON.parse(event.data);
         const now = Date.now();
 
-        if (
-          data.type === lastMessageRef.current.type &&
-          now - lastMessageRef.current.timestamp < 50
-        ) {
-          return;
+        // Only deduplicate non-log messages by type and timestamp
+        if (data.type !== 'log') {
+          if (
+            data.type === lastMessageRef.current.type &&
+            now - lastMessageRef.current.timestamp < 50
+          ) {
+            return;
+          }
+          lastMessageRef.current = { type: data.type, timestamp: now };
         }
-
-        lastMessageRef.current = { type: data.type, timestamp: now };
 
         switch (data.type) {
           case 'init': {
-            console.log(
-              'Received init message with analyses:',
-              data.analyses?.length || 0,
-            );
             setAnalyses(data.analyses || []);
 
             // Initialize log sequences tracking
@@ -83,9 +87,7 @@ export function WebSocketProvider({ children }) {
 
           case 'analysisCreated':
             if (data.data?.analysis) {
-              // Initialize log tracking for new analysis
               logSequences.current.set(data.data.analysis, new Set());
-              console.log('Analysis created, waiting for refresh...');
             }
             break;
 
@@ -101,7 +103,6 @@ export function WebSocketProvider({ children }) {
 
           case 'analysisRenamed':
             if (data.data?.oldFileName && data.data?.newFileName) {
-              // Transfer log sequences to new name
               const oldSequences = logSequences.current.get(
                 data.data.oldFileName,
               );
@@ -113,7 +114,50 @@ export function WebSocketProvider({ children }) {
               setAnalyses((prev) =>
                 prev.map((analysis) =>
                   analysis.name === data.data.oldFileName
-                    ? { ...analysis, name: data.data.newFileName }
+                    ? {
+                        ...analysis,
+                        name: data.data.newFileName,
+                        status: data.data.restarted
+                          ? 'running'
+                          : analysis.status,
+                        enabled: data.data.restarted ? true : analysis.enabled,
+                      }
+                    : analysis,
+                ),
+              );
+            }
+            break;
+
+          case 'analysisUpdated':
+            if (data.data?.fileName) {
+              setAnalyses((prev) =>
+                prev.map((analysis) =>
+                  analysis.name === data.data.fileName
+                    ? {
+                        ...analysis,
+                        status: data.data.restarted
+                          ? 'running'
+                          : analysis.status,
+                        enabled: data.data.restarted ? true : analysis.enabled,
+                      }
+                    : analysis,
+                ),
+              );
+            }
+            break;
+
+          case 'environmentUpdated':
+            if (data.data?.fileName) {
+              setAnalyses((prev) =>
+                prev.map((analysis) =>
+                  analysis.name === data.data.fileName
+                    ? {
+                        ...analysis,
+                        status: data.data.restarted
+                          ? 'running'
+                          : analysis.status,
+                        enabled: data.data.restarted ? true : analysis.enabled,
+                      }
                     : analysis,
                 ),
               );
@@ -153,7 +197,7 @@ export function WebSocketProvider({ children }) {
                   analysis.name === fileName
                     ? {
                         ...analysis,
-                        logs: [log, ...(analysis.logs || [])].slice(0, 1000), // Keep recent 1000
+                        logs: [log, ...(analysis.logs || [])].slice(0, 1000),
                         totalLogCount: totalCount,
                       }
                     : analysis,
@@ -165,7 +209,6 @@ export function WebSocketProvider({ children }) {
           case 'logsCleared':
             if (data.data?.fileName) {
               const fileName = data.data.fileName;
-              // Clear sequence tracking
               logSequences.current.set(fileName, new Set());
 
               setAnalyses((prev) =>
@@ -189,100 +232,153 @@ export function WebSocketProvider({ children }) {
     [removeLoadingAnalysis],
   );
 
-  useEffect(() => {
-    let ws = null;
-    let reconnectTimeout = null;
+  const createConnection = useCallback(async () => {
+    // If we already have a working connection, reuse it
+    if (globalWebSocket && globalWebSocket.readyState === WebSocket.OPEN) {
+      setSocket(globalWebSocket);
+      setConnectionStatus('connected');
+      return globalWebSocket;
+    }
 
-    const connect = () => {
-      if (ws?.readyState === WebSocket.OPEN) return;
+    // If connection is in progress, wait for it
+    if (globalConnectionPromise) {
+      return globalConnectionPromise;
+    }
 
-      if (reconnectTimeout) {
-        clearTimeout(reconnectTimeout);
-      }
+    // Create new connection
+    globalConnectionPromise = new Promise((resolve, reject) => {
+      const websocket = new WebSocket(getWebSocketUrl());
+      let resolved = false;
 
-      setConnectionStatus('connecting');
-      connectingRef.current = true;
+      const connectionTimeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          websocket.close();
+          reject(new Error('Connection timeout'));
+        }
+      }, 5000);
 
-      try {
-        ws = new WebSocket(getWebSocketUrl());
-
-        const connectionTimeout = setTimeout(() => {
-          if (connectingRef.current && ws.readyState !== WebSocket.OPEN) {
-            console.log('WebSocket connection timeout');
-            ws.close();
-          }
-        }, 5000);
-
-        ws.onopen = () => {
+      websocket.onopen = () => {
+        if (!resolved) {
+          resolved = true;
           clearTimeout(connectionTimeout);
-          connectingRef.current = false;
-          console.log('WebSocket connected');
-          setConnectionStatus('connected');
-          setSocket(ws);
-          reconnectAttemptsRef.current = 0;
-        };
+          globalWebSocket = websocket;
+          globalConnectionPromise = null;
 
-        ws.onmessage = handleMessage;
-
-        ws.onclose = (event) => {
-          clearTimeout(connectionTimeout);
-          console.log('WebSocket disconnected', event.code, event.reason);
-
-          if (!connectingRef.current) {
-            setConnectionStatus('disconnected');
+          if (mountedRef.current) {
+            setSocket(websocket);
+            setConnectionStatus('connected');
+            reconnectAttemptsRef.current = 0;
           }
 
+          resolve(websocket);
+        }
+      };
+
+      websocket.onmessage = handleMessage;
+
+      websocket.onclose = (event) => {
+        clearTimeout(connectionTimeout);
+
+        // Clean up global references
+        if (globalWebSocket === websocket) {
+          globalWebSocket = null;
+        }
+        globalConnectionPromise = null;
+
+        if (mountedRef.current) {
           setSocket(null);
 
-          const delay = Math.min(
-            100 * Math.pow(2, reconnectAttemptsRef.current),
-            maxReconnectDelay,
-          );
-          reconnectAttemptsRef.current++;
+          // Only attempt reconnection if not intentionally closed and component is mounted
+          if (event.code !== 1000) {
+            setConnectionStatus('disconnected');
 
-          console.log(
-            `Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current})`,
-          );
-          reconnectTimeout = setTimeout(connect, delay);
-        };
+            const delay = Math.min(
+              100 * Math.pow(2, reconnectAttemptsRef.current),
+              maxReconnectDelay,
+            );
+            reconnectAttemptsRef.current++;
 
-        ws.onerror = (error) => {
-          console.error('WebSocket error:', error);
-        };
-      } catch (error) {
-        console.error('Error creating WebSocket connection:', error);
-        connectingRef.current = false;
-        setConnectionStatus('connecting');
+            setTimeout(() => {
+              if (mountedRef.current) {
+                createConnection().catch(() => {
+                  // Reconnection failed, will try again on next timeout
+                });
+              }
+            }, delay);
+          }
+        }
+      };
 
-        const delay = Math.min(
-          100 * Math.pow(2, reconnectAttemptsRef.current),
-          maxReconnectDelay,
-        );
-        reconnectAttemptsRef.current++;
-        reconnectTimeout = setTimeout(connect, delay);
+      websocket.onerror = () => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(connectionTimeout);
+          globalConnectionPromise = null;
+          reject(new Error('WebSocket error'));
+        }
+      };
+    });
+
+    try {
+      return await globalConnectionPromise;
+    } catch (error) {
+      globalConnectionPromise = null;
+      if (mountedRef.current) {
+        setConnectionStatus('disconnected');
       }
-    };
-
-    connect();
-
-    return () => {
-      if (reconnectTimeout) {
-        clearTimeout(reconnectTimeout);
-      }
-      if (ws?.readyState === WebSocket.OPEN) {
-        ws.close();
-      }
-    };
+      throw error;
+    }
   }, [handleMessage]);
 
+  useEffect(() => {
+    mountedRef.current = true;
+    setConnectionStatus('connecting');
+
+    createConnection().catch(() => {
+      if (mountedRef.current) {
+        setConnectionStatus('disconnected');
+      }
+    });
+
+    return () => {
+      mountedRef.current = false;
+      // Don't close the global connection here - let other instances use it
+      // Only close when the last component unmounts (handled by beforeunload)
+    };
+  }, [createConnection]);
+
+  // Clean up global connection when page unloads
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (globalWebSocket && globalWebSocket.readyState === WebSocket.OPEN) {
+        globalWebSocket.close(1000, 'Page unloading');
+      }
+      globalWebSocket = null;
+      globalConnectionPromise = null;
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
+
   const reconnect = useCallback(() => {
-    if (socket?.readyState === WebSocket.OPEN) {
-      socket.close();
-    } else {
-      setConnectionStatus('connecting');
-      reconnectAttemptsRef.current = 0;
+    // Force close existing connection and create new one
+    if (globalWebSocket) {
+      globalWebSocket.close(1000, 'Manual reconnect');
+      globalWebSocket = null;
     }
-  }, [socket]);
+    globalConnectionPromise = null;
+
+    setConnectionStatus('connecting');
+    reconnectAttemptsRef.current = 0;
+
+    createConnection().catch(() => {
+      if (mountedRef.current) {
+        setConnectionStatus('disconnected');
+      }
+    });
+  }, [createConnection]);
 
   return (
     <WebSocketContext.Provider

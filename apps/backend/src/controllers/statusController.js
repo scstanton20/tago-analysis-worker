@@ -45,27 +45,10 @@ class StatusController {
       },
       tagoConnection: {
         sdkVersion: tagoVersion,
-        status: 'disconnected',
         runningAnalyses: runningAnalyses.length,
       },
       serverTime: new Date().toString(),
     };
-
-    // If there are running analyses, check connection status
-    if (runningAnalyses.length > 0) {
-      // Get the connection monitor for the first running analysis
-      const firstRunning = runningAnalyses[0];
-      const monitor = this.analysisService.connectionMonitors.get(
-        firstRunning.analysisName,
-      );
-
-      if (monitor) {
-        const isConnected = await monitor.checkConnection();
-        status.tagoConnection.status = isConnected
-          ? 'connected'
-          : 'disconnected';
-      }
-    }
 
     // Return appropriate HTTP status code based on container state
     const httpStatus =

@@ -1,13 +1,11 @@
-// utils/websocket.js
+// backend/src/utils/websocket.js
 import { WebSocketServer } from 'ws';
 
 let wss = null;
 const clients = new Set();
 
 function setupWebSocket(server) {
-  // Ensure we don't create multiple WebSocket servers
   if (wss !== null) {
-    console.warn('WebSocket server already exists');
     return wss;
   }
 
@@ -16,7 +14,6 @@ function setupWebSocket(server) {
     path: '/ws',
     clientTracking: true,
   });
-
   console.log('Setting up WebSocket server');
 
   wss.on('connection', async (ws) => {
@@ -42,13 +39,13 @@ function setupWebSocket(server) {
     }
 
     ws.on('close', () => {
-      console.log('WebSocket connection closed');
       clients.delete(ws);
+      console.log('WebSocket connection closed');
     });
 
     ws.on('error', (error) => {
-      console.error('WebSocket connection error:', error);
       clients.delete(ws);
+      console.error('WebSocket connection error:', error);
     });
   });
 
@@ -56,7 +53,6 @@ function setupWebSocket(server) {
 }
 
 function broadcastUpdate(type, data) {
-  // Add check to prevent unnecessary broadcasts
   if (!wss || clients.size === 0) return;
 
   const message = JSON.stringify({ type, data });
@@ -65,8 +61,7 @@ function broadcastUpdate(type, data) {
     if (client.readyState === WebSocket.OPEN) {
       try {
         client.send(message);
-      } catch (error) {
-        console.error('Error broadcasting to client:', error);
+      } catch {
         clients.delete(client);
       }
     }
@@ -89,8 +84,7 @@ async function broadcastRefresh() {
       if (client.readyState === WebSocket.OPEN) {
         try {
           client.send(message);
-        } catch (error) {
-          console.error('Error broadcasting refresh to client:', error);
+        } catch {
           clients.delete(client);
         }
       }

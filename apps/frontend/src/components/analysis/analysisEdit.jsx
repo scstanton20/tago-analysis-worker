@@ -34,7 +34,6 @@ export default function EditAnalysisModal({
       try {
         setIsLoading(true);
         setError(null);
-        console.log('Loading content for:', currentAnalysis.name);
         const fileContent = await analysisService.getAnalysisContent(
           currentAnalysis.name,
         );

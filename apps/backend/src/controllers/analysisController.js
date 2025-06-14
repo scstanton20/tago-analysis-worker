@@ -102,7 +102,7 @@ const analysisController = {
   async getAnalysisContent(req, res) {
     try {
       const { fileName } = req.params;
-      console.log('Getting content for analysis:', fileName);
+      // console.log('Getting content for analysis:', fileName);
 
       try {
         const content = await analysisService.getAnalysisContent(fileName);
