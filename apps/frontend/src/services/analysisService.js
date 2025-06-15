@@ -20,23 +20,27 @@ export const analysisService = {
     }
   },
 
-  async uploadAnalysis(file, type) {
-    try {
-      console.log('Uploading analysis:', file.name);
-      const formData = new FormData();
-      formData.append('analysis', file);
-      formData.append('type', type);
+  async uploadAnalysis(file, type = 'listener', department = null) {
+    const formData = new FormData();
+    formData.append('analysis', file);
+    formData.append('type', type);
 
-      const response = await fetchWithHeaders('/analyses/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      return await handleResponse(response);
-    } catch (error) {
-      console.error('Upload failed:', error);
-      throw new Error(`Upload failed: ${error.message}`);
+    // Add department if provided
+    if (department) {
+      formData.append('department', department);
     }
+
+    const response = await fetchWithHeaders('/analyses/upload', {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to upload analysis');
+    }
+
+    return response.json();
   },
 
   async runAnalysis(fileName) {

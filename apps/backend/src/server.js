@@ -19,6 +19,7 @@ import {
 // Route modules
 import analysisRoutes from './routes/analysisRoutes.js';
 import statusRoutes from './routes/statusRoutes.js';
+import departmentRoutes from './routes/departmentRoutes.js';
 
 // Api prefix
 const API_PREFIX = '/api';
@@ -50,6 +51,7 @@ app.use(fileUpload());
 // Routes
 app.use(`${API_PREFIX}/status`, statusRoutes(analysisService));
 app.use(`${API_PREFIX}/analyses`, analysisRoutes);
+app.use(`${API_PREFIX}/departments`, departmentRoutes);
 
 // Error handling
 app.use(errorHandler);

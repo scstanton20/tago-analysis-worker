@@ -3,6 +3,7 @@ import { promises as fs } from 'fs';
 import config from '../config/default.js';
 import { encrypt, decrypt } from '../utils/cryptoUtils.js';
 import AnalysisProcess from '../models/analysisProcess.js';
+import departmentService from './departmentService.js';
 
 function formatFileSize(bytes) {
   if (bytes === 0) return '0 B';
@@ -17,7 +18,10 @@ function formatFileSize(bytes) {
 class AnalysisService {
   constructor() {
     this.analyses = new Map();
+    this.configCache = null;
+    this.configPath = path.join(config.paths.config, 'analyses-config.json');
   }
+
   validateTimeRange(timeRange) {
     const validRanges = ['1h', '24h', '7d', '30d', 'all'];
     return validRanges.includes(timeRange);
@@ -28,22 +32,96 @@ class AnalysisService {
     await fs.mkdir(config.paths.config, { recursive: true });
   }
 
+  // NEW: Get complete config including departments
+  async getConfig() {
+    return {
+      version: this.configCache?.version || '2.0',
+      departments: this.configCache?.departments || {},
+      analyses: Object.fromEntries(this.analyses),
+    };
+  }
+
+  // NEW: Update complete config
+  async updateConfig(config) {
+    this.configCache = config;
+
+    // Update internal analyses Map from config
+    this.analyses.clear();
+    if (config.analyses) {
+      Object.entries(config.analyses).forEach(([name, analysis]) => {
+        this.analyses.set(name, analysis);
+      });
+    }
+
+    await this.saveConfig();
+  }
+
+  // MODIFIED: Save config with departments
   async saveConfig() {
-    const configuration = {};
+    const configuration = {
+      version: this.configCache?.version || '2.0',
+      departments: this.configCache?.departments || {},
+      analyses: {},
+    };
+
     this.analyses.forEach((analysis, analysisName) => {
-      configuration[analysisName] = {
+      configuration.analyses[analysisName] = {
         type: analysis.type,
         enabled: analysis.enabled,
         status: analysis.status,
         lastRun: analysis.lastRun,
         startTime: analysis.startTime,
+        department: analysis.department || 'uncategorized', // NEW: Include department
       };
     });
 
-    await fs.writeFile(
-      path.join(config.paths.config, 'analyses-config.json'),
-      JSON.stringify(configuration, null, 2),
-    );
+    await fs.writeFile(this.configPath, JSON.stringify(configuration, null, 2));
+
+    this.configCache = configuration;
+  }
+
+  // MODIFIED: Load config with departments
+  async loadConfig() {
+    try {
+      const data = await fs.readFile(this.configPath, 'utf8');
+      const config = JSON.parse(data);
+
+      // Store the full config including departments
+      this.configCache = config;
+
+      // Load analyses into the Map
+      this.analyses.clear();
+      if (config.analyses) {
+        Object.entries(config.analyses).forEach(([name, analysis]) => {
+          this.analyses.set(name, analysis);
+        });
+      }
+
+      console.log('Configuration loaded with departments');
+      return config;
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        console.log('No existing config file, creating new one');
+        this.configCache = {
+          version: '2.0',
+          departments: {
+            uncategorized: {
+              id: 'uncategorized',
+              name: 'Uncategorized',
+              color: '#9ca3af',
+              order: 0,
+              created: new Date().toISOString(),
+              isSystem: true,
+            },
+          },
+          analyses: {},
+        };
+        await this.saveConfig();
+        return this.configCache;
+      } else {
+        throw error;
+      }
+    }
   }
 
   async createAnalysisDirectories(analysisName) {
@@ -56,13 +134,15 @@ class AnalysisService {
     return basePath;
   }
 
-  async uploadAnalysis(file, type) {
+  // MODIFIED: Upload with department support
+  async uploadAnalysis(file, type, targetDepartment = 'uncategorized') {
     const analysisName = path.parse(file.name).name;
     const basePath = await this.createAnalysisDirectories(analysisName);
     const filePath = path.join(basePath, 'index.cjs');
 
     await file.mv(filePath);
     const analysis = new AnalysisProcess(analysisName, type, this);
+    analysis.department = targetDepartment; // NEW: Set department
     this.analyses.set(analysisName, analysis);
 
     const envFile = path.join(basePath, 'env', '.env');
@@ -70,13 +150,17 @@ class AnalysisService {
 
     await this.saveConfig();
 
+    // NEW: Ensure department tracking
+    await departmentService.ensureAnalysisHasDepartment(analysisName);
+
     return { analysisName };
   }
 
+  // MODIFIED: Include department info
   async getAllAnalyses() {
     const analysisDirectories = await fs.readdir(config.paths.analysis);
 
-    return Promise.all(
+    const results = await Promise.all(
       analysisDirectories.map(async (dirName) => {
         const indexPath = path.join(
           config.paths.analysis,
@@ -100,15 +184,45 @@ class AnalysisService {
             enabled: analysis?.enabled || false,
             lastRun: analysis?.lastRun,
             startTime: analysis?.startTime,
+            department: analysis?.department || 'uncategorized', // NEW: Include department
           };
         } catch (error) {
           if (error.code === 'ENOENT') return null;
           throw error;
         }
       }),
-    ).then((results) => results.filter(Boolean));
+    );
+
+    // Return as object to match WebSocket expectations
+    const analysesObj = {};
+    results.filter(Boolean).forEach((analysis) => {
+      analysesObj[analysis.name] = analysis;
+    });
+
+    return analysesObj;
   }
 
+  // NEW: Get all analyses with department info
+  async getAllAnalysesWithDepartments() {
+    const analyses = await this.getAllAnalyses();
+    const departments = await departmentService.getAllDepartments();
+
+    // Create a map for quick department lookup
+    const deptMap = new Map(departments.map((d) => [d.id, d]));
+
+    // Enhance analyses with department info
+    return Object.entries(analyses).reduce((acc, [name, analysis]) => {
+      const dept = deptMap.get(analysis.department || 'uncategorized');
+      acc[name] = {
+        ...analysis,
+        departmentName: dept?.name || 'Uncategorized',
+        departmentColor: dept?.color || '#9ca3af',
+      };
+      return acc;
+    }, {});
+  }
+
+  // MODIFIED: Update department tracking on rename
   async renameAnalysis(analysisName, newFileName) {
     try {
       const analysis = this.analyses.get(analysisName);
@@ -140,7 +254,6 @@ class AnalysisService {
         );
       } catch (err) {
         if (err.code !== 'ENOENT') throw err;
-        // ENOENT error means file doesn't exist, which is what we want
       }
 
       // Perform the rename
@@ -163,6 +276,14 @@ class AnalysisService {
 
       // Save updated config to analyses-config.json
       await this.saveConfig();
+
+      // NEW: Update in department service
+      const analysisData = departmentService.analyses.get(analysisName);
+      if (analysisData) {
+        departmentService.analyses.delete(analysisName);
+        departmentService.analyses.set(newFileName, analysisData);
+        await departmentService.saveConfig();
+      }
 
       // If it was running before, restart it
       if (wasRunning) {
@@ -367,6 +488,7 @@ class AnalysisService {
     }
   }
 
+  // MODIFIED: Remove from department tracking on delete
   async deleteAnalysis(analysisName) {
     const analysis = this.analyses.get(analysisName);
     if (analysis) {
@@ -388,21 +510,14 @@ class AnalysisService {
     return { message: 'Analysis deleted successfully' };
   }
 
+  // MODIFIED: Initialize with department support
   async initialize() {
     await this.ensureDirectories();
 
-    let configuration = {};
-    try {
-      const configData = await fs.readFile(
-        path.join(config.paths.config, 'analyses-config.json'),
-        'utf8',
-      );
-      configuration = JSON.parse(configData);
-      console.log('Loaded analysis configuration');
-    } catch {
-      console.log('No existing config found, creating new');
-      await this.saveConfig();
-    }
+    const configuration = await this.loadConfig();
+
+    // Initialize department service after config is loaded
+    await departmentService.initialize(this);
 
     const analysisDirectories = await fs.readdir(config.paths.analysis);
     await Promise.all(
@@ -415,24 +530,16 @@ class AnalysisService {
           );
           const stats = await fs.stat(indexPath);
           if (stats.isFile()) {
-            await this.initializeAnalysis(dirName, configuration[dirName]);
+            await this.initializeAnalysis(
+              dirName,
+              configuration.analyses?.[dirName],
+            );
           }
         } catch (error) {
           console.error(`Error loading analysis ${dirName}:`, error);
         }
       }),
     );
-  }
-  getConfig() {
-    const configuration = {};
-    this.analyses.forEach((analysis, analysisName) => {
-      configuration[analysisName] = {
-        type: analysis.type,
-        enabled: analysis.enabled,
-        status: analysis.status,
-      };
-    });
-    return configuration;
   }
 
   async getAnalysisContent(analysisName) {
@@ -450,33 +557,55 @@ class AnalysisService {
     }
   }
 
-  async updateAnalysis(analysisName, content) {
+  // MODIFIED: Update with department support
+  async updateAnalysis(analysisName, updates) {
     try {
       const analysis = this.analyses.get(analysisName);
+
+      if (!analysis) {
+        throw new Error(`Analysis ${analysisName} not found`);
+      }
+
+      // If department is being updated, validate it exists
+      if (updates.department) {
+        const dept = await departmentService.getDepartment(updates.department);
+        if (!dept) {
+          throw new Error(`Department ${updates.department} not found`);
+        }
+      }
+
       const wasRunning = analysis && analysis.status === 'running';
 
-      // If running, stop the analysis first
-      if (wasRunning) {
+      // If running and content is being updated, stop the analysis first
+      if (wasRunning && updates.content) {
         await this.stopAnalysis(analysisName);
         await this.addLog(analysisName, 'Analysis stopped to update content');
       }
 
-      const filePath = path.join(
-        config.paths.analysis,
-        analysisName,
-        'index.cjs',
-      );
-      await fs.writeFile(filePath, content, 'utf8');
+      // Update content if provided
+      if (updates.content) {
+        const filePath = path.join(
+          config.paths.analysis,
+          analysisName,
+          'index.cjs',
+        );
+        await fs.writeFile(filePath, updates.content, 'utf8');
+      }
 
-      // If it was running before, restart it
-      if (wasRunning) {
+      // Update analysis properties
+      Object.assign(analysis, updates);
+      this.analyses.set(analysisName, analysis);
+      await this.saveConfig();
+
+      // If it was running before and content was updated, restart it
+      if (wasRunning && updates.content) {
         await this.runAnalysis(analysisName, analysis.type);
         await this.addLog(analysisName, 'Analysis updated successfully');
       }
 
       return {
         success: true,
-        restarted: wasRunning,
+        restarted: wasRunning && updates.content,
       };
     } catch (error) {
       console.error('Error updating analysis:', error);
@@ -539,6 +668,7 @@ class AnalysisService {
       throw error;
     }
   }
+
   async getEnvironment(analysisName) {
     const envFile = path.join(
       config.paths.analysis,
@@ -607,6 +737,7 @@ class AnalysisService {
     }
   }
 
+  // MODIFIED: Initialize with department
   async initializeAnalysis(analysisName, analysisConfig = {}) {
     const defaultConfig = {
       type: 'listener',
@@ -614,6 +745,7 @@ class AnalysisService {
       status: 'stopped',
       lastRun: null,
       startTime: null,
+      department: 'uncategorized', // NEW: Default department
     };
 
     const fullConfig = { ...defaultConfig, ...analysisConfig };
@@ -624,6 +756,7 @@ class AnalysisService {
       status: fullConfig.status,
       lastRun: fullConfig.lastRun,
       startTime: fullConfig.startTime,
+      department: fullConfig.department, // NEW: Set department
     });
 
     // Initialize log state (this replaces the old log loading logic)

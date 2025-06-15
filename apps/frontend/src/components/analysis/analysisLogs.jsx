@@ -1,4 +1,4 @@
-// Enhanced AnalysisLogs.jsx - Primarily WebSocket-driven
+// Enhanced AnalysisLogs.jsx - Uses props from AnalysisItem
 import PropTypes from 'prop-types';
 import { useState, useEffect, useRef } from 'react';
 import { analysisService } from '../../services/analysisService';
@@ -17,11 +17,27 @@ const AnalysisLogs = ({ analysis }) => {
   const scrollRef = useRef(null);
   const isLoadingMore = useRef(false);
   const hasLoadedInitial = useRef(false);
+  const lastScrollTop = useRef(0);
+  const shouldAutoScroll = useRef(true);
 
-  // Primary logs come from WebSocket (analysis.logs)
-  // Initial logs loaded on mount, additional logs from pagination
+  // Use logs directly from props (passed from AnalysisItem which gets from WebSocket)
   const websocketLogs = analysis.logs || [];
   const totalLogCount = analysis.totalLogCount || websocketLogs.length;
+
+  // Auto-scroll to bottom when new logs arrive
+  useEffect(() => {
+    if (
+      shouldAutoScroll.current &&
+      scrollRef.current &&
+      websocketLogs.length > 0
+    ) {
+      const element = scrollRef.current;
+      // Small delay to ensure DOM has updated
+      setTimeout(() => {
+        element.scrollTop = element.scrollHeight;
+      }, 0);
+    }
+  }, [websocketLogs.length]);
 
   const loadInitialLogs = async () => {
     if (hasLoadedInitial.current) return;
@@ -30,12 +46,13 @@ const AnalysisLogs = ({ analysis }) => {
     try {
       const response = await analysisService.getLogs(analysis.name, {
         page: 1,
-        limit: LOGS_PER_PAGE, // Use full page size like original
+        limit: LOGS_PER_PAGE,
       });
 
-      setInitialLogs(response.logs);
-      // Respect the API's hasMore response
-      setHasMore(response.hasMore || false);
+      if (response.logs) {
+        setInitialLogs(response.logs);
+        setHasMore(response.hasMore || false);
+      }
       hasLoadedInitial.current = true;
     } catch (error) {
       console.error('Failed to fetch initial logs:', error);
@@ -74,9 +91,9 @@ const AnalysisLogs = ({ analysis }) => {
         ].filter(Boolean),
       );
 
-      const newLogs = response.logs.filter(
-        (log) => !existingSequences.has(log.sequence),
-      );
+      const newLogs =
+        response.logs?.filter((log) => !existingSequences.has(log.sequence)) ||
+        [];
 
       console.log('New logs after filtering:', newLogs.length);
 
@@ -94,12 +111,28 @@ const AnalysisLogs = ({ analysis }) => {
   };
 
   const handleScroll = () => {
-    if (!scrollRef.current || isLoadingMore.current || !hasMore) return;
+    if (!scrollRef.current) return;
 
     const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
 
-    // Load more when scrolled near bottom (within 200px)
-    if (scrollHeight - (scrollTop + clientHeight) < 200) {
+    // Check if user scrolled up manually
+    if (scrollTop < lastScrollTop.current) {
+      shouldAutoScroll.current = false;
+    }
+
+    // Re-enable auto-scroll if user scrolls to bottom
+    if (scrollHeight - (scrollTop + clientHeight) < 50) {
+      shouldAutoScroll.current = true;
+    }
+
+    lastScrollTop.current = scrollTop;
+
+    // Load more when scrolled near bottom (within 200px) and not loading
+    if (
+      !isLoadingMore.current &&
+      hasMore &&
+      scrollHeight - (scrollTop + clientHeight) < 200
+    ) {
       loadMoreLogs();
     }
   };
@@ -110,18 +143,21 @@ const AnalysisLogs = ({ analysis }) => {
     setInitialLogs([]);
     setAdditionalLogs([]);
     setPage(1);
-    setHasMore(false); // Start with false, let API response set it
+    setHasMore(false);
+    shouldAutoScroll.current = true;
     loadInitialLogs();
   }, [analysis.name]);
 
-  // Update hasMore based on API response
+  // Reset when logs are cleared
   useEffect(() => {
-    // If we have initial logs loaded, check if there are more
-    if (hasLoadedInitial.current && initialLogs.length > 0) {
-      // hasMore should be based on the actual API response, not calculated
-      // The backend tells us if there are more logs
+    if (websocketLogs.length === 0 && hasLoadedInitial.current) {
+      setInitialLogs([]);
+      setAdditionalLogs([]);
+      setPage(1);
+      setHasMore(false);
+      shouldAutoScroll.current = true;
     }
-  }, [initialLogs]);
+  }, [websocketLogs.length]);
 
   // Combine and deduplicate all logs
   const allLogs = [...websocketLogs, ...initialLogs, ...additionalLogs]
@@ -142,23 +178,29 @@ const AnalysisLogs = ({ analysis }) => {
 
   return (
     <div
-      className={`mt-4 bg-gray-50 rounded-md overflow-hidden ${isResizing ? 'select-none' : ''}`}
+      className={`mt-4 bg-gray-50 dark:bg-gray-800 rounded-md overflow-hidden ${isResizing ? 'select-none' : ''}`}
       style={{ minHeight: '96px', maxHeight: '800px' }}
     >
-      <div className="p-4 sticky top-0 bg-gray-100 border-b flex justify-between items-center">
-        <h4 className="text-sm font-semibold">Logs</h4>
+      <div className="p-4 sticky top-0 bg-gray-100 dark:bg-gray-700 border-b flex justify-between items-center">
+        <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
+          Logs
+        </h4>
         <div className="flex items-center gap-4">
           {(isLoading || isLoadingMore.current) && (
-            <RotateCw className="w-3 h-3 animate-spin" />
+            <RotateCw className="w-3 h-3 animate-spin text-blue-500" />
           )}
-          <div className="text-xs text-gray-500">
+          <div className="text-xs text-gray-500 dark:text-gray-400">
             {websocketLogs.length > 0 ? (
               <>
                 {allLogs.length} of {totalLogCount} entries
                 {analysis.status === 'running' ? (
-                  <span className="ml-2 text-green-600">● Live</span>
+                  <span className="ml-2 text-green-600 dark:text-green-400">
+                    ● Live
+                  </span>
                 ) : (
-                  <span className="ml-2 text-red-600">● Stopped</span>
+                  <span className="ml-2 text-red-600 dark:text-red-400">
+                    ● Stopped
+                  </span>
                 )}
               </>
             ) : (
@@ -175,12 +217,14 @@ const AnalysisLogs = ({ analysis }) => {
         onScroll={handleScroll}
       >
         {isLoading && allLogs.length === 0 ? (
-          <div className="flex items-center justify-center text-gray-500">
+          <div className="flex items-center justify-center text-gray-500 dark:text-gray-400">
             <RotateCw className="w-4 h-4 animate-spin mr-2" />
             Loading logs...
           </div>
         ) : allLogs.length === 0 ? (
-          <p className="text-gray-500 text-sm">No logs available.</p>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">
+            No logs available.
+          </p>
         ) : (
           <>
             <div className="space-y-1 font-mono text-sm">
@@ -191,18 +235,18 @@ const AnalysisLogs = ({ analysis }) => {
                       ? `seq-${log.sequence}`
                       : `${log.timestamp}-${index}`
                   }
-                  className="flex hover:bg-gray-100 p-1 rounded"
+                  className="flex hover:bg-gray-100 dark:hover:bg-gray-700 p-1 rounded"
                 >
-                  <span className="text-gray-500 mr-2 shrink-0">
+                  <span className="text-gray-500 dark:text-gray-400 mr-2 shrink-0">
                     {log.timestamp}
                   </span>
                   <span
                     className={`${
                       log.message?.toLowerCase().includes('error')
-                        ? 'text-red-600'
+                        ? 'text-red-600 dark:text-red-400'
                         : log.message?.toLowerCase().includes('warn')
-                          ? 'text-yellow-600'
-                          : ''
+                          ? 'text-yellow-600 dark:text-yellow-400'
+                          : 'text-gray-900 dark:text-gray-100'
                     }`}
                   >
                     {log.message}
@@ -211,7 +255,7 @@ const AnalysisLogs = ({ analysis }) => {
               ))}
             </div>
             {hasMore && !isLoading && (
-              <div className="text-center py-2 text-sm text-gray-500">
+              <div className="text-center py-2 text-sm text-gray-500 dark:text-gray-400">
                 {isLoadingMore.current ? (
                   <>
                     <RotateCw className="w-4 h-4 animate-spin inline mr-2" />
@@ -220,7 +264,7 @@ const AnalysisLogs = ({ analysis }) => {
                 ) : (
                   <button
                     onClick={loadMoreLogs}
-                    className="text-blue-500 hover:text-blue-700"
+                    className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
                   >
                     Load more logs...
                   </button>
@@ -233,9 +277,9 @@ const AnalysisLogs = ({ analysis }) => {
 
       <div
         className={`
-          h-2 bg-gray-100 border-t cursor-row-resize hover:bg-gray-200 
+          h-2 bg-gray-100 dark:bg-gray-700 border-t cursor-row-resize hover:bg-gray-200 dark:hover:bg-gray-600
           flex items-center justify-center
-          ${isResizing ? 'bg-gray-300' : ''}
+          ${isResizing ? 'bg-gray-300 dark:bg-gray-500' : ''}
         `}
         onMouseDown={(e) => {
           e.preventDefault();
@@ -259,7 +303,7 @@ const AnalysisLogs = ({ analysis }) => {
           document.addEventListener('mouseup', onMouseUp);
         }}
       >
-        <div className="w-16 h-1 bg-gray-300 rounded-full" />
+        <div className="w-16 h-1 bg-gray-300 dark:bg-gray-500 rounded-full" />
       </div>
     </div>
   );
@@ -268,6 +312,7 @@ const AnalysisLogs = ({ analysis }) => {
 AnalysisLogs.propTypes = {
   analysis: PropTypes.shape({
     name: PropTypes.string.isRequired,
+    status: PropTypes.string,
     logs: PropTypes.arrayOf(
       PropTypes.shape({
         sequence: PropTypes.number,

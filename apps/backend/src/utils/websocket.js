@@ -1,10 +1,11 @@
 // backend/src/utils/websocket.js
 import { WebSocketServer } from 'ws';
+import departmentService from '../services/departmentService.js';
 
 let wss = null;
 const clients = new Set();
 
-function setupWebSocket(server) {
+export function setupWebSocket(server) {
   if (wss !== null) {
     return wss;
   }
@@ -14,7 +15,7 @@ function setupWebSocket(server) {
     path: '/ws',
     clientTracking: true,
   });
-  console.log('Setting up WebSocket server');
+  console.log('Setting up WebSocket server with department support');
 
   wss.on('connection', async (ws) => {
     console.log('New WebSocket connection established');
@@ -24,13 +25,20 @@ function setupWebSocket(server) {
       const { analysisService } = await import(
         '../services/analysisService.js'
       );
-      const analyses = await analysisService.getAllAnalyses();
 
-      if (ws.readyState === WebSocket.OPEN) {
+      // Get both analyses and departments
+      const [analyses, departments] = await Promise.all([
+        analysisService.getAllAnalyses(),
+        departmentService.getAllDepartments(),
+      ]);
+
+      if (ws.readyState === ws.OPEN) {
         ws.send(
           JSON.stringify({
             type: 'init',
             analyses,
+            departments,
+            version: '2.0',
           }),
         );
 
@@ -41,13 +49,65 @@ function setupWebSocket(server) {
       console.error('Error sending initial state:', error);
     }
 
-    // Handle status requests from client
+    // Handle messages from client
     ws.on('message', async (message) => {
       try {
         const data = JSON.parse(message.toString());
 
-        if (data.type === 'requestStatus') {
-          await sendStatusUpdate(ws);
+        switch (data.type) {
+          case 'requestStatus':
+            await sendStatusUpdate(ws);
+            break;
+
+          case 'requestDepartments': {
+            const departments = await departmentService.getAllDepartments();
+            ws.send(
+              JSON.stringify({
+                type: 'departmentsUpdate',
+                departments,
+              }),
+            );
+            break;
+          }
+
+          case 'requestAnalysesByDepartment':
+            if (data.departmentId) {
+              const analyses = await departmentService.getAnalysesByDepartment(
+                data.departmentId,
+              );
+              ws.send(
+                JSON.stringify({
+                  type: 'analysesByDepartment',
+                  departmentId: data.departmentId,
+                  analyses,
+                }),
+              );
+            }
+            break;
+
+          // Handle refresh request
+          case 'requestAnalyses': {
+            const { analysisService } = await import(
+              '../services/analysisService.js'
+            );
+            const [analyses, departments] = await Promise.all([
+              analysisService.getAllAnalyses(),
+              departmentService.getAllDepartments(),
+            ]);
+
+            ws.send(
+              JSON.stringify({
+                type: 'init',
+                analyses,
+                departments,
+                version: '2.0',
+              }),
+            );
+            break;
+          }
+
+          default:
+            console.log('Unknown WebSocket message type:', data.type);
         }
       } catch (error) {
         console.error('Error handling WebSocket message:', error);
@@ -68,6 +128,51 @@ function setupWebSocket(server) {
   return wss;
 }
 
+// Broadcast to all connected clients
+export function broadcast(data) {
+  if (!wss) return;
+
+  const message = JSON.stringify(data);
+  clients.forEach((client) => {
+    if (client.readyState === client.OPEN) {
+      client.send(message);
+    }
+  });
+}
+
+// Enhanced broadcast refresh that includes departments
+export async function broadcastRefresh() {
+  if (!wss || clients.size === 0) return;
+
+  try {
+    const { analysisService } = await import('../services/analysisService.js');
+    const [analyses, departments] = await Promise.all([
+      analysisService.getAllAnalyses(),
+      departmentService.getAllDepartments(),
+    ]);
+
+    const message = JSON.stringify({
+      type: 'init',
+      analyses,
+      departments,
+      version: '2.0',
+    });
+
+    clients.forEach((client) => {
+      if (client.readyState === client.OPEN) {
+        try {
+          client.send(message);
+        } catch (error) {
+          console.error('Error sending refresh message:', error);
+          clients.delete(client);
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error broadcasting refresh:', error);
+  }
+}
+
 // Helper function to send status update to a specific client
 async function sendStatusUpdate(client) {
   try {
@@ -76,8 +181,8 @@ async function sendStatusUpdate(client) {
     const require = createRequire(import.meta.url);
     const ms = (await import('ms')).default;
 
-    // Get container state - we'll need to import this from server.js or make it accessible
-    const containerState = getContainerState(); // We'll need to implement this
+    // Get container state
+    const containerState = getContainerState();
 
     const runningAnalyses = Array.from(
       analysisService.analyses.values(),
@@ -94,6 +199,7 @@ async function sendStatusUpdate(client) {
     }
 
     const status = {
+      type: 'statusUpdate',
       container_health: {
         status: containerState.status === 'ready' ? 'healthy' : 'initializing',
         message: containerState.message,
@@ -111,94 +217,84 @@ async function sendStatusUpdate(client) {
       serverTime: new Date().toString(),
     };
 
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(
-        JSON.stringify({
-          type: 'statusUpdate',
-          data: status,
-        }),
-      );
+    if (client.readyState === client.OPEN) {
+      client.send(JSON.stringify(status));
     }
   } catch (error) {
     console.error('Error sending status update:', error);
   }
 }
 
-function broadcastUpdate(type, data) {
-  if (!wss || clients.size === 0) return;
+// Container state management (should be injected from server.js)
+let containerState = {
+  status: 'ready',
+  startTime: new Date(),
+  message: 'Container is ready',
+};
 
-  const message = JSON.stringify({ type, data });
+export function setContainerState(state) {
+  containerState = state;
+}
 
-  clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN) {
-      try {
-        client.send(message);
-      } catch {
-        clients.delete(client);
-      }
-    }
+export function getContainerState() {
+  return containerState;
+}
+
+// Enhanced broadcast functions for department operations
+export function broadcastDepartmentUpdate(department, action) {
+  broadcast({
+    type: 'departmentUpdate',
+    action,
+    department,
+    timestamp: new Date().toISOString(),
   });
 }
 
-async function broadcastRefresh() {
-  if (!wss || clients.size === 0) return;
-
-  try {
-    const { analysisService } = await import('../services/analysisService.js');
-    const analyses = await analysisService.getAllAnalyses();
-
-    const message = JSON.stringify({
-      type: 'init',
-      analyses,
-    });
-
-    clients.forEach((client) => {
-      if (client.readyState === WebSocket.OPEN) {
-        try {
-          client.send(message);
-        } catch {
-          clients.delete(client);
-        }
-      }
-    });
-  } catch (error) {
-    console.error('Error broadcasting refresh:', error);
-  }
+export function broadcastAnalysisMove(analysisName, fromDept, toDept) {
+  broadcast({
+    type: 'analysisMovedToDepartment',
+    analysis: analysisName,
+    from: fromDept,
+    to: toDept,
+    timestamp: new Date().toISOString(),
+  });
 }
 
-// Broadcast status updates to all connected clients
-async function broadcastStatusUpdate() {
+// Original broadcast functions for analysis updates - enhanced for department support
+export function broadcastUpdate(analysisName, update) {
+  broadcast({
+    type: 'analysisUpdate',
+    analysisName,
+    update,
+    timestamp: new Date().toISOString(),
+  });
+}
+
+export function broadcastStatusUpdate() {
   if (!wss || clients.size === 0) return;
 
   clients.forEach(async (client) => {
-    if (client.readyState === WebSocket.OPEN) {
+    if (client.readyState === client.OPEN) {
       await sendStatusUpdate(client);
     }
   });
 }
 
-// Container state management - needs to be accessible from server.js
-let containerState = {
-  status: 'starting',
-  startTime: new Date(),
-  message: 'Container is starting',
-};
-
-function updateContainerState(newState) {
+export function updateContainerState(newState) {
   containerState = { ...containerState, ...newState };
   // Broadcast status update when container state changes
   broadcastStatusUpdate();
 }
 
-function getContainerState() {
-  return containerState;
+// Cleanup function
+export function closeWebSocket() {
+  if (wss) {
+    clients.forEach((client) => {
+      client.close();
+    });
+    clients.clear();
+    wss.close();
+    wss = null;
+    console.log('WebSocket server closed');
+  }
 }
-
-export {
-  setupWebSocket,
-  broadcastUpdate,
-  broadcastRefresh,
-  broadcastStatusUpdate,
-  updateContainerState,
-  getContainerState,
-};

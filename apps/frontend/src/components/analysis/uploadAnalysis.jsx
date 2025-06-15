@@ -7,7 +7,11 @@ import sanitize from 'sanitize-filename';
 
 const DEFAULT_EDITOR_CONTENT = '// Write your analysis code here';
 
-export default function AnalysisCreator() {
+export default function AnalysisCreator({
+  targetDepartment = null,
+  departmentName = null,
+  onClose = null,
+}) {
   // Form state
   const [mode, setMode] = useState('upload');
   const [selectedFile, setSelectedFile] = useState(null);
@@ -209,13 +213,28 @@ export default function AnalysisCreator() {
       }
 
       addLoadingAnalysis(finalFileName);
-      await analysisService.uploadAnalysis(file, analysisType);
+
+      // Pass the targetDepartment to the service
+      await analysisService.uploadAnalysis(
+        file,
+        analysisType,
+        targetDepartment,
+      );
 
       window.alert(
-        `Successfully ${mode === 'upload' ? 'uploaded' : 'created'} analysis ${finalFileName}`,
+        `Successfully ${mode === 'upload' ? 'uploaded' : 'created'} analysis ${finalFileName}${
+          departmentName && departmentName !== 'All Departments'
+            ? ` in ${departmentName}`
+            : ''
+        }`,
       );
 
       resetForm();
+
+      // If onClose was provided, close the component
+      if (onClose) {
+        onClose();
+      }
     } catch (error) {
       if (finalFileName) {
         removeLoadingAnalysis(finalFileName);
@@ -381,24 +400,44 @@ export default function AnalysisCreator() {
   );
 
   return (
-    <div className="bg-white rounded-lg shadow-md mb-8">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md mb-8 transition-colors relative">
       {/* Header */}
       <div
-        className="p-4 flex justify-between items-center cursor-pointer hover:bg-gray-50"
+        className="p-4 flex justify-between items-center cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
         onClick={handleToggleExpanded}
       >
-        <h2 className="text-xl font-semibold">Analysis Creator</h2>
-        <button className="text-gray-500 hover:text-gray-700">
-          {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-        </button>
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+          Analysis Creator
+          {departmentName && departmentName !== 'All Departments' && (
+            <span className="text-sm font-normal text-gray-600 dark:text-gray-400 ml-2">
+              - {departmentName}
+            </span>
+          )}
+        </h2>
+        <div className="flex items-center gap-2">
+          {isExpanded && onClose && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onClose();
+              }}
+              className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 p-1"
+            >
+              ✕
+            </button>
+          )}
+          <button className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+            {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+          </button>
+        </div>
       </div>
 
       {/* Expanded Content */}
       {isExpanded && (
-        <div className="p-6 pt-2 border-t">
+        <div className="p-6 pt-2 border-t dark:border-gray-700">
           <div className="space-y-4">
             {/* Mode Toggle */}
-            <div className="border-b border-gray-200 mb-6">
+            <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
               <nav className="-mb-px flex space-x-8">
                 {renderTabButton('upload', 'Upload Existing File')}
                 {renderTabButton('create', 'Create New Analysis')}
@@ -407,7 +446,7 @@ export default function AnalysisCreator() {
 
             {/* Loading Indicator */}
             {isFetchingAnalyses && (
-              <div className="text-sm text-gray-500 italic">
+              <div className="text-sm text-gray-500 dark:text-gray-400 italic">
                 Loading existing analyses...
               </div>
             )}
@@ -416,7 +455,11 @@ export default function AnalysisCreator() {
             {mode === 'upload' ? renderUploadMode() : renderCreateMode()}
 
             {/* Error Message */}
-            {error && <div className="text-red-500 text-sm">{error}</div>}
+            {error && (
+              <div className="text-red-500 dark:text-red-400 text-sm">
+                {error}
+              </div>
+            )}
 
             {/* Action Buttons */}
             <div className="flex space-x-4">
@@ -435,7 +478,7 @@ export default function AnalysisCreator() {
               {showCancelButton && (
                 <button
                   onClick={handleCancel}
-                  className="px-4 py-2 rounded text-gray-600 hover:text-gray-800"
+                  className="px-4 py-2 rounded text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100"
                   disabled={isInputDisabled}
                 >
                   Cancel
@@ -446,7 +489,7 @@ export default function AnalysisCreator() {
 
           {/* Connection Status */}
           {!isConnected && (
-            <div className="mt-4 p-2 bg-yellow-100 text-yellow-700 rounded">
+            <div className="mt-4 p-2 bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-200 rounded">
               Not connected to server. Please wait for connection to be
               established.
             </div>

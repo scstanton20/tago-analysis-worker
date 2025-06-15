@@ -10,6 +10,7 @@ let globalConnectionPromise = null;
 export function WebSocketProvider({ children }) {
   const [socket, setSocket] = useState(null);
   const [analyses, setAnalyses] = useState([]);
+  const [departments, setDepartments] = useState([]); // Add departments state
   const [loadingAnalyses, setLoadingAnalyses] = useState(new Set());
   const [connectionStatus, setConnectionStatus] = useState('connecting');
   const [backendStatus, setBackendStatus] = useState(null);
@@ -69,17 +70,33 @@ export function WebSocketProvider({ children }) {
 
         switch (data.type) {
           case 'init': {
-            setAnalyses(data.analyses || []);
+            // Handle both array and object formats
+            let analysesArray = [];
+
+            if (Array.isArray(data.analyses)) {
+              // Old format - already an array
+              analysesArray = data.analyses;
+            } else if (data.analyses && typeof data.analyses === 'object') {
+              // New format - convert object to array
+              analysesArray = Object.entries(data.analyses).map(
+                ([name, analysis]) => ({
+                  ...analysis,
+                  name, // Ensure name is included
+                }),
+              );
+            }
+
+            setAnalyses(analysesArray);
 
             // Initialize log sequences tracking
-            (data.analyses || []).forEach((analysis) => {
+            analysesArray.forEach((analysis) => {
               if (!logSequences.current.has(analysis.name)) {
                 logSequences.current.set(analysis.name, new Set());
               }
             });
 
             const analysisNames = new Set(
-              (data.analyses || []).map((analysis) => analysis.name),
+              analysesArray.map((analysis) => analysis.name),
             );
             setLoadingAnalyses((prev) => {
               const updatedLoadingSet = new Set();
@@ -90,20 +107,93 @@ export function WebSocketProvider({ children }) {
               });
               return updatedLoadingSet;
             });
+
+            // Handle departments if provided
+            if (data.departments) {
+              if (Array.isArray(data.departments)) {
+                setDepartments(data.departments);
+              } else {
+                // Convert object to array
+                const deptsArray = Object.values(data.departments);
+                setDepartments(deptsArray.sort((a, b) => a.order - b.order));
+              }
+            }
             break;
           }
 
           case 'statusUpdate': {
             // Handle status updates from WebSocket
-            if (data.data) {
+            if (data.container_health) {
+              // Direct status structure
+              setBackendStatus(data);
+            } else if (data.data) {
+              // Wrapped in data property
               setBackendStatus(data.data);
             }
             break;
           }
 
+          case 'analysisUpdate':
+            // Handle the new update format from broadcast
+            if (data.analysisName && data.update) {
+              setAnalyses((prev) =>
+                prev.map((analysis) =>
+                  analysis.name === data.analysisName
+                    ? { ...analysis, ...data.update }
+                    : analysis,
+                ),
+              );
+            }
+            break;
+
+          case 'refresh':
+            // Re-request data - use the global socket
+            if (
+              globalWebSocket &&
+              globalWebSocket.readyState === WebSocket.OPEN
+            ) {
+              globalWebSocket.send(JSON.stringify({ type: 'requestAnalyses' }));
+            }
+            break;
+
           case 'analysisCreated':
             if (data.data?.analysis) {
               logSequences.current.set(data.data.analysis, new Set());
+
+              // If we have complete analysis data, add it immediately
+              if (data.data.analysisData) {
+                const newAnalysis = {
+                  ...data.data.analysisData,
+                  name: data.data.analysis,
+                  department: data.data.department || 'uncategorized',
+                };
+
+                setAnalyses((prev) => {
+                  // Check if analysis already exists
+                  const existingIndex = prev.findIndex(
+                    (a) => a.name === data.data.analysis,
+                  );
+                  if (existingIndex >= 0) {
+                    // Update existing
+                    const updated = [...prev];
+                    updated[existingIndex] = newAnalysis;
+                    return updated;
+                  } else {
+                    // Add new
+                    return [...prev, newAnalysis];
+                  }
+                });
+              } else {
+                // Force refresh to get complete analysis data
+                if (
+                  globalWebSocket &&
+                  globalWebSocket.readyState === WebSocket.OPEN
+                ) {
+                  globalWebSocket.send(
+                    JSON.stringify({ type: 'requestAnalyses' }),
+                  );
+                }
+              }
             }
             break;
 
@@ -137,36 +227,123 @@ export function WebSocketProvider({ children }) {
                           ? 'running'
                           : analysis.status,
                         enabled: data.data.restarted ? true : analysis.enabled,
+                        department: data.data.department || analysis.department,
                       }
                     : analysis,
                 ),
               );
             }
             break;
+
           case 'analysisStatus':
-            removeLoadingAnalysis(data.data.fileName);
             if (data.data?.fileName) {
+              removeLoadingAnalysis(data.data.fileName);
               setAnalyses((prev) =>
                 prev.map((analysis) =>
                   analysis.name === data.data.fileName
-                    ? { ...analysis, ...data.data }
+                    ? {
+                        ...analysis,
+                        status: data.data.status,
+                        enabled: data.data.enabled,
+                        department: data.data.department || analysis.department,
+                        lastRun: data.data.lastRun || analysis.lastRun,
+                        startTime: data.data.startTime || analysis.startTime,
+                      }
                     : analysis,
                 ),
               );
             }
             break;
+
           case 'analysisUpdated':
-            if (data.data?.analysis) {
-              const updatedAnalysis = data.data.analysis;
+            if (data.data?.fileName) {
               setAnalyses((prev) =>
                 prev.map((analysis) =>
-                  analysis.name === updatedAnalysis.name
-                    ? { ...analysis, ...updatedAnalysis }
+                  analysis.name === data.data.fileName
+                    ? {
+                        ...analysis,
+                        status: data.data.status || analysis.status,
+                        department: data.data.department || analysis.department,
+                        lastRun: data.data.lastRun || analysis.lastRun,
+                        startTime: data.data.startTime || analysis.startTime,
+                      }
                     : analysis,
                 ),
               );
-              if (updatedAnalysis.status !== 'running') {
-                removeLoadingAnalysis(updatedAnalysis.name);
+              if (data.data.status !== 'running') {
+                removeLoadingAnalysis(data.data.fileName);
+              }
+            }
+            break;
+
+          case 'analysisEnvironmentUpdated':
+            if (data.data?.fileName) {
+              setAnalyses((prev) =>
+                prev.map((analysis) =>
+                  analysis.name === data.data.fileName
+                    ? {
+                        ...analysis,
+                        status: data.data.status || analysis.status,
+                        department: data.data.department || analysis.department,
+                        lastRun: data.data.lastRun || analysis.lastRun,
+                        startTime: data.data.startTime || analysis.startTime,
+                      }
+                    : analysis,
+                ),
+              );
+            }
+            break;
+
+          // Department-related messages
+          case 'departmentCreated':
+          case 'departmentUpdated':
+            if (data.department) {
+              setDepartments((prev) => {
+                const updated = prev.filter((d) => d.id !== data.department.id);
+                return [...updated, data.department].sort(
+                  (a, b) => a.order - b.order,
+                );
+              });
+            }
+            break;
+
+          case 'departmentDeleted':
+            if (data.deleted) {
+              setDepartments((prev) =>
+                prev.filter((d) => d.id !== data.deleted),
+              );
+              // Update analyses to move to new department
+              if (data.analysesMovedTo) {
+                setAnalyses((prev) =>
+                  prev.map((analysis) =>
+                    analysis.department === data.deleted
+                      ? { ...analysis, department: data.analysesMovedTo }
+                      : analysis,
+                  ),
+                );
+              }
+            }
+            break;
+
+          case 'analysisMovedToDepartment':
+            if (data.analysis && data.to) {
+              setAnalyses((prev) =>
+                prev.map((analysis) =>
+                  analysis.name === data.analysis
+                    ? { ...analysis, department: data.to }
+                    : analysis,
+                ),
+              );
+            }
+            break;
+
+          case 'departmentsReordered':
+            if (data.departments) {
+              if (Array.isArray(data.departments)) {
+                setDepartments(data.departments);
+              } else {
+                const deptsArray = Object.values(data.departments);
+                setDepartments(deptsArray.sort((a, b) => a.order - b.order));
               }
             }
             break;
@@ -218,6 +395,10 @@ export function WebSocketProvider({ children }) {
                 ),
               );
             }
+            break;
+
+          default:
+            console.log('Unhandled WebSocket message type:', data.type);
             break;
         }
       } catch (error) {
@@ -388,13 +569,16 @@ export function WebSocketProvider({ children }) {
 
   const value = {
     socket,
-    analyses,
+    analyses, // Array format for backward compatibility
+    departments, // Array format
+    analysesArray: analyses, // Explicit array format
+    departmentsArray: departments, // Explicit array format
     loadingAnalyses,
     addLoadingAnalysis,
     removeLoadingAnalysis,
     connectionStatus,
-    backendStatus, // Expose backend status
-    requestStatusUpdate, // Expose manual status request function
+    backendStatus,
+    requestStatusUpdate,
   };
 
   return (
