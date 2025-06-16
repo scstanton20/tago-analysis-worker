@@ -1,8 +1,19 @@
-// Enhanced AnalysisLogs.jsx - Uses props from AnalysisItem
+// frontend/src/components/analysis/analysisLogs.jsx
 import PropTypes from 'prop-types';
 import { useState, useEffect, useRef } from 'react';
 import { analysisService } from '../../services/analysisService';
-import { RotateCw } from 'lucide-react';
+import {
+  Paper,
+  ScrollArea,
+  Group,
+  Text,
+  Badge,
+  Stack,
+  Button,
+  Center,
+  Loader,
+  Box,
+} from '@mantine/core';
 
 const LOGS_PER_PAGE = 100;
 
@@ -20,7 +31,7 @@ const AnalysisLogs = ({ analysis }) => {
   const lastScrollTop = useRef(0);
   const shouldAutoScroll = useRef(true);
 
-  // Use logs directly from props (passed from AnalysisItem which gets from WebSocket)
+  // Use logs directly from props
   const websocketLogs = analysis.logs || [];
   const totalLogCount = analysis.totalLogCount || websocketLogs.length;
 
@@ -32,7 +43,6 @@ const AnalysisLogs = ({ analysis }) => {
       websocketLogs.length > 0
     ) {
       const element = scrollRef.current;
-      // Small delay to ensure DOM has updated
       setTimeout(() => {
         element.scrollTop = element.scrollHeight;
       }, 0);
@@ -65,7 +75,6 @@ const AnalysisLogs = ({ analysis }) => {
   const loadMoreLogs = async () => {
     if (isLoadingMore.current || !hasMore) return;
 
-    console.log('Loading more logs, current page:', page, 'hasMore:', hasMore);
     isLoadingMore.current = true;
 
     try {
@@ -74,13 +83,6 @@ const AnalysisLogs = ({ analysis }) => {
         page: nextPage,
         limit: LOGS_PER_PAGE,
       });
-
-      console.log(
-        'Received logs:',
-        response.logs?.length,
-        'hasMore:',
-        response.hasMore,
-      );
 
       // Filter out logs we already have
       const existingSequences = new Set(
@@ -94,8 +96,6 @@ const AnalysisLogs = ({ analysis }) => {
       const newLogs =
         response.logs?.filter((log) => !existingSequences.has(log.sequence)) ||
         [];
-
-      console.log('New logs after filtering:', newLogs.length);
 
       if (newLogs.length > 0) {
         setAdditionalLogs((prev) => [...prev, ...newLogs]);
@@ -127,7 +127,7 @@ const AnalysisLogs = ({ analysis }) => {
 
     lastScrollTop.current = scrollTop;
 
-    // Load more when scrolled near bottom (within 200px) and not loading
+    // Load more when scrolled near bottom
     if (
       !isLoadingMore.current &&
       hasMore &&
@@ -137,7 +137,7 @@ const AnalysisLogs = ({ analysis }) => {
     }
   };
 
-  // Load initial logs on mount or when analysis changes
+  // Load initial logs on mount
   useEffect(() => {
     hasLoadedInitial.current = false;
     setInitialLogs([]);
@@ -171,116 +171,158 @@ const AnalysisLogs = ({ analysis }) => {
         ),
     )
     .sort((a, b) => {
-      // Sort by sequence if available, otherwise by timestamp
       if (a.sequence && b.sequence) return b.sequence - a.sequence;
       return new Date(b.timestamp) - new Date(a.timestamp);
     });
 
   return (
-    <div
-      className={`mt-4 bg-gray-50 dark:bg-gray-800 rounded-md overflow-hidden ${isResizing ? 'select-none' : ''}`}
-      style={{ minHeight: '96px', maxHeight: '800px' }}
+    <Paper
+      mt="md"
+      withBorder
+      radius="md"
+      style={{
+        minHeight: '96px',
+        maxHeight: '800px',
+        overflow: 'hidden',
+        userSelect: isResizing ? 'none' : 'auto',
+      }}
     >
-      <div className="p-4 sticky top-0 bg-gray-100 dark:bg-gray-700 border-b flex justify-between items-center">
-        <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
-          Logs
-        </h4>
-        <div className="flex items-center gap-4">
-          {(isLoading || isLoadingMore.current) && (
-            <RotateCw className="w-3 h-3 animate-spin text-blue-500" />
-          )}
-          <div className="text-xs text-gray-500 dark:text-gray-400">
-            {websocketLogs.length > 0 ? (
-              <>
-                {allLogs.length} of {totalLogCount} entries
-                {analysis.status === 'running' ? (
-                  <span className="ml-2 text-green-600 dark:text-green-400">
-                    ● Live
-                  </span>
-                ) : (
-                  <span className="ml-2 text-red-600 dark:text-red-400">
-                    ● Stopped
-                  </span>
-                )}
-              </>
-            ) : (
-              `${allLogs.length} entries`
-            )}
-          </div>
-        </div>
-      </div>
+      {/* Header */}
+      <Box p="sm">
+        <Group justify="space-between">
+          <Text size="sm" fw={600}>
+            Logs
+          </Text>
+          <Group gap="xs">
+            {(isLoading || isLoadingMore.current) && <Loader size="xs" />}
+            <Text size="xs" c="dimmed">
+              {websocketLogs.length > 0 ? (
+                <>
+                  {allLogs.length} of {totalLogCount} entries
+                  {analysis.status === 'running' ? (
+                    <Badge color="green" size="xs" variant="dot" ml="xs">
+                      Live
+                    </Badge>
+                  ) : (
+                    <Badge color="red" size="xs" variant="dot" ml="xs">
+                      Stopped
+                    </Badge>
+                  )}
+                </>
+              ) : (
+                `${allLogs.length} entries`
+              )}
+            </Text>
+          </Group>
+        </Group>
+      </Box>
 
-      <div
+      {/* Logs Content */}
+      <ScrollArea
+        h={height}
+        p="sm"
         ref={scrollRef}
-        className="p-4 overflow-y-auto"
-        style={{ height: `${height}px` }}
-        onScroll={handleScroll}
+        onScrollPositionChange={handleScroll}
+        type="scroll"
+        scrollbarSize={8}
       >
         {isLoading && allLogs.length === 0 ? (
-          <div className="flex items-center justify-center text-gray-500 dark:text-gray-400">
-            <RotateCw className="w-4 h-4 animate-spin mr-2" />
-            Loading logs...
-          </div>
+          <Center h="100%">
+            <Group>
+              <Loader size="sm" />
+              <Text c="dimmed" size="sm">
+                Loading logs...
+              </Text>
+            </Group>
+          </Center>
         ) : allLogs.length === 0 ? (
-          <p className="text-gray-500 dark:text-gray-400 text-sm">
-            No logs available.
-          </p>
+          <Center h="100%">
+            <Text c="dimmed" size="sm">
+              No logs available.
+            </Text>
+          </Center>
         ) : (
-          <>
-            <div className="space-y-1 font-mono text-sm">
-              {allLogs.map((log, index) => (
-                <div
+          <Stack gap={2}>
+            {allLogs.map((log, index) => {
+              const isError = log.message?.toLowerCase().includes('error');
+              const isWarning = log.message?.toLowerCase().includes('warn');
+
+              return (
+                <Group
                   key={
                     log.sequence
                       ? `seq-${log.sequence}`
                       : `${log.timestamp}-${index}`
                   }
-                  className="flex hover:bg-gray-100 dark:hover:bg-gray-700 p-1 rounded"
+                  gap="xs"
+                  wrap="nowrap"
+                  p={4}
+                  style={(theme) => ({
+                    borderRadius: theme.radius.sm,
+                    '&:hover': {
+                      backgroundColor:
+                        theme.colorScheme === 'dark'
+                          ? theme.colors.dark[6]
+                          : theme.colors.gray[0],
+                    },
+                  })}
                 >
-                  <span className="text-gray-500 dark:text-gray-400 mr-2 shrink-0">
+                  <Text
+                    size="xs"
+                    c="dimmed"
+                    ff="monospace"
+                    style={{ flexShrink: 0 }}
+                  >
                     {log.timestamp}
-                  </span>
-                  <span
-                    className={`${
-                      log.message?.toLowerCase().includes('error')
-                        ? 'text-red-600 dark:text-red-400'
-                        : log.message?.toLowerCase().includes('warn')
-                          ? 'text-yellow-600 dark:text-yellow-400'
-                          : 'text-gray-900 dark:text-gray-100'
-                    }`}
+                  </Text>
+                  <Text
+                    size="xs"
+                    c={isError ? 'red' : isWarning ? 'yellow' : undefined}
+                    ff="monospace"
+                    style={{ wordBreak: 'break-word' }}
                   >
                     {log.message}
-                  </span>
-                </div>
-              ))}
-            </div>
-            {hasMore && !isLoading && (
-              <div className="text-center py-2 text-sm text-gray-500 dark:text-gray-400">
-                {isLoadingMore.current ? (
-                  <>
-                    <RotateCw className="w-4 h-4 animate-spin inline mr-2" />
-                    Loading more...
-                  </>
-                ) : (
-                  <button
-                    onClick={loadMoreLogs}
-                    className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
-                  >
-                    Load more logs...
-                  </button>
-                )}
-              </div>
-            )}
-          </>
-        )}
-      </div>
+                  </Text>
+                </Group>
+              );
+            })}
 
-      <div
-        className={`
-          h-2 bg-gray-100 dark:bg-gray-700 border-t cursor-row-resize hover:bg-gray-200 dark:hover:bg-gray-600
-          flex items-center justify-center
-          ${isResizing ? 'bg-gray-300 dark:bg-gray-500' : ''}
-        `}
+            {hasMore && !isLoading && (
+              <Center py="sm">
+                {isLoadingMore.current ? (
+                  <Group>
+                    <Loader size="xs" />
+                    <Text size="xs" c="dimmed">
+                      Loading more...
+                    </Text>
+                  </Group>
+                ) : (
+                  <Button variant="subtle" size="xs" onClick={loadMoreLogs}>
+                    Load more logs...
+                  </Button>
+                )}
+              </Center>
+            )}
+          </Stack>
+        )}
+      </ScrollArea>
+
+      {/* Resize Handle */}
+      <Box
+        h={8}
+        style={{
+          cursor: 'row-resize',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          transition: 'background-color 200ms',
+          '&:hover': {
+            backgroundColor: 'var(--mantine-color-gray-2)',
+          },
+          backgroundColor: isResizing
+            ? 'var(--mantine-color-gray-3)'
+            : undefined,
+        }}
         onMouseDown={(e) => {
           e.preventDefault();
           const startY = e.clientY;
@@ -303,9 +345,9 @@ const AnalysisLogs = ({ analysis }) => {
           document.addEventListener('mouseup', onMouseUp);
         }}
       >
-        <div className="w-16 h-1 bg-gray-300 dark:bg-gray-500 rounded-full" />
-      </div>
-    </div>
+        <Box w={64} h={2} bg="gray.3" style={{ borderRadius: '2px' }} />
+      </Box>
+    </Paper>
   );
 };
 

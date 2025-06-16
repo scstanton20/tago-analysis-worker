@@ -1,7 +1,18 @@
+// frontend/src/components/analysis/analysisList.jsx
 import { useState } from 'react';
 import { useWebSocket } from '../../contexts/websocketContext';
 import AnalysisItem from './analysisItem';
-import { Loader2 } from 'lucide-react';
+import {
+  Paper,
+  Stack,
+  Group,
+  Text,
+  Button,
+  Center,
+  Loader,
+  Box,
+} from '@mantine/core';
+import { IconFileText } from '@tabler/icons-react';
 
 export default function AnalysisList({
   analyses = null, // Accept filtered analyses as prop
@@ -43,15 +54,19 @@ export default function AnalysisList({
 
   if (connectionStatus === 'connecting') {
     return (
-      <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
-        <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
-          Available Analyses
-        </h2>
-        <div className="flex items-center justify-center gap-2 text-gray-500 dark:text-gray-400">
-          <span>Connecting to server...</span>
-          <Loader2 className="w-5 h-5 animate-spin" />
-        </div>
-      </div>
+      <Paper p="lg" withBorder radius="md">
+        <Stack>
+          <Text size="lg" fw={600}>
+            Available Analyses
+          </Text>
+          <Center py="xl">
+            <Group>
+              <Text c="dimmed">Connecting to server...</Text>
+              <Loader size="sm" />
+            </Group>
+          </Center>
+        </Stack>
+      </Paper>
     );
   }
 
@@ -59,76 +74,91 @@ export default function AnalysisList({
     Array.isArray(analysesToShow) && analysesToShow.length > 0;
 
   return (
-    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
-      <div className="flex justify-between items-center mb-4">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-            Available Analyses
-          </h2>
+    <Paper p="lg" withBorder radius="md">
+      <Stack>
+        <Group justify="space-between" mb="md">
+          <Box>
+            <Text size="lg" fw={600}>
+              Available Analyses
+            </Text>
+            {hasAnalyses && (
+              <Text size="sm" c="dimmed" mt={4}>
+                Showing {analysesToShow.length} analysis
+                {analysesToShow.length !== 1 ? 'es' : ''}
+              </Text>
+            )}
+          </Box>
           {hasAnalyses && (
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              Showing {analysesToShow.length} analysis
-              {analysesToShow.length !== 1 ? 'es' : ''}
-            </p>
+            <Button
+              onClick={toggleAllLogs}
+              variant="light"
+              size="sm"
+              leftSection={<IconFileText size={16} />}
+            >
+              {openLogIds.size === analysesToShow.length
+                ? 'Close All Logs'
+                : 'Open All Logs'}
+            </Button>
           )}
-        </div>
-        {hasAnalyses && (
-          <button
-            onClick={toggleAllLogs}
-            className="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 transition-colors"
-          >
-            {openLogIds.size === analysesToShow.length
-              ? 'Close All Logs'
-              : 'Open All Logs'}
-          </button>
-        )}
-      </div>
+        </Group>
 
-      <div className="space-y-4">
-        {hasAnalyses ? (
-          analysesToShow.map((analysis) => {
-            const departmentInfo = getDepartmentInfo(analysis.department);
+        <Stack gap="md">
+          {hasAnalyses ? (
+            analysesToShow.map((analysis) => {
+              const departmentInfo = getDepartmentInfo(analysis.department);
 
-            return (
-              <div key={`${analysis.name}-${analysis.created || Date.now()}`}>
-                {/* Department Label (if enabled) */}
-                {showDepartmentLabels && (
-                  <div className="flex items-center gap-2 mb-2 text-sm">
-                    <div
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: departmentInfo.color }}
-                    />
-                    <span className="text-gray-600 dark:text-gray-400 font-medium">
-                      {departmentInfo.name}
-                    </span>
-                  </div>
-                )}
+              return (
+                <Stack
+                  key={`${analysis.name}-${analysis.created || Date.now()}`}
+                  gap="xs"
+                >
+                  {/* Department Label (if enabled) */}
+                  {showDepartmentLabels && (
+                    <Group gap="xs">
+                      <Box
+                        w={12}
+                        h={12}
+                        style={{
+                          borderRadius: '50%',
+                          backgroundColor: departmentInfo.color,
+                        }}
+                      />
+                      <Text size="sm" c="dimmed" fw={500}>
+                        {departmentInfo.name}
+                      </Text>
+                    </Group>
+                  )}
 
-                {/* Analysis Item */}
-                <AnalysisItem
-                  analysis={analysis}
-                  showLogs={openLogIds.has(analysis.name)}
-                  onToggleLogs={() => toggleLog(analysis.name)}
-                  departmentInfo={showDepartmentLabels ? departmentInfo : null}
-                />
-              </div>
-            );
-          })
-        ) : (
-          <div className="text-center text-gray-500 dark:text-gray-400 py-8">
-            <div className="mb-2">
-              {analyses !== null
-                ? 'No analyses found in this department.'
-                : 'No analyses available.'}
-            </div>
-            <div className="text-sm">
-              {analyses !== null
-                ? 'Try selecting a different department or create a new analysis.'
-                : 'Upload one to get started.'}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+                  {/* Analysis Item */}
+                  <AnalysisItem
+                    analysis={analysis}
+                    showLogs={openLogIds.has(analysis.name)}
+                    onToggleLogs={() => toggleLog(analysis.name)}
+                    departmentInfo={
+                      showDepartmentLabels ? departmentInfo : null
+                    }
+                  />
+                </Stack>
+              );
+            })
+          ) : (
+            <Center py="xl">
+              <Stack align="center" gap="xs">
+                <Text c="dimmed" size="md">
+                  {analyses !== null
+                    ? 'No analyses found in this department.'
+                    : 'No analyses available.'}
+                </Text>
+                <Text c="dimmed" size="sm">
+                  {analyses !== null
+                    ? 'Try selecting a different department or create a new analysis.'
+                    : 'Upload one to get started.'}
+                </Text>
+              </Stack>
+            </Center>
+          )}
+        </Stack>
+      </Stack>
+    </Paper>
   );
 }

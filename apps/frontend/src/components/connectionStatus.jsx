@@ -1,34 +1,43 @@
 // frontend/src/components/connectionStatus.jsx
-import { useState, useEffect, useContext, useRef } from 'react';
+import { useState, useContext } from 'react';
 import { WebSocketContext } from '../contexts/websocketContext';
-import { ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import {
+  ActionIcon,
+  Popover,
+  Stack,
+  Group,
+  Text,
+  Button,
+  Divider,
+  LoadingOverlay,
+  Box,
+  Indicator,
+} from '@mantine/core';
+import {
+  IconChevronDown,
+  IconChevronUp,
+  IconRefresh,
+} from '@tabler/icons-react';
 
 const ConnectionStatus = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const { connectionStatus, backendStatus, requestStatusUpdate } =
     useContext(WebSocketContext);
-  const containerRef = useRef(null);
 
   const getOverallStatusColor = () => {
-    if (!backendStatus) return 'bg-red-500';
+    if (!backendStatus) return 'red';
 
-    // Count disconnected services
     let disconnectedCount = 0;
 
-    // Check backend
     if (backendStatus.container_health.status !== 'healthy')
       disconnectedCount++;
-    // Check WebSocket
     if (connectionStatus !== 'connected') disconnectedCount++;
-    // Tago is considered disconnected if no analyses are running
     if (backendStatus.tagoConnection.runningAnalyses === 0) {
       disconnectedCount++;
     }
 
-    // If all services are down, show red
-    if (disconnectedCount === 3) return 'bg-red-500';
-    // All services are up
-    return 'bg-green-500';
+    if (disconnectedCount === 3) return 'red';
+    return 'green';
   };
 
   const getStatusText = () => {
@@ -43,38 +52,9 @@ const ConnectionStatus = () => {
   };
 
   const handleRetryConnection = () => {
-    // Request fresh status update through WebSocket
     requestStatusUpdate();
   };
 
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(event.target)
-      ) {
-        setIsExpanded(false);
-      }
-    };
-
-    const handleEscape = (event) => {
-      if (event.key === 'Escape') {
-        setIsExpanded(false);
-      }
-    };
-
-    if (isExpanded) {
-      document.addEventListener('mousedown', handleClickOutside);
-      document.addEventListener('keydown', handleEscape);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscape);
-    };
-  }, [isExpanded]);
-
-  // Don't render if we don't have any status data yet
   if (!backendStatus && connectionStatus === 'connecting') {
     return null;
   }
@@ -85,136 +65,153 @@ const ConnectionStatus = () => {
       (backendStatus.container_health.status !== 'healthy' ||
         backendStatus.tagoConnection.runningAnalyses === 0));
 
-  // Loading overlay that appears when connection status is "connecting"
-  const ConnectionLoadingOverlay = () => {
-    if (connectionStatus !== 'connecting') return null;
-
-    return (
-      <div className="fixed inset-0 backdrop-blur-xs z-50 flex items-center justify-center">
-        <div className="bg-white p-6 rounded-lg shadow-lg flex flex-col items-center">
-          <Loader2 className="animate-spin h-10 w-10 text-blue-500 mb-4" />
-          <p className="text-lg font-medium">Connecting to server...</p>
-        </div>
-      </div>
-    );
-  };
+  const isConnecting = connectionStatus === 'connecting';
 
   return (
     <>
-      {/* Loading Overlay */}
-      <ConnectionLoadingOverlay />
+      <LoadingOverlay
+        visible={isConnecting}
+        zIndex={1000}
+        overlayProps={{ blur: 0.5 }}
+        loaderProps={{ size: 'lg' }}
+        pos="fixed"
+      >
+        <Stack align="center">
+          <Text size="lg" fw={500}>
+            Connecting to server...
+          </Text>
+        </Stack>
+      </LoadingOverlay>
 
-      <div className="absolute top-4 right-4" ref={containerRef}>
-        <div className="relative">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsExpanded(!isExpanded);
-            }}
-            className="flex items-center space-x-2 p-2 rounded-md hover:bg-gray-100"
-            aria-label="Toggle connection status details"
-            aria-expanded={isExpanded}
+      <Popover
+        opened={isExpanded}
+        onChange={setIsExpanded}
+        width={300}
+        position="bottom-end"
+        withArrow
+        shadow="md"
+      >
+        <Popover.Target>
+          <ActionIcon
+            variant="subtle"
+            onClick={() => setIsExpanded(!isExpanded)}
+            size="lg"
           >
-            <div
-              className={`w-3 h-3 rounded-full ${getOverallStatusColor()}`}
-            />
-            {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          </button>
+            <Group gap="xs">
+              <Indicator color={getOverallStatusColor()} size={12} processing>
+                <Box />
+              </Indicator>
+              {isExpanded ? (
+                <IconChevronUp size={16} />
+              ) : (
+                <IconChevronDown size={16} />
+              )}
+            </Group>
+          </ActionIcon>
+        </Popover.Target>
 
-          {isExpanded && (
-            <div
-              className="absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg p-4 z-50 border border-gray-200"
-              role="dialog"
-              aria-label="Connection status details"
-            >
-              <h3 className="font-medium mb-3">System Status</h3>
+        <Popover.Dropdown>
+          <Stack>
+            <Text fw={500} size="md">
+              System Status
+            </Text>
 
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">Backend:</span>
-                  <div className="flex items-center">
-                    <div
-                      className={`w-2 h-2 rounded-full mr-2 ${
-                        backendStatus &&
-                        backendStatus.container_health.status === 'healthy'
-                          ? 'bg-green-500'
-                          : 'bg-red-500'
-                      }`}
-                    />
-                    <span className="text-sm capitalize">
-                      {backendStatus?.container_health.status || 'unknown'}
-                    </span>
-                  </div>
-                </div>
+            <Stack gap="sm">
+              <Group justify="space-between">
+                <Text size="sm">Backend:</Text>
+                <Group gap="xs">
+                  <Indicator
+                    color={
+                      backendStatus &&
+                      backendStatus.container_health.status === 'healthy'
+                        ? 'green'
+                        : 'red'
+                    }
+                    size={8}
+                  >
+                    <Box />
+                  </Indicator>
+                  <Text size="sm" tt="capitalize">
+                    {backendStatus?.container_health.status || 'unknown'}
+                  </Text>
+                </Group>
+              </Group>
 
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">WebSocket:</span>
-                  <div className="flex items-center">
-                    <div
-                      className={`w-2 h-2 rounded-full mr-2 ${
-                        connectionStatus === 'connected'
-                          ? 'bg-green-500'
-                          : 'bg-red-500'
-                      }`}
-                    />
-                    <span className="text-sm capitalize">
-                      {connectionStatus}
-                    </span>
-                  </div>
-                </div>
+              <Group justify="space-between">
+                <Text size="sm">WebSocket:</Text>
+                <Group gap="xs">
+                  <Indicator
+                    color={connectionStatus === 'connected' ? 'green' : 'red'}
+                    size={8}
+                  >
+                    <Box />
+                  </Indicator>
+                  <Text size="sm" tt="capitalize">
+                    {connectionStatus}
+                  </Text>
+                </Group>
+              </Group>
 
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">Tago Analyses:</span>
-                  <div className="flex items-center">
-                    <div
-                      className={`w-2 h-2 rounded-full mr-2 ${
-                        backendStatus &&
-                        backendStatus.tagoConnection.runningAnalyses > 0
-                          ? 'bg-green-500'
-                          : 'bg-yellow-500'
-                      }`}
-                    />
-                    <span className="text-sm">
-                      {backendStatus?.tagoConnection.runningAnalyses || 0}{' '}
-                      running
-                    </span>
-                  </div>
-                </div>
+              <Group justify="space-between">
+                <Text size="sm">Tago Analyses:</Text>
+                <Group gap="xs">
+                  <Indicator
+                    color={
+                      backendStatus &&
+                      backendStatus.tagoConnection.runningAnalyses > 0
+                        ? 'green'
+                        : 'yellow'
+                    }
+                    size={8}
+                  >
+                    <Box />
+                  </Indicator>
+                  <Text size="sm">
+                    {backendStatus?.tagoConnection.runningAnalyses || 0} running
+                  </Text>
+                </Group>
+              </Group>
 
-                {backendStatus?.tagoConnection.sdkVersion && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">SDK Version:</span>
-                    <span className="text-sm text-gray-600">
-                      {backendStatus.tagoConnection.sdkVersion}
-                    </span>
-                  </div>
-                )}
+              {backendStatus?.tagoConnection.sdkVersion && (
+                <Group justify="space-between">
+                  <Text size="sm">SDK Version:</Text>
+                  <Text size="sm" c="dimmed">
+                    {backendStatus.tagoConnection.sdkVersion}
+                  </Text>
+                </Group>
+              )}
 
-                {backendStatus?.container_health.uptime && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Uptime:</span>
-                    <span className="text-sm text-gray-600">
-                      {backendStatus.container_health.uptime.formatted}
-                    </span>
-                  </div>
-                )}
-              </div>
+              {backendStatus?.container_health.uptime && (
+                <Group justify="space-between">
+                  <Text size="sm">Uptime:</Text>
+                  <Text size="sm" c="dimmed">
+                    {backendStatus.container_health.uptime.formatted}
+                  </Text>
+                </Group>
+              )}
+            </Stack>
 
-              {isDisconnected && (
-                <div className="mt-3 pt-3 border-t border-gray-200">
-                  <p className="text-sm text-gray-600">{getStatusText()}</p>
-                  <button
+            {isDisconnected && (
+              <>
+                <Divider />
+                <Stack gap="xs">
+                  <Text size="sm" c="dimmed">
+                    {getStatusText()}
+                  </Text>
+                  <Button
+                    variant="subtle"
+                    size="xs"
                     onClick={handleRetryConnection}
-                    className="mt-2 text-sm text-blue-500 hover:text-blue-600"
+                    leftSection={<IconRefresh size={14} />}
                   >
                     Refresh Status
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
+                  </Button>
+                </Stack>
+              </>
+            )}
+          </Stack>
+        </Popover.Dropdown>
+      </Popover>
     </>
   );
 };

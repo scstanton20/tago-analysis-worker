@@ -1,8 +1,27 @@
+// frontend/src/components/analysis/analysisEdit.jsx
 import { useState, useEffect, useContext } from 'react';
 import PropTypes from 'prop-types';
 import Editor from '@monaco-editor/react';
 import { analysisService } from '../../services/analysisService';
 import { WebSocketContext } from '../../contexts/websocketContext/context';
+import {
+  Modal,
+  Stack,
+  Group,
+  Text,
+  Button,
+  TextInput,
+  Alert,
+  Box,
+  ActionIcon,
+  LoadingOverlay,
+} from '@mantine/core';
+import {
+  IconEdit,
+  IconCheck,
+  IconX,
+  IconAlertCircle,
+} from '@tabler/icons-react';
 
 export default function EditAnalysisModal({
   onClose,
@@ -103,157 +122,80 @@ export default function EditAnalysisModal({
     }
   };
 
-  // Handle overlay click
-  const handleOverlayClick = (e) => {
-    if (e.target === e.currentTarget) {
-      onClose();
-    }
-  };
-
-  // Handle modal content click
-  const handleModalClick = (e) => {
-    e.stopPropagation();
-  };
-
-  // Handle escape key
-  useEffect(() => {
-    const handleEscape = (e) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
-  }, [onClose]);
-
   return (
-    <div
-      className="fixed inset-0 backdrop-blur-xs z-50 flex items-center justify-center"
-      onClick={handleOverlayClick}
-    >
-      <div
-        className="bg-white w-11/12 h-5/6 rounded-lg flex flex-col relative"
-        onClick={handleModalClick}
-      >
-        <div className="flex justify-between items-center p-4 border-b">
-          <h2 className="text-xl font-semibold flex items-center">
-            {isEditingName ? (
-              <div className="flex items-center">
-                <input
-                  type="text"
-                  value={newFileName}
-                  onChange={(e) => setNewFileName(e.target.value)}
-                  className="border border-gray-300 rounded px-2 py-1 mr-2"
-                  autoFocus
-                />
-                <button
-                  onClick={handleRename}
-                  className="text-green-600 hover:text-green-800 mr-2"
-                  type="button"
-                  aria-label="Save filename"
-                  disabled={isLoading}
-                >
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
-                </button>
-                <button
-                  onClick={() => {
-                    setIsEditingName(false);
-                    setNewFileName(currentAnalysis.name);
-                  }}
-                  className="text-red-600 hover:text-red-800"
-                  type="button"
-                  aria-label="Cancel rename"
-                  disabled={isLoading}
-                >
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
-              </div>
-            ) : (
-              <>
-                Editing Analysis Content: {currentAnalysis.name}
-                <button
-                  onClick={() => setIsEditingName(true)}
-                  className="ml-2 text-gray-500 hover:text-gray-700"
-                  type="button"
-                  aria-label="Edit filename"
-                  disabled={isLoading}
-                >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                    />
-                  </svg>
-                </button>
-              </>
-            )}
-          </h2>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
-            type="button"
-            aria-label="Close editor"
-          >
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
+    <Modal
+      opened
+      onClose={onClose}
+      size="90%"
+      title={
+        <Group gap="xs">
+          <Text fw={600}>Editing Analysis Content:</Text>
+          {isEditingName ? (
+            <Group gap="xs">
+              <TextInput
+                value={newFileName}
+                onChange={(e) => setNewFileName(e.target.value)}
+                size="xs"
+                autoFocus
+                style={{ width: 200 }}
               />
-            </svg>
-          </button>
-        </div>
-
+              <ActionIcon
+                color="green"
+                size="sm"
+                onClick={handleRename}
+                disabled={isLoading}
+              >
+                <IconCheck size={16} />
+              </ActionIcon>
+              <ActionIcon
+                color="red"
+                size="sm"
+                onClick={() => {
+                  setIsEditingName(false);
+                  setNewFileName(currentAnalysis.name);
+                }}
+                disabled={isLoading}
+              >
+                <IconX size={16} />
+              </ActionIcon>
+            </Group>
+          ) : (
+            <Group gap={4}>
+              <Text>{currentAnalysis.name}</Text>
+              <ActionIcon
+                variant="subtle"
+                size="sm"
+                onClick={() => setIsEditingName(true)}
+                disabled={isLoading}
+              >
+                <IconEdit size={14} />
+              </ActionIcon>
+            </Group>
+          )}
+        </Group>
+      }
+      styles={{
+        body: {
+          height: 'calc(100vh - 200px)',
+          display: 'flex',
+          flexDirection: 'column',
+        },
+      }}
+    >
+      <Stack h="100%">
         {error && (
-          <div className="p-4 bg-red-100 border-b border-red-200 text-red-700">
+          <Alert
+            icon={<IconAlertCircle size={16} />}
+            color="red"
+            variant="light"
+          >
             {error}
-          </div>
+          </Alert>
         )}
 
-        <div className="flex-1 overflow-hidden">
-          {isLoading ? (
-            <div className="h-full flex items-center justify-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-            </div>
-          ) : (
+        <Box style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+          <LoadingOverlay visible={isLoading} />
+          {!isLoading && (
             <Editor
               height="100%"
               defaultLanguage="javascript"
@@ -272,31 +214,26 @@ export default function EditAnalysisModal({
               }}
             />
           )}
-        </div>
+        </Box>
 
-        <div className="p-4 border-t flex justify-end space-x-4">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-gray-600 hover:text-gray-800"
-            type="button"
-          >
+        <Group
+          justify="flex-end"
+          pt="md"
+          style={{ borderTop: '1px solid var(--mantine-color-gray-3)' }}
+        >
+          <Button variant="default" onClick={onClose}>
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={handleSave}
-            disabled={!hasChanges || isLoading}
-            className={`px-4 py-2 rounded ${
-              hasChanges && !isLoading
-                ? 'bg-blue-500 text-white hover:bg-blue-600'
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            }`}
-            type="button"
+            disabled={!hasChanges}
+            loading={isLoading}
           >
-            {isLoading ? 'Saving...' : 'Save Changes'}
-          </button>
-        </div>
-      </div>
-    </div>
+            Save Changes
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
   );
 }
 

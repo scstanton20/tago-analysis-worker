@@ -1,21 +1,20 @@
 // frontend/src/components/common/StatusBadge.jsx
 import PropTypes from 'prop-types';
+import { Badge } from '@mantine/core';
 
-const statusColors = {
-  running: 'bg-green-100 text-green-800',
-  stopped: 'bg-red-100 text-black-800',
-  error: 'bg-red-100 text-red-800',
+const statusConfig = {
+  running: { color: 'green', variant: 'light' },
+  stopped: { color: 'red', variant: 'light' },
+  error: { color: 'red', variant: 'filled' },
 };
 
 export default function StatusBadge({ status }) {
-  const colorClasses = statusColors[status] || 'bg-gray-100 text-gray-800';
+  const config = statusConfig[status] || { color: 'gray', variant: 'light' };
 
   return (
-    <span
-      className={`px-2 py-1 text-xs font-medium rounded-full ${colorClasses}`}
-    >
+    <Badge color={config.color} variant={config.variant} size="sm" radius="xl">
       {status}
-    </span>
+    </Badge>
   );
 }
 

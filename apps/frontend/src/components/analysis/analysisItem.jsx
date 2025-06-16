@@ -1,17 +1,28 @@
+// frontend/src/components/analysis/analysisItem.jsx
 import { useState, useContext } from 'react';
 import PropTypes from 'prop-types';
 import {
-  Play,
-  Square,
-  FileText,
-  Download,
-  Edit,
-  Trash2,
-  MoreVertical,
-  FolderPlus,
-  FolderEdit,
-} from 'lucide-react';
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+  Paper,
+  Group,
+  Text,
+  Button,
+  Menu,
+  ActionIcon,
+  Badge,
+  Stack,
+  Box,
+} from '@mantine/core';
+import {
+  IconPlayerPlay,
+  IconPlayerStop,
+  IconFileText,
+  IconDownload,
+  IconEdit,
+  IconTrash,
+  IconDotsVertical,
+  IconFolderPlus,
+  IconFolderCog,
+} from '@tabler/icons-react';
 import { analysisService } from '../../services/analysisService';
 import AnalysisLogs from './analysisLogs';
 import StatusBadge from '../common/statusBadge';
@@ -167,158 +178,149 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
   };
 
   return (
-    <div className="border rounded-lg p-4 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center space-x-2">
-            <h3 className="font-semibold text-gray-900 dark:text-white">
+    <Paper p="md" withBorder radius="md">
+      <Stack>
+        <Group justify="space-between">
+          <Group>
+            <Text fw={600} size="md">
               {analysis.name}
-            </h3>
+            </Text>
             <StatusBadge status={analysis.status || 'stopped'} />
-            {/* Department indicator */}
             {currentDepartment && (
-              <div className="flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700">
-                <div
-                  className="w-2 h-2 rounded-full"
-                  style={{ backgroundColor: currentDepartment.color }}
-                />
-                <span className="text-gray-600 dark:text-gray-300">
-                  {currentDepartment.name}
-                </span>
-              </div>
+              <Badge
+                variant="light"
+                color="gray"
+                size="sm"
+                leftSection={
+                  <Box
+                    w={8}
+                    h={8}
+                    style={{
+                      borderRadius: '50%',
+                      backgroundColor: currentDepartment.color,
+                    }}
+                  />
+                }
+              >
+                {currentDepartment.name}
+              </Badge>
             )}
-          </div>
-        </div>
+          </Group>
 
-        <div className="flex items-center space-x-2">
-          {/* Primary Actions */}
-          <div className="flex items-center space-x-2">
+          <Group gap="xs">
+            {/* Primary Actions */}
             {analysis.status === 'running' ? (
-              <button
+              <Button
                 onClick={handleStop}
-                disabled={isLoading}
-                className="flex items-center gap-1 bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 disabled:bg-red-300"
+                loading={isLoading}
+                color="red"
+                size="xs"
+                leftSection={<IconPlayerStop size={16} />}
               >
-                <Square className="w-4 h-4" />
                 Stop
-              </button>
+              </Button>
             ) : (
-              <button
+              <Button
                 onClick={handleRun}
-                disabled={isLoading}
-                className="flex items-center gap-1 bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 disabled:bg-green-300"
+                loading={isLoading}
+                color="green"
+                size="xs"
+                leftSection={<IconPlayerPlay size={16} />}
               >
-                <Play className="w-4 h-4" />
                 Run
-              </button>
+              </Button>
             )}
-          </div>
 
-          {/* Log Actions */}
-          <div className="flex items-center space-x-2">
-            <button
+            {/* Log Actions */}
+            <Button
               onClick={onToggleLogs}
-              className="flex items-center gap-1 bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600"
+              variant="light"
+              size="xs"
+              leftSection={<IconFileText size={16} />}
             >
-              <FileText className="w-4 h-4" />
               {showLogs ? 'Hide Logs' : 'Show Logs'}
-            </button>
-          </div>
+            </Button>
 
-          {/* Secondary Actions Dropdown */}
-          <DropdownMenu.Root>
-            <DropdownMenu.Trigger asChild>
-              <button className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700">
-                <MoreVertical className="w-5 h-5 text-gray-600 dark:text-gray-300" />
-              </button>
-            </DropdownMenu.Trigger>
+            {/* Secondary Actions Dropdown */}
+            <Menu shadow="md" width={200}>
+              <Menu.Target>
+                <ActionIcon variant="subtle" size="lg">
+                  <IconDotsVertical size={20} />
+                </ActionIcon>
+              </Menu.Target>
 
-            <DropdownMenu.Portal>
-              <DropdownMenu.Content
-                className="min-w-[200px] bg-white dark:bg-gray-800 rounded-md shadow-lg border dark:border-gray-700 p-1 z-50"
-                sideOffset={5}
-              >
+              <Menu.Dropdown>
                 {/* Department Management */}
-                <DropdownMenu.Item
+                <Menu.Item
                   onClick={() => setShowDepartmentModal(true)}
-                  className="flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer text-gray-900 dark:text-gray-100"
+                  leftSection={
+                    isUncategorized ? (
+                      <IconFolderPlus size={16} />
+                    ) : (
+                      <IconFolderCog size={16} />
+                    )
+                  }
                 >
-                  {isUncategorized ? (
-                    <>
-                      <FolderPlus className="w-4 h-4" />
-                      Add to Department
-                    </>
-                  ) : (
-                    <>
-                      <FolderEdit className="w-4 h-4" />
-                      Change Department
-                    </>
-                  )}
-                </DropdownMenu.Item>
+                  {isUncategorized ? 'Add to Department' : 'Change Department'}
+                </Menu.Item>
 
-                <DropdownMenu.Separator className="h-px bg-gray-200 dark:bg-gray-600 my-1" />
+                <Menu.Divider />
 
                 {/* File Operations */}
-                <DropdownMenu.Item
-                  onClick={() => handleDownloadAnalysis()}
-                  className="flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer text-gray-900 dark:text-gray-100"
+                <Menu.Item
+                  onClick={handleDownloadAnalysis}
+                  leftSection={<IconDownload size={16} />}
                 >
-                  <Download className="w-4 h-4" />
                   Download Analysis File
-                </DropdownMenu.Item>
-                <DropdownMenu.Item
+                </Menu.Item>
+                <Menu.Item
                   onClick={() => setShowLogDownloadDialog(true)}
-                  className="flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer text-gray-900 dark:text-gray-100"
+                  leftSection={<IconDownload size={16} />}
                 >
-                  <Download className="w-4 h-4" />
                   Download Logs
-                </DropdownMenu.Item>
+                </Menu.Item>
 
-                <DropdownMenu.Separator className="h-px bg-gray-200 dark:bg-gray-600 my-1" />
+                <Menu.Divider />
 
                 {/* Edit Operations */}
-                <DropdownMenu.Item
+                <Menu.Item
                   onClick={() => setShowEditAnalysisModal(true)}
-                  className="flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer text-gray-900 dark:text-gray-100"
+                  leftSection={<IconEdit size={16} />}
                 >
-                  <Edit className="w-4 h-4" />
                   Edit Analysis
-                </DropdownMenu.Item>
-
-                <DropdownMenu.Item
+                </Menu.Item>
+                <Menu.Item
                   onClick={() => setShowEditENVModal(true)}
-                  className="flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer text-gray-900 dark:text-gray-100"
+                  leftSection={<IconEdit size={16} />}
                 >
-                  <Edit className="w-4 h-4" />
                   Edit Environment
-                </DropdownMenu.Item>
+                </Menu.Item>
 
-                <DropdownMenu.Separator className="h-px bg-gray-200 dark:bg-gray-600 my-1" />
+                <Menu.Divider />
 
                 {/* Destructive Operations */}
-                <DropdownMenu.Item
+                <Menu.Item
                   onClick={handleDeleteLogs}
-                  className="flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer text-red-600 dark:text-red-400"
+                  color="red"
+                  leftSection={<IconTrash size={16} />}
                 >
-                  <Trash2 className="w-4 h-4" />
                   Clear/Delete All Logs
-                </DropdownMenu.Item>
-
-                <DropdownMenu.Item
+                </Menu.Item>
+                <Menu.Item
                   onClick={handleDeleteAnalysis}
-                  className="flex items-center gap-2 px-2 py-1.5 text-sm rounded hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer text-red-600 dark:text-red-400"
+                  color="red"
+                  leftSection={<IconTrash size={16} />}
                 >
-                  <Trash2 className="w-4 h-4" />
                   Delete Analysis
-                </DropdownMenu.Item>
-              </DropdownMenu.Content>
-            </DropdownMenu.Portal>
-          </DropdownMenu.Root>
-        </div>
-      </div>
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
+          </Group>
+        </Group>
 
-      {/* Logs Section */}
-      {showLogs && <AnalysisLogs analysis={analysis} />}
+        {/* Logs Section */}
+        {showLogs && <AnalysisLogs analysis={analysis} />}
+      </Stack>
 
       {/* Modals */}
       {showEditAnalysisModal && (
@@ -350,7 +352,7 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
           analysisName={analysis.name}
         />
       )}
-    </div>
+    </Paper>
   );
 }
 

@@ -1,8 +1,30 @@
+// frontend/src/components/analysis/uploadAnalysis.jsx
 import { useState, useRef, useEffect } from 'react';
 import { analysisService } from '../../services/analysisService';
 import { useWebSocket } from '../../contexts/websocketContext/index';
 import Editor from '@monaco-editor/react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import {
+  Paper,
+  Stack,
+  Group,
+  Text,
+  Button,
+  TextInput,
+  FileInput,
+  Tabs,
+  Alert,
+  Collapse,
+  ActionIcon,
+  Box,
+} from '@mantine/core';
+import {
+  IconChevronDown,
+  IconChevronUp,
+  IconUpload,
+  IconFile,
+  IconAlertCircle,
+  IconX,
+} from '@tabler/icons-react';
 import sanitize from 'sanitize-filename';
 
 const DEFAULT_EDITOR_CONTENT = '// Write your analysis code here';
@@ -123,9 +145,11 @@ export default function AnalysisCreator({
   };
 
   // Event handlers
-  const handleFileChange = (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
+  const handleFileChange = (file) => {
+    if (!file) {
+      resetFileSelection();
+      return;
+    }
 
     setFormTouched(true);
 
@@ -257,245 +281,225 @@ export default function AnalysisCreator({
     setError(null);
     setFormTouched(false);
     setIsExpanded(false);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
   };
 
   const resetFileSelection = () => {
     setSelectedFile(null);
     setEditableFileName('');
-    if (fileInputRef.current) {
-      fileInputRef.current.value = null;
-    }
   };
 
-  // Render helpers
-  const renderTabButton = (tabMode, label) => (
-    <button
-      onClick={() => handleModeChange(tabMode)}
-      className={`py-4 px-1 border-b-2 font-medium text-sm ${
-        mode === tabMode
-          ? 'border-blue-500 text-blue-600'
-          : 'border-transparent text-gray-500'
-      } ${
-        isTabDisabled && mode !== tabMode
-          ? 'opacity-50 cursor-not-allowed'
-          : 'hover:text-gray-700 hover:border-gray-300'
-      }`}
-      disabled={isTabDisabled && mode !== tabMode}
-    >
-      {label}
-    </button>
-  );
-
-  const renderUploadMode = () => (
-    <div className="space-y-4">
-      <div className="flex items-center space-x-4">
-        <input
-          type="file"
-          onChange={handleFileChange}
-          ref={fileInputRef}
-          accept=".cjs"
-          className="hidden"
-          id="analysis-file"
-          disabled={isInputDisabled}
-        />
-        <label
-          htmlFor="analysis-file"
-          className={`px-4 py-2 rounded cursor-pointer text-white ${
-            isConnected
-              ? 'bg-blue-500 hover:bg-blue-600'
-              : 'bg-gray-400 cursor-not-allowed'
-          }`}
-        >
-          Choose File
-        </label>
-        <span className="text-gray-600">
-          {selectedFile ? selectedFile.name : 'No file chosen'}
-        </span>
-      </div>
-
-      {selectedFile && (
-        <div className="space-y-2">
-          <label
-            htmlFor="filename"
-            className="block text-sm font-medium text-gray-700"
-          >
-            Edit Filename
-          </label>
-          <input
-            type="text"
-            id="filename"
-            value={editableFileName}
-            onChange={handleEditableFileNameChange}
-            className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
-              error && error.includes('already exists')
-                ? 'border-red-300 bg-red-50'
-                : 'border-gray-300'
-            }`}
-            placeholder="Enter filename (no extension)"
-            disabled={isInputDisabled}
-          />
-        </div>
-      )}
-
-      <p className="text-sm text-gray-500">
-        The .cjs extension will be added automatically by the backend as Tago.IO
-        requires CommonJS modules.
-      </p>
-    </div>
-  );
-
-  const renderCreateMode = () => (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <label
-          htmlFor="analysis-name"
-          className="block text-sm font-medium text-gray-700"
-        >
-          Analysis Name
-        </label>
-        <input
-          type="text"
-          id="analysis-name"
-          value={analysisName}
-          onChange={handleAnalysisNameChange}
-          className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
-            error && error.includes('already exists')
-              ? 'border-red-300 bg-red-50'
-              : 'border-gray-300'
-          }`}
-          placeholder="Enter analysis name (no extension)"
-          disabled={isInputDisabled}
-        />
-        <p className="text-sm text-gray-500">
-          The .cjs extension will be added automatically by the backend as
-          Tago.IO requires CommonJS modules.
-        </p>
-        <p className="text-sm text-gray-500">
-          You will be able to edit the environment variables after creation.
-        </p>
-      </div>
-
-      <div className="h-96 border border-gray-300 rounded-md overflow-hidden">
-        <Editor
-          height="100%"
-          defaultLanguage="javascript"
-          value={editorContent}
-          onChange={handleEditorChange}
-          theme="vs-dark"
-          options={{
-            minimap: { enabled: true },
-            scrollBeyondLastLine: false,
-            fontSize: 14,
-            automaticLayout: true,
-            wordWrap: 'on',
-            lineNumbers: 'on',
-            readOnly: isInputDisabled,
-          }}
-        />
-      </div>
-    </div>
-  );
-
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md mb-8 transition-colors relative">
+    <Paper withBorder radius="md" mb="lg" pos="relative">
       {/* Header */}
-      <div
-        className="p-4 flex justify-between items-center cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
+      <Box
+        p="md"
+        style={(theme) => ({
+          cursor: 'pointer',
+          transition: 'background-color 200ms',
+          '&:hover': {
+            backgroundColor:
+              theme.colorScheme === 'dark'
+                ? theme.colors.dark[6]
+                : theme.colors.gray[0],
+          },
+        })}
         onClick={handleToggleExpanded}
       >
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-          Analysis Creator
-          {departmentName && departmentName !== 'All Departments' && (
-            <span className="text-sm font-normal text-gray-600 dark:text-gray-400 ml-2">
-              - {departmentName}
-            </span>
-          )}
-        </h2>
-        <div className="flex items-center gap-2">
-          {isExpanded && onClose && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onClose();
-              }}
-              className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 p-1"
-            >
-              ✕
-            </button>
-          )}
-          <button className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
-            {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-          </button>
-        </div>
-      </div>
+        <Group justify="space-between">
+          <Box>
+            <Text size="lg" fw={600}>
+              Analysis Creator
+              {departmentName && departmentName !== 'All Departments' && (
+                <Text span size="sm" fw={400} c="dimmed" ml="xs">
+                  - '{departmentName}' group
+                </Text>
+              )}
+            </Text>
+          </Box>
+          <Group gap="xs">
+            {isExpanded && onClose && (
+              <ActionIcon
+                variant="subtle"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClose();
+                }}
+              >
+                <IconX size={20} />
+              </ActionIcon>
+            )}
+            <ActionIcon variant="subtle">
+              {isExpanded ? (
+                <IconChevronUp size={20} />
+              ) : (
+                <IconChevronDown size={20} />
+              )}
+            </ActionIcon>
+          </Group>
+        </Group>
+      </Box>
 
       {/* Expanded Content */}
-      {isExpanded && (
-        <div className="p-6 pt-2 border-t dark:border-gray-700">
-          <div className="space-y-4">
+      <Collapse in={isExpanded}>
+        <Box
+          p="lg"
+          pt={0}
+          style={{ borderTop: '1px solid var(--mantine-color-gray-3)' }}
+        >
+          <Stack>
             {/* Mode Toggle */}
-            <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
-              <nav className="-mb-px flex space-x-8">
-                {renderTabButton('upload', 'Upload Existing File')}
-                {renderTabButton('create', 'Create New Analysis')}
-              </nav>
-            </div>
+            <Tabs value={mode} onChange={handleModeChange}>
+              <Tabs.List>
+                <Tabs.Tab
+                  value="upload"
+                  disabled={isTabDisabled && mode !== 'upload'}
+                >
+                  Upload Existing File
+                </Tabs.Tab>
+                <Tabs.Tab
+                  value="create"
+                  disabled={isTabDisabled && mode !== 'create'}
+                >
+                  Create New Analysis
+                </Tabs.Tab>
+              </Tabs.List>
+
+              <Tabs.Panel value="upload" pt="md">
+                <Stack>
+                  <FileInput
+                    ref={fileInputRef}
+                    accept=".js,.cjs"
+                    placeholder="Choose file"
+                    label="Select JavaScript file"
+                    value={selectedFile}
+                    onChange={handleFileChange}
+                    disabled={isInputDisabled}
+                    leftSection={<IconUpload size={16} />}
+                    rightSection={selectedFile && <IconFile size={16} />}
+                  />
+
+                  {selectedFile && (
+                    <TextInput
+                      label="Edit Filename"
+                      value={editableFileName}
+                      onChange={handleEditableFileNameChange}
+                      placeholder="Enter filename (no extension)"
+                      disabled={isInputDisabled}
+                      error={error && error.includes('already exists')}
+                    />
+                  )}
+
+                  <Text size="sm" c="dimmed">
+                    The .cjs extension will be added automatically by the
+                    backend as Tago.IO requires CommonJS modules.
+                  </Text>
+                </Stack>
+              </Tabs.Panel>
+
+              <Tabs.Panel value="create" pt="md">
+                <Stack>
+                  <TextInput
+                    label="Analysis Name"
+                    value={analysisName}
+                    onChange={handleAnalysisNameChange}
+                    placeholder="Enter analysis name (no extension)"
+                    disabled={isInputDisabled}
+                    error={error && error.includes('already exists')}
+                  />
+
+                  <Text size="sm" c="dimmed">
+                    The .cjs extension will be added automatically by the
+                    backend as Tago.IO requires CommonJS modules.
+                  </Text>
+
+                  <Text size="sm" c="dimmed">
+                    You will be able to edit the environment variables after
+                    creation.
+                  </Text>
+
+                  <Box
+                    h={384}
+                    style={{
+                      border: '1px solid var(--mantine-color-gray-3)',
+                      borderRadius: 'var(--mantine-radius-md)',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <Editor
+                      height="100%"
+                      defaultLanguage="javascript"
+                      value={editorContent}
+                      onChange={handleEditorChange}
+                      theme="vs-dark"
+                      options={{
+                        minimap: { enabled: true },
+                        scrollBeyondLastLine: false,
+                        fontSize: 14,
+                        automaticLayout: true,
+                        wordWrap: 'on',
+                        lineNumbers: 'on',
+                        readOnly: isInputDisabled,
+                      }}
+                    />
+                  </Box>
+                </Stack>
+              </Tabs.Panel>
+            </Tabs>
 
             {/* Loading Indicator */}
             {isFetchingAnalyses && (
-              <div className="text-sm text-gray-500 dark:text-gray-400 italic">
+              <Text size="sm" c="dimmed" fs="italic">
                 Loading existing analyses...
-              </div>
+              </Text>
             )}
-
-            {/* Mode Content */}
-            {mode === 'upload' ? renderUploadMode() : renderCreateMode()}
 
             {/* Error Message */}
             {error && (
-              <div className="text-red-500 dark:text-red-400 text-sm">
+              <Alert
+                icon={<IconAlertCircle size={16} />}
+                color="red"
+                variant="light"
+              >
                 {error}
-              </div>
+              </Alert>
             )}
 
             {/* Action Buttons */}
-            <div className="flex space-x-4">
-              <button
+            <Group>
+              <Button
                 onClick={handleUpload}
                 disabled={isSaveDisabled}
-                className={`px-4 py-2 rounded text-white ${
-                  isSaveDisabled
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-green-500 hover:bg-green-600'
-                }`}
+                loading={isCurrentAnalysisLoading}
+                color="green"
               >
-                {isCurrentAnalysisLoading ? 'Processing...' : 'Save Analysis'}
-              </button>
+                Save Analysis
+              </Button>
 
               {showCancelButton && (
-                <button
+                <Button
+                  variant="default"
                   onClick={handleCancel}
-                  className="px-4 py-2 rounded text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-gray-100"
                   disabled={isInputDisabled}
                 >
                   Cancel
-                </button>
+                </Button>
               )}
-            </div>
-          </div>
+            </Group>
 
-          {/* Connection Status */}
-          {!isConnected && (
-            <div className="mt-4 p-2 bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-200 rounded">
-              Not connected to server. Please wait for connection to be
-              established.
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+            {/* Connection Status */}
+            {!isConnected && (
+              <Alert
+                icon={<IconAlertCircle size={16} />}
+                color="yellow"
+                variant="light"
+              >
+                Not connected to server. Please wait for connection to be
+                established.
+              </Alert>
+            )}
+          </Stack>
+        </Box>
+      </Collapse>
+    </Paper>
   );
 }

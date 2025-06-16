@@ -1,7 +1,19 @@
+// frontend/src/components/analysis/departmentSelectModal.jsx
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Check, Folder, X } from 'lucide-react';
 import PropTypes from 'prop-types';
+import {
+  Modal,
+  Stack,
+  Group,
+  Text,
+  Button,
+  UnstyledButton,
+  Badge,
+  ColorSwatch,
+  Alert,
+  ScrollArea,
+} from '@mantine/core';
+import { IconFolder, IconCheck, IconInfoCircle } from '@tabler/icons-react';
 
 const DepartmentSelectModal = ({
   isOpen,
@@ -31,123 +43,110 @@ const DepartmentSelectModal = ({
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-        onClick={onClose}
-      >
-        <motion.div
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.9, opacity: 0 }}
-          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-          className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md max-h-[80vh] overflow-y-auto"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-              Change Department
-            </h2>
-            <button
-              onClick={onClose}
-              className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-            >
-              <X className="w-5 h-5 text-gray-500" />
-            </button>
-          </div>
+    <Modal
+      opened={isOpen}
+      onClose={onClose}
+      title="Change Department"
+      size="md"
+    >
+      <Stack>
+        <Text size="sm" c="dimmed">
+          Select a new department for{' '}
+          <Text span fw={600}>
+            {analysisName}
+          </Text>
+          :
+        </Text>
 
-          <div className="mb-4">
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-              Select a new department for{' '}
-              <span className="font-semibold">{analysisName}</span>:
-            </p>
-
-            <div className="space-y-2 max-h-60 overflow-y-auto">
-              {[...departments]
-                .sort((a, b) => a.order - b.order)
-                .map((department) => (
-                  <button
-                    key={department.id}
-                    onClick={() => setSelectedDepartment(department.id)}
-                    className={`
-                      w-full flex items-center gap-3 p-3 rounded-lg border transition-all
-                      ${
+        <ScrollArea h={300} offsetScrollbars>
+          <Stack gap="xs">
+            {[...departments]
+              .sort((a, b) => a.order - b.order)
+              .map((department) => (
+                <UnstyledButton
+                  key={department.id}
+                  onClick={() => setSelectedDepartment(department.id)}
+                  p="sm"
+                  style={(theme) => ({
+                    border: `2px solid ${
+                      selectedDepartment === department.id
+                        ? theme.colors.blue[5]
+                        : theme.colorScheme === 'dark'
+                          ? theme.colors.dark[4]
+                          : theme.colors.gray[3]
+                    }`,
+                    borderRadius: theme.radius.md,
+                    backgroundColor:
+                      selectedDepartment === department.id
+                        ? theme.colorScheme === 'dark'
+                          ? theme.fn.rgba(theme.colors.blue[9], 0.2)
+                          : theme.colors.blue[0]
+                        : 'transparent',
+                    transition: 'all 200ms ease',
+                    '&:hover': {
+                      borderColor:
                         selectedDepartment === department.id
-                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                          : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
-                      }
-                    `}
-                  >
-                    <div
-                      className="w-4 h-4 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: department.color }}
-                    />
-                    <Folder className="w-4 h-4 text-gray-500" />
-                    <span className="flex-1 text-left text-gray-900 dark:text-white">
-                      {department.name}
-                    </span>
-                    {selectedDepartment === department.id && (
-                      <Check className="w-4 h-4 text-blue-500" />
-                    )}
-                    {currentDepartment === department.id && (
-                      <span className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
-                        Current
-                      </span>
-                    )}
-                  </button>
-                ))}
-            </div>
-          </div>
+                          ? theme.colors.blue[6]
+                          : theme.colors.gray[5],
+                    },
+                  })}
+                >
+                  <Group justify="space-between" wrap="nowrap">
+                    <Group gap="sm">
+                      <ColorSwatch color={department.color} size={20} />
+                      <IconFolder size={20} />
+                      <Text size="sm" fw={500}>
+                        {department.name}
+                      </Text>
+                    </Group>
+                    <Group gap="xs">
+                      {selectedDepartment === department.id && (
+                        <IconCheck
+                          size={16}
+                          color="var(--mantine-color-blue-6)"
+                        />
+                      )}
+                      {currentDepartment === department.id && (
+                        <Badge size="xs" variant="light">
+                          Current
+                        </Badge>
+                      )}
+                    </Group>
+                  </Group>
+                </UnstyledButton>
+              ))}
+          </Stack>
+        </ScrollArea>
 
-          <div className="flex gap-3 mt-6">
-            <button
-              onClick={handleSubmit}
-              disabled={
-                isSubmitting || selectedDepartment === currentDepartment
-              }
-              className={`
-                flex-1 px-4 py-2 rounded-lg transition-colors
-                ${
-                  isSubmitting || selectedDepartment === currentDepartment
-                    ? 'bg-gray-300 dark:bg-gray-600 cursor-not-allowed'
-                    : 'bg-blue-500 hover:bg-blue-600 text-white'
-                }
-              `}
-            >
-              {isSubmitting ? 'Moving...' : 'Move Analysis'}
-            </button>
-            <button
-              onClick={onClose}
-              disabled={isSubmitting}
-              className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
+        <Group justify="flex-end" mt="md">
+          <Button variant="default" onClick={onClose} disabled={isSubmitting}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            loading={isSubmitting}
+            disabled={selectedDepartment === currentDepartment}
+          >
+            Move Analysis
+          </Button>
+        </Group>
 
-          {selectedDepartment !== currentDepartment && (
-            <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-              <p className="text-sm text-blue-800 dark:text-blue-200">
-                This will move the analysis to{' '}
-                <span className="font-semibold">
-                  {
-                    [...departments].find((d) => d.id === selectedDepartment)
-                      ?.name
-                  }
-                </span>
-                . The change will be visible to all users.
-              </p>
-            </div>
-          )}
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
+        {selectedDepartment !== currentDepartment && (
+          <Alert
+            icon={<IconInfoCircle size={16} />}
+            color="blue"
+            variant="light"
+          >
+            This will move the analysis to{' '}
+            <Text span fw={600}>
+              {[...departments].find((d) => d.id === selectedDepartment)?.name}
+            </Text>
+            . The change will be visible to all users.
+          </Alert>
+        )}
+      </Stack>
+    </Modal>
   );
 };
 

@@ -1,204 +1,155 @@
 // frontend/src/App.jsx
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
-  createBrowserRouter,
-  RouterProvider,
-  useParams,
-  useNavigate,
-  Outlet,
-} from 'react-router';
-import {
-  WebSocketProvider,
-  useWebSocket,
-} from './contexts/websocketContext/index';
-import DepartmentalSidebarWithProviders from './components/departmentalSidebar';
-import Container from './components/layout/Container';
-import UploadAnalysis from './components/analysis/uploadAnalysis';
+  AppShell,
+  Box,
+  Text,
+  useMantineTheme,
+  Burger,
+  Group,
+  ActionIcon,
+  Tooltip,
+} from '@mantine/core';
+import { useDisclosure } from '@mantine/hooks';
+import { IconSun, IconMoon } from '@tabler/icons-react';
+import { useWebSocket } from './contexts/websocketContext';
+import { ThemeProvider, useTheme } from './contexts/themeContext';
+import { WebSocketProvider } from './contexts/websocketContext/provider';
+import DepartmentalSidebar from './components/departmentalSidebar';
 import AnalysisList from './components/analysis/analysisList';
+import AnalysisCreator from './components/analysis/uploadAnalysis';
+import ConnectionStatus from './components/connectionStatus';
 import { useIsMobile } from './hooks/useIsMobile';
-import { ThemeProvider } from './contexts/themeContext';
 
-function DepartmentView() {
-  const { departmentId } = useParams();
-  const navigate = useNavigate();
-  const { analyses, departments } = useWebSocket();
-  const [filteredAnalyses, setFilteredAnalyses] = useState({});
+function AppContent() {
+  const mantineTheme = useMantineTheme();
+  const { theme, toggleTheme } = useTheme();
+  const { analysesArray, departmentsArray } = useWebSocket();
+  const [selectedDepartment, setSelectedDepartment] = useState(null);
+  const [mobileOpened, { toggle: toggleMobile }] = useDisclosure();
+  const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
+  const isMobile = useIsMobile();
 
-  // Debug logging
-  useEffect(() => {
-    console.log('DepartmentView - departmentId:', departmentId);
-    console.log('DepartmentView - analyses:', analyses);
-    console.log('DepartmentView - departments:', departments);
-  }, [departmentId, analyses, departments]);
+  // Filter analyses based on selected department
+  const filteredAnalyses = selectedDepartment
+    ? analysesArray?.filter(
+        (analysis) => analysis.department === selectedDepartment,
+      )
+    : analysesArray;
 
-  // Filter analyses based on URL parameter
-  useEffect(() => {
-    if (!analyses || analyses.length === 0) {
-      setFilteredAnalyses({});
-      return;
-    }
+  // Get current department info
+  const currentDepartment = departmentsArray?.find(
+    (d) => d.id === selectedDepartment,
+  );
 
-    console.log('Filtering analyses for department:', departmentId);
-
-    if (!departmentId || departmentId === 'all') {
-      // Show all analyses when no department selected or 'all' route
-      const analysesObj = {};
-      analyses.forEach((analysis) => {
-        analysesObj[analysis.name] = analysis;
-      });
-      setFilteredAnalyses(analysesObj);
-      console.log('Showing all analyses:', analysesObj);
-    } else {
-      // Filter by specific department
-      const filtered = {};
-      analyses.forEach((analysis) => {
-        console.log(
-          `Analysis ${analysis.name} department: ${analysis.department}, looking for: ${departmentId}`,
-        );
-        if (analysis.department === departmentId) {
-          filtered[analysis.name] = analysis;
-        }
-      });
-      setFilteredAnalyses(filtered);
-      console.log('Filtered analyses:', filtered);
-    }
-  }, [departmentId, analyses]);
-
-  // Handle department selection from sidebar
-  const handleDepartmentSelect = (deptId) => {
-    console.log('Department selected:', deptId);
-    if (!deptId) {
-      navigate('/departments/all');
-    } else {
-      navigate(`/departments/${deptId}`);
-    }
-  };
-
-  // Convert departments object to array for finding
-  const departmentsArray = Array.isArray(departments)
-    ? departments
-    : Object.values(departments || {});
-  const currentDepartment =
-    departmentId && departmentId !== 'all'
-      ? departmentsArray.find((d) => d.id === departmentId)
-      : null;
-
-  const currentDepartmentName = currentDepartment?.name || 'All Departments';
+  if (isMobile) {
+    return (
+      <Box
+        ta="center"
+        p="xl"
+        style={{
+          minHeight: '100vh',
+          background:
+            theme === 'dark'
+              ? `linear-gradient(135deg, ${mantineTheme.colors.dark[8]} 0%, ${mantineTheme.colors.dark[9]} 100%)`
+              : `linear-gradient(135deg, ${mantineTheme.colors.gray[0]} 0%, ${mantineTheme.colors.gray[1]} 100%)`,
+        }}
+      >
+        <Text size="lg" fw={500} mb="md">
+          Mobile View Not Supported
+        </Text>
+        <Text c="dimmed">
+          Please use a desktop browser to access this application.
+        </Text>
+      </Box>
+    );
+  }
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Departmental Sidebar */}
-      <DepartmentalSidebarWithProviders
-        selectedDepartment={departmentId === 'all' ? null : departmentId}
-        onDepartmentSelect={handleDepartmentSelect}
-      />
+    <AppShell
+      header={{ height: 60 }}
+      navbar={{
+        width: 280,
+        breakpoint: 'sm',
+        collapsed: { mobile: !mobileOpened, desktop: !desktopOpened },
+      }}
+      padding="md"
+    >
+      <AppShell.Header>
+        <Group h="100%" px="md" justify="space-between">
+          <Group>
+            <Burger
+              opened={mobileOpened}
+              onClick={toggleMobile}
+              hiddenFrom="sm"
+              size="sm"
+            />
+            <Burger
+              opened={desktopOpened}
+              onClick={toggleDesktop}
+              visibleFrom="sm"
+              size="sm"
+            />
+            <Text size="lg" fw={600}>
+              Tago Analysis Runner
+            </Text>
+          </Group>
+          <Group>
+            <Tooltip label={theme === 'light' ? 'Dark mode' : 'Light mode'}>
+              <ActionIcon
+                variant="subtle"
+                onClick={() => toggleTheme()}
+                size="lg"
+              >
+                {theme === 'light' ? (
+                  <IconSun size={20} />
+                ) : (
+                  <IconMoon size={20} />
+                )}
+              </ActionIcon>
+            </Tooltip>
+            <ConnectionStatus />
+          </Group>
+        </Group>
+      </AppShell.Header>
 
-      {/* Main Content */}
-      <div className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-900">
-        <Container>
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-              PWS Tago Analysis Runner
-            </h1>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
-              Viewing: {currentDepartmentName}
-            </p>
-            {departmentId && departmentId !== 'all' && (
-              <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                Department ID: {departmentId} | Found{' '}
-                {Object.keys(filteredAnalyses).length} analyses
-              </p>
-            )}
-          </div>
+      <AppShell.Navbar>
+        <DepartmentalSidebar
+          selectedDepartment={selectedDepartment}
+          onDepartmentSelect={setSelectedDepartment}
+          opened={desktopOpened}
+          onToggle={toggleDesktop}
+        />
+      </AppShell.Navbar>
 
-          <UploadAnalysis
-            targetDepartment={departmentId === 'all' ? null : departmentId}
-            departmentName={currentDepartmentName}
-          />
-
-          <AnalysisList
-            analyses={filteredAnalyses}
-            showDepartmentLabels={!departmentId || departmentId === 'all'}
-            departments={departmentsArray}
-          />
-        </Container>
-      </div>
-    </div>
+      <AppShell.Main
+        style={{
+          background:
+            theme === 'dark'
+              ? `linear-gradient(135deg, ${mantineTheme.colors.dark[8]} 0%, ${mantineTheme.colors.dark[9]} 100%)`
+              : `linear-gradient(135deg, ${mantineTheme.colors.gray[0]} 0%, ${mantineTheme.colors.gray[1]} 100%)`,
+        }}
+      >
+        <AnalysisCreator
+          targetDepartment={selectedDepartment}
+          departmentName={currentDepartment?.name || 'All Departments'}
+        />
+        <AnalysisList
+          analyses={filteredAnalyses}
+          showDepartmentLabels={!selectedDepartment}
+          departments={departmentsArray || []}
+        />
+      </AppShell.Main>
+    </AppShell>
   );
 }
 
-// Root layout component with theme provider
-function RootLayout() {
+export default function App() {
   return (
     <ThemeProvider>
       <WebSocketProvider>
-        <Outlet />
+        <AppContent />
       </WebSocketProvider>
     </ThemeProvider>
   );
 }
-
-// Component to handle default redirect
-function DepartmentRedirect() {
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    navigate('/departments/all', { replace: true });
-  }, [navigate]);
-
-  return null;
-}
-
-// Create the router configuration
-const router = createBrowserRouter([
-  {
-    path: '/',
-    element: <RootLayout />,
-    children: [
-      {
-        index: true,
-        element: <DepartmentRedirect />,
-      },
-      {
-        path: 'departments/:departmentId',
-        element: <DepartmentView />,
-      },
-      {
-        path: '*',
-        element: <DepartmentRedirect />,
-      },
-    ],
-  },
-]);
-
-function App() {
-  const isMobile = useIsMobile();
-
-  // Mobile: Show "not available" message with theme support
-  if (isMobile) {
-    return (
-      <ThemeProvider>
-        <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-6">
-          <div className="text-center max-w-md">
-            <img
-              src="/dark-ollie.png"
-              alt="Application Logo"
-              className="w-48 h-34 mx-auto mb-6"
-            />
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-              Desktop Only
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400 mb-6 leading-relaxed">
-              This application isn't available on mobile devices. Please access
-              it from a desktop or laptop computer for the best experience.
-            </p>
-          </div>
-        </div>
-      </ThemeProvider>
-    );
-  }
-
-  return <RouterProvider router={router} />;
-}
-
-export default App;
