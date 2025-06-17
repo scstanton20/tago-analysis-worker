@@ -33,7 +33,6 @@ import {
   Divider,
   NavLink,
   Tooltip,
-  useMantineTheme,
 } from '@mantine/core';
 import {
   IconSettings,
@@ -58,7 +57,6 @@ const SortableDepartmentItem = ({
     transition,
     isDragging,
   } = useSortable({ id: department.id });
-  const theme = useMantineTheme();
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -92,14 +90,14 @@ const SortableDepartmentItem = ({
                 {...attributes}
                 {...listeners}
                 className="department-drag-handle"
-                style={{
-                  cursor: 'grab',
-                  opacity: 0,
-                  transition: 'opacity 200ms',
-                }}
-                sx={{
-                  '.mantine-NavLink-root:hover &': {
-                    opacity: 1,
+                styles={{
+                  root: {
+                    cursor: 'grab',
+                    opacity: 0,
+                    transition: 'opacity 200ms',
+                    '.mantine-NavLink-root:hover &': {
+                      opacity: 1,
+                    },
                   },
                 }}
               >
@@ -110,7 +108,7 @@ const SortableDepartmentItem = ({
         }
         styles={{
           root: {
-            borderRadius: theme.radius.md,
+            borderRadius: 'var(--mantine-radius-md)',
             marginBottom: 4,
           },
         }}
@@ -371,8 +369,6 @@ export default function DepartmentalSidebar({
   selectedDepartment,
   onDepartmentSelect,
 }) {
-  const mantineTheme = useMantineTheme();
-
   const { departments, getDepartmentAnalysisCount } = useWebSocket();
 
   const [showManageModal, setShowManageModal] = useState(false);
@@ -462,7 +458,7 @@ export default function DepartmentalSidebar({
       <Box
         p="md"
         style={{
-          borderBottom: `1px solid ${mantineTheme.colorScheme === 'dark' ? mantineTheme.colors.dark[4] : mantineTheme.colors.gray[3]}`,
+          borderBottom: '1px solid var(--mantine-color-default-border)',
         }}
       >
         <Group justify="space-between">
@@ -516,9 +512,9 @@ export default function DepartmentalSidebar({
                     onDrop={(e) => handleAnalysisDrop(e, dept.id)}
                     onDragOver={(e) => e.preventDefault()}
                     style={{
-                      borderRadius: mantineTheme.radius.md,
+                      borderRadius: 'var(--mantine-radius-md)',
                       outline: draggedAnalysis
-                        ? `2px solid ${mantineTheme.colors.blue[4]}`
+                        ? '2px solid var(--mantine-color-blue-filled)'
                         : 'none',
                       outlineOffset: '2px',
                     }}

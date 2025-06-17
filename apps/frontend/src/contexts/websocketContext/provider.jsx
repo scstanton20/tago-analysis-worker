@@ -14,9 +14,11 @@ export function WebSocketProvider({ children }) {
   const [loadingAnalyses, setLoadingAnalyses] = useState(new Set());
   const [connectionStatus, setConnectionStatus] = useState('connecting');
   const [backendStatus, setBackendStatus] = useState(null);
+  const [hasInitialData, setHasInitialData] = useState(false); // NEW: Track if we've ever loaded data
   const lastMessageRef = useRef({ type: null, timestamp: 0 });
   const reconnectAttemptsRef = useRef(0);
-  const maxReconnectDelay = 5000;
+  const maxReconnectAttempts = 10; // NEW: Limit reconnection attempts
+  const maxReconnectDelay = 30000; // Increased max delay to 30 seconds
   const mountedRef = useRef(true);
 
   // Track log sequences to prevent duplicates
@@ -49,6 +51,14 @@ export function WebSocketProvider({ children }) {
     }
   }, [socket]);
 
+  // ADDED: getDepartment helper function
+  const getDepartment = useCallback(
+    (departmentId) => {
+      return departments[departmentId] || null;
+    },
+    [departments],
+  );
+
   const handleMessage = useCallback(
     (event) => {
       if (!mountedRef.current) return;
@@ -56,6 +66,8 @@ export function WebSocketProvider({ children }) {
       try {
         const data = JSON.parse(event.data);
         const now = Date.now();
+
+        console.log('WebSocket message received:', data.type, data); // DEBUG: Log all messages
 
         // Only deduplicate non-log messages by type and timestamp
         if (data.type !== 'log' && data.type !== 'statusUpdate') {
@@ -70,7 +82,7 @@ export function WebSocketProvider({ children }) {
 
         switch (data.type) {
           case 'init': {
-            console.log('Received init message:', data);
+            console.log('Received init message - setting backendStatus:', data); // DEBUG
 
             // Handle analyses - always store as object
             let analysesObj = {};
@@ -102,6 +114,8 @@ export function WebSocketProvider({ children }) {
 
             setAnalyses(analysesObj);
             setDepartments(departmentsObj);
+            setHasInitialData(true); // Mark that we've loaded initial data
+            // Data is loaded when we have analyses and departments data
 
             // Initialize log sequences tracking
             Object.keys(analysesObj).forEach((analysisName) => {
@@ -480,6 +494,15 @@ export function WebSocketProvider({ children }) {
   const reconnect = useCallback(async () => {
     if (!mountedRef.current) return;
 
+    // Stop reconnecting after max attempts
+    if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+      console.log(
+        `Max reconnection attempts (${maxReconnectAttempts}) reached. Stopping reconnection attempts.`,
+      );
+      setConnectionStatus('failed');
+      return;
+    }
+
     const delay = Math.min(
       1000 * Math.pow(2, reconnectAttemptsRef.current),
       maxReconnectDelay,
@@ -487,7 +510,7 @@ export function WebSocketProvider({ children }) {
     reconnectAttemptsRef.current++;
 
     console.log(
-      `Attempting to reconnect in ${delay}ms (attempt ${reconnectAttemptsRef.current})`,
+      `Attempting to reconnect in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`,
     );
 
     setTimeout(async () => {
@@ -578,7 +601,14 @@ export function WebSocketProvider({ children }) {
     connectionStatus,
     backendStatus,
     requestStatusUpdate,
+    getDepartment, // ADDED: Helper function
+    hasInitialData, // NEW: Expose initial data status
   };
+
+  console.log('WebSocket Provider context value:', {
+    connectionStatus,
+    reconnectAttempts: reconnectAttemptsRef.current,
+  }); // DEBUG
 
   return (
     <WebSocketContext.Provider value={value}>

@@ -4,16 +4,19 @@ import {
   AppShell,
   Box,
   Text,
-  useMantineTheme,
   Burger,
   Group,
   ActionIcon,
   Tooltip,
+  LoadingOverlay,
+  Stack,
+  Button,
+  useComputedColorScheme,
+  useMantineColorScheme,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { IconSun, IconMoon } from '@tabler/icons-react';
 import { useWebSocket } from './contexts/websocketContext';
-import { ThemeProvider, useTheme } from './contexts/themeContext';
 import { WebSocketProvider } from './contexts/websocketContext/provider';
 import DepartmentalSidebar from './components/departmentalSidebar';
 import AnalysisList from './components/analysis/analysisList';
@@ -22,14 +25,20 @@ import ConnectionStatus from './components/connectionStatus';
 import { useIsMobile } from './hooks/useIsMobile';
 
 function AppContent() {
-  const mantineTheme = useMantineTheme();
-  const { theme, toggleTheme } = useTheme();
-  const { analyses, departments, getDepartment } = useWebSocket();
+  const {
+    analyses,
+    departments,
+    getDepartment,
+    connectionStatus,
+    hasInitialData,
+  } = useWebSocket();
 
   const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure();
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
   const isMobile = useIsMobile();
+  const { setColorScheme } = useMantineColorScheme();
+  const computedColorScheme = useComputedColorScheme('light');
 
   const getFilteredAnalyses = () => {
     if (!selectedDepartment) {
@@ -47,7 +56,7 @@ function AppContent() {
     return filteredAnalyses;
   };
 
-  // FIXED: Get current department using object lookup
+  // Get current department using object lookup
   const currentDepartment = selectedDepartment
     ? getDepartment(selectedDepartment)
     : null;
@@ -59,10 +68,7 @@ function AppContent() {
         p="xl"
         style={{
           minHeight: '100vh',
-          background:
-            theme === 'dark'
-              ? `linear-gradient(135deg, ${mantineTheme.colors.dark[8]} 0%, ${mantineTheme.colors.dark[9]} 100%)`
-              : `linear-gradient(135deg, ${mantineTheme.colors.gray[0]} 0%, ${mantineTheme.colors.gray[1]} 100%)`,
+          background: 'var(--mantine-color-body)',
         }}
       >
         <Text size="lg" fw={500} mb="md">
@@ -75,94 +81,162 @@ function AppContent() {
     );
   }
 
-  return (
-    <AppShell
-      header={{ height: 60 }}
-      navbar={{
-        width: 280,
-        breakpoint: 'sm',
-        collapsed: { mobile: !mobileOpened, desktop: !desktopOpened },
-      }}
-      padding="md"
-    >
-      <AppShell.Header>
-        <Group h="100%" px="md" justify="space-between">
-          <Group>
-            <Burger
-              opened={mobileOpened}
-              onClick={toggleMobile}
-              hiddenFrom="sm"
-              size="sm"
-            />
-            <Burger
-              opened={desktopOpened}
-              onClick={toggleDesktop}
-              visibleFrom="sm"
-              size="sm"
-            />
-            <Text size="lg" fw={600}>
-              Tago Analysis Runner
-            </Text>
-          </Group>
-          <Group>
-            <Tooltip label={theme === 'light' ? 'Dark mode' : 'Light mode'}>
-              <ActionIcon
-                variant="subtle"
-                onClick={() => toggleTheme()}
-                size="lg"
-              >
-                {theme === 'light' ? (
-                  <IconSun size={20} />
-                ) : (
-                  <IconMoon size={20} />
-                )}
-              </ActionIcon>
-            </Tooltip>
-            <ConnectionStatus />
-          </Group>
-        </Group>
-      </AppShell.Header>
+  // Show initial loading overlay only when we haven't loaded data yet
+  const isInitialLoading =
+    !hasInitialData &&
+    (connectionStatus === 'connecting' || connectionStatus === 'disconnected');
+  const connectionFailed = connectionStatus === 'failed';
 
-      <AppShell.Navbar>
-        <DepartmentalSidebar
-          selectedDepartment={selectedDepartment}
-          onDepartmentSelect={setSelectedDepartment}
-          opened={desktopOpened}
-          onToggle={toggleDesktop}
-        />
-      </AppShell.Navbar>
-
-      <AppShell.Main
+  if (connectionFailed) {
+    return (
+      <Box
+        ta="center"
+        p="xl"
         style={{
-          background:
-            theme === 'dark'
-              ? `linear-gradient(135deg, ${mantineTheme.colors.dark[8]} 0%, ${mantineTheme.colors.dark[9]} 100%)`
-              : `linear-gradient(135deg, ${mantineTheme.colors.gray[0]} 0%, ${mantineTheme.colors.gray[1]} 100%)`,
+          minHeight: '100vh',
+          background: 'var(--mantine-color-body)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
         }}
       >
-        <AnalysisCreator
-          targetDepartment={selectedDepartment}
-          departmentName={currentDepartment?.name || 'All Departments'}
-        />
+        <Stack align="center" gap="lg">
+          <Text size="xl" fw={600} c="red">
+            Connection Failed
+          </Text>
+          <Text size="lg" c="dimmed" ta="center">
+            Unable to connect to the Tago Analysis Runner server
+          </Text>
+          <Text size="sm" c="dimmed" ta="center" maw={400}>
+            Please ensure the backend server is running and accessible at the
+            configured WebSocket endpoint.
+          </Text>
+          <Button
+            onClick={() => window.location.reload()}
+            variant="outline"
+            mt="md"
+          >
+            Retry Connection
+          </Button>
+        </Stack>
+      </Box>
+    );
+  }
 
-        {/* FIXED: Pass object-based data to AnalysisList */}
-        <AnalysisList
-          analyses={getFilteredAnalyses()} // Object format
-          showDepartmentLabels={!selectedDepartment}
-          departments={departments} // Object format
-          selectedDepartment={selectedDepartment} // For internal filtering
-        />
-      </AppShell.Main>
-    </AppShell>
+  return (
+    <>
+      <LoadingOverlay
+        visible={isInitialLoading}
+        zIndex={1000}
+        overlayProps={{ blur: 2, radius: 'sm' }}
+        loaderProps={{
+          size: 'xl',
+          children: (
+            <Stack align="center" gap="lg">
+              <Text size="lg" fw={500}>
+                Connecting to Tago Analysis Runner...
+              </Text>
+              <Text size="sm" c="dimmed">
+                {connectionStatus === 'connecting' &&
+                  'Establishing WebSocket connection...'}
+                {connectionStatus === 'disconnected' &&
+                  'Connection lost, retrying...'}
+              </Text>
+            </Stack>
+          ),
+        }}
+        pos="fixed"
+      />
+
+      <AppShell
+        header={{ height: 60 }}
+        navbar={{
+          width: 280,
+          breakpoint: 'sm',
+          collapsed: { mobile: !mobileOpened, desktop: !desktopOpened },
+        }}
+        padding="md"
+      >
+        <AppShell.Header>
+          <Group h="100%" px="md" justify="space-between">
+            <Group>
+              <Burger
+                opened={mobileOpened}
+                onClick={toggleMobile}
+                hiddenFrom="sm"
+                size="sm"
+              />
+              <Burger
+                opened={desktopOpened}
+                onClick={toggleDesktop}
+                visibleFrom="sm"
+                size="sm"
+              />
+              <Text size="lg" fw={600}>
+                Tago Analysis Runner
+              </Text>
+            </Group>
+            <Group>
+              <Tooltip
+                label={
+                  computedColorScheme === 'light' ? 'Dark mode' : 'Light mode'
+                }
+              >
+                <ActionIcon
+                  variant="subtle"
+                  onClick={() =>
+                    setColorScheme(
+                      computedColorScheme === 'dark' ? 'light' : 'dark',
+                    )
+                  }
+                  size="lg"
+                >
+                  {computedColorScheme === 'light' ? (
+                    <IconSun size={20} />
+                  ) : (
+                    <IconMoon size={20} />
+                  )}
+                </ActionIcon>
+              </Tooltip>
+              <ConnectionStatus />
+            </Group>
+          </Group>
+        </AppShell.Header>
+
+        <AppShell.Navbar>
+          <DepartmentalSidebar
+            selectedDepartment={selectedDepartment}
+            onDepartmentSelect={setSelectedDepartment}
+            opened={desktopOpened}
+            onToggle={toggleDesktop}
+          />
+        </AppShell.Navbar>
+
+        <AppShell.Main
+          style={{
+            background: 'var(--mantine-color-body)',
+          }}
+        >
+          <AnalysisCreator
+            targetDepartment={selectedDepartment}
+            departmentName={currentDepartment?.name || 'All Departments'}
+          />
+          <AnalysisList
+            analyses={getFilteredAnalyses()}
+            showDepartmentLabels={!selectedDepartment}
+            departments={departments}
+            selectedDepartment={selectedDepartment}
+          />
+        </AppShell.Main>
+      </AppShell>
+    </>
   );
 }
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <WebSocketProvider>
-        <AppContent />
-      </WebSocketProvider>
-    </ThemeProvider>
+    <WebSocketProvider>
+      <AppContent />
+    </WebSocketProvider>
   );
 }

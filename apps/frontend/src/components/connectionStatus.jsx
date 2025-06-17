@@ -1,6 +1,6 @@
 // frontend/src/components/connectionStatus.jsx
-import { useState, useContext } from 'react';
-import { WebSocketContext } from '../contexts/websocketContext';
+import { useState } from 'react';
+import { useWebSocket } from '../contexts/websocketContext';
 import {
   ActionIcon,
   Popover,
@@ -9,20 +9,15 @@ import {
   Text,
   Button,
   Divider,
-  LoadingOverlay,
   Box,
   Indicator,
 } from '@mantine/core';
-import {
-  IconChevronDown,
-  IconChevronUp,
-  IconRefresh,
-} from '@tabler/icons-react';
+import { IconRefresh } from '@tabler/icons-react';
 
 const ConnectionStatus = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const { connectionStatus, backendStatus, requestStatusUpdate } =
-    useContext(WebSocketContext);
+    useWebSocket();
 
   const getOverallStatusColor = () => {
     if (!backendStatus) return 'red';
@@ -65,24 +60,8 @@ const ConnectionStatus = () => {
       (backendStatus.container_health.status !== 'healthy' ||
         backendStatus.tagoConnection.runningAnalyses === 0));
 
-  const isConnecting = connectionStatus === 'connecting';
-
   return (
     <>
-      <LoadingOverlay
-        visible={isConnecting}
-        zIndex={1000}
-        overlayProps={{ blur: 0.5 }}
-        loaderProps={{ size: 'lg' }}
-        pos="fixed"
-      >
-        <Stack align="center">
-          <Text size="lg" fw={500}>
-            Connecting to server...
-          </Text>
-        </Stack>
-      </LoadingOverlay>
-
       <Popover
         opened={isExpanded}
         onChange={setIsExpanded}
@@ -94,19 +73,28 @@ const ConnectionStatus = () => {
         <Popover.Target>
           <ActionIcon
             variant="subtle"
-            onClick={() => setIsExpanded(!isExpanded)}
             size="lg"
+            onClick={() => setIsExpanded(!isExpanded)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
           >
-            <Group gap="xs">
-              <Indicator color={getOverallStatusColor()} size={12} processing>
-                <Box />
-              </Indicator>
-              {isExpanded ? (
-                <IconChevronUp size={16} />
-              ) : (
-                <IconChevronDown size={16} />
-              )}
-            </Group>
+            {/* Main status indicator */}
+            <Box
+              style={{
+                width: 16,
+                height: 16,
+                borderRadius: '50%',
+                backgroundColor:
+                  getOverallStatusColor() === 'green'
+                    ? 'var(--mantine-color-green-filled)'
+                    : 'var(--mantine-color-red-filled)',
+                border: '2px solid var(--mantine-color-body)',
+                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.12)',
+              }}
+            />
           </ActionIcon>
         </Popover.Target>
 

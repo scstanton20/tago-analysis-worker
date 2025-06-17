@@ -1,5 +1,5 @@
 // frontend/src/components/analysis/analysisItem.jsx
-import { useState, useContext } from 'react';
+import { useState } from 'react';
 import PropTypes from 'prop-types';
 import {
   Paper,
@@ -30,7 +30,6 @@ import EditAnalysisModal from './analysisEdit';
 import EditAnalysisENVModal from './analysisEditENV';
 import LogDownloadDialog from './logDownload';
 import DepartmentSelectModal from './departmentSelectModal';
-import { WebSocketContext } from '../../contexts/websocketContext';
 import { useWebSocket } from '../../contexts/websocketContext';
 
 export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
@@ -39,9 +38,12 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
   const [showLogDownloadDialog, setShowLogDownloadDialog] = useState(false);
   const [showDepartmentModal, setShowDepartmentModal] = useState(false);
 
-  const { loadingAnalyses, addLoadingAnalysis, removeLoadingAnalysis } =
-    useContext(WebSocketContext);
-  const { departments } = useWebSocket();
+  const {
+    loadingAnalyses,
+    addLoadingAnalysis,
+    removeLoadingAnalysis,
+    departments,
+  } = useWebSocket();
   const isLoading = loadingAnalyses.has(analysis.name);
 
   if (!analysis || !analysis.name) {
@@ -240,9 +242,13 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
             >
               {showLogs ? 'Hide Logs' : 'Show Logs'}
             </Button>
-
-            {/* Secondary Actions Dropdown */}
-            <Menu shadow="md" width={200}>
+            <Menu
+              shadow="md"
+              width={200}
+              withinPortal={true}
+              position="bottom-end"
+              closeOnItemClick={true}
+            >
               <Menu.Target>
                 <ActionIcon variant="subtle" size="lg">
                   <IconDotsVertical size={20} />

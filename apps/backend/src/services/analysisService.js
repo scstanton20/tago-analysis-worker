@@ -3,6 +3,7 @@ import { promises as fs } from 'fs';
 import config from '../config/default.js';
 import { encrypt, decrypt } from '../utils/cryptoUtils.js';
 import AnalysisProcess from '../models/analysisProcess.js';
+// FIXED: Import department service properly
 import departmentService from './departmentService.js';
 
 function formatFileSize(bytes) {
@@ -32,7 +33,7 @@ class AnalysisService {
     await fs.mkdir(config.paths.config, { recursive: true });
   }
 
-  // NEW: Get complete config including departments
+  // Get complete config including departments
   async getConfig() {
     return {
       version: this.configCache?.version || '2.0',
@@ -41,7 +42,7 @@ class AnalysisService {
     };
   }
 
-  // NEW: Update complete config
+  // Update complete config
   async updateConfig(config) {
     this.configCache = config;
 
@@ -56,7 +57,7 @@ class AnalysisService {
     await this.saveConfig();
   }
 
-  // MODIFIED: Save config with departments
+  // Save config with departments
   async saveConfig() {
     const configuration = {
       version: this.configCache?.version || '2.0',
@@ -71,7 +72,7 @@ class AnalysisService {
         status: analysis.status,
         lastRun: analysis.lastRun,
         startTime: analysis.startTime,
-        department: analysis.department || 'uncategorized', // NEW: Include department
+        department: analysis.department || 'uncategorized',
       };
     });
 
@@ -80,7 +81,7 @@ class AnalysisService {
     this.configCache = configuration;
   }
 
-  // MODIFIED: Load config with departments
+  // Load config with departments
   async loadConfig() {
     try {
       const data = await fs.readFile(this.configPath, 'utf8');
@@ -134,7 +135,7 @@ class AnalysisService {
     return basePath;
   }
 
-  // MODIFIED: Upload with department support
+  // Upload with department support
   async uploadAnalysis(file, type, targetDepartment = 'uncategorized') {
     const analysisName = path.parse(file.name).name;
     const basePath = await this.createAnalysisDirectories(analysisName);
@@ -142,7 +143,7 @@ class AnalysisService {
 
     await file.mv(filePath);
     const analysis = new AnalysisProcess(analysisName, type, this);
-    analysis.department = targetDepartment; // NEW: Set department
+    analysis.department = targetDepartment;
     this.analyses.set(analysisName, analysis);
 
     const envFile = path.join(basePath, 'env', '.env');
@@ -150,13 +151,13 @@ class AnalysisService {
 
     await this.saveConfig();
 
-    // NEW: Ensure department tracking
+    // Ensure department tracking
     await departmentService.ensureAnalysisHasDepartment(analysisName);
 
     return { analysisName };
   }
 
-  // MODIFIED: Include department info
+  // Include department info
   async getAllAnalyses() {
     const analysisDirectories = await fs.readdir(config.paths.analysis);
 
@@ -184,7 +185,7 @@ class AnalysisService {
             enabled: analysis?.enabled || false,
             lastRun: analysis?.lastRun,
             startTime: analysis?.startTime,
-            department: analysis?.department || 'uncategorized', // NEW: Include department
+            department: analysis?.department || 'uncategorized',
           };
         } catch (error) {
           if (error.code === 'ENOENT') return null;
@@ -202,27 +203,7 @@ class AnalysisService {
     return analysesObj;
   }
 
-  // NEW: Get all analyses with department info
-  async getAllAnalysesWithDepartments() {
-    const analyses = await this.getAllAnalyses();
-    const departments = await departmentService.getAllDepartments();
-
-    // Create a map for quick department lookup
-    const deptMap = new Map(departments.map((d) => [d.id, d]));
-
-    // Enhance analyses with department info
-    return Object.entries(analyses).reduce((acc, [name, analysis]) => {
-      const dept = deptMap.get(analysis.department || 'uncategorized');
-      acc[name] = {
-        ...analysis,
-        departmentName: dept?.name || 'Uncategorized',
-        departmentColor: dept?.color || '#9ca3af',
-      };
-      return acc;
-    }, {});
-  }
-
-  // MODIFIED: Update department tracking on rename
+  // FIXED: Rename analysis with proper department service integration
   async renameAnalysis(analysisName, newFileName) {
     try {
       const analysis = this.analyses.get(analysisName);
@@ -277,13 +258,10 @@ class AnalysisService {
       // Save updated config to analyses-config.json
       await this.saveConfig();
 
-      // NEW: Update in department service
-      const analysisData = departmentService.analyses.get(analysisName);
-      if (analysisData) {
-        departmentService.analyses.delete(analysisName);
-        departmentService.analyses.set(newFileName, analysisData);
-        await departmentService.saveConfig();
-      }
+      // FIXED: Update department tracking properly through the department service
+      // The department service works with the same config, so we just need to ensure
+      // the analysis has proper department tracking
+      await departmentService.ensureAnalysisHasDepartment(newFileName);
 
       // If it was running before, restart it
       if (wasRunning) {
@@ -488,7 +466,7 @@ class AnalysisService {
     }
   }
 
-  // MODIFIED: Remove from department tracking on delete
+  // Remove from department tracking on delete
   async deleteAnalysis(analysisName) {
     const analysis = this.analyses.get(analysisName);
     if (analysis) {
@@ -510,7 +488,7 @@ class AnalysisService {
     return { message: 'Analysis deleted successfully' };
   }
 
-  // MODIFIED: Initialize with department support
+  // Initialize with department support
   async initialize() {
     await this.ensureDirectories();
 
@@ -557,7 +535,7 @@ class AnalysisService {
     }
   }
 
-  // MODIFIED: Update with department support
+  // Update with department support
   async updateAnalysis(analysisName, updates) {
     try {
       const analysis = this.analyses.get(analysisName);
@@ -737,7 +715,7 @@ class AnalysisService {
     }
   }
 
-  // MODIFIED: Initialize with department
+  // Initialize with department
   async initializeAnalysis(analysisName, analysisConfig = {}) {
     const defaultConfig = {
       type: 'listener',
@@ -745,7 +723,7 @@ class AnalysisService {
       status: 'stopped',
       lastRun: null,
       startTime: null,
-      department: 'uncategorized', // NEW: Default department
+      department: 'uncategorized',
     };
 
     const fullConfig = { ...defaultConfig, ...analysisConfig };
@@ -756,7 +734,7 @@ class AnalysisService {
       status: fullConfig.status,
       lastRun: fullConfig.lastRun,
       startTime: fullConfig.startTime,
-      department: fullConfig.department, // NEW: Set department
+      department: fullConfig.department,
     });
 
     // Initialize log state (this replaces the old log loading logic)

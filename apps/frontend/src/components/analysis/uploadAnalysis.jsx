@@ -48,18 +48,13 @@ export default function AnalysisCreator({
   const [error, setError] = useState(null);
   const [fetchedAnalyses, setFetchedAnalyses] = useState([]);
   const [isFetchingAnalyses, setIsFetchingAnalyses] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Refs
   const fileInputRef = useRef(null);
 
   // WebSocket context
-  const {
-    connectionStatus,
-    addLoadingAnalysis,
-    removeLoadingAnalysis,
-    loadingAnalyses,
-    analyses, // FIXED: This is now an object
-  } = useWebSocket();
+  const { loadingAnalyses, analyses } = useWebSocket();
 
   // FIXED: Computed values - handle object instead of array
   const existingAnalyses = analyses
@@ -70,11 +65,11 @@ export default function AnalysisCreator({
   const currentAnalysisName =
     mode === 'upload' ? editableFileName : analysisName;
   const isCurrentAnalysisLoading =
-    currentAnalysisName && loadingAnalyses.has(currentAnalysisName);
-  const isConnected = connectionStatus === 'connected';
+    currentAnalysisName &&
+    (loadingAnalyses.has(currentAnalysisName) || isUploading);
 
   // Form validation and state checks
-  const isInputDisabled = isCurrentAnalysisLoading || !isConnected;
+  const isInputDisabled = isCurrentAnalysisLoading;
   const hasFormContent =
     selectedFile ||
     editorContent !== DEFAULT_EDITOR_CONTENT ||
@@ -83,7 +78,6 @@ export default function AnalysisCreator({
   const showCancelButton = formTouched || hasFormContent || error;
   const isSaveDisabled =
     isCurrentAnalysisLoading ||
-    !isConnected ||
     (mode === 'create' && !analysisName) ||
     (mode === 'upload' && (!selectedFile || !editableFileName)) ||
     error;
@@ -96,7 +90,6 @@ export default function AnalysisCreator({
         setIsFetchingAnalyses(true);
         try {
           const data = await analysisService.getAnalyses();
-          // FIXED: Handle response format - convert to array of names
           const analysisNames = Array.isArray(data)
             ? data.map((analysis) => analysis.name)
             : Object.keys(data);
@@ -228,6 +221,7 @@ export default function AnalysisCreator({
     }
 
     setError(null);
+    setIsUploading(true);
 
     try {
       let file;
@@ -239,10 +233,6 @@ export default function AnalysisCreator({
         const blob = new Blob([editorContent], { type: 'text/javascript' });
         file = new File([blob], finalFileName, { type: 'text/javascript' });
       }
-
-      addLoadingAnalysis(finalFileName);
-
-      // Pass the targetDepartment to the service
       await analysisService.uploadAnalysis(
         file,
         analysisType,
@@ -264,11 +254,10 @@ export default function AnalysisCreator({
         onClose();
       }
     } catch (error) {
-      if (finalFileName) {
-        removeLoadingAnalysis(finalFileName);
-      }
       setError(error.message || 'Failed to save analysis');
       console.error('Save failed:', error);
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -297,16 +286,15 @@ export default function AnalysisCreator({
       {/* Header */}
       <Box
         p="md"
-        style={(theme) => ({
-          cursor: 'pointer',
-          transition: 'background-color 200ms',
-          '&:hover': {
-            backgroundColor:
-              theme.colorScheme === 'dark'
-                ? theme.colors.dark[6]
-                : theme.colors.gray[0],
+        styles={{
+          root: {
+            cursor: 'pointer',
+            transition: 'background-color 200ms',
+            '&:hover': {
+              backgroundColor: 'var(--mantine-color-gray-light)',
+            },
           },
-        })}
+        }}
         onClick={handleToggleExpanded}
       >
         <Group justify="space-between">
@@ -489,18 +477,6 @@ export default function AnalysisCreator({
                 </Button>
               )}
             </Group>
-
-            {/* Connection Status */}
-            {!isConnected && (
-              <Alert
-                icon={<IconAlertCircle size={16} />}
-                color="yellow"
-                variant="light"
-              >
-                Not connected to server. Please wait for connection to be
-                established.
-              </Alert>
-            )}
           </Stack>
         </Box>
       </Collapse>

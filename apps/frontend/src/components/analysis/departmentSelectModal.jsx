@@ -68,29 +68,32 @@ const DepartmentSelectModal = ({
                   key={department.id}
                   onClick={() => setSelectedDepartment(department.id)}
                   p="sm"
-                  style={(theme) => ({
-                    border: `2px solid ${
-                      selectedDepartment === department.id
-                        ? theme.colors.blue[5]
-                        : theme.colorScheme === 'dark'
-                          ? theme.colors.dark[4]
-                          : theme.colors.gray[3]
-                    }`,
-                    borderRadius: theme.radius.md,
-                    backgroundColor:
-                      selectedDepartment === department.id
-                        ? theme.colorScheme === 'dark'
-                          ? theme.fn.rgba(theme.colors.blue[9], 0.2)
-                          : theme.colors.blue[0]
-                        : 'transparent',
-                    transition: 'all 200ms ease',
-                    '&:hover': {
-                      borderColor:
+                  mod={{ selected: selectedDepartment === department.id }}
+                  styles={{
+                    root: {
+                      border: `2px solid ${
                         selectedDepartment === department.id
-                          ? theme.colors.blue[6]
-                          : theme.colors.gray[5],
+                          ? 'var(--mantine-color-blue-filled)'
+                          : 'var(--mantine-color-default-border)'
+                      }`,
+                      borderRadius: 'var(--mantine-radius-md)',
+                      backgroundColor:
+                        selectedDepartment === department.id
+                          ? 'var(--mantine-color-blue-light)'
+                          : 'transparent',
+                      transition: 'all 200ms ease',
+                      '&:hover': {
+                        borderColor:
+                          selectedDepartment === department.id
+                            ? 'var(--mantine-color-blue-filled-hover)'
+                            : 'var(--mantine-color-gray-filled)',
+                        backgroundColor:
+                          selectedDepartment === department.id
+                            ? 'var(--mantine-color-blue-light-hover)'
+                            : 'var(--mantine-color-gray-light)',
+                      },
                     },
-                  })}
+                  }}
                 >
                   <Group justify="space-between" wrap="nowrap">
                     <Group gap="sm">

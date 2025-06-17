@@ -10,8 +10,23 @@ export function useWebSocket() {
   }
 
   return {
+    // Core state
     analyses: context.analyses || {}, // Object: { analysisName: analysisData }
     departments: context.departments || {}, // Object: { deptId: deptData }
+
+    // Connection state
+    connectionStatus: context.connectionStatus || 'connecting',
+    backendStatus: context.backendStatus,
+    hasInitialData: context.hasInitialData || false, // NEW: Track initial data load
+
+    // WebSocket and loading state
+    socket: context.socket,
+    loadingAnalyses: context.loadingAnalyses || new Set(),
+
+    // Functions
+    addLoadingAnalysis: context.addLoadingAnalysis,
+    removeLoadingAnalysis: context.removeLoadingAnalysis,
+    requestStatusUpdate: context.requestStatusUpdate,
 
     // Utility functions for object-based operations
     getAnalysis: (name) => context.analyses?.[name] || null,

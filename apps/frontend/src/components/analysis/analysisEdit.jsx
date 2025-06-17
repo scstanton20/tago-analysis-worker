@@ -1,9 +1,8 @@
 // frontend/src/components/analysis/analysisEdit.jsx
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import Editor from '@monaco-editor/react';
 import { analysisService } from '../../services/analysisService';
-import { WebSocketContext } from '../../contexts/websocketContext/context';
 import {
   Modal,
   Stack,
@@ -22,6 +21,7 @@ import {
   IconX,
   IconAlertCircle,
 } from '@tabler/icons-react';
+import { useWebSocket } from '../../contexts/websocketContext';
 
 export default function EditAnalysisModal({
   onClose,
@@ -35,7 +35,7 @@ export default function EditAnalysisModal({
   const [newFileName, setNewFileName] = useState(initialAnalysis.name);
 
   // FIXED: Get analyses object from WebSocket context
-  const { analyses } = useContext(WebSocketContext);
+  const { analyses } = useWebSocket();
 
   // FIXED: Use direct object lookup instead of array.find()
   const currentAnalysis = analyses?.[initialAnalysis.name] || initialAnalysis;
