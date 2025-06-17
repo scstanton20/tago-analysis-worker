@@ -2,7 +2,7 @@
 import path from 'path';
 import { promises as fs } from 'fs';
 import { fork } from 'child_process';
-import { broadcastUpdate } from '../utils/websocket.js';
+import { broadcast } from '../utils/websocket.js'; // FIXED: Direct import of broadcast function
 import config from '../config/default.js';
 
 class AnalysisProcess {
@@ -84,11 +84,13 @@ class AnalysisProcess {
       console.error(`Error writing to log file ${this.logFile}:`, error);
     }
 
-    // Broadcast with sequence number for deduplication
-    broadcastUpdate('log', {
-      fileName: this.analysisName,
-      log: logEntry,
-      totalCount: this.totalLogCount,
+    broadcast({
+      type: 'log',
+      data: {
+        fileName: this.analysisName,
+        log: logEntry,
+        totalCount: this.totalLogCount,
+      },
     });
   }
 
@@ -247,12 +249,15 @@ class AnalysisProcess {
       this.lastRun = new Date().toISOString();
     }
 
-    broadcastUpdate('analysisStatus', {
-      fileName: this.analysisName,
-      status: this.status,
-      enabled: this.enabled,
-      lastRun: this.lastRun,
-      startTime: this.startTime,
+    broadcast({
+      type: 'analysisStatus',
+      data: {
+        fileName: this.analysisName,
+        status: this.status,
+        enabled: this.enabled,
+        lastRun: this.lastRun,
+        startTime: this.startTime,
+      },
     });
   }
 

@@ -1,5 +1,5 @@
 // frontend/src/components/departmentalSidebar.jsx
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -15,9 +15,6 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { create } from 'zustand';
-import { immer } from 'zustand/middleware/immer';
-import { useHotkeys } from 'react-hotkeys-hook';
 import { useWebSocket } from '../contexts/websocketContext/index';
 import {
   Box,
@@ -45,63 +42,6 @@ import {
   IconEdit,
   IconGripVertical,
 } from '@tabler/icons-react';
-
-// Zustand store for department management
-const useDepartmentStore = create(
-  immer((set) => ({
-    departments: [],
-    analyses: {},
-
-    setDepartments: (departments) =>
-      set((state) => {
-        state.departments = [...departments];
-      }),
-
-    setAnalyses: (analyses) =>
-      set((state) => {
-        state.analyses = analyses;
-      }),
-
-    addDepartment: (department) =>
-      set((state) => {
-        const existingIndex = state.departments.findIndex(
-          (d) => d.id === department.id,
-        );
-        if (existingIndex === -1) {
-          state.departments.push(department);
-          state.departments.sort((a, b) => a.order - b.order);
-        }
-      }),
-
-    updateDepartment: (id, updates) =>
-      set((state) => {
-        const index = state.departments.findIndex((d) => d.id === id);
-        if (index !== -1) {
-          state.departments[index] = {
-            ...state.departments[index],
-            ...updates,
-          };
-        }
-      }),
-
-    deleteDepartment: (id) =>
-      set((state) => {
-        state.departments = state.departments.filter((d) => d.id !== id);
-      }),
-
-    reorderDepartments: (departments) =>
-      set((state) => {
-        state.departments = [...departments];
-      }),
-
-    moveAnalysis: (analysisName, fromDept, toDept) =>
-      set((state) => {
-        if (state.analyses[analysisName]) {
-          state.analyses[analysisName].department = toDept;
-        }
-      }),
-  })),
-);
 
 // Sortable Department Item
 const SortableDepartmentItem = ({
@@ -180,13 +120,18 @@ const SortableDepartmentItem = ({
 };
 
 // Department Management Modal
-const DepartmentManagementModal = ({ opened, onClose }) => {
-  const { departments, reorderDepartments } = useDepartmentStore();
+const DepartmentManagementModal = ({ opened, onClose, departments }) => {
   const [newDeptName, setNewDeptName] = useState('');
   const [newDeptColor, setNewDeptColor] = useState('#3b82f6');
   const [editingId, setEditingId] = useState(null);
   const [editingName, setEditingName] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
+
+  // Convert departments object to sorted array for display
+  const departmentsArray = useMemo(
+    () => Object.values(departments).sort((a, b) => a.order - b.order),
+    [departments],
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -219,7 +164,7 @@ const DepartmentManagementModal = ({ opened, onClose }) => {
   const handleUpdateName = async (id) => {
     if (
       !editingName.trim() ||
-      editingName === departments.find((d) => d.id === id)?.name
+      editingName === departmentsArray.find((d) => d.id === id)?.name
     ) {
       setEditingId(null);
       return;
@@ -260,11 +205,9 @@ const DepartmentManagementModal = ({ opened, onClose }) => {
     const { active, over } = event;
 
     if (active.id !== over.id) {
-      const oldIndex = departments.findIndex((d) => d.id === active.id);
-      const newIndex = departments.findIndex((d) => d.id === over.id);
-      const newOrder = arrayMove(departments, oldIndex, newIndex);
-
-      reorderDepartments(newOrder);
+      const oldIndex = departmentsArray.findIndex((d) => d.id === active.id);
+      const newIndex = departmentsArray.findIndex((d) => d.id === over.id);
+      const newOrder = arrayMove(departmentsArray, oldIndex, newIndex);
 
       try {
         const response = await fetch('/api/departments/reorder', {
@@ -275,11 +218,9 @@ const DepartmentManagementModal = ({ opened, onClose }) => {
 
         if (!response.ok) {
           console.error('Failed to reorder departments');
-          reorderDepartments(departments);
         }
       } catch (error) {
         console.error('Error reordering departments:', error);
-        reorderDepartments(departments);
       }
     }
   };
@@ -340,11 +281,11 @@ const DepartmentManagementModal = ({ opened, onClose }) => {
             onDragEnd={handleDragEnd}
           >
             <SortableContext
-              items={departments.map((d) => d.id)}
+              items={departmentsArray.map((d) => d.id)}
               strategy={verticalListSortingStrategy}
             >
               <Stack gap="xs">
-                {departments.map((dept) => (
+                {departmentsArray.map((dept) => (
                   <Paper key={dept.id} p="xs" withBorder>
                     <Group gap="xs">
                       <ColorSwatch color={dept.color} size={20} />
@@ -431,37 +372,22 @@ export default function DepartmentalSidebar({
   onDepartmentSelect,
 }) {
   const mantineTheme = useMantineTheme();
-  const { analysesArray, departmentsArray } = useWebSocket();
-  const { departments, setDepartments, setAnalyses, moveAnalysis } =
-    useDepartmentStore();
+
+  const { departments, getDepartmentAnalysisCount } = useWebSocket();
 
   const [showManageModal, setShowManageModal] = useState(false);
   const [draggedAnalysis, setDraggedAnalysis] = useState(null);
   const [activeDeptId, setActiveDeptId] = useState(null);
 
-  // Initialize departments from WebSocket
-  useEffect(() => {
-    if (departmentsArray && departmentsArray.length > 0) {
-      setDepartments(departmentsArray);
-    }
-  }, [departmentsArray, setDepartments]);
+  // FIXED: Convert departments object to sorted array for display (memoized)
+  const departmentsArray = useMemo(
+    () => Object.values(departments).sort((a, b) => a.order - b.order),
+    [departments],
+  );
 
-  // Initialize analyses from WebSocket
-  useEffect(() => {
-    if (analysesArray) {
-      const analysesObj = {};
-      analysesArray.forEach((analysis) => {
-        analysesObj[analysis.name] = analysis;
-      });
-      setAnalyses(analysesObj);
-    }
-  }, [analysesArray, setAnalyses]);
-
-  // Keyboard shortcuts
-  useHotkeys('cmd+k, ctrl+k', () => setShowManageModal(true));
-
+  // Use the efficient count function from WebSocket hook
   const getAnalysisCount = (deptId) => {
-    return analysesArray?.filter((a) => a.department === deptId).length || 0;
+    return getDepartmentAnalysisCount(deptId);
   };
 
   const handleDepartmentClick = (deptId) => {
@@ -483,8 +409,9 @@ export default function DepartmentalSidebar({
       );
 
       if (response.ok) {
-        const result = await response.json();
-        moveAnalysis(draggedAnalysis, result.from, result.to);
+        console.log(
+          `Moved analysis ${draggedAnalysis} to department ${deptId}`,
+        );
       }
     } catch (error) {
       console.error('Error moving analysis:', error);
@@ -497,12 +424,11 @@ export default function DepartmentalSidebar({
     const { active, over } = event;
 
     if (active.id !== over?.id) {
-      const oldIndex = departments.findIndex((d) => d.id === active.id);
-      const newIndex = departments.findIndex((d) => d.id === over.id);
+      const oldIndex = departmentsArray.findIndex((d) => d.id === active.id);
+      const newIndex = departmentsArray.findIndex((d) => d.id === over.id);
 
       if (oldIndex !== -1 && newIndex !== -1) {
-        const newOrder = arrayMove(departments, oldIndex, newIndex);
-        setDepartments(newOrder);
+        const newOrder = arrayMove(departmentsArray, oldIndex, newIndex);
 
         try {
           const response = await fetch('/api/departments/reorder', {
@@ -513,11 +439,9 @@ export default function DepartmentalSidebar({
 
           if (!response.ok) {
             console.error('Failed to reorder departments');
-            setDepartments(departments);
           }
         } catch (error) {
           console.error('Error reordering departments:', error);
-          setDepartments(departments);
         }
       }
     }
@@ -571,51 +495,59 @@ export default function DepartmentalSidebar({
       {/* Department List */}
       <ScrollArea style={{ flex: 1 }} p="md">
         <Stack gap="xs">
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-            onDragStart={(event) => setActiveDeptId(event.active.id)}
-          >
-            <SortableContext
-              items={departments.map((d) => d.id)}
-              strategy={verticalListSortingStrategy}
+          {departmentsArray.length === 0 ? (
+            <Text c="dimmed" size="sm" ta="center" py="md">
+              Loading departments...
+            </Text>
+          ) : (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+              onDragStart={(event) => setActiveDeptId(event.active.id)}
             >
-              {departments.map((dept) => (
-                <div
-                  key={dept.id}
-                  onDrop={(e) => handleAnalysisDrop(e, dept.id)}
-                  onDragOver={(e) => e.preventDefault()}
-                  style={{
-                    borderRadius: mantineTheme.radius.md,
-                    outline: draggedAnalysis
-                      ? `2px solid ${mantineTheme.colors.blue[4]}`
-                      : 'none',
-                    outlineOffset: '2px',
-                  }}
-                >
-                  <SortableDepartmentItem
-                    department={dept}
-                    isSelected={selectedDepartment === dept.id}
-                    onClick={() => handleDepartmentClick(dept.id)}
-                    analysisCount={getAnalysisCount(dept.id)}
-                  />
-                </div>
-              ))}
-            </SortableContext>
-            <DragOverlay>
-              {activeDeptId ? (
-                <Box style={{ opacity: 0.8 }}>
-                  <SortableDepartmentItem
-                    department={departments.find((d) => d.id === activeDeptId)}
-                    isSelected={false}
-                    onClick={() => {}}
-                    analysisCount={getAnalysisCount(activeDeptId)}
-                  />
-                </Box>
-              ) : null}
-            </DragOverlay>
-          </DndContext>
+              <SortableContext
+                items={departmentsArray.map((d) => d.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                {departmentsArray.map((dept) => (
+                  <div
+                    key={dept.id}
+                    onDrop={(e) => handleAnalysisDrop(e, dept.id)}
+                    onDragOver={(e) => e.preventDefault()}
+                    style={{
+                      borderRadius: mantineTheme.radius.md,
+                      outline: draggedAnalysis
+                        ? `2px solid ${mantineTheme.colors.blue[4]}`
+                        : 'none',
+                      outlineOffset: '2px',
+                    }}
+                  >
+                    <SortableDepartmentItem
+                      department={dept}
+                      isSelected={selectedDepartment === dept.id}
+                      onClick={() => handleDepartmentClick(dept.id)}
+                      analysisCount={getAnalysisCount(dept.id)}
+                    />
+                  </div>
+                ))}
+              </SortableContext>
+              <DragOverlay>
+                {activeDeptId ? (
+                  <Box style={{ opacity: 0.8 }}>
+                    <SortableDepartmentItem
+                      department={departmentsArray.find(
+                        (d) => d.id === activeDeptId,
+                      )}
+                      isSelected={false}
+                      onClick={() => {}}
+                      analysisCount={getAnalysisCount(activeDeptId)}
+                    />
+                  </Box>
+                ) : null}
+              </DragOverlay>
+            </DndContext>
+          )}
         </Stack>
       </ScrollArea>
 
@@ -623,6 +555,7 @@ export default function DepartmentalSidebar({
       <DepartmentManagementModal
         opened={showManageModal}
         onClose={() => setShowManageModal(false)}
+        departments={departments}
       />
     </Stack>
   );

@@ -135,7 +135,12 @@ export function broadcast(data) {
   const message = JSON.stringify(data);
   clients.forEach((client) => {
     if (client.readyState === client.OPEN) {
-      client.send(message);
+      try {
+        client.send(message);
+      } catch (error) {
+        console.error('Error broadcasting message:', error);
+        clients.delete(client);
+      }
     }
   });
 }
@@ -259,15 +264,21 @@ export function broadcastAnalysisMove(analysisName, fromDept, toDept) {
     timestamp: new Date().toISOString(),
   });
 }
-
-// Original broadcast functions for analysis updates - enhanced for department support
-export function broadcastUpdate(analysisName, update) {
-  broadcast({
-    type: 'analysisUpdate',
-    analysisName,
-    update,
-    timestamp: new Date().toISOString(),
-  });
+export function broadcastUpdate(type, data) {
+  if (type === 'log') {
+    broadcast({
+      type: 'log',
+      data: data,
+    });
+  } else {
+    // For other update types, use the original structure
+    broadcast({
+      type: 'analysisUpdate',
+      analysisName: type,
+      update: data,
+      timestamp: new Date().toISOString(),
+    });
+  }
 }
 
 export function broadcastStatusUpdate() {

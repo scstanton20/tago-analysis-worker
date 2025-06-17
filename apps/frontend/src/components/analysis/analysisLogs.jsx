@@ -151,6 +151,7 @@ const AnalysisLogs = ({ analysis }) => {
   // Reset when logs are cleared
   useEffect(() => {
     if (websocketLogs.length === 0 && hasLoadedInitial.current) {
+      console.log('Logs cleared, resetting state');
       setInitialLogs([]);
       setAdditionalLogs([]);
       setPage(1);
@@ -175,6 +176,8 @@ const AnalysisLogs = ({ analysis }) => {
       return new Date(b.timestamp) - new Date(a.timestamp);
     });
 
+  console.log(`Combined ${allLogs.length} total logs for display`);
+
   return (
     <Paper
       mt="md"
@@ -191,7 +194,7 @@ const AnalysisLogs = ({ analysis }) => {
       <Box p="sm">
         <Group justify="space-between">
           <Text size="sm" fw={600}>
-            Logs
+            Logs {websocketLogs.length > 0 && '(Live)'}
           </Text>
           <Group gap="xs">
             {(isLoading || isLoadingMore.current) && <Loader size="xs" />}
@@ -238,7 +241,8 @@ const AnalysisLogs = ({ analysis }) => {
         ) : allLogs.length === 0 ? (
           <Center h="100%">
             <Text c="dimmed" size="sm">
-              No logs available.
+              No logs available.{' '}
+              {analysis.status === 'running' && 'Waiting for new logs...'}
             </Text>
           </Center>
         ) : (

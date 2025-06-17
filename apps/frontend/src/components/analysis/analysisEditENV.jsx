@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import Editor from '@monaco-editor/react';
 import { analysisService } from '../../services/analysisService';
+import { useWebSocket } from '../../contexts/websocketContext'; // Added for consistency
 import {
   Modal,
   Stack,
@@ -21,28 +22,34 @@ export default function EditAnalysisENVModal({ onClose, analysis }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // ADDED: Get current analysis from WebSocket context for consistency
+  const { getAnalysis } = useWebSocket();
+  const currentAnalysis = getAnalysis(analysis.name) || analysis;
+
   useEffect(() => {
     async function loadContent() {
       try {
         setIsLoading(true);
         setError(null);
-        console.log('Loading ENV content for:', analysis.name);
+        console.log('Loading ENV content for:', currentAnalysis.name);
+
         const fileContent = await analysisService.getAnalysisENVContent(
-          analysis.name,
+          currentAnalysis.name,
         );
+
         setContent(fileContent);
       } catch (error) {
-        console.error('Failed to load analysis content:', error);
+        console.error('Failed to load analysis ENV content:', error);
         setError(error.message);
       } finally {
         setIsLoading(false);
       }
     }
 
-    if (analysis.name) {
+    if (currentAnalysis.name) {
       loadContent();
     }
-  }, [analysis.name]);
+  }, [currentAnalysis.name]);
 
   const handleEditorChange = (value) => {
     // Ensure value is a string
@@ -75,8 +82,9 @@ export default function EditAnalysisENVModal({ onClose, analysis }) {
       setIsLoading(true);
       setError(null);
 
-      await analysisService.updateAnalysisENV(analysis.name, content);
+      await analysisService.updateAnalysisENV(currentAnalysis.name, content);
 
+      console.log('ENV content saved successfully');
       alert('Analysis ENV updated successfully!');
       setHasChanges(false);
       onClose();
@@ -93,7 +101,17 @@ export default function EditAnalysisENVModal({ onClose, analysis }) {
       opened
       onClose={onClose}
       size="90%"
-      title={<Text fw={600}>Editing Environment: {analysis.name}</Text>}
+      title={
+        <Group gap="xs">
+          <Text fw={600}>Editing Environment:</Text>
+          <Text>{currentAnalysis.name}</Text>
+          {currentAnalysis.status && (
+            <Text size="sm" c="dimmed">
+              ({currentAnalysis.status})
+            </Text>
+          )}
+        </Group>
+      }
       styles={{
         body: {
           height: 'calc(100vh - 200px)',
@@ -113,6 +131,25 @@ export default function EditAnalysisENVModal({ onClose, analysis }) {
           </Alert>
         )}
 
+        <Alert
+          color="blue"
+          variant="light"
+          title="Environment Variables Format"
+        >
+          <Text size="sm">
+            Use{' '}
+            <Text span ff="monospace">
+              KEY=value
+            </Text>{' '}
+            format. Keys will be automatically normalized to uppercase. Comments
+            starting with{' '}
+            <Text span ff="monospace">
+              #
+            </Text>{' '}
+            are preserved.
+          </Text>
+        </Alert>
+
         <Box style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
           <LoadingOverlay visible={isLoading} />
           {!isLoading && (
@@ -131,6 +168,7 @@ export default function EditAnalysisENVModal({ onClose, analysis }) {
                 lineNumbers: 'on',
                 folding: true,
                 foldingStrategy: 'indentation',
+                readOnly: isLoading,
               }}
             />
           )}
@@ -141,13 +179,14 @@ export default function EditAnalysisENVModal({ onClose, analysis }) {
           pt="md"
           style={{ borderTop: '1px solid var(--mantine-color-gray-3)' }}
         >
-          <Button variant="default" onClick={onClose}>
+          <Button variant="default" onClick={onClose} disabled={isLoading}>
             Cancel
           </Button>
           <Button
             onClick={handleSave}
             disabled={!hasChanges}
             loading={isLoading}
+            color="green"
           >
             Save Changes
           </Button>

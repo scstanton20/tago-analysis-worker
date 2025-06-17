@@ -4,7 +4,6 @@ import { fetchWithHeaders, handleResponse } from '../utils/apiUtils';
 export const analysisService = {
   async getAnalyses() {
     try {
-      console.log('Fetching analyses list');
       const response = await fetchWithHeaders('/analyses', {
         method: 'GET',
       });
@@ -297,8 +296,6 @@ export const analysisService = {
           acc[key.trim()] = value || '';
           return acc;
         }, {});
-
-      console.log('Sending env update:', envObject);
 
       const response = await fetchWithHeaders(
         `/analyses/${fileName}/environment`,

@@ -24,23 +24,33 @@ import { useIsMobile } from './hooks/useIsMobile';
 function AppContent() {
   const mantineTheme = useMantineTheme();
   const { theme, toggleTheme } = useTheme();
-  const { analysesArray, departmentsArray } = useWebSocket();
+  const { analyses, departments, getDepartment } = useWebSocket();
+
   const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure();
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
   const isMobile = useIsMobile();
 
-  // Filter analyses based on selected department
-  const filteredAnalyses = selectedDepartment
-    ? analysesArray?.filter(
-        (analysis) => analysis.department === selectedDepartment,
-      )
-    : analysesArray;
+  const getFilteredAnalyses = () => {
+    if (!selectedDepartment) {
+      // Return all analyses as object
+      return analyses;
+    }
 
-  // Get current department info
-  const currentDepartment = departmentsArray?.find(
-    (d) => d.id === selectedDepartment,
-  );
+    // Filter analyses by department and return as object
+    const filteredAnalyses = {};
+    Object.entries(analyses).forEach(([name, analysis]) => {
+      if (analysis.department === selectedDepartment) {
+        filteredAnalyses[name] = analysis;
+      }
+    });
+    return filteredAnalyses;
+  };
+
+  // FIXED: Get current department using object lookup
+  const currentDepartment = selectedDepartment
+    ? getDepartment(selectedDepartment)
+    : null;
 
   if (isMobile) {
     return (
@@ -134,10 +144,13 @@ function AppContent() {
           targetDepartment={selectedDepartment}
           departmentName={currentDepartment?.name || 'All Departments'}
         />
+
+        {/* FIXED: Pass object-based data to AnalysisList */}
         <AnalysisList
-          analyses={filteredAnalyses}
+          analyses={getFilteredAnalyses()} // Object format
           showDepartmentLabels={!selectedDepartment}
-          departments={departmentsArray || []}
+          departments={departments} // Object format
+          selectedDepartment={selectedDepartment} // For internal filtering
         />
       </AppShell.Main>
     </AppShell>

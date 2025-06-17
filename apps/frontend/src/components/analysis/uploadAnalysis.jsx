@@ -58,12 +58,12 @@ export default function AnalysisCreator({
     addLoadingAnalysis,
     removeLoadingAnalysis,
     loadingAnalyses,
-    analyses,
+    analyses, // FIXED: This is now an object
   } = useWebSocket();
 
-  // Computed values
+  // FIXED: Computed values - handle object instead of array
   const existingAnalyses = analyses
-    ? analyses.map((analysis) => analysis.name)
+    ? Object.keys(analyses) // Get analysis names from object keys
     : [];
   const finalExistingAnalyses =
     existingAnalyses.length > 0 ? existingAnalyses : fetchedAnalyses;
@@ -92,11 +92,15 @@ export default function AnalysisCreator({
   // Effects
   useEffect(() => {
     const fetchAnalyses = async () => {
-      if (isExpanded && (!analyses || analyses.length === 0)) {
+      if (isExpanded && (!analyses || Object.keys(analyses).length === 0)) {
         setIsFetchingAnalyses(true);
         try {
           const data = await analysisService.getAnalyses();
-          setFetchedAnalyses(data.map((analysis) => analysis.name));
+          // FIXED: Handle response format - convert to array of names
+          const analysisNames = Array.isArray(data)
+            ? data.map((analysis) => analysis.name)
+            : Object.keys(data);
+          setFetchedAnalyses(analysisNames);
         } catch (error) {
           console.error('Error fetching analyses:', error);
         } finally {

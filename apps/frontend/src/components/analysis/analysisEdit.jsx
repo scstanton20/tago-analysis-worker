@@ -34,12 +34,11 @@ export default function EditAnalysisModal({
   const [isEditingName, setIsEditingName] = useState(false);
   const [newFileName, setNewFileName] = useState(initialAnalysis.name);
 
-  // Get analyses from WebSocket context
+  // FIXED: Get analyses object from WebSocket context
   const { analyses } = useContext(WebSocketContext);
 
-  // Find the current analysis from the WebSocket context
-  const currentAnalysis =
-    analyses.find((a) => a.name === initialAnalysis.name) || initialAnalysis;
+  // FIXED: Use direct object lookup instead of array.find()
+  const currentAnalysis = analyses?.[initialAnalysis.name] || initialAnalysis;
 
   // Update analysis name when it changes via WebSocket
   useEffect(() => {

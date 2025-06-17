@@ -1,5 +1,5 @@
 // frontend/src/components/analysis/analysisList.jsx
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useWebSocket } from '../../contexts/websocketContext';
 import AnalysisItem from './analysisItem';
 import {
@@ -11,26 +11,82 @@ import {
   Center,
   Loader,
   Box,
+  Alert,
 } from '@mantine/core';
-import { IconFileText } from '@tabler/icons-react';
+import { IconFileText, IconInfoCircle } from '@tabler/icons-react';
 
 export default function AnalysisList({
-  analyses = null, // Accept filtered analyses as prop
+  analyses = null,
   showDepartmentLabels = false,
-  departments = [],
+  departments = {},
+  selectedDepartment = null,
 }) {
-  const { analyses: allAnalyses = [], connectionStatus } = useWebSocket();
+  const {
+    analyses: allAnalyses = {},
+    departments: allDepartments = {},
+    connectionStatus,
+    getDepartment,
+  } = useWebSocket();
+
   const [openLogIds, setOpenLogIds] = useState(new Set());
 
-  // Use provided analyses (filtered) or fall back to all analyses
-  const analysesToShow =
-    analyses !== null ? Object.values(analyses) : allAnalyses;
+  // Determine which analyses to show (memoized for performance)
+  const analysesToShow = useMemo(() => {
+    // If pre-filtered analyses are provided
+    if (analyses !== null) {
+      if (typeof analyses === 'object') {
+        return analyses;
+      }
+    }
 
+    // Use WebSocket data and apply department filtering
+    if (selectedDepartment) {
+      const filtered = {};
+      Object.entries(allAnalyses).forEach(([name, analysis]) => {
+        if (analysis.department === selectedDepartment) {
+          filtered[name] = analysis;
+        }
+      });
+      return filtered;
+    }
+
+    return allAnalyses;
+  }, [analyses, allAnalyses, selectedDepartment]);
+
+  // Convert to array for rendering (memoized)
+  const analysesArray = useMemo(() => {
+    const array = Object.values(analysesToShow).filter(
+      (analysis) => analysis && analysis.name, // Ensure valid analysis objects
+    );
+    return array;
+  }, [analysesToShow]);
+
+  // Get departments object for lookups
+  const departmentsObj =
+    Object.keys(departments).length > 0 ? departments : allDepartments;
+
+  // Helper function to get department info
+  const getDepartmentInfo = (departmentId) => {
+    if (!departmentId) {
+      return { name: 'Uncategorized', color: '#9ca3af' };
+    }
+
+    const department = departmentsObj[departmentId];
+    if (department) {
+      return department;
+    }
+
+    // Fallback for missing departments
+    console.warn(`Department ${departmentId} not found`);
+    return { name: 'Unknown Department', color: '#ef4444' };
+  };
+
+  // Log toggle functions
   const toggleAllLogs = () => {
-    if (openLogIds.size === analysesToShow.length) {
+    if (openLogIds.size === analysesArray.length) {
       setOpenLogIds(new Set());
     } else {
-      setOpenLogIds(new Set(analysesToShow.map((analysis) => analysis.name)));
+      setOpenLogIds(new Set(analysesArray.map((analysis) => analysis.name)));
     }
   };
 
@@ -46,12 +102,7 @@ export default function AnalysisList({
     });
   };
 
-  // Helper function to get department info
-  const getDepartmentInfo = (departmentId) => {
-    const department = departments.find((d) => d.id === departmentId);
-    return department || { name: 'Uncategorized', color: '#9ca3af' };
-  };
-
+  // Handle loading state
   if (connectionStatus === 'connecting') {
     return (
       <Paper p="lg" withBorder radius="md">
@@ -61,8 +112,8 @@ export default function AnalysisList({
           </Text>
           <Center py="xl">
             <Group>
-              <Text c="dimmed">Connecting to server...</Text>
               <Loader size="sm" />
+              <Text c="dimmed">Connecting to server...</Text>
             </Group>
           </Center>
         </Stack>
@@ -70,24 +121,74 @@ export default function AnalysisList({
     );
   }
 
-  const hasAnalyses =
-    Array.isArray(analysesToShow) && analysesToShow.length > 0;
+  // Handle disconnected state
+  if (connectionStatus === 'disconnected') {
+    return (
+      <Paper p="lg" withBorder radius="md">
+        <Stack>
+          <Text size="lg" fw={600}>
+            Available Analyses
+          </Text>
+          <Alert
+            icon={<IconInfoCircle size={16} />}
+            color="red"
+            variant="light"
+          >
+            Disconnected from server. Attempting to reconnect...
+          </Alert>
+        </Stack>
+      </Paper>
+    );
+  }
+
+  const hasAnalyses = analysesArray.length > 0;
+  const totalAnalyses = Object.keys(allAnalyses).length;
+
+  // Get current department info for display
+  const currentDepartmentInfo = selectedDepartment
+    ? getDepartment?.(selectedDepartment)
+    : null;
 
   return (
     <Paper p="lg" withBorder radius="md">
       <Stack>
+        {/* Header */}
         <Group justify="space-between" mb="md">
           <Box>
             <Text size="lg" fw={600}>
-              Available Analyses
+              {selectedDepartment ? 'Department Analyses' : 'All Analyses'}
             </Text>
-            {hasAnalyses && (
-              <Text size="sm" c="dimmed" mt={4}>
-                Showing {analysesToShow.length} analysis
-                {analysesToShow.length !== 1 ? 'es' : ''}
-              </Text>
+
+            {/* Department info */}
+            {selectedDepartment && currentDepartmentInfo && (
+              <Group gap="xs" mt={4}>
+                <Box
+                  w={12}
+                  h={12}
+                  style={{
+                    borderRadius: '50%',
+                    backgroundColor: currentDepartmentInfo.color,
+                  }}
+                />
+                <Text size="sm" c="dimmed" fw={500}>
+                  {currentDepartmentInfo.name}
+                </Text>
+              </Group>
             )}
+
+            {/* Count info */}
+            <Text size="sm" c="dimmed" mt={4}>
+              {hasAnalyses
+                ? selectedDepartment
+                  ? `Showing ${analysesArray.length} of ${totalAnalyses} analyses`
+                  : `${analysesArray.length} analysis${analysesArray.length !== 1 ? 'es' : ''} available`
+                : selectedDepartment
+                  ? 'No analyses in this department'
+                  : 'No analyses available'}
+            </Text>
           </Box>
+
+          {/* Log toggle button */}
           {hasAnalyses && (
             <Button
               onClick={toggleAllLogs}
@@ -95,25 +196,23 @@ export default function AnalysisList({
               size="sm"
               leftSection={<IconFileText size={16} />}
             >
-              {openLogIds.size === analysesToShow.length
+              {openLogIds.size === analysesArray.length
                 ? 'Close All Logs'
                 : 'Open All Logs'}
             </Button>
           )}
         </Group>
 
+        {/* Content */}
         <Stack gap="md">
           {hasAnalyses ? (
-            analysesToShow.map((analysis) => {
+            analysesArray.map((analysis) => {
               const departmentInfo = getDepartmentInfo(analysis.department);
 
               return (
-                <Stack
-                  key={`${analysis.name}-${analysis.created || Date.now()}`}
-                  gap="xs"
-                >
-                  {/* Department Label (if enabled) */}
-                  {showDepartmentLabels && (
+                <Stack key={`analysis-${analysis.name}`} gap="xs">
+                  {/* Department Label (when showing all analyses) */}
+                  {showDepartmentLabels && !selectedDepartment && (
                     <Group gap="xs">
                       <Box
                         w={12}
@@ -142,18 +241,40 @@ export default function AnalysisList({
               );
             })
           ) : (
+            /* Empty State */
             <Center py="xl">
-              <Stack align="center" gap="xs">
-                <Text c="dimmed" size="md">
-                  {analyses !== null
-                    ? 'No analyses found in this department.'
-                    : 'No analyses available.'}
-                </Text>
-                <Text c="dimmed" size="sm">
-                  {analyses !== null
-                    ? 'Try selecting a different department or create a new analysis.'
-                    : 'Upload one to get started.'}
-                </Text>
+              <Stack align="center" gap="md">
+                <Box ta="center">
+                  <Text c="dimmed" size="md" mb="xs">
+                    {selectedDepartment
+                      ? 'No analyses found in this department'
+                      : totalAnalyses === 0
+                        ? 'No analyses available'
+                        : 'Loading analyses...'}
+                  </Text>
+
+                  <Text c="dimmed" size="sm">
+                    {selectedDepartment
+                      ? 'Try selecting a different department or create a new analysis here.'
+                      : totalAnalyses === 0
+                        ? 'Upload an analysis file to get started.'
+                        : 'Please wait while analyses load from the server.'}
+                  </Text>
+                </Box>
+
+                {/* Additional context for department view */}
+                {selectedDepartment && currentDepartmentInfo && (
+                  <Alert
+                    icon={<IconInfoCircle size={16} />}
+                    color="blue"
+                    variant="light"
+                    style={{ maxWidth: 400 }}
+                  >
+                    You can create a new analysis for the{' '}
+                    <strong>{currentDepartmentInfo.name}</strong> department
+                    using the analysis creator above.
+                  </Alert>
+                )}
               </Stack>
             </Center>
           )}
