@@ -22,7 +22,6 @@ import DepartmentalSidebar from './components/departmentalSidebar';
 import AnalysisList from './components/analysis/analysisList';
 import AnalysisCreator from './components/analysis/uploadAnalysis';
 import ConnectionStatus from './components/connectionStatus';
-import { useIsMobile } from './hooks/useIsMobile';
 
 function AppContent() {
   const {
@@ -36,7 +35,6 @@ function AppContent() {
   const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure();
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
-  const isMobile = useIsMobile();
   const { setColorScheme } = useMantineColorScheme();
   const computedColorScheme = useComputedColorScheme('light');
 
@@ -60,26 +58,6 @@ function AppContent() {
   const currentDepartment = selectedDepartment
     ? getDepartment(selectedDepartment)
     : null;
-
-  if (isMobile) {
-    return (
-      <Box
-        ta="center"
-        p="xl"
-        style={{
-          minHeight: '100vh',
-          background: 'var(--mantine-color-body)',
-        }}
-      >
-        <Text size="lg" fw={500} mb="md">
-          Mobile View Not Supported
-        </Text>
-        <Text c="dimmed">
-          Please use a desktop browser to access this application.
-        </Text>
-      </Box>
-    );
-  }
 
   // Show initial loading overlay only when we haven't loaded data yet
   const isInitialLoading =
