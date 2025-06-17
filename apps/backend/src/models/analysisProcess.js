@@ -13,8 +13,7 @@ class AnalysisProcess {
     this.process = null;
     this.enabled = false;
     this.status = 'stopped';
-    this.lastRun = null;
-    this.startTime = null;
+    this.lastStartTime = null;
     this.stdoutBuffer = '';
     this.stderrBuffer = '';
     this.logFile = path.join(
@@ -244,9 +243,7 @@ class AnalysisProcess {
     this.enabled = enabled;
 
     if (this.type === 'listener' && status === 'running') {
-      this.startTime = new Date().toISOString();
-    } else if (status === 'running') {
-      this.lastRun = new Date().toISOString();
+      this.lastStartTime = new Date().toISOString();
     }
 
     broadcast({
@@ -255,8 +252,7 @@ class AnalysisProcess {
         fileName: this.analysisName,
         status: this.status,
         enabled: this.enabled,
-        lastRun: this.lastRun,
-        startTime: this.startTime,
+        lastStartTime: this.lastStartTime,
       },
     });
   }

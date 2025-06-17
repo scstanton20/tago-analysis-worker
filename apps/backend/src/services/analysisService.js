@@ -70,8 +70,7 @@ class AnalysisService {
         type: analysis.type,
         enabled: analysis.enabled,
         status: analysis.status,
-        lastRun: analysis.lastRun,
-        startTime: analysis.startTime,
+        lastStartTime: analysis.lastStartTime,
         department: analysis.department || 'uncategorized',
       };
     });
@@ -183,8 +182,7 @@ class AnalysisService {
             type: 'listener',
             status: analysis?.status || 'stopped',
             enabled: analysis?.enabled || false,
-            lastRun: analysis?.lastRun,
-            startTime: analysis?.startTime,
+            lastStartTime: analysis?.lastStartTime,
             department: analysis?.department || 'uncategorized',
           };
         } catch (error) {
@@ -721,8 +719,7 @@ class AnalysisService {
       type: 'listener',
       enabled: false,
       status: 'stopped',
-      lastRun: null,
-      startTime: null,
+      lastStartTime: null,
       department: 'uncategorized',
     };
 
@@ -732,8 +729,7 @@ class AnalysisService {
     Object.assign(analysis, {
       enabled: fullConfig.enabled,
       status: fullConfig.status,
-      lastRun: fullConfig.lastRun,
-      startTime: fullConfig.startTime,
+      lastStartTime: fullConfig.lastStartTime,
       department: fullConfig.department,
     });
 
