@@ -1,13 +1,39 @@
+// frontend/src/components/analysis/uploadAnalysis.jsx
 import { useState, useRef, useEffect } from 'react';
 import { analysisService } from '../../services/analysisService';
 import { useWebSocket } from '../../contexts/websocketContext/index';
 import Editor from '@monaco-editor/react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import {
+  Paper,
+  Stack,
+  Group,
+  Text,
+  Button,
+  TextInput,
+  FileInput,
+  Tabs,
+  Alert,
+  Collapse,
+  ActionIcon,
+  Box,
+} from '@mantine/core';
+import {
+  IconChevronDown,
+  IconChevronUp,
+  IconUpload,
+  IconFile,
+  IconAlertCircle,
+  IconX,
+} from '@tabler/icons-react';
 import sanitize from 'sanitize-filename';
 
 const DEFAULT_EDITOR_CONTENT = '// Write your analysis code here';
 
-export default function AnalysisCreator() {
+export default function AnalysisCreator({
+  targetDepartment = null,
+  departmentName = null,
+  onClose = null,
+}) {
   // Form state
   const [mode, setMode] = useState('upload');
   const [selectedFile, setSelectedFile] = useState(null);
@@ -22,33 +48,28 @@ export default function AnalysisCreator() {
   const [error, setError] = useState(null);
   const [fetchedAnalyses, setFetchedAnalyses] = useState([]);
   const [isFetchingAnalyses, setIsFetchingAnalyses] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Refs
   const fileInputRef = useRef(null);
 
   // WebSocket context
-  const {
-    connectionStatus,
-    addLoadingAnalysis,
-    removeLoadingAnalysis,
-    loadingAnalyses,
-    analyses,
-  } = useWebSocket();
+  const { loadingAnalyses, analyses } = useWebSocket();
 
-  // Computed values
+  // FIXED: Computed values - handle object instead of array
   const existingAnalyses = analyses
-    ? analyses.map((analysis) => analysis.name)
+    ? Object.keys(analyses) // Get analysis names from object keys
     : [];
   const finalExistingAnalyses =
     existingAnalyses.length > 0 ? existingAnalyses : fetchedAnalyses;
   const currentAnalysisName =
     mode === 'upload' ? editableFileName : analysisName;
   const isCurrentAnalysisLoading =
-    currentAnalysisName && loadingAnalyses.has(currentAnalysisName);
-  const isConnected = connectionStatus === 'connected';
+    currentAnalysisName &&
+    (loadingAnalyses.has(currentAnalysisName) || isUploading);
 
   // Form validation and state checks
-  const isInputDisabled = isCurrentAnalysisLoading || !isConnected;
+  const isInputDisabled = isCurrentAnalysisLoading;
   const hasFormContent =
     selectedFile ||
     editorContent !== DEFAULT_EDITOR_CONTENT ||
@@ -57,7 +78,6 @@ export default function AnalysisCreator() {
   const showCancelButton = formTouched || hasFormContent || error;
   const isSaveDisabled =
     isCurrentAnalysisLoading ||
-    !isConnected ||
     (mode === 'create' && !analysisName) ||
     (mode === 'upload' && (!selectedFile || !editableFileName)) ||
     error;
@@ -66,11 +86,14 @@ export default function AnalysisCreator() {
   // Effects
   useEffect(() => {
     const fetchAnalyses = async () => {
-      if (isExpanded && (!analyses || analyses.length === 0)) {
+      if (isExpanded && (!analyses || Object.keys(analyses).length === 0)) {
         setIsFetchingAnalyses(true);
         try {
           const data = await analysisService.getAnalyses();
-          setFetchedAnalyses(data.map((analysis) => analysis.name));
+          const analysisNames = Array.isArray(data)
+            ? data.map((analysis) => analysis.name)
+            : Object.keys(data);
+          setFetchedAnalyses(analysisNames);
         } catch (error) {
           console.error('Error fetching analyses:', error);
         } finally {
@@ -119,9 +142,11 @@ export default function AnalysisCreator() {
   };
 
   // Event handlers
-  const handleFileChange = (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
+  const handleFileChange = (file) => {
+    if (!file) {
+      resetFileSelection();
+      return;
+    }
 
     setFormTouched(true);
 
@@ -196,6 +221,7 @@ export default function AnalysisCreator() {
     }
 
     setError(null);
+    setIsUploading(true);
 
     try {
       let file;
@@ -207,21 +233,31 @@ export default function AnalysisCreator() {
         const blob = new Blob([editorContent], { type: 'text/javascript' });
         file = new File([blob], finalFileName, { type: 'text/javascript' });
       }
-
-      addLoadingAnalysis(finalFileName);
-      await analysisService.uploadAnalysis(file, analysisType);
+      await analysisService.uploadAnalysis(
+        file,
+        analysisType,
+        targetDepartment,
+      );
 
       window.alert(
-        `Successfully ${mode === 'upload' ? 'uploaded' : 'created'} analysis ${finalFileName}`,
+        `Successfully ${mode === 'upload' ? 'uploaded' : 'created'} analysis ${finalFileName}${
+          departmentName && departmentName !== 'All Departments'
+            ? ` in ${departmentName}`
+            : ''
+        }`,
       );
 
       resetForm();
-    } catch (error) {
-      if (finalFileName) {
-        removeLoadingAnalysis(finalFileName);
+
+      // If onClose was provided, close the component
+      if (onClose) {
+        onClose();
       }
+    } catch (error) {
       setError(error.message || 'Failed to save analysis');
       console.error('Save failed:', error);
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -238,221 +274,212 @@ export default function AnalysisCreator() {
     setError(null);
     setFormTouched(false);
     setIsExpanded(false);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
   };
 
   const resetFileSelection = () => {
     setSelectedFile(null);
     setEditableFileName('');
-    if (fileInputRef.current) {
-      fileInputRef.current.value = null;
-    }
   };
 
-  // Render helpers
-  const renderTabButton = (tabMode, label) => (
-    <button
-      onClick={() => handleModeChange(tabMode)}
-      className={`py-4 px-1 border-b-2 font-medium text-sm ${
-        mode === tabMode
-          ? 'border-blue-500 text-blue-600'
-          : 'border-transparent text-gray-500'
-      } ${
-        isTabDisabled && mode !== tabMode
-          ? 'opacity-50 cursor-not-allowed'
-          : 'hover:text-gray-700 hover:border-gray-300'
-      }`}
-      disabled={isTabDisabled && mode !== tabMode}
-    >
-      {label}
-    </button>
-  );
-
-  const renderUploadMode = () => (
-    <div className="space-y-4">
-      <div className="flex items-center space-x-4">
-        <input
-          type="file"
-          onChange={handleFileChange}
-          ref={fileInputRef}
-          accept=".cjs"
-          className="hidden"
-          id="analysis-file"
-          disabled={isInputDisabled}
-        />
-        <label
-          htmlFor="analysis-file"
-          className={`px-4 py-2 rounded cursor-pointer text-white ${
-            isConnected
-              ? 'bg-blue-500 hover:bg-blue-600'
-              : 'bg-gray-400 cursor-not-allowed'
-          }`}
-        >
-          Choose File
-        </label>
-        <span className="text-gray-600">
-          {selectedFile ? selectedFile.name : 'No file chosen'}
-        </span>
-      </div>
-
-      {selectedFile && (
-        <div className="space-y-2">
-          <label
-            htmlFor="filename"
-            className="block text-sm font-medium text-gray-700"
-          >
-            Edit Filename
-          </label>
-          <input
-            type="text"
-            id="filename"
-            value={editableFileName}
-            onChange={handleEditableFileNameChange}
-            className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
-              error && error.includes('already exists')
-                ? 'border-red-300 bg-red-50'
-                : 'border-gray-300'
-            }`}
-            placeholder="Enter filename (no extension)"
-            disabled={isInputDisabled}
-          />
-        </div>
-      )}
-
-      <p className="text-sm text-gray-500">
-        The .cjs extension will be added automatically by the backend as Tago.IO
-        requires CommonJS modules.
-      </p>
-    </div>
-  );
-
-  const renderCreateMode = () => (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <label
-          htmlFor="analysis-name"
-          className="block text-sm font-medium text-gray-700"
-        >
-          Analysis Name
-        </label>
-        <input
-          type="text"
-          id="analysis-name"
-          value={analysisName}
-          onChange={handleAnalysisNameChange}
-          className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
-            error && error.includes('already exists')
-              ? 'border-red-300 bg-red-50'
-              : 'border-gray-300'
-          }`}
-          placeholder="Enter analysis name (no extension)"
-          disabled={isInputDisabled}
-        />
-        <p className="text-sm text-gray-500">
-          The .cjs extension will be added automatically by the backend as
-          Tago.IO requires CommonJS modules.
-        </p>
-        <p className="text-sm text-gray-500">
-          You will be able to edit the environment variables after creation.
-        </p>
-      </div>
-
-      <div className="h-96 border border-gray-300 rounded-md overflow-hidden">
-        <Editor
-          height="100%"
-          defaultLanguage="javascript"
-          value={editorContent}
-          onChange={handleEditorChange}
-          theme="vs-dark"
-          options={{
-            minimap: { enabled: true },
-            scrollBeyondLastLine: false,
-            fontSize: 14,
-            automaticLayout: true,
-            wordWrap: 'on',
-            lineNumbers: 'on',
-            readOnly: isInputDisabled,
-          }}
-        />
-      </div>
-    </div>
-  );
-
   return (
-    <div className="bg-white rounded-lg shadow-md mb-8">
+    <Paper withBorder radius="md" mb="lg" pos="relative">
       {/* Header */}
-      <div
-        className="p-4 flex justify-between items-center cursor-pointer hover:bg-gray-50"
+      <Box
+        p="md"
+        styles={{
+          root: {
+            cursor: 'pointer',
+            transition: 'background-color 200ms',
+            '&:hover': {
+              backgroundColor: 'var(--mantine-color-gray-light)',
+            },
+          },
+        }}
         onClick={handleToggleExpanded}
       >
-        <h2 className="text-xl font-semibold">Analysis Creator</h2>
-        <button className="text-gray-500 hover:text-gray-700">
-          {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-        </button>
-      </div>
+        <Group justify="space-between">
+          <Box>
+            <Text size="lg" fw={600}>
+              Analysis Creator
+              {departmentName && departmentName !== 'All Departments' && (
+                <Text span size="sm" fw={400} c="dimmed" ml="xs">
+                  - '{departmentName}' group
+                </Text>
+              )}
+            </Text>
+          </Box>
+          <Group gap="xs">
+            {isExpanded && onClose && (
+              <ActionIcon
+                variant="subtle"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClose();
+                }}
+              >
+                <IconX size={20} />
+              </ActionIcon>
+            )}
+            <ActionIcon variant="subtle" color="brand">
+              {isExpanded ? (
+                <IconChevronUp size={20} />
+              ) : (
+                <IconChevronDown size={20} />
+              )}
+            </ActionIcon>
+          </Group>
+        </Group>
+      </Box>
 
       {/* Expanded Content */}
-      {isExpanded && (
-        <div className="p-6 pt-2 border-t">
-          <div className="space-y-4">
+      <Collapse in={isExpanded}>
+        <Box
+          p="lg"
+          pt={0}
+          style={{ borderTop: '1px solid var(--mantine-color-gray-3)' }}
+        >
+          <Stack>
             {/* Mode Toggle */}
-            <div className="border-b border-gray-200 mb-6">
-              <nav className="-mb-px flex space-x-8">
-                {renderTabButton('upload', 'Upload Existing File')}
-                {renderTabButton('create', 'Create New Analysis')}
-              </nav>
-            </div>
+            <Tabs value={mode} onChange={handleModeChange}>
+              <Tabs.List>
+                <Tabs.Tab
+                  value="upload"
+                  disabled={isTabDisabled && mode !== 'upload'}
+                >
+                  Upload Existing File
+                </Tabs.Tab>
+                <Tabs.Tab
+                  value="create"
+                  disabled={isTabDisabled && mode !== 'create'}
+                >
+                  Create New Analysis
+                </Tabs.Tab>
+              </Tabs.List>
+
+              <Tabs.Panel value="upload" pt="md">
+                <Stack>
+                  <FileInput
+                    ref={fileInputRef}
+                    accept=".js,.cjs"
+                    placeholder="Choose file"
+                    label="Select JavaScript file"
+                    value={selectedFile}
+                    onChange={handleFileChange}
+                    disabled={isInputDisabled}
+                    leftSection={<IconUpload size={16} />}
+                    rightSection={selectedFile && <IconFile size={16} />}
+                  />
+
+                  {selectedFile && (
+                    <TextInput
+                      label="Edit Filename"
+                      value={editableFileName}
+                      onChange={handleEditableFileNameChange}
+                      placeholder="Enter filename (no extension)"
+                      disabled={isInputDisabled}
+                      error={error && error.includes('already exists')}
+                    />
+                  )}
+
+                  <Text size="sm" c="dimmed">
+                    The .cjs extension will be added automatically by the
+                    backend as Tago.IO requires CommonJS modules.
+                  </Text>
+                </Stack>
+              </Tabs.Panel>
+
+              <Tabs.Panel value="create" pt="md">
+                <Stack>
+                  <TextInput
+                    label="Analysis Name"
+                    value={analysisName}
+                    onChange={handleAnalysisNameChange}
+                    placeholder="Enter analysis name (no extension)"
+                    disabled={isInputDisabled}
+                    error={error && error.includes('already exists')}
+                  />
+
+                  <Text size="sm" c="dimmed">
+                    The .cjs extension will be added automatically by the
+                    backend as Tago.IO requires CommonJS modules.
+                  </Text>
+
+                  <Text size="sm" c="dimmed">
+                    You will be able to edit the environment variables after
+                    creation.
+                  </Text>
+
+                  <Box
+                    h={384}
+                    style={{
+                      border: '1px solid var(--mantine-color-gray-3)',
+                      borderRadius: 'var(--mantine-radius-md)',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <Editor
+                      height="100%"
+                      defaultLanguage="javascript"
+                      value={editorContent}
+                      onChange={handleEditorChange}
+                      theme="vs-dark"
+                      options={{
+                        minimap: { enabled: true },
+                        scrollBeyondLastLine: false,
+                        fontSize: 14,
+                        automaticLayout: true,
+                        wordWrap: 'on',
+                        lineNumbers: 'on',
+                        readOnly: isInputDisabled,
+                      }}
+                    />
+                  </Box>
+                </Stack>
+              </Tabs.Panel>
+            </Tabs>
 
             {/* Loading Indicator */}
             {isFetchingAnalyses && (
-              <div className="text-sm text-gray-500 italic">
+              <Text size="sm" c="dimmed" fs="italic">
                 Loading existing analyses...
-              </div>
+              </Text>
             )}
 
-            {/* Mode Content */}
-            {mode === 'upload' ? renderUploadMode() : renderCreateMode()}
-
             {/* Error Message */}
-            {error && <div className="text-red-500 text-sm">{error}</div>}
+            {error && (
+              <Alert
+                icon={<IconAlertCircle size={16} />}
+                color="red"
+                variant="light"
+              >
+                {error}
+              </Alert>
+            )}
 
             {/* Action Buttons */}
-            <div className="flex space-x-4">
-              <button
+            <Group>
+              <Button
                 onClick={handleUpload}
                 disabled={isSaveDisabled}
-                className={`px-4 py-2 rounded text-white ${
-                  isSaveDisabled
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-green-500 hover:bg-green-600'
-                }`}
+                loading={isCurrentAnalysisLoading}
+                color="green"
               >
-                {isCurrentAnalysisLoading ? 'Processing...' : 'Save Analysis'}
-              </button>
+                Save Analysis
+              </Button>
 
               {showCancelButton && (
-                <button
+                <Button
+                  variant="default"
                   onClick={handleCancel}
-                  className="px-4 py-2 rounded text-gray-600 hover:text-gray-800"
                   disabled={isInputDisabled}
                 >
                   Cancel
-                </button>
+                </Button>
               )}
-            </div>
-          </div>
-
-          {/* Connection Status */}
-          {!isConnected && (
-            <div className="mt-4 p-2 bg-yellow-100 text-yellow-700 rounded">
-              Not connected to server. Please wait for connection to be
-              established.
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+            </Group>
+          </Stack>
+        </Box>
+      </Collapse>
+    </Paper>
   );
 }

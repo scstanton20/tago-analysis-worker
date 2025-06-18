@@ -3,7 +3,13 @@ import { promises as fs } from 'fs';
 import config from '../config/default.js';
 import { encrypt, decrypt } from '../utils/cryptoUtils.js';
 import AnalysisProcess from '../models/analysisProcess.js';
+import departmentService from './departmentService.js';
 
+/**
+ * Format file size in bytes to human readable format
+ * @param {number} bytes - File size in bytes
+ * @returns {string} Formatted file size (e.g., "1.5 MB")
+ */
 function formatFileSize(bytes) {
   if (bytes === 0) return '0 B';
 
@@ -14,38 +20,145 @@ function formatFileSize(bytes) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
+/**
+ * Service class for managing analysis files, processes, and configurations
+ * Handles CRUD operations, file management, logging, and department integration
+ */
 class AnalysisService {
   constructor() {
+    /** @type {Map<string, AnalysisProcess>} Map of analysis name to process instance */
     this.analyses = new Map();
-  }
-  validateTimeRange(timeRange) {
-    const validRanges = ['1h', '24h', '7d', '30d', 'all'];
-    return validRanges.includes(timeRange);
+    /** @type {Object|null} Cached configuration object */
+    this.configCache = null;
+    /** @type {string} Path to the configuration file */
+    this.configPath = path.join(config.paths.config, 'analyses-config.json');
   }
 
+  /**
+   * Ensure required directories exist
+   * @returns {Promise<void>}
+   * @throws {Error} If directory creation fails
+   */
   async ensureDirectories() {
     await fs.mkdir(config.paths.analysis, { recursive: true });
     await fs.mkdir(config.paths.config, { recursive: true });
   }
 
+  /**
+   * Get complete configuration including departments and analyses
+   * @returns {Promise<Object>} Configuration object with version, departments, and analyses
+   */
+  async getConfig() {
+    if (!this.configCache) {
+      await this.loadConfig();
+    }
+    return { ...this.configCache };
+  }
+
+  /**
+   * Update complete configuration
+   * @param {Object} config - Configuration object to update
+   * @param {string} config.version - Configuration version
+   * @param {Object} config.departments - Departments configuration
+   * @param {Object} config.analyses - Analyses configuration
+   * @returns {Promise<void>}
+   * @throws {Error} If config update fails
+   */
+  async updateConfig(config) {
+    this.configCache = { ...config };
+
+    // Update internal analyses Map from config
+    this.analyses.clear();
+    if (config.analyses) {
+      Object.entries(config.analyses).forEach(([name, analysis]) => {
+        this.analyses.set(name, analysis);
+      });
+    }
+
+    await this.saveConfig();
+  }
+
+  /**
+   * Save current configuration to file
+   * @returns {Promise<void>}
+   * @throws {Error} If file write fails
+   */
   async saveConfig() {
-    const configuration = {};
+    const configuration = {
+      version: this.configCache?.version || '2.0',
+      departments: this.configCache?.departments || {},
+      analyses: {},
+    };
+
     this.analyses.forEach((analysis, analysisName) => {
-      configuration[analysisName] = {
+      configuration.analyses[analysisName] = {
         type: analysis.type,
         enabled: analysis.enabled,
         status: analysis.status,
-        lastRun: analysis.lastRun,
-        startTime: analysis.startTime,
+        lastStartTime: analysis.lastStartTime,
+        department: analysis.department || 'uncategorized',
       };
     });
 
-    await fs.writeFile(
-      path.join(config.paths.config, 'analyses-config.json'),
-      JSON.stringify(configuration, null, 2),
-    );
+    await fs.writeFile(this.configPath, JSON.stringify(configuration, null, 2));
+
+    this.configCache = configuration;
   }
 
+  /**
+   * Load configuration from file or create default if not exists
+   * @returns {Promise<Object>} Loaded configuration object
+   * @throws {Error} If file read fails (except ENOENT)
+   */
+  async loadConfig() {
+    try {
+      const data = await fs.readFile(this.configPath, 'utf8');
+      const config = JSON.parse(data);
+
+      // Store the full config including departments
+      this.configCache = config;
+
+      // Load analyses into the Map
+      this.analyses.clear();
+      if (config.analyses) {
+        Object.entries(config.analyses).forEach(([name, analysis]) => {
+          this.analyses.set(name, analysis);
+        });
+      }
+
+      console.log('Configuration loaded with departments');
+      return config;
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        console.log('No existing config file, creating new one');
+        this.configCache = {
+          version: '2.0',
+          departments: {
+            uncategorized: {
+              id: 'uncategorized',
+              name: 'Uncategorized',
+              color: '#9ca3af',
+              order: 0,
+              created: new Date().toISOString(),
+              isSystem: true,
+            },
+          },
+          analyses: {},
+        };
+        await this.saveConfig();
+        return this.configCache;
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  /**
+   * Create directory structure for a new analysis
+   * @param {string} analysisName - Name of the analysis
+   * @returns {Promise<string>} Base path of created directories
+   * @throws {Error} If directory creation fails
+   */
   async createAnalysisDirectories(analysisName) {
     const basePath = path.join(config.paths.analysis, analysisName);
     await Promise.all([
@@ -56,13 +169,27 @@ class AnalysisService {
     return basePath;
   }
 
-  async uploadAnalysis(file, type) {
+  /**
+   * Upload and register a new analysis file
+   * @param {Object} file - File object with name and mv method
+   * @param {string} file.name - Original filename
+   * @param {Function} file.mv - Method to move file to destination
+   * @param {string} type - Type of analysis (e.g., 'listener')
+   * @param {string|null} [targetDepartment=null] - Department to assign analysis to (null means uncategorized)
+   * @returns {Promise<Object>} Object with analysisName property
+   * @throws {Error} If upload or registration fails
+   */
+  async uploadAnalysis(file, type, targetDepartment = null) {
     const analysisName = path.parse(file.name).name;
     const basePath = await this.createAnalysisDirectories(analysisName);
     const filePath = path.join(basePath, 'index.cjs');
 
     await file.mv(filePath);
     const analysis = new AnalysisProcess(analysisName, type, this);
+
+    // FIXED: If no department specified (null) or "all analyses" selected, use uncategorized
+    analysis.department = targetDepartment || 'uncategorized';
+
     this.analyses.set(analysisName, analysis);
 
     const envFile = path.join(basePath, 'env', '.env');
@@ -70,13 +197,21 @@ class AnalysisService {
 
     await this.saveConfig();
 
+    // Ensure department tracking
+    await departmentService.ensureAnalysisHasDepartment(analysisName);
+
     return { analysisName };
   }
 
+  /**
+   * Get all analyses with their metadata and department information
+   * @returns {Promise<Object>} Object mapping analysis names to their metadata
+   * @throws {Error} If directory read or file stat fails
+   */
   async getAllAnalyses() {
     const analysisDirectories = await fs.readdir(config.paths.analysis);
 
-    return Promise.all(
+    const results = await Promise.all(
       analysisDirectories.map(async (dirName) => {
         const indexPath = path.join(
           config.paths.analysis,
@@ -98,17 +233,32 @@ class AnalysisService {
             type: 'listener',
             status: analysis?.status || 'stopped',
             enabled: analysis?.enabled || false,
-            lastRun: analysis?.lastRun,
-            startTime: analysis?.startTime,
+            lastStartTime: analysis?.lastStartTime,
+            department: analysis?.department || 'uncategorized',
           };
         } catch (error) {
           if (error.code === 'ENOENT') return null;
           throw error;
         }
       }),
-    ).then((results) => results.filter(Boolean));
+    );
+
+    // Return as object to match WebSocket expectations
+    const analysesObj = {};
+    results.filter(Boolean).forEach((analysis) => {
+      analysesObj[analysis.name] = analysis;
+    });
+
+    return analysesObj;
   }
 
+  /**
+   * Rename an analysis file and update all references
+   * @param {string} analysisName - Current name of the analysis
+   * @param {string} newFileName - New name for the analysis
+   * @returns {Promise<Object>} Object with success status and restart information
+   * @throws {Error} If analysis not found, target exists, or rename fails
+   */
   async renameAnalysis(analysisName, newFileName) {
     try {
       const analysis = this.analyses.get(analysisName);
@@ -140,7 +290,6 @@ class AnalysisService {
         );
       } catch (err) {
         if (err.code !== 'ENOENT') throw err;
-        // ENOENT error means file doesn't exist, which is what we want
       }
 
       // Perform the rename
@@ -164,6 +313,9 @@ class AnalysisService {
       // Save updated config to analyses-config.json
       await this.saveConfig();
 
+      // Update department tracking properly through the department service
+      await departmentService.ensureAnalysisHasDepartment(newFileName);
+
       // If it was running before, restart it
       if (wasRunning) {
         await this.runAnalysis(newFileName, analysis.type);
@@ -183,6 +335,12 @@ class AnalysisService {
     }
   }
 
+  /**
+   * Add a log entry to an analysis
+   * @param {string} analysisName - Name of the analysis
+   * @param {string} message - Log message to add
+   * @returns {Promise<void>}
+   */
   async addLog(analysisName, message) {
     const analysis = this.analyses.get(analysisName);
     if (analysis) {
@@ -190,7 +348,12 @@ class AnalysisService {
     }
   }
 
-  // Get initial logs for WebSocket connection
+  /**
+   * Get initial logs for WebSocket connection with pagination
+   * @param {string} analysisName - Name of the analysis
+   * @param {number} [limit=50] - Maximum number of log entries to return
+   * @returns {Promise<Object>} Object with logs array and total count
+   */
   async getInitialLogs(analysisName, limit = 50) {
     const analysis = this.analyses.get(analysisName);
     if (!analysis) {
@@ -204,7 +367,12 @@ class AnalysisService {
     };
   }
 
-  // Clear logs - reset everything
+  /**
+   * Clear all logs for an analysis
+   * @param {string} analysisName - Name of the analysis
+   * @returns {Promise<Object>} Success result object
+   * @throws {Error} If analysis not found or log clear fails
+   */
   async clearLogs(analysisName) {
     try {
       const analysis = this.analyses.get(analysisName);
@@ -237,11 +405,22 @@ class AnalysisService {
     }
   }
 
+  /**
+   * Get the current status of an analysis process
+   * @param {string} analysisName - Name of the analysis
+   * @returns {string} Current status ('running', 'stopped', etc.)
+   */
   getProcessStatus(analysisName) {
     const analysis = this.analyses.get(analysisName);
     return analysis ? analysis.status : 'stopped';
   }
 
+  /**
+   * Start/run an analysis process
+   * @param {string} analysisName - Name of the analysis to run
+   * @returns {Promise<Object>} Result object with success status and analysis info
+   * @throws {Error} If analysis start fails
+   */
   async runAnalysis(analysisName) {
     let analysis = this.analyses.get(analysisName);
 
@@ -256,6 +435,12 @@ class AnalysisService {
     return { success: true, status: analysis.status, logs: analysis.logs };
   }
 
+  /**
+   * Stop a running analysis process
+   * @param {string} analysisName - Name of the analysis to stop
+   * @returns {Promise<Object>} Success result object
+   * @throws {Error} If analysis not found or stop fails
+   */
   async stopAnalysis(analysisName) {
     const analysis = this.analyses.get(analysisName);
     if (!analysis) {
@@ -266,34 +451,14 @@ class AnalysisService {
     return { success: true };
   }
 
-  async loadEnvironmentVariables(analysisName) {
-    const envFile = path.join(
-      config.paths.analysis,
-      analysisName,
-      'env',
-      '.env',
-    );
-
-    try {
-      const envContent = await fs.readFile(envFile, 'utf8');
-      const envVariables = {};
-
-      envContent.split('\n').forEach((line) => {
-        const [key, encryptedValue] = line.split('=');
-        if (key && encryptedValue) {
-          envVariables[key] = decrypt(encryptedValue, process.env.SECRET_KEY);
-        }
-      });
-
-      return envVariables;
-    } catch (error) {
-      if (error.code === 'ENOENT') {
-        return {}; // Return empty object if the file does not exist
-      }
-      throw error;
-    }
-  }
-
+  /**
+   * Get paginated logs for an analysis
+   * @param {string} analysisName - Name of the analysis
+   * @param {number} [page=1] - Page number for pagination
+   * @param {number} [limit=100] - Number of log entries per page
+   * @returns {Promise<Object>} Object with logs, pagination info, and source
+   * @throws {Error} If analysis not found
+   */
   async getLogs(analysisName, page = 1, limit = 100) {
     const analysis = this.analyses.get(analysisName);
 
@@ -318,6 +483,14 @@ class AnalysisService {
     return this.getLogsFromFile(analysisName, page, limit);
   }
 
+  /**
+   * Get paginated logs from file system
+   * @param {string} analysisName - Name of the analysis
+   * @param {number} [page=1] - Page number for pagination
+   * @param {number} [limit=100] - Number of log entries per page
+   * @returns {Promise<Object>} Object with logs, pagination info, and source
+   * @throws {Error} If file read fails (except ENOENT)
+   */
   async getLogsFromFile(analysisName, page = 1, limit = 100) {
     try {
       const logFile = path.join(
@@ -367,6 +540,12 @@ class AnalysisService {
     }
   }
 
+  /**
+   * Delete an analysis and all its associated files
+   * @param {string} analysisName - Name of the analysis to delete
+   * @returns {Promise<Object>} Success message object
+   * @throws {Error} If deletion fails (except ENOENT)
+   */
   async deleteAnalysis(analysisName) {
     const analysis = this.analyses.get(analysisName);
     if (analysis) {
@@ -388,21 +567,18 @@ class AnalysisService {
     return { message: 'Analysis deleted successfully' };
   }
 
+  /**
+   * Initialize the analysis service and load existing analyses
+   * @returns {Promise<void>}
+   * @throws {Error} If initialization fails
+   */
   async initialize() {
     await this.ensureDirectories();
 
-    let configuration = {};
-    try {
-      const configData = await fs.readFile(
-        path.join(config.paths.config, 'analyses-config.json'),
-        'utf8',
-      );
-      configuration = JSON.parse(configData);
-      console.log('Loaded analysis configuration');
-    } catch {
-      console.log('No existing config found, creating new');
-      await this.saveConfig();
-    }
+    const configuration = await this.loadConfig();
+
+    // Initialize department service after config is loaded
+    await departmentService.initialize(this);
 
     const analysisDirectories = await fs.readdir(config.paths.analysis);
     await Promise.all(
@@ -415,7 +591,10 @@ class AnalysisService {
           );
           const stats = await fs.stat(indexPath);
           if (stats.isFile()) {
-            await this.initializeAnalysis(dirName, configuration[dirName]);
+            await this.initializeAnalysis(
+              dirName,
+              configuration.analyses?.[dirName],
+            );
           }
         } catch (error) {
           console.error(`Error loading analysis ${dirName}:`, error);
@@ -423,18 +602,13 @@ class AnalysisService {
       }),
     );
   }
-  getConfig() {
-    const configuration = {};
-    this.analyses.forEach((analysis, analysisName) => {
-      configuration[analysisName] = {
-        type: analysis.type,
-        enabled: analysis.enabled,
-        status: analysis.status,
-      };
-    });
-    return configuration;
-  }
 
+  /**
+   * Get the source code content of an analysis file
+   * @param {string} analysisName - Name of the analysis
+   * @returns {Promise<string>} Content of the analysis file
+   * @throws {Error} If file read fails
+   */
   async getAnalysisContent(analysisName) {
     try {
       const filePath = path.join(
@@ -450,33 +624,64 @@ class AnalysisService {
     }
   }
 
-  async updateAnalysis(analysisName, content) {
+  /**
+   * Update analysis properties and/or content
+   * @param {string} analysisName - Name of the analysis to update
+   * @param {Object} updates - Updates to apply
+   * @param {string} [updates.content] - New content for the analysis file
+   * @param {string} [updates.department] - New department for the analysis
+   * @param {boolean} [updates.enabled] - Enable/disable status
+   * @returns {Promise<Object>} Update result with success status and restart info
+   * @throws {Error} If analysis not found, department invalid, or update fails
+   */
+  async updateAnalysis(analysisName, updates) {
     try {
       const analysis = this.analyses.get(analysisName);
+
+      if (!analysis) {
+        throw new Error(`Analysis ${analysisName} not found`);
+      }
+
+      // If department is being updated, validate it exists
+      if (updates.department) {
+        const dept = await departmentService.getDepartment(updates.department);
+        if (!dept) {
+          throw new Error(`Department ${updates.department} not found`);
+        }
+      }
+
       const wasRunning = analysis && analysis.status === 'running';
 
-      // If running, stop the analysis first
-      if (wasRunning) {
+      // If running and content is being updated, stop the analysis first
+      if (wasRunning && updates.content) {
         await this.stopAnalysis(analysisName);
         await this.addLog(analysisName, 'Analysis stopped to update content');
       }
 
-      const filePath = path.join(
-        config.paths.analysis,
-        analysisName,
-        'index.cjs',
-      );
-      await fs.writeFile(filePath, content, 'utf8');
+      // Update content if provided
+      if (updates.content) {
+        const filePath = path.join(
+          config.paths.analysis,
+          analysisName,
+          'index.cjs',
+        );
+        await fs.writeFile(filePath, updates.content, 'utf8');
+      }
 
-      // If it was running before, restart it
-      if (wasRunning) {
+      // Update analysis properties
+      Object.assign(analysis, updates);
+      this.analyses.set(analysisName, analysis);
+      await this.saveConfig();
+
+      // If it was running before and content was updated, restart it
+      if (wasRunning && updates.content) {
         await this.runAnalysis(analysisName, analysis.type);
         await this.addLog(analysisName, 'Analysis updated successfully');
       }
 
       return {
         success: true,
-        restarted: wasRunning,
+        restarted: wasRunning && updates.content,
       };
     } catch (error) {
       console.error('Error updating analysis:', error);
@@ -484,6 +689,13 @@ class AnalysisService {
     }
   }
 
+  /**
+   * Get filtered logs for download based on time range
+   * @param {string} analysisName - Name of the analysis
+   * @param {string} timeRange - Time range filter ('1h', '24h', '7d', '30d', 'all')
+   * @returns {Promise<Object>} Object with logFile path and filtered content
+   * @throws {Error} If analysis not found, file doesn't exist, or invalid time range
+   */
   async getLogsForDownload(analysisName, timeRange) {
     try {
       const logFile = path.join(
@@ -539,6 +751,13 @@ class AnalysisService {
       throw error;
     }
   }
+
+  /**
+   * Get decrypted environment variables for an analysis
+   * @param {string} analysisName - Name of the analysis
+   * @returns {Promise<Object>} Object with decrypted environment variables
+   * @throws {Error} If file read or decryption fails (except ENOENT)
+   */
   async getEnvironment(analysisName) {
     const envFile = path.join(
       config.paths.analysis,
@@ -564,6 +783,13 @@ class AnalysisService {
     }
   }
 
+  /**
+   * Update environment variables for an analysis
+   * @param {string} analysisName - Name of the analysis
+   * @param {Object} env - Environment variables object to encrypt and save
+   * @returns {Promise<Object>} Update result with success status and restart info
+   * @throws {Error} If analysis not found or environment update fails
+   */
   async updateEnvironment(analysisName, env) {
     const envFile = path.join(
       config.paths.analysis,
@@ -607,13 +833,24 @@ class AnalysisService {
     }
   }
 
+  /**
+   * Initialize an analysis instance with configuration
+   * @param {string} analysisName - Name of the analysis
+   * @param {Object} [analysisConfig={}] - Configuration object for the analysis
+   * @param {string} [analysisConfig.type='listener'] - Type of analysis
+   * @param {boolean} [analysisConfig.enabled=false] - Whether analysis is enabled
+   * @param {string} [analysisConfig.status='stopped'] - Current status
+   * @param {string|null} [analysisConfig.lastStartTime=null] - Last start timestamp
+   * @param {string} [analysisConfig.department='uncategorized'] - Department assignment
+   * @returns {Promise<void>}
+   */
   async initializeAnalysis(analysisName, analysisConfig = {}) {
     const defaultConfig = {
       type: 'listener',
       enabled: false,
       status: 'stopped',
-      lastRun: null,
-      startTime: null,
+      lastStartTime: null,
+      department: 'uncategorized',
     };
 
     const fullConfig = { ...defaultConfig, ...analysisConfig };
@@ -622,8 +859,8 @@ class AnalysisService {
     Object.assign(analysis, {
       enabled: fullConfig.enabled,
       status: fullConfig.status,
-      lastRun: fullConfig.lastRun,
-      startTime: fullConfig.startTime,
+      lastStartTime: fullConfig.lastStartTime,
+      department: fullConfig.department,
     });
 
     // Initialize log state (this replaces the old log loading logic)
@@ -637,6 +874,11 @@ class AnalysisService {
 const analysisService = new AnalysisService();
 export { analysisService, initializeAnalyses };
 
+/**
+ * Initialize the analysis service singleton
+ * @returns {Promise<void>} Promise that resolves when initialization is complete
+ * @throws {Error} If initialization fails
+ */
 function initializeAnalyses() {
   return analysisService.initialize();
 }

@@ -1,8 +1,19 @@
-// Enhanced AnalysisLogs.jsx - Primarily WebSocket-driven
+// frontend/src/components/analysis/analysisLogs.jsx
 import PropTypes from 'prop-types';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { analysisService } from '../../services/analysisService';
-import { RotateCw } from 'lucide-react';
+import {
+  Paper,
+  ScrollArea,
+  Group,
+  Text,
+  Badge,
+  Stack,
+  Button,
+  Center,
+  Loader,
+  Box,
+} from '@mantine/core';
 
 const LOGS_PER_PAGE = 100;
 
@@ -17,38 +28,66 @@ const AnalysisLogs = ({ analysis }) => {
   const scrollRef = useRef(null);
   const isLoadingMore = useRef(false);
   const hasLoadedInitial = useRef(false);
+  const lastScrollTop = useRef(0);
+  const shouldAutoScroll = useRef(true);
+  const isMountedRef = useRef(true);
 
-  // Primary logs come from WebSocket (analysis.logs)
-  // Initial logs loaded on mount, additional logs from pagination
-  const websocketLogs = analysis.logs || [];
-  const totalLogCount = analysis.totalLogCount || websocketLogs.length;
+  // Memoize websocketLogs to prevent unnecessary re-renders
+  const websocketLogs = useMemo(() => analysis.logs || [], [analysis.logs]);
+  const totalLogCount = useMemo(
+    () => analysis.totalLogCount || websocketLogs.length,
+    [analysis.totalLogCount, websocketLogs.length],
+  );
 
-  const loadInitialLogs = async () => {
-    if (hasLoadedInitial.current) return;
+  // Memoized auto-scroll effect to prevent excessive re-renders
+  useEffect(() => {
+    if (!isMountedRef.current) return;
+
+    if (
+      shouldAutoScroll.current &&
+      scrollRef.current &&
+      websocketLogs.length > 0
+    ) {
+      const element = scrollRef.current;
+      // Use requestAnimationFrame for better performance
+      requestAnimationFrame(() => {
+        if (element && isMountedRef.current) {
+          element.scrollTop = element.scrollHeight;
+        }
+      });
+    }
+  }, [websocketLogs.length]);
+
+  const loadInitialLogs = useCallback(async () => {
+    if (hasLoadedInitial.current || !isMountedRef.current) return;
 
     setIsLoading(true);
     try {
       const response = await analysisService.getLogs(analysis.name, {
         page: 1,
-        limit: LOGS_PER_PAGE, // Use full page size like original
+        limit: LOGS_PER_PAGE,
       });
 
-      setInitialLogs(response.logs);
-      // Respect the API's hasMore response
-      setHasMore(response.hasMore || false);
+      if (response.logs && isMountedRef.current) {
+        setInitialLogs(response.logs);
+        setHasMore(response.hasMore || false);
+      }
       hasLoadedInitial.current = true;
     } catch (error) {
       console.error('Failed to fetch initial logs:', error);
-      setHasMore(false);
+      if (isMountedRef.current) {
+        setHasMore(false);
+      }
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
-  };
+  }, [analysis.name]);
 
-  const loadMoreLogs = async () => {
-    if (isLoadingMore.current || !hasMore) return;
+  const loadMoreLogs = useCallback(async () => {
+    if (isLoadingMore.current || !hasMore || !isMountedRef.current) return;
 
-    console.log('Loading more logs, current page:', page, 'hasMore:', hasMore);
     isLoadingMore.current = true;
 
     try {
@@ -58,12 +97,7 @@ const AnalysisLogs = ({ analysis }) => {
         limit: LOGS_PER_PAGE,
       });
 
-      console.log(
-        'Received logs:',
-        response.logs?.length,
-        'hasMore:',
-        response.hasMore,
-      );
+      if (!isMountedRef.current) return;
 
       // Filter out logs we already have
       const existingSequences = new Set(
@@ -74,200 +108,303 @@ const AnalysisLogs = ({ analysis }) => {
         ].filter(Boolean),
       );
 
-      const newLogs = response.logs.filter(
-        (log) => !existingSequences.has(log.sequence),
-      );
+      const newLogs =
+        response.logs?.filter((log) => !existingSequences.has(log.sequence)) ||
+        [];
 
-      console.log('New logs after filtering:', newLogs.length);
-
-      if (newLogs.length > 0) {
+      if (newLogs.length > 0 && isMountedRef.current) {
         setAdditionalLogs((prev) => [...prev, ...newLogs]);
       }
 
-      setHasMore(response.hasMore);
-      setPage(nextPage);
+      if (isMountedRef.current) {
+        setHasMore(response.hasMore);
+        setPage(nextPage);
+      }
     } catch (error) {
       console.error('Failed to fetch more logs:', error);
     } finally {
       isLoadingMore.current = false;
     }
-  };
+  }, [
+    analysis.name,
+    page,
+    hasMore,
+    websocketLogs,
+    initialLogs,
+    additionalLogs,
+  ]);
 
-  const handleScroll = () => {
-    if (!scrollRef.current || isLoadingMore.current || !hasMore) return;
+  const handleScroll = useCallback(() => {
+    if (!scrollRef.current || !isMountedRef.current) return;
 
     const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
 
-    // Load more when scrolled near bottom (within 200px)
-    if (scrollHeight - (scrollTop + clientHeight) < 200) {
+    // Check if user scrolled up manually
+    if (scrollTop < lastScrollTop.current) {
+      shouldAutoScroll.current = false;
+    }
+
+    // Re-enable auto-scroll if user scrolls to bottom
+    if (scrollHeight - (scrollTop + clientHeight) < 50) {
+      shouldAutoScroll.current = true;
+    }
+
+    lastScrollTop.current = scrollTop;
+
+    // Load more when scrolled near bottom
+    if (
+      !isLoadingMore.current &&
+      hasMore &&
+      scrollHeight - (scrollTop + clientHeight) < 200
+    ) {
       loadMoreLogs();
     }
-  };
+  }, [hasMore, loadMoreLogs]);
 
-  // Load initial logs on mount or when analysis changes
+  // Load initial logs on mount or analysis change
   useEffect(() => {
     hasLoadedInitial.current = false;
     setInitialLogs([]);
     setAdditionalLogs([]);
     setPage(1);
-    setHasMore(false); // Start with false, let API response set it
+    setHasMore(false);
+    shouldAutoScroll.current = true;
     loadInitialLogs();
-  }, [analysis.name]);
+  }, [analysis.name, loadInitialLogs]);
 
-  // Update hasMore based on API response
+  // Reset when logs are cleared
   useEffect(() => {
-    // If we have initial logs loaded, check if there are more
-    if (hasLoadedInitial.current && initialLogs.length > 0) {
-      // hasMore should be based on the actual API response, not calculated
-      // The backend tells us if there are more logs
-    }
-  }, [initialLogs]);
+    if (!isMountedRef.current) return;
 
-  // Combine and deduplicate all logs
-  const allLogs = [...websocketLogs, ...initialLogs, ...additionalLogs]
-    .filter(
-      (log, index, self) =>
-        index ===
-        self.findIndex((l) =>
-          l.sequence
-            ? l.sequence === log.sequence
-            : l.timestamp === log.timestamp && l.message === log.message,
-        ),
-    )
-    .sort((a, b) => {
-      // Sort by sequence if available, otherwise by timestamp
-      if (a.sequence && b.sequence) return b.sequence - a.sequence;
-      return new Date(b.timestamp) - new Date(a.timestamp);
-    });
+    if (websocketLogs.length === 0 && hasLoadedInitial.current) {
+      console.log('Logs cleared, resetting state');
+      setInitialLogs([]);
+      setAdditionalLogs([]);
+      setPage(1);
+      setHasMore(false);
+      shouldAutoScroll.current = true;
+    }
+  }, [websocketLogs.length]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  // Memoize combined logs to prevent unnecessary recalculations
+  const allLogs = useCallback(() => {
+    return [...websocketLogs, ...initialLogs, ...additionalLogs]
+      .filter(
+        (log, index, self) =>
+          index ===
+          self.findIndex((l) =>
+            l.sequence
+              ? l.sequence === log.sequence
+              : l.timestamp === log.timestamp && l.message === log.message,
+          ),
+      )
+      .sort((a, b) => {
+        if (a.sequence && b.sequence) return b.sequence - a.sequence;
+        return new Date(b.timestamp) - new Date(a.timestamp);
+      });
+  }, [websocketLogs, initialLogs, additionalLogs]);
+
+  const logs = allLogs();
+
+  // Memoized resize handler to prevent memory leaks
+  const handleMouseDown = useCallback(
+    (e) => {
+      e.preventDefault();
+      const startY = e.clientY;
+      const startHeight = height;
+      setIsResizing(true);
+
+      function onMouseMove(moveEvent) {
+        const delta = moveEvent.clientY - startY;
+        const newHeight = Math.max(96, Math.min(800, startHeight + delta));
+        setHeight(newHeight);
+      }
+
+      function onMouseUp() {
+        setIsResizing(false);
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+      }
+
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    },
+    [height],
+  );
+
+  if (!analysis || !analysis.name) {
+    return null;
+  }
 
   return (
-    <div
-      className={`mt-4 bg-gray-50 rounded-md overflow-hidden ${isResizing ? 'select-none' : ''}`}
-      style={{ minHeight: '96px', maxHeight: '800px' }}
+    <Paper
+      mt="md"
+      withBorder
+      radius="md"
+      style={{
+        minHeight: '96px',
+        maxHeight: '800px',
+        overflow: 'hidden',
+        userSelect: isResizing ? 'none' : 'auto',
+      }}
     >
-      <div className="p-4 sticky top-0 bg-gray-100 border-b flex justify-between items-center">
-        <h4 className="text-sm font-semibold">Logs</h4>
-        <div className="flex items-center gap-4">
-          {(isLoading || isLoadingMore.current) && (
-            <RotateCw className="w-3 h-3 animate-spin" />
-          )}
-          <div className="text-xs text-gray-500">
-            {websocketLogs.length > 0 ? (
-              <>
-                {allLogs.length} of {totalLogCount} entries
-                {analysis.status === 'running' ? (
-                  <span className="ml-2 text-green-600">● Live</span>
+      {/* Header */}
+      <Box p="sm">
+        <Group justify="space-between">
+          <Text size="sm" fw={600}>
+            Logs {websocketLogs.length > 0 && '(Live)'}
+          </Text>
+          <Group gap="xs">
+            {(isLoading || isLoadingMore.current) && <Loader size="xs" />}
+            <Group gap="xs" align="center">
+              <Text size="xs" c="dimmed" component="span">
+                {websocketLogs.length > 0
+                  ? `${logs.length} of ${totalLogCount} entries`
+                  : `${logs.length} entries`}
+              </Text>
+              {websocketLogs.length > 0 &&
+                (analysis.status === 'running' ? (
+                  <Badge color="green" size="xs" variant="dot">
+                    Live
+                  </Badge>
                 ) : (
-                  <span className="ml-2 text-red-600">● Stopped</span>
-                )}
-              </>
-            ) : (
-              `${allLogs.length} entries`
-            )}
-          </div>
-        </div>
-      </div>
+                  <Badge color="red" size="xs" variant="dot">
+                    Stopped
+                  </Badge>
+                ))}
+            </Group>
+          </Group>
+        </Group>
+      </Box>
 
-      <div
+      {/* Logs Content */}
+      <ScrollArea
+        h={height}
+        p="sm"
         ref={scrollRef}
-        className="p-4 overflow-y-auto"
-        style={{ height: `${height}px` }}
-        onScroll={handleScroll}
+        onScrollPositionChange={handleScroll}
+        type="scroll"
+        scrollbarSize={8}
       >
-        {isLoading && allLogs.length === 0 ? (
-          <div className="flex items-center justify-center text-gray-500">
-            <RotateCw className="w-4 h-4 animate-spin mr-2" />
-            Loading logs...
-          </div>
-        ) : allLogs.length === 0 ? (
-          <p className="text-gray-500 text-sm">No logs available.</p>
+        {isLoading && logs.length === 0 ? (
+          <Center h="100%">
+            <Group>
+              <Loader size="sm" />
+              <Text c="dimmed" size="sm">
+                Loading logs...
+              </Text>
+            </Group>
+          </Center>
+        ) : logs.length === 0 ? (
+          <Center h="100%">
+            <Text c="dimmed" size="sm">
+              No logs available.{' '}
+              {analysis.status === 'running' && 'Waiting for new logs...'}
+            </Text>
+          </Center>
         ) : (
-          <>
-            <div className="space-y-1 font-mono text-sm">
-              {allLogs.map((log, index) => (
-                <div
+          <Stack gap={2}>
+            {logs.map((log, index) => {
+              const isError = log.message?.toLowerCase().includes('error');
+              const isWarning = log.message?.toLowerCase().includes('warn');
+
+              return (
+                <Group
                   key={
                     log.sequence
                       ? `seq-${log.sequence}`
                       : `${log.timestamp}-${index}`
                   }
-                  className="flex hover:bg-gray-100 p-1 rounded"
+                  gap="xs"
+                  wrap="nowrap"
+                  p={4}
+                  styles={{
+                    root: {
+                      borderRadius: 'var(--mantine-radius-sm)',
+                      '&:hover': {
+                        backgroundColor: 'var(--mantine-color-gray-light)',
+                      },
+                    },
+                  }}
                 >
-                  <span className="text-gray-500 mr-2 shrink-0">
+                  <Text
+                    size="xs"
+                    c="dimmed"
+                    ff="monospace"
+                    style={{ flexShrink: 0 }}
+                    component="span"
+                  >
                     {log.timestamp}
-                  </span>
-                  <span
-                    className={`${
-                      log.message?.toLowerCase().includes('error')
-                        ? 'text-red-600'
-                        : log.message?.toLowerCase().includes('warn')
-                          ? 'text-yellow-600'
-                          : ''
-                    }`}
+                  </Text>
+                  <Text
+                    size="xs"
+                    c={isError ? 'red' : isWarning ? 'yellow' : undefined}
+                    ff="monospace"
+                    style={{ wordBreak: 'break-word' }}
+                    component="span"
                   >
                     {log.message}
-                  </span>
-                </div>
-              ))}
-            </div>
+                  </Text>
+                </Group>
+              );
+            })}
+
             {hasMore && !isLoading && (
-              <div className="text-center py-2 text-sm text-gray-500">
+              <Center py="sm">
                 {isLoadingMore.current ? (
-                  <>
-                    <RotateCw className="w-4 h-4 animate-spin inline mr-2" />
-                    Loading more...
-                  </>
+                  <Group>
+                    <Loader size="xs" />
+                    <Text size="xs" c="dimmed">
+                      Loading more...
+                    </Text>
+                  </Group>
                 ) : (
-                  <button
-                    onClick={loadMoreLogs}
-                    className="text-blue-500 hover:text-blue-700"
-                  >
+                  <Button variant="subtle" size="xs" onClick={loadMoreLogs}>
                     Load more logs...
-                  </button>
+                  </Button>
                 )}
-              </div>
+              </Center>
             )}
-          </>
+          </Stack>
         )}
-      </div>
+      </ScrollArea>
 
-      <div
-        className={`
-          h-2 bg-gray-100 border-t cursor-row-resize hover:bg-gray-200 
-          flex items-center justify-center
-          ${isResizing ? 'bg-gray-300' : ''}
-        `}
-        onMouseDown={(e) => {
-          e.preventDefault();
-          const startY = e.clientY;
-          const startHeight = height;
-          setIsResizing(true);
-
-          function onMouseMove(moveEvent) {
-            const delta = moveEvent.clientY - startY;
-            const newHeight = Math.max(96, Math.min(800, startHeight + delta));
-            setHeight(newHeight);
-          }
-
-          function onMouseUp() {
-            setIsResizing(false);
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
-          }
-
-          document.addEventListener('mousemove', onMouseMove);
-          document.addEventListener('mouseup', onMouseUp);
+      {/* Resize Handle */}
+      <Box
+        h={8}
+        style={{
+          cursor: 'row-resize',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          transition: 'background-color 200ms',
+          '&:hover': {
+            backgroundColor: 'var(--mantine-color-gray-2)',
+          },
+          backgroundColor: isResizing
+            ? 'var(--mantine-color-gray-3)'
+            : undefined,
         }}
+        onMouseDown={handleMouseDown}
       >
-        <div className="w-16 h-1 bg-gray-300 rounded-full" />
-      </div>
-    </div>
+        <Box w={64} h={2} bg="gray.3" style={{ borderRadius: '2px' }} />
+      </Box>
+    </Paper>
   );
 };
 
 AnalysisLogs.propTypes = {
   analysis: PropTypes.shape({
     name: PropTypes.string.isRequired,
+    status: PropTypes.string,
     logs: PropTypes.arrayOf(
       PropTypes.shape({
         sequence: PropTypes.number,

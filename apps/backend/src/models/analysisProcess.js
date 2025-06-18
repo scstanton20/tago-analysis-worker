@@ -2,7 +2,7 @@
 import path from 'path';
 import { promises as fs } from 'fs';
 import { fork } from 'child_process';
-import { broadcastUpdate } from '../utils/websocket.js';
+import { broadcast } from '../utils/websocket.js';
 import config from '../config/default.js';
 
 class AnalysisProcess {
@@ -13,8 +13,7 @@ class AnalysisProcess {
     this.process = null;
     this.enabled = false;
     this.status = 'stopped';
-    this.lastRun = null;
-    this.startTime = null;
+    this.lastStartTime = null;
     this.stdoutBuffer = '';
     this.stderrBuffer = '';
     this.logFile = path.join(
@@ -84,11 +83,13 @@ class AnalysisProcess {
       console.error(`Error writing to log file ${this.logFile}:`, error);
     }
 
-    // Broadcast with sequence number for deduplication
-    broadcastUpdate('log', {
-      fileName: this.analysisName,
-      log: logEntry,
-      totalCount: this.totalLogCount,
+    broadcast({
+      type: 'log',
+      data: {
+        fileName: this.analysisName,
+        log: logEntry,
+        totalCount: this.totalLogCount,
+      },
     });
   }
 
@@ -211,7 +212,7 @@ class AnalysisProcess {
       await this.addLog(`Node.js ${process.version}`);
 
       const storedEnv = this.service
-        ? await this.service.loadEnvironmentVariables(this.analysisName)
+        ? await this.service.getEnvironment(this.analysisName)
         : {};
 
       this.process = fork(filePath, [], {
@@ -242,17 +243,17 @@ class AnalysisProcess {
     this.enabled = enabled;
 
     if (this.type === 'listener' && status === 'running') {
-      this.startTime = new Date().toISOString();
-    } else if (status === 'running') {
-      this.lastRun = new Date().toISOString();
+      this.lastStartTime = new Date().toISOString();
     }
 
-    broadcastUpdate('analysisStatus', {
-      fileName: this.analysisName,
-      status: this.status,
-      enabled: this.enabled,
-      lastRun: this.lastRun,
-      startTime: this.startTime,
+    broadcast({
+      type: 'analysisStatus',
+      data: {
+        fileName: this.analysisName,
+        status: this.status,
+        enabled: this.enabled,
+        lastStartTime: this.lastStartTime,
+      },
     });
   }
 

@@ -9,14 +9,18 @@ let globalConnectionPromise = null;
 
 export function WebSocketProvider({ children }) {
   const [socket, setSocket] = useState(null);
-  const [analyses, setAnalyses] = useState([]);
+  const [analyses, setAnalyses] = useState({}); // Object: { analysisName: analysisData }
+  const [departments, setDepartments] = useState({}); // Object: { deptId: deptData }
   const [loadingAnalyses, setLoadingAnalyses] = useState(new Set());
   const [connectionStatus, setConnectionStatus] = useState('connecting');
   const [backendStatus, setBackendStatus] = useState(null);
+  const [hasInitialData, setHasInitialData] = useState(false);
   const lastMessageRef = useRef({ type: null, timestamp: 0 });
   const reconnectAttemptsRef = useRef(0);
-  const maxReconnectDelay = 5000;
+  const maxReconnectAttempts = 10;
+  const maxReconnectDelay = 30000;
   const mountedRef = useRef(true);
+  const componentIdRef = useRef(null); // Track this component instance
 
   // Track log sequences to prevent duplicates
   const logSequences = useRef(new Map()); // fileName -> Set of sequence numbers
@@ -48,6 +52,14 @@ export function WebSocketProvider({ children }) {
     }
   }, [socket]);
 
+  // ADDED: getDepartment helper function
+  const getDepartment = useCallback(
+    (departmentId) => {
+      return departments[departmentId] || null;
+    },
+    [departments],
+  );
+
   const handleMessage = useCallback(
     (event) => {
       if (!mountedRef.current) return;
@@ -69,18 +81,46 @@ export function WebSocketProvider({ children }) {
 
         switch (data.type) {
           case 'init': {
-            setAnalyses(data.analyses || []);
+            // Handle analyses - always store as object
+            let analysesObj = {};
+            if (data.analyses) {
+              if (Array.isArray(data.analyses)) {
+                // Convert array to object
+                data.analyses.forEach((analysis) => {
+                  analysesObj[analysis.name] = analysis;
+                });
+              } else {
+                // Already an object
+                analysesObj = data.analyses;
+              }
+            }
+
+            let departmentsObj = {};
+            if (data.departments) {
+              if (Array.isArray(data.departments)) {
+                // Convert array to object
+                data.departments.forEach((dept) => {
+                  departmentsObj[dept.id] = dept;
+                });
+              } else {
+                // Already an object
+                departmentsObj = data.departments;
+              }
+            }
+
+            setAnalyses(analysesObj);
+            setDepartments(departmentsObj);
+            setHasInitialData(true); // Mark that we've loaded initial data
+            // Data is loaded when we have analyses and departments data
 
             // Initialize log sequences tracking
-            (data.analyses || []).forEach((analysis) => {
-              if (!logSequences.current.has(analysis.name)) {
-                logSequences.current.set(analysis.name, new Set());
+            Object.keys(analysesObj).forEach((analysisName) => {
+              if (!logSequences.current.has(analysisName)) {
+                logSequences.current.set(analysisName, new Set());
               }
             });
 
-            const analysisNames = new Set(
-              (data.analyses || []).map((analysis) => analysis.name),
-            );
+            const analysisNames = new Set(Object.keys(analysesObj));
             setLoadingAnalyses((prev) => {
               const updatedLoadingSet = new Set();
               prev.forEach((loadingName) => {
@@ -90,20 +130,72 @@ export function WebSocketProvider({ children }) {
               });
               return updatedLoadingSet;
             });
+
             break;
           }
 
           case 'statusUpdate': {
             // Handle status updates from WebSocket
-            if (data.data) {
+            if (data.container_health) {
+              // Direct status structure
+              setBackendStatus(data);
+            } else if (data.data) {
+              // Wrapped in data property
               setBackendStatus(data.data);
             }
             break;
           }
 
+          case 'analysisUpdate':
+            // Handle the new update format from broadcast
+            if (data.analysisName && data.update) {
+              setAnalyses((prev) => ({
+                ...prev,
+                [data.analysisName]: {
+                  ...prev[data.analysisName],
+                  ...data.update,
+                },
+              }));
+            }
+            break;
+
+          case 'refresh':
+            // Re-request data - use the global socket
+            if (
+              globalWebSocket &&
+              globalWebSocket.readyState === WebSocket.OPEN
+            ) {
+              globalWebSocket.send(JSON.stringify({ type: 'requestAnalyses' }));
+            }
+            break;
+
           case 'analysisCreated':
             if (data.data?.analysis) {
               logSequences.current.set(data.data.analysis, new Set());
+
+              // If we have complete analysis data, add it immediately
+              if (data.data.analysisData) {
+                const newAnalysis = {
+                  ...data.data.analysisData,
+                  name: data.data.analysis,
+                  department: data.data.department || 'uncategorized',
+                };
+
+                setAnalyses((prev) => ({
+                  ...prev,
+                  [data.data.analysis]: newAnalysis,
+                }));
+              } else {
+                // Force refresh to get complete analysis data
+                if (
+                  globalWebSocket &&
+                  globalWebSocket.readyState === WebSocket.OPEN
+                ) {
+                  globalWebSocket.send(
+                    JSON.stringify({ type: 'requestAnalyses' }),
+                  );
+                }
+              }
             }
             break;
 
@@ -111,9 +203,11 @@ export function WebSocketProvider({ children }) {
             if (data.data?.fileName) {
               removeLoadingAnalysis(data.data.fileName);
               logSequences.current.delete(data.data.fileName);
-              setAnalyses((prev) =>
-                prev.filter((a) => a.name !== data.data.fileName),
-              );
+              setAnalyses((prev) => {
+                const newAnalyses = { ...prev };
+                delete newAnalyses[data.data.fileName];
+                return newAnalyses;
+              });
             }
             break;
 
@@ -127,51 +221,150 @@ export function WebSocketProvider({ children }) {
                 logSequences.current.delete(data.data.oldFileName);
               }
 
-              setAnalyses((prev) =>
-                prev.map((analysis) =>
-                  analysis.name === data.data.oldFileName
-                    ? {
-                        ...analysis,
-                        name: data.data.newFileName,
-                        status: data.data.restarted
-                          ? 'running'
-                          : analysis.status,
-                        enabled: data.data.restarted ? true : analysis.enabled,
-                      }
-                    : analysis,
-                ),
-              );
+              setAnalyses((prev) => {
+                const newAnalyses = { ...prev };
+                const analysis = newAnalyses[data.data.oldFileName];
+                if (analysis) {
+                  newAnalyses[data.data.newFileName] = {
+                    ...analysis,
+                    name: data.data.newFileName,
+                    status: data.data.restarted ? 'running' : analysis.status,
+                    enabled: data.data.restarted ? true : analysis.enabled,
+                    department: data.data.department || analysis.department,
+                  };
+                  delete newAnalyses[data.data.oldFileName];
+                }
+                return newAnalyses;
+              });
             }
             break;
+
           case 'analysisStatus':
-            removeLoadingAnalysis(data.data.fileName);
             if (data.data?.fileName) {
-              setAnalyses((prev) =>
-                prev.map((analysis) =>
-                  analysis.name === data.data.fileName
-                    ? { ...analysis, ...data.data }
-                    : analysis,
-                ),
-              );
+              removeLoadingAnalysis(data.data.fileName);
+              setAnalyses((prev) => ({
+                ...prev,
+                [data.data.fileName]: {
+                  ...prev[data.data.fileName],
+                  status: data.data.status,
+                  enabled: data.data.enabled,
+                  department:
+                    data.data.department ||
+                    prev[data.data.fileName]?.department,
+                  lastRun:
+                    data.data.lastRun || prev[data.data.fileName]?.lastRun,
+                  startTime:
+                    data.data.startTime || prev[data.data.fileName]?.startTime,
+                },
+              }));
             }
             break;
+
           case 'analysisUpdated':
-            if (data.data?.analysis) {
-              const updatedAnalysis = data.data.analysis;
-              setAnalyses((prev) =>
-                prev.map((analysis) =>
-                  analysis.name === updatedAnalysis.name
-                    ? { ...analysis, ...updatedAnalysis }
-                    : analysis,
-                ),
-              );
-              if (updatedAnalysis.status !== 'running') {
-                removeLoadingAnalysis(updatedAnalysis.name);
+            if (data.data?.fileName) {
+              setAnalyses((prev) => ({
+                ...prev,
+                [data.data.fileName]: {
+                  ...prev[data.data.fileName],
+                  status: data.data.status || prev[data.data.fileName]?.status,
+                  department:
+                    data.data.department ||
+                    prev[data.data.fileName]?.department,
+                  lastRun:
+                    data.data.lastRun || prev[data.data.fileName]?.lastRun,
+                  startTime:
+                    data.data.startTime || prev[data.data.fileName]?.startTime,
+                },
+              }));
+              if (data.data.status !== 'running') {
+                removeLoadingAnalysis(data.data.fileName);
               }
             }
             break;
 
+          case 'analysisEnvironmentUpdated':
+            if (data.data?.fileName) {
+              setAnalyses((prev) => ({
+                ...prev,
+                [data.data.fileName]: {
+                  ...prev[data.data.fileName],
+                  status: data.data.status || prev[data.data.fileName]?.status,
+                  department:
+                    data.data.department ||
+                    prev[data.data.fileName]?.department,
+                  lastRun:
+                    data.data.lastRun || prev[data.data.fileName]?.lastRun,
+                  startTime:
+                    data.data.startTime || prev[data.data.fileName]?.startTime,
+                },
+              }));
+            }
+            break;
+
+          // FIXED: Department-related messages - handle objects
+          case 'departmentCreated':
+          case 'departmentUpdated':
+            if (data.department) {
+              setDepartments((prev) => ({
+                ...prev,
+                [data.department.id]: data.department,
+              }));
+            }
+            break;
+
+          case 'departmentDeleted':
+            if (data.deleted) {
+              setDepartments((prev) => {
+                const newDepts = { ...prev };
+                delete newDepts[data.deleted];
+                return newDepts;
+              });
+              // Update analyses to move to new department
+              if (data.analysesMovedTo) {
+                setAnalyses((prev) => {
+                  const newAnalyses = {};
+                  Object.entries(prev).forEach(([name, analysis]) => {
+                    newAnalyses[name] =
+                      analysis.department === data.deleted
+                        ? { ...analysis, department: data.analysesMovedTo }
+                        : analysis;
+                  });
+                  return newAnalyses;
+                });
+              }
+            }
+            break;
+
+          case 'analysisMovedToDepartment':
+            if (data.analysis && data.to) {
+              setAnalyses((prev) => ({
+                ...prev,
+                [data.analysis]: {
+                  ...prev[data.analysis],
+                  department: data.to,
+                },
+              }));
+            }
+            break;
+
+          case 'departmentsReordered':
+            if (data.departments) {
+              let departmentsObj = {};
+              if (Array.isArray(data.departments)) {
+                // Convert array to object
+                data.departments.forEach((dept) => {
+                  departmentsObj[dept.id] = dept;
+                });
+              } else {
+                // Already an object
+                departmentsObj = data.departments;
+              }
+              setDepartments(departmentsObj);
+            }
+            break;
+
           case 'log':
+            // Handle log messages correctly
             if (data.data?.fileName && data.data?.log) {
               const { fileName, log, totalCount } = data.data;
 
@@ -187,17 +380,14 @@ export function WebSocketProvider({ children }) {
                 logSequences.current.set(fileName, sequences);
               }
 
-              setAnalyses((prev) =>
-                prev.map((analysis) =>
-                  analysis.name === fileName
-                    ? {
-                        ...analysis,
-                        logs: [log, ...(analysis.logs || [])].slice(0, 1000),
-                        totalLogCount: totalCount,
-                      }
-                    : analysis,
-                ),
-              );
+              setAnalyses((prev) => ({
+                ...prev,
+                [fileName]: {
+                  ...prev[fileName],
+                  logs: [log, ...(prev[fileName]?.logs || [])].slice(0, 1000),
+                  totalLogCount: totalCount,
+                },
+              }));
             }
             break;
 
@@ -206,18 +396,19 @@ export function WebSocketProvider({ children }) {
               const fileName = data.data.fileName;
               logSequences.current.set(fileName, new Set());
 
-              setAnalyses((prev) =>
-                prev.map((analysis) =>
-                  analysis.name === fileName
-                    ? {
-                        ...analysis,
-                        logs: [],
-                        totalLogCount: 0,
-                      }
-                    : analysis,
-                ),
-              );
+              setAnalyses((prev) => ({
+                ...prev,
+                [fileName]: {
+                  ...prev[fileName],
+                  logs: [],
+                  totalLogCount: 0,
+                },
+              }));
             }
+            break;
+
+          default:
+            console.log('Unhandled WebSocket message type:', data.type);
             break;
         }
       } catch (error) {
@@ -228,8 +419,11 @@ export function WebSocketProvider({ children }) {
   );
 
   const createConnection = useCallback(async () => {
+    const componentId = componentIdRef.current;
+
     // If we already have a working connection, reuse it
     if (globalWebSocket && globalWebSocket.readyState === WebSocket.OPEN) {
+      console.log(`WebSocket client reusing connection`);
       setSocket(globalWebSocket);
       setConnectionStatus('connected');
       return globalWebSocket;
@@ -237,17 +431,19 @@ export function WebSocketProvider({ children }) {
 
     // If connection is in progress, wait for it
     if (globalConnectionPromise) {
+      console.log(`WebSocket client waiting for connection`);
       return globalConnectionPromise;
     }
 
-    // Create new connection
     globalConnectionPromise = new Promise((resolve, reject) => {
       const websocket = new WebSocket(getWebSocketUrl());
+      websocket._componentId = componentId;
       let resolved = false;
 
       const connectionTimeout = setTimeout(() => {
         if (!resolved) {
           resolved = true;
+          console.log(`WebSocket connection timeout`);
           websocket.close();
           reject(new Error('Connection timeout'));
         }
@@ -259,6 +455,8 @@ export function WebSocketProvider({ children }) {
           clearTimeout(connectionTimeout);
           globalWebSocket = websocket;
           globalConnectionPromise = null;
+
+          console.log(`WebSocket connection established`);
 
           if (mountedRef.current) {
             setSocket(websocket);
@@ -275,19 +473,28 @@ export function WebSocketProvider({ children }) {
           resolved = true;
           clearTimeout(connectionTimeout);
           globalConnectionPromise = null;
+          console.error('WebSocket connection error', error);
           reject(error);
         }
       };
 
-      websocket.onclose = () => {
+      websocket.onclose = (event) => {
+        console.log(
+          `WebSocket connection closed Code: ${event.code}, Reason: ${event.reason})`,
+        );
+
         if (mountedRef.current) {
           setConnectionStatus('disconnected');
           setSocket(null);
           // Clear backend status when connection is lost
           setBackendStatus(null);
         }
-        globalWebSocket = null;
-        globalConnectionPromise = null;
+
+        // Only clear global references if this is the current global connection
+        if (globalWebSocket === websocket) {
+          globalWebSocket = null;
+          globalConnectionPromise = null;
+        }
       };
 
       websocket.onmessage = handleMessage;
@@ -299,6 +506,15 @@ export function WebSocketProvider({ children }) {
   const reconnect = useCallback(async () => {
     if (!mountedRef.current) return;
 
+    // Stop reconnecting after max attempts
+    if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+      console.log(
+        `WebSocket max reconnection attempts reached (${maxReconnectAttempts})`,
+      );
+      setConnectionStatus('failed');
+      return;
+    }
+
     const delay = Math.min(
       1000 * Math.pow(2, reconnectAttemptsRef.current),
       maxReconnectDelay,
@@ -306,7 +522,7 @@ export function WebSocketProvider({ children }) {
     reconnectAttemptsRef.current++;
 
     console.log(
-      `Attempting to reconnect in ${delay}ms (attempt ${reconnectAttemptsRef.current})`,
+      `WebSocket reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`,
     );
 
     setTimeout(async () => {
@@ -316,7 +532,7 @@ export function WebSocketProvider({ children }) {
       try {
         await createConnection();
       } catch (error) {
-        console.error('Reconnection failed:', error);
+        console.error(`WebSocket reconnection failed:`, error);
         if (mountedRef.current) {
           setConnectionStatus('disconnected');
           reconnect();
@@ -331,10 +547,16 @@ export function WebSocketProvider({ children }) {
     const connect = async () => {
       try {
         setConnectionStatus('connecting');
+        console.log(`Starting live listener connection...`);
+
         const ws = await createConnection();
 
         if (ws && mountedRef.current) {
-          ws.onclose = () => {
+          ws.onclose = (event) => {
+            console.log(
+              `WebSocket connection closed, Code: ${event.code}, Reason: ${event.reason})`,
+            );
+
             if (mountedRef.current) {
               setConnectionStatus('disconnected');
               setSocket(null);
@@ -344,7 +566,8 @@ export function WebSocketProvider({ children }) {
           };
 
           ws.onerror = (error) => {
-            console.error('WebSocket error:', error);
+            console.error(`WebSocket error:`, error);
+
             if (mountedRef.current) {
               setConnectionStatus('disconnected');
               setSocket(null);
@@ -353,7 +576,7 @@ export function WebSocketProvider({ children }) {
           };
         }
       } catch (error) {
-        console.error('Initial connection failed:', error);
+        console.error(`WebSocket initial connection failed:`, error);
         if (mountedRef.current) {
           setConnectionStatus('disconnected');
           reconnect();
@@ -364,8 +587,12 @@ export function WebSocketProvider({ children }) {
     connect();
 
     return () => {
+      console.log(`WebSocket client cleanup starting`);
       mountedRef.current = false;
+
+      // Only close if this component created the global connection
       if (globalWebSocket) {
+        console.log(`WebSocket closing connection`);
         globalWebSocket.close();
         globalWebSocket = null;
       }
@@ -388,13 +615,16 @@ export function WebSocketProvider({ children }) {
 
   const value = {
     socket,
-    analyses,
+    analyses, // Object format: { analysisName: analysisData }
+    departments, // Object format: { deptId: deptData }
     loadingAnalyses,
     addLoadingAnalysis,
     removeLoadingAnalysis,
     connectionStatus,
-    backendStatus, // Expose backend status
-    requestStatusUpdate, // Expose manual status request function
+    backendStatus,
+    requestStatusUpdate,
+    getDepartment,
+    hasInitialData,
   };
 
   return (

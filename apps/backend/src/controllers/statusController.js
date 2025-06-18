@@ -8,7 +8,7 @@ class StatusController {
     this.analysisService = analysisService;
     this.containerState = containerState || {
       status: 'ready',
-      startTime: new Date(),
+      lastlastStartTime: new Date(),
       message: 'Container is ready',
     };
     this.getSystemStatus = this.getSystemStatus.bind(this);
@@ -36,9 +36,9 @@ class StatusController {
         message: this.containerState.message,
         uptime: {
           seconds: Math.floor(
-            (new Date() - this.containerState.startTime) / 1000,
+            (new Date() - this.containerState.lastlastStartTime) / 1000,
           ),
-          formatted: ms(new Date() - this.containerState.startTime, {
+          formatted: ms(new Date() - this.containerState.lastlastStartTime, {
             long: true,
           }),
         },

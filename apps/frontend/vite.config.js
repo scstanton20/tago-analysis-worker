@@ -1,7 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react-swc';
 import fs from 'fs';
-import tailwindcss from '@tailwindcss/vite';
 
 // Docker detection
 const isDocker = (() => {
@@ -17,7 +16,7 @@ const backendUrl = isDocker ? 'http://backend:3000' : 'http://localhost:3000';
 const wsBackendUrl = isDocker ? 'ws://backend:3000' : 'ws://localhost:3000';
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react()],
   server: {
     host: true,
     port: 5173,
@@ -30,6 +29,11 @@ export default defineConfig({
         target: wsBackendUrl,
         ws: true,
       },
+    },
+  },
+  resolve: {
+    alias: {
+      '@tabler/icons-react': '@tabler/icons-react/dist/esm/icons/index.mjs',
     },
   },
 });

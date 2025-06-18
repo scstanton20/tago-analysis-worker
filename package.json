@@ -7,7 +7,7 @@
     "node": ">=22.0.0"
   },
   "imports": {
-    "#services/mqAPI": "./apps/backend/src/services/mqAPI.cjs"
+    "#utils/mqAPI": "./apps/backend/src/utils/mqAPI.cjs"
   },
   "scripts": {
     "dev": "pnpm run dev:frontend & pnpm run dev:backend",
