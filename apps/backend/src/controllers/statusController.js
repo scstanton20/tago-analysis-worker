@@ -3,12 +3,13 @@ import { createRequire } from 'module';
 import ms from 'ms';
 
 const require = createRequire(import.meta.url);
+
 class StatusController {
   constructor(analysisService, containerState) {
     this.analysisService = analysisService;
     this.containerState = containerState || {
       status: 'ready',
-      lastlastStartTime: new Date(),
+      lastStartTime: new Date(),
       message: 'Container is ready',
     };
     this.getSystemStatus = this.getSystemStatus.bind(this);
@@ -29,18 +30,27 @@ class StatusController {
       tagoVersion = 'unknown';
     }
 
+    // Calculate uptime safely
+    const startTime = this.containerState.lastStartTime || new Date();
+    const uptimeMs = new Date() - startTime;
+
+    // Ensure we have valid values for ms()
+    let formattedUptime;
+    try {
+      formattedUptime = ms(uptimeMs, { long: true });
+    } catch (error) {
+      console.error('Error formatting uptime:', error);
+      formattedUptime = 'unknown';
+    }
+
     const status = {
       container_health: {
         status:
           this.containerState.status === 'ready' ? 'healthy' : 'initializing',
         message: this.containerState.message,
         uptime: {
-          seconds: Math.floor(
-            (new Date() - this.containerState.lastlastStartTime) / 1000,
-          ),
-          formatted: ms(new Date() - this.containerState.lastlastStartTime, {
-            long: true,
-          }),
+          seconds: Math.floor(uptimeMs / 1000),
+          formatted: formattedUptime,
         },
       },
       tagoConnection: {
