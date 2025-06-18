@@ -67,8 +67,6 @@ export function WebSocketProvider({ children }) {
         const data = JSON.parse(event.data);
         const now = Date.now();
 
-        console.log('WebSocket message received:', data.type, data); // DEBUG: Log all messages
-
         // Only deduplicate non-log messages by type and timestamp
         if (data.type !== 'log' && data.type !== 'statusUpdate') {
           if (
@@ -82,8 +80,6 @@ export function WebSocketProvider({ children }) {
 
         switch (data.type) {
           case 'init': {
-            console.log('Received init message - setting backendStatus:', data); // DEBUG
-
             // Handle analyses - always store as object
             let analysesObj = {};
             if (data.analyses) {
@@ -604,11 +600,6 @@ export function WebSocketProvider({ children }) {
     getDepartment, // ADDED: Helper function
     hasInitialData, // NEW: Expose initial data status
   };
-
-  console.log('WebSocket Provider context value:', {
-    connectionStatus,
-    reconnectAttempts: reconnectAttemptsRef.current,
-  }); // DEBUG
 
   return (
     <WebSocketContext.Provider value={value}>

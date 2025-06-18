@@ -15,7 +15,7 @@ import {
 } from '@mantine/core';
 import { IconFolder, IconCheck, IconInfoCircle } from '@tabler/icons-react';
 
-const DepartmentSelectModal = ({
+const ChangeDepartmentModal = ({
   isOpen,
   onClose,
   onSelect,
@@ -153,7 +153,7 @@ const DepartmentSelectModal = ({
   );
 };
 
-DepartmentSelectModal.propTypes = {
+ChangeDepartmentModal.propTypes = {
   isOpen: PropTypes.bool.isRequired,
   onClose: PropTypes.func.isRequired,
   onSelect: PropTypes.func.isRequired,
@@ -169,4 +169,4 @@ DepartmentSelectModal.propTypes = {
   analysisName: PropTypes.string.isRequired,
 };
 
-export default DepartmentSelectModal;
+export default ChangeDepartmentModal;

@@ -25,11 +25,11 @@ import {
 } from '@tabler/icons-react';
 import { analysisService } from '../../services/analysisService';
 import AnalysisLogs from './analysisLogs';
-import StatusBadge from '../common/statusBadge';
-import EditAnalysisModal from './analysisEdit';
-import EditAnalysisENVModal from './analysisEditENV';
-import LogDownloadDialog from './logDownload';
-import DepartmentSelectModal from './departmentSelectModal';
+import StatusBadge from './statusBadge';
+import EditAnalysisModal from '../modals/analysisEdit';
+import EditAnalysisENVModal from '../modals/analysisEditENV';
+import LogDownloadDialog from '../modals/logDownload';
+import DepartmentSelectModal from '../modals/changeDepartmentModal';
 import { useWebSocket } from '../../contexts/websocketContext';
 
 export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
