@@ -212,7 +212,7 @@ class AnalysisProcess {
       await this.addLog(`Node.js ${process.version}`);
 
       const storedEnv = this.service
-        ? await this.service.loadEnvironmentVariables(this.analysisName)
+        ? await this.service.getEnvironment(this.analysisName)
         : {};
 
       this.process = fork(filePath, [], {

@@ -6,13 +6,13 @@ import {
   Text,
   Burger,
   Group,
-  ActionIcon,
   Tooltip,
   LoadingOverlay,
   Stack,
   Button,
   useComputedColorScheme,
   useMantineColorScheme,
+  Switch,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { IconSun, IconMoon } from '@tabler/icons-react';
@@ -157,24 +157,56 @@ function AppContent() {
             <Group>
               <Tooltip
                 label={
-                  computedColorScheme === 'light' ? 'Dark mode' : 'Light mode'
+                  computedColorScheme === 'light'
+                    ? 'Switch to dark mode'
+                    : 'Switch to light mode'
                 }
               >
-                <ActionIcon
-                  variant="subtle"
-                  onClick={() =>
-                    setColorScheme(
-                      computedColorScheme === 'dark' ? 'light' : 'dark',
-                    )
-                  }
-                  size="lg"
-                >
-                  {computedColorScheme === 'light' ? (
-                    <IconSun size={20} />
-                  ) : (
-                    <IconMoon size={20} />
-                  )}
-                </ActionIcon>
+                <Group gap="xs">
+                  <IconSun
+                    size={16}
+                    style={{
+                      opacity: computedColorScheme === 'light' ? 1 : 0.5,
+                    }}
+                  />
+                  <Switch
+                    checked={computedColorScheme === 'dark'}
+                    onChange={() =>
+                      setColorScheme(
+                        computedColorScheme === 'dark' ? 'light' : 'dark',
+                      )
+                    }
+                    size="md"
+                    onLabel=""
+                    offLabel=""
+                    styles={{
+                      track: {
+                        cursor: 'pointer',
+                        backgroundColor: 'transparent',
+                        borderColor: 'var(--mantine-color-gray-4)',
+                        border: '1px solid',
+                        '&[data-checked]': {
+                          backgroundColor: 'transparent',
+                          borderColor: 'var(--mantine-color-gray-6)',
+                        },
+                      },
+                      thumb: {
+                        cursor: 'pointer',
+                        backgroundColor: 'var(--mantine-color-gray-6)',
+                        border: 'none',
+                        '&[data-checked]': {
+                          backgroundColor: 'var(--mantine-color-gray-7)',
+                        },
+                      },
+                    }}
+                  />
+                  <IconMoon
+                    size={16}
+                    style={{
+                      opacity: computedColorScheme === 'dark' ? 1 : 0.5,
+                    }}
+                  />
+                </Group>
               </Tooltip>
               <ConnectionStatus />
             </Group>

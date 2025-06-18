@@ -17,7 +17,7 @@ export function useWebSocket() {
     // Connection state
     connectionStatus: context.connectionStatus || 'connecting',
     backendStatus: context.backendStatus,
-    hasInitialData: context.hasInitialData || false, // NEW: Track initial data load
+    hasInitialData: context.hasInitialData || false,
 
     // WebSocket and loading state
     socket: context.socket,

@@ -15,10 +15,10 @@ export function setupWebSocket(server) {
     path: '/ws',
     clientTracking: true,
   });
-  console.log('Setting up WebSocket server with department support');
+  console.log('WebSocket server setup complete');
 
   wss.on('connection', async (ws) => {
-    console.log('New WebSocket connection established');
+    console.log(`WebSocket connection established`);
     clients.add(ws);
 
     try {
@@ -46,7 +46,7 @@ export function setupWebSocket(server) {
         await sendStatusUpdate(ws);
       }
     } catch (error) {
-      console.error('Error sending initial state:', error);
+      console.error(`Error sending initial state for websocket`, error);
     }
 
     // Handle messages from client
@@ -107,21 +107,24 @@ export function setupWebSocket(server) {
           }
 
           default:
-            console.log('Unknown WebSocket message type:', data.type);
+            console.log(`Unknown WebSocket message type: ${data.type}`);
         }
       } catch (error) {
-        console.error('Error handling WebSocket message:', error);
+        console.error(`Error handling WebSocket message`, error);
       }
     });
 
-    ws.on('close', () => {
+    ws.on('close', (code, reason) => {
       clients.delete(ws);
-      console.log('WebSocket connection closed');
+      console.log(
+        `WebSocket connection closed, Code: ${code}, Reason: ${reason.toString()})`,
+      );
     });
 
+    // Fixed: Use the error parameter
     ws.on('error', (error) => {
       clients.delete(ws);
-      console.error('WebSocket connection error:', error);
+      console.error(`WebSocket connection error`, error.message);
     });
   });
 
@@ -138,7 +141,7 @@ export function broadcast(data) {
       try {
         client.send(message);
       } catch (error) {
-        console.error('Error broadcasting message:', error);
+        console.error(`Error broadcasting message`, error.message);
         clients.delete(client);
       }
     }
@@ -168,7 +171,7 @@ export async function broadcastRefresh() {
         try {
           client.send(message);
         } catch (error) {
-          console.error('Error sending refresh message:', error);
+          console.error(`Error sending refresh:`, error.message);
           clients.delete(client);
         }
       }
@@ -226,7 +229,7 @@ async function sendStatusUpdate(client) {
       client.send(JSON.stringify(status));
     }
   } catch (error) {
-    console.error('Error sending status update:', error);
+    console.error(`Error sending status update:`, error);
   }
 }
 
@@ -264,6 +267,7 @@ export function broadcastAnalysisMove(analysisName, fromDept, toDept) {
     timestamp: new Date().toISOString(),
   });
 }
+
 export function broadcastUpdate(type, data) {
   if (type === 'log') {
     broadcast({

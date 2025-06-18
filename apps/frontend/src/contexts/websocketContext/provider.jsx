@@ -10,16 +10,17 @@ let globalConnectionPromise = null;
 export function WebSocketProvider({ children }) {
   const [socket, setSocket] = useState(null);
   const [analyses, setAnalyses] = useState({}); // Object: { analysisName: analysisData }
-  const [departments, setDepartments] = useState({}); // FIXED: Object: { deptId: deptData }
+  const [departments, setDepartments] = useState({}); // Object: { deptId: deptData }
   const [loadingAnalyses, setLoadingAnalyses] = useState(new Set());
   const [connectionStatus, setConnectionStatus] = useState('connecting');
   const [backendStatus, setBackendStatus] = useState(null);
-  const [hasInitialData, setHasInitialData] = useState(false); // NEW: Track if we've ever loaded data
+  const [hasInitialData, setHasInitialData] = useState(false);
   const lastMessageRef = useRef({ type: null, timestamp: 0 });
   const reconnectAttemptsRef = useRef(0);
-  const maxReconnectAttempts = 10; // NEW: Limit reconnection attempts
-  const maxReconnectDelay = 30000; // Increased max delay to 30 seconds
+  const maxReconnectAttempts = 10;
+  const maxReconnectDelay = 30000;
   const mountedRef = useRef(true);
+  const componentIdRef = useRef(null); // Track this component instance
 
   // Track log sequences to prevent duplicates
   const logSequences = useRef(new Map()); // fileName -> Set of sequence numbers
@@ -94,7 +95,6 @@ export function WebSocketProvider({ children }) {
               }
             }
 
-            // FIXED: Handle departments - store as object
             let departmentsObj = {};
             if (data.departments) {
               if (Array.isArray(data.departments)) {
@@ -419,8 +419,11 @@ export function WebSocketProvider({ children }) {
   );
 
   const createConnection = useCallback(async () => {
+    const componentId = componentIdRef.current;
+
     // If we already have a working connection, reuse it
     if (globalWebSocket && globalWebSocket.readyState === WebSocket.OPEN) {
+      console.log(`WebSocket client reusing connection`);
       setSocket(globalWebSocket);
       setConnectionStatus('connected');
       return globalWebSocket;
@@ -428,17 +431,19 @@ export function WebSocketProvider({ children }) {
 
     // If connection is in progress, wait for it
     if (globalConnectionPromise) {
+      console.log(`WebSocket client waiting for connection`);
       return globalConnectionPromise;
     }
 
-    // Create new connection
     globalConnectionPromise = new Promise((resolve, reject) => {
       const websocket = new WebSocket(getWebSocketUrl());
+      websocket._componentId = componentId;
       let resolved = false;
 
       const connectionTimeout = setTimeout(() => {
         if (!resolved) {
           resolved = true;
+          console.log(`WebSocket connection timeout`);
           websocket.close();
           reject(new Error('Connection timeout'));
         }
@@ -450,6 +455,8 @@ export function WebSocketProvider({ children }) {
           clearTimeout(connectionTimeout);
           globalWebSocket = websocket;
           globalConnectionPromise = null;
+
+          console.log(`WebSocket connection established`);
 
           if (mountedRef.current) {
             setSocket(websocket);
@@ -466,19 +473,28 @@ export function WebSocketProvider({ children }) {
           resolved = true;
           clearTimeout(connectionTimeout);
           globalConnectionPromise = null;
+          console.error('WebSocket connection error', error);
           reject(error);
         }
       };
 
-      websocket.onclose = () => {
+      websocket.onclose = (event) => {
+        console.log(
+          `WebSocket connection closed Code: ${event.code}, Reason: ${event.reason})`,
+        );
+
         if (mountedRef.current) {
           setConnectionStatus('disconnected');
           setSocket(null);
           // Clear backend status when connection is lost
           setBackendStatus(null);
         }
-        globalWebSocket = null;
-        globalConnectionPromise = null;
+
+        // Only clear global references if this is the current global connection
+        if (globalWebSocket === websocket) {
+          globalWebSocket = null;
+          globalConnectionPromise = null;
+        }
       };
 
       websocket.onmessage = handleMessage;
@@ -493,7 +509,7 @@ export function WebSocketProvider({ children }) {
     // Stop reconnecting after max attempts
     if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
       console.log(
-        `Max reconnection attempts (${maxReconnectAttempts}) reached. Stopping reconnection attempts.`,
+        `WebSocket max reconnection attempts reached (${maxReconnectAttempts})`,
       );
       setConnectionStatus('failed');
       return;
@@ -506,7 +522,7 @@ export function WebSocketProvider({ children }) {
     reconnectAttemptsRef.current++;
 
     console.log(
-      `Attempting to reconnect in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`,
+      `WebSocket reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`,
     );
 
     setTimeout(async () => {
@@ -516,7 +532,7 @@ export function WebSocketProvider({ children }) {
       try {
         await createConnection();
       } catch (error) {
-        console.error('Reconnection failed:', error);
+        console.error(`WebSocket reconnection failed:`, error);
         if (mountedRef.current) {
           setConnectionStatus('disconnected');
           reconnect();
@@ -531,10 +547,16 @@ export function WebSocketProvider({ children }) {
     const connect = async () => {
       try {
         setConnectionStatus('connecting');
+        console.log(`Starting live listener connection...`);
+
         const ws = await createConnection();
 
         if (ws && mountedRef.current) {
-          ws.onclose = () => {
+          ws.onclose = (event) => {
+            console.log(
+              `WebSocket connection closed, Code: ${event.code}, Reason: ${event.reason})`,
+            );
+
             if (mountedRef.current) {
               setConnectionStatus('disconnected');
               setSocket(null);
@@ -544,7 +566,8 @@ export function WebSocketProvider({ children }) {
           };
 
           ws.onerror = (error) => {
-            console.error('WebSocket error:', error);
+            console.error(`WebSocket error:`, error);
+
             if (mountedRef.current) {
               setConnectionStatus('disconnected');
               setSocket(null);
@@ -553,7 +576,7 @@ export function WebSocketProvider({ children }) {
           };
         }
       } catch (error) {
-        console.error('Initial connection failed:', error);
+        console.error(`WebSocket initial connection failed:`, error);
         if (mountedRef.current) {
           setConnectionStatus('disconnected');
           reconnect();
@@ -564,8 +587,12 @@ export function WebSocketProvider({ children }) {
     connect();
 
     return () => {
+      console.log(`WebSocket client cleanup starting`);
       mountedRef.current = false;
+
+      // Only close if this component created the global connection
       if (globalWebSocket) {
+        console.log(`WebSocket closing connection`);
         globalWebSocket.close();
         globalWebSocket = null;
       }
@@ -586,7 +613,6 @@ export function WebSocketProvider({ children }) {
     }
   }, [connectionStatus, socket, requestStatusUpdate]);
 
-  // FIXED: Provide consistent object structures
   const value = {
     socket,
     analyses, // Object format: { analysisName: analysisData }
@@ -597,8 +623,8 @@ export function WebSocketProvider({ children }) {
     connectionStatus,
     backendStatus,
     requestStatusUpdate,
-    getDepartment, // ADDED: Helper function
-    hasInitialData, // NEW: Expose initial data status
+    getDepartment,
+    hasInitialData,
   };
 
   return (
