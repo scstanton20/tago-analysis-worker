@@ -418,15 +418,17 @@ class AnalysisService {
   /**
    * Start/run an analysis process
    * @param {string} analysisName - Name of the analysis to run
+   * @param {string} [type='listener'] - Type of analysis (default: 'listener')
    * @returns {Promise<Object>} Result object with success status and analysis info
    * @throws {Error} If analysis start fails
    */
-  async runAnalysis(analysisName) {
+  async runAnalysis(analysisName, type = 'listener') {
     let analysis = this.analyses.get(analysisName);
 
     if (!analysis) {
       console.log(`Creating new analysis instance: ${analysisName}`);
-      analysis = new AnalysisProcess(analysisName, this);
+      // Fix: Pass type and service parameters correctly
+      analysis = new AnalysisProcess(analysisName, type, this);
       this.analyses.set(analysisName, analysis);
       await this.saveConfig();
     }

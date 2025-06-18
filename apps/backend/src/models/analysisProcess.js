@@ -110,37 +110,67 @@ class AnalysisProcess {
   // Initialize log count and sequence from existing file
   async initializeLogState() {
     try {
-      const content = await fs.readFile(this.logFile, 'utf8');
-      const lines = content
-        .trim()
-        .split('\n')
-        .filter((line) => line.length > 0);
-      this.totalLogCount = lines.length;
-      this.logSequence = lines.length;
+      const stats = await fs.stat(this.logFile);
 
-      // Load recent logs into memory
-      const recentLines = lines.slice(-this.maxMemoryLogs);
-      this.logs = recentLines
-        .map((line, index) => {
-          const match = line.match(/\[(.*?)\] (.*)/);
-          return match
-            ? {
-                sequence: this.logSequence - recentLines.length + index + 1,
-                timestamp: match[1],
-                message: match[2],
-                createdAt: new Date(match[1]).getTime(),
-              }
-            : null;
-        })
-        .filter(Boolean)
-        .reverse();
+      // Check if file is too large (> 50MB)
+      const maxFileSize = 50 * 1024 * 1024; // 50MB
+
+      if (stats.size > maxFileSize) {
+        console.warn(
+          `Log file for ${this.analysisName} is very large (${Math.round(stats.size / 1024 / 1024)}MB). Deleting and starting fresh.`,
+        );
+
+        // Delete the oversized log file
+        await fs.unlink(this.logFile);
+
+        // Start fresh
+        this.totalLogCount = 0;
+        this.logSequence = 0;
+        this.logs = [];
+
+        // Log that we cleared the file
+        await this.addLog(
+          `Log file was too large and has been cleared. Starting fresh.`,
+        );
+      } else {
+        // For normal-sized files, read as usual
+        const content = await fs.readFile(this.logFile, 'utf8');
+        const lines = content
+          .trim()
+          .split('\n')
+          .filter((line) => line.length > 0);
+
+        this.totalLogCount = lines.length;
+        this.logSequence = lines.length;
+
+        // Load recent logs into memory
+        const recentLines = lines.slice(-this.maxMemoryLogs);
+        this.logs = recentLines
+          .map((line, index) => {
+            const match = line.match(/\[(.*?)\] (.*)/);
+            return match
+              ? {
+                  sequence: this.logSequence - recentLines.length + index + 1,
+                  timestamp: match[1],
+                  message: match[2],
+                  createdAt: new Date(match[1]).getTime(),
+                }
+              : null;
+          })
+          .filter(Boolean)
+          .reverse();
+      }
     } catch (error) {
       if (error.code !== 'ENOENT') {
-        console.error('Error initializing log state:', error);
+        console.error(
+          `Error initializing log state for ${this.analysisName}:`,
+          error,
+        );
       }
       // File doesn't exist yet, start fresh
       this.totalLogCount = 0;
       this.logSequence = 0;
+      this.logs = [];
     }
   }
 

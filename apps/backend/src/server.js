@@ -48,14 +48,6 @@ app.use(cors());
 app.use(express.json());
 app.use(fileUpload());
 
-// Routes
-app.use(`${API_PREFIX}/status`, statusRoutes(analysisService));
-app.use(`${API_PREFIX}/analyses`, analysisRoutes);
-app.use(`${API_PREFIX}/departments`, departmentRoutes);
-
-// Error handling
-app.use(errorHandler);
-
 const PORT = process.env.PORT || 3000;
 
 // Function to restart processes that were running before
@@ -68,16 +60,21 @@ async function restartRunningProcesses() {
 
     console.log('Checking for analyses that need to be restarted...');
 
-    const configuration = analysisService.getConfig();
+    const configuration = await analysisService.getConfig();
 
-    for (const [analysisName, config] of Object.entries(configuration)) {
-      if (config.status === 'running' || config.enabled === true) {
-        console.log(`Restarting analysis: ${analysisName}`);
-        // Pass the type from config, but default to 'listener' if not found
-        await analysisService.runAnalysis(
-          analysisName,
-          config.type || 'listener',
-        );
+    // Check if configuration has analyses property
+    if (configuration.analyses) {
+      for (const [analysisName, config] of Object.entries(
+        configuration.analyses,
+      )) {
+        if (config.status === 'running' || config.enabled === true) {
+          console.log(`Restarting analysis: ${analysisName}`);
+          // Pass the type from config, but default to 'listener' if not found
+          await analysisService.runAnalysis(
+            analysisName,
+            config.type || 'listener',
+          );
+        }
       }
     }
 
@@ -106,8 +103,30 @@ async function startServer() {
       message: 'Initializing server components',
     });
 
-    // Initialize analysis service
+    // IMPORTANT: Initialize analysis service BEFORE setting up routes
+    console.log('Initializing analysis service...');
     await initializeAnalyses();
+    console.log('Analysis service initialized successfully');
+
+    updateContainerState({
+      status: 'setting_up_routes',
+      message: 'Setting up API routes',
+    });
+
+    // NOW set up routes after analysisService is initialized
+    console.log('Setting up routes...');
+
+    app.use(`${API_PREFIX}/status`, statusRoutes(analysisService));
+    console.log(`✓ Status routes mounted at ${API_PREFIX}/status`);
+
+    app.use(`${API_PREFIX}/analyses`, analysisRoutes);
+    console.log(`✓ Analysis routes mounted at ${API_PREFIX}/analyses`);
+
+    app.use(`${API_PREFIX}/departments`, departmentRoutes);
+    console.log(`✓ Department routes mounted at ${API_PREFIX}/departments`);
+
+    // Error handling (must be after routes)
+    app.use(errorHandler);
 
     updateContainerState({
       status: 'starting_processes',
