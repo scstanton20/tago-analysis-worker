@@ -192,9 +192,19 @@ async function sendStatusUpdate(client) {
     // Get container state
     const containerState = getContainerState();
 
-    const runningAnalyses = Array.from(
-      analysisService.analyses.values(),
-    ).filter((analysis) => analysis.status === 'running');
+    // Add safety checks for analyses collection and filter
+    let runningAnalyses = [];
+    try {
+      const analyses = analysisService?.analyses;
+      if (analyses && typeof analyses.values === 'function') {
+        runningAnalyses = Array.from(analyses.values()).filter(
+          (analysis) => analysis && analysis.status === 'running',
+        );
+      }
+    } catch (filterError) {
+      console.error('Error filtering analyses:', filterError);
+      runningAnalyses = [];
+    }
 
     // Get Tago SDK version from package.json
     let tagoVersion;
