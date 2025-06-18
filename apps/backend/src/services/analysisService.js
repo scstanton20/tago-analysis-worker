@@ -35,16 +35,6 @@ class AnalysisService {
   }
 
   /**
-   * Validate if time range is supported
-   * @param {string} timeRange - Time range to validate
-   * @returns {boolean} True if valid time range
-   */
-  validateTimeRange(timeRange) {
-    const validRanges = ['1h', '24h', '7d', '30d', 'all'];
-    return validRanges.includes(timeRange);
-  }
-
-  /**
    * Ensure required directories exist
    * @returns {Promise<void>}
    * @throws {Error} If directory creation fails
@@ -59,11 +49,10 @@ class AnalysisService {
    * @returns {Promise<Object>} Configuration object with version, departments, and analyses
    */
   async getConfig() {
-    return {
-      version: this.configCache?.version || '2.0',
-      departments: this.configCache?.departments || {},
-      analyses: Object.fromEntries(this.analyses),
-    };
+    if (!this.configCache) {
+      await this.loadConfig();
+    }
+    return { ...this.configCache };
   }
 
   /**
@@ -76,7 +65,7 @@ class AnalysisService {
    * @throws {Error} If config update fails
    */
   async updateConfig(config) {
-    this.configCache = config;
+    this.configCache = { ...config };
 
     // Update internal analyses Map from config
     this.analyses.clear();
@@ -186,18 +175,21 @@ class AnalysisService {
    * @param {string} file.name - Original filename
    * @param {Function} file.mv - Method to move file to destination
    * @param {string} type - Type of analysis (e.g., 'listener')
-   * @param {string} [targetDepartment='uncategorized'] - Department to assign analysis to
+   * @param {string|null} [targetDepartment=null] - Department to assign analysis to (null means uncategorized)
    * @returns {Promise<Object>} Object with analysisName property
    * @throws {Error} If upload or registration fails
    */
-  async uploadAnalysis(file, type, targetDepartment = 'uncategorized') {
+  async uploadAnalysis(file, type, targetDepartment = null) {
     const analysisName = path.parse(file.name).name;
     const basePath = await this.createAnalysisDirectories(analysisName);
     const filePath = path.join(basePath, 'index.cjs');
 
     await file.mv(filePath);
     const analysis = new AnalysisProcess(analysisName, type, this);
-    analysis.department = targetDepartment;
+
+    // FIXED: If no department specified (null) or "all analyses" selected, use uncategorized
+    analysis.department = targetDepartment || 'uncategorized';
+
     this.analyses.set(analysisName, analysis);
 
     const envFile = path.join(basePath, 'env', '.env');
@@ -321,9 +313,7 @@ class AnalysisService {
       // Save updated config to analyses-config.json
       await this.saveConfig();
 
-      // FIXED: Update department tracking properly through the department service
-      // The department service works with the same config, so we just need to ensure
-      // the analysis has proper department tracking
+      // Update department tracking properly through the department service
       await departmentService.ensureAnalysisHasDepartment(newFileName);
 
       // If it was running before, restart it
@@ -459,40 +449,6 @@ class AnalysisService {
 
     await analysis.stop();
     return { success: true };
-  }
-
-  /**
-   * Load and decrypt environment variables for an analysis
-   * @param {string} analysisName - Name of the analysis
-   * @returns {Promise<Object>} Object with decrypted environment variables
-   * @throws {Error} If file read or decryption fails (except ENOENT)
-   */
-  async loadEnvironmentVariables(analysisName) {
-    const envFile = path.join(
-      config.paths.analysis,
-      analysisName,
-      'env',
-      '.env',
-    );
-
-    try {
-      const envContent = await fs.readFile(envFile, 'utf8');
-      const envVariables = {};
-
-      envContent.split('\n').forEach((line) => {
-        const [key, encryptedValue] = line.split('=');
-        if (key && encryptedValue) {
-          envVariables[key] = decrypt(encryptedValue, process.env.SECRET_KEY);
-        }
-      });
-
-      return envVariables;
-    } catch (error) {
-      if (error.code === 'ENOENT') {
-        return {}; // Return empty object if the file does not exist
-      }
-      throw error;
-    }
   }
 
   /**

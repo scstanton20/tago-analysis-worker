@@ -2,7 +2,7 @@
 import path from 'path';
 import { promises as fs } from 'fs';
 import { fork } from 'child_process';
-import { broadcast } from '../utils/websocket.js'; // FIXED: Direct import of broadcast function
+import { broadcast } from '../utils/websocket.js';
 import config from '../config/default.js';
 
 class AnalysisProcess {
