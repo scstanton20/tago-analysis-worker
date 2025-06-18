@@ -186,7 +186,7 @@ export default function EditAnalysisENVModal({ onClose, analysis }) {
             onClick={handleSave}
             disabled={!hasChanges}
             loading={isLoading}
-            color="green"
+            color="brand"
           >
             Save Changes
           </Button>

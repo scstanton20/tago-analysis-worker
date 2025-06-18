@@ -227,6 +227,7 @@ export default function EditAnalysisModal({
             onClick={handleSave}
             disabled={!hasChanges}
             loading={isLoading}
+            color="brand"
           >
             Save Changes
           </Button>

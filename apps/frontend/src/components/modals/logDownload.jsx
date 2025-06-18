@@ -54,6 +54,7 @@ const LogDownloadDialog = ({ isOpen, onClose, onDownload }) => {
             onClick={handleDownload}
             loading={isLoading}
             leftSection={<IconDownload size={16} />}
+            color="brand"
           >
             Download
           </Button>

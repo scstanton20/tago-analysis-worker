@@ -22,6 +22,7 @@ import DepartmentalSidebar from './components/departmentalSidebar';
 import AnalysisList from './components/analysis/analysisList';
 import AnalysisCreator from './components/analysis/uploadAnalysis';
 import ConnectionStatus from './components/connectionStatus';
+import Logo from './components/Logo';
 
 function AppContent() {
   const {
@@ -79,6 +80,7 @@ function AppContent() {
         }}
       >
         <Stack align="center" gap="lg">
+          <Logo size={64} />
           <Text size="xl" fw={600} c="red">
             Connection Failed
           </Text>
@@ -91,7 +93,8 @@ function AppContent() {
           </Text>
           <Button
             onClick={() => window.location.reload()}
-            variant="outline"
+            variant="gradient"
+            gradient={{ from: 'brand.6', to: 'accent.6' }}
             mt="md"
           >
             Retry Connection
@@ -111,6 +114,7 @@ function AppContent() {
           size: 'xl',
           children: (
             <Stack align="center" gap="lg">
+              <Logo size={48} className="pulse" />
               <Text size="lg" fw={500}>
                 Connecting to Tago Analysis Runner...
               </Text>
@@ -150,9 +154,17 @@ function AppContent() {
                 visibleFrom="sm"
                 size="sm"
               />
-              <Text size="lg" fw={600}>
-                Tago Analysis Runner
-              </Text>
+              <Group gap="sm">
+                <Logo size={48} />
+                <Text
+                  size="xl"
+                  fw={800}
+                  variant="gradient"
+                  gradient={{ from: 'brand.6', to: 'accent.6' }}
+                >
+                  Tago Analysis Runner
+                </Text>
+              </Group>
             </Group>
             <Group>
               <Tooltip
@@ -167,6 +179,10 @@ function AppContent() {
                     size={16}
                     style={{
                       opacity: computedColorScheme === 'light' ? 1 : 0.5,
+                      color:
+                        computedColorScheme === 'light'
+                          ? 'var(--mantine-color-brand-6)'
+                          : 'var(--mantine-color-gray-5)',
                     }}
                   />
                   <Switch
@@ -179,23 +195,30 @@ function AppContent() {
                     size="md"
                     onLabel=""
                     offLabel=""
+                    color="brand"
                     styles={{
                       track: {
                         cursor: 'pointer',
                         backgroundColor: 'transparent',
-                        borderColor: 'var(--mantine-color-gray-4)',
+                        borderColor:
+                          computedColorScheme === 'dark'
+                            ? 'var(--mantine-color-brand-4)'
+                            : 'var(--mantine-color-gray-4)',
                         border: '1px solid',
                         '&[data-checked]': {
-                          backgroundColor: 'transparent',
-                          borderColor: 'var(--mantine-color-gray-6)',
+                          backgroundColor: 'var(--mantine-color-brand-1)',
+                          borderColor: 'var(--mantine-color-brand-6)',
                         },
                       },
                       thumb: {
                         cursor: 'pointer',
-                        backgroundColor: 'var(--mantine-color-gray-6)',
+                        backgroundColor:
+                          computedColorScheme === 'dark'
+                            ? 'var(--mantine-color-brand-6)'
+                            : 'var(--mantine-color-gray-6)',
                         border: 'none',
                         '&[data-checked]': {
-                          backgroundColor: 'var(--mantine-color-gray-7)',
+                          backgroundColor: 'var(--mantine-color-brand-7)',
                         },
                       },
                     }}
@@ -204,6 +227,10 @@ function AppContent() {
                     size={16}
                     style={{
                       opacity: computedColorScheme === 'dark' ? 1 : 0.5,
+                      color:
+                        computedColorScheme === 'dark'
+                          ? 'var(--mantine-color-brand-6)'
+                          : 'var(--mantine-color-gray-5)',
                     }}
                   />
                 </Group>

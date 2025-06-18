@@ -32,6 +32,7 @@ const ConnectionStatus = () => {
     }
 
     if (disconnectedCount === 3) return 'red';
+    if (disconnectedCount >= 1) return 'yellow';
     return 'green';
   };
 
@@ -46,6 +47,19 @@ const ConnectionStatus = () => {
     return 'Connected';
   };
 
+  const getStatusGradient = (status) => {
+    switch (status) {
+      case 'green':
+        return 'linear-gradient(135deg, var(--mantine-color-teal-6) 0%, var(--mantine-color-green-6) 100%)';
+      case 'yellow':
+        return 'linear-gradient(135deg, var(--mantine-color-yellow-6) 0%, var(--mantine-color-orange-6) 100%)';
+      case 'red':
+        return 'linear-gradient(135deg, var(--mantine-color-red-6) 0%, var(--mantine-color-pink-6) 100%)';
+      default:
+        return 'var(--brand-gradient)';
+    }
+  };
+
   const handleRetryConnection = () => {
     requestStatusUpdate();
   };
@@ -54,6 +68,7 @@ const ConnectionStatus = () => {
     return null;
   }
 
+  const overallColor = getOverallStatusColor();
   const isDisconnected =
     connectionStatus !== 'connected' ||
     (backendStatus &&
@@ -65,10 +80,16 @@ const ConnectionStatus = () => {
       <Popover
         opened={isExpanded}
         onChange={setIsExpanded}
-        width={300}
+        width={320}
         position="bottom-end"
         withArrow
-        shadow="md"
+        shadow="lg"
+        styles={{
+          dropdown: {
+            border: '1px solid var(--mantine-color-gray-3)',
+            backdropFilter: 'blur(10px)',
+          },
+        }}
       >
         <Popover.Target>
           <ActionIcon
@@ -81,28 +102,50 @@ const ConnectionStatus = () => {
               justifyContent: 'center',
             }}
           >
-            {/* Main status indicator */}
+            {/* Enhanced status indicator with gradient and animation */}
             <Box
+              className={`connection-status-indicator ${connectionStatus}`}
               style={{
                 width: 16,
                 height: 16,
                 borderRadius: '50%',
-                backgroundColor:
-                  getOverallStatusColor() === 'green'
-                    ? 'var(--mantine-color-green-filled)'
-                    : 'var(--mantine-color-red-filled)',
+                background: getStatusGradient(overallColor),
                 border: '2px solid var(--mantine-color-body)',
-                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.12)',
+                boxShadow: `0 2px 8px ${getStatusGradient(overallColor)}33`,
+                position: 'relative',
               }}
-            />
+            >
+              {connectionStatus === 'connecting' && (
+                <Box
+                  style={{
+                    position: 'absolute',
+                    inset: '-4px',
+                    borderRadius: '50%',
+                    background: getStatusGradient(overallColor),
+                    opacity: 0.3,
+                    animation: 'pulse 2s infinite',
+                  }}
+                />
+              )}
+            </Box>
           </ActionIcon>
         </Popover.Target>
 
         <Popover.Dropdown>
           <Stack>
-            <Text fw={500} size="md">
-              System Status
-            </Text>
+            <Group justify="space-between">
+              <Text fw={600} size="md" c="brand.5">
+                System Status
+              </Text>
+              <Box
+                style={{
+                  width: 12,
+                  height: 12,
+                  borderRadius: '50%',
+                  background: getStatusGradient(overallColor),
+                }}
+              />
+            </Group>
 
             <Stack gap="sm">
               <Group justify="space-between">
@@ -112,14 +155,23 @@ const ConnectionStatus = () => {
                     color={
                       backendStatus &&
                       backendStatus.container_health.status === 'healthy'
-                        ? 'green'
+                        ? 'teal'
                         : 'red'
                     }
                     size={8}
+                    styles={{
+                      indicator: {
+                        background:
+                          backendStatus &&
+                          backendStatus.container_health.status === 'healthy'
+                            ? 'linear-gradient(135deg, var(--mantine-color-teal-6) 0%, var(--mantine-color-green-6) 100%)'
+                            : 'linear-gradient(135deg, var(--mantine-color-red-6) 0%, var(--mantine-color-pink-6) 100%)',
+                      },
+                    }}
                   >
                     <Box />
                   </Indicator>
-                  <Text size="sm" tt="capitalize">
+                  <Text size="sm" tt="capitalize" fw={500}>
                     {backendStatus?.container_health.status || 'unknown'}
                   </Text>
                 </Group>
@@ -129,12 +181,20 @@ const ConnectionStatus = () => {
                 <Text size="sm">WebSocket:</Text>
                 <Group gap="xs">
                   <Indicator
-                    color={connectionStatus === 'connected' ? 'green' : 'red'}
+                    color={connectionStatus === 'connected' ? 'teal' : 'red'}
                     size={8}
+                    styles={{
+                      indicator: {
+                        background:
+                          connectionStatus === 'connected'
+                            ? 'linear-gradient(135deg, var(--mantine-color-teal-6) 0%, var(--mantine-color-green-6) 100%)'
+                            : 'linear-gradient(135deg, var(--mantine-color-red-6) 0%, var(--mantine-color-pink-6) 100%)',
+                      },
+                    }}
                   >
                     <Box />
                   </Indicator>
-                  <Text size="sm" tt="capitalize">
+                  <Text size="sm" tt="capitalize" fw={500}>
                     {connectionStatus}
                   </Text>
                 </Group>
@@ -147,14 +207,23 @@ const ConnectionStatus = () => {
                     color={
                       backendStatus &&
                       backendStatus.tagoConnection.runningAnalyses > 0
-                        ? 'green'
+                        ? 'teal'
                         : 'yellow'
                     }
                     size={8}
+                    styles={{
+                      indicator: {
+                        background:
+                          backendStatus &&
+                          backendStatus.tagoConnection.runningAnalyses > 0
+                            ? 'linear-gradient(135deg, var(--mantine-color-teal-6) 0%, var(--mantine-color-green-6) 100%)'
+                            : 'linear-gradient(135deg, var(--mantine-color-yellow-6) 0%, var(--mantine-color-orange-6) 100%)',
+                      },
+                    }}
                   >
                     <Box />
                   </Indicator>
-                  <Text size="sm">
+                  <Text size="sm" fw={500}>
                     {backendStatus?.tagoConnection.runningAnalyses || 0} running
                   </Text>
                 </Group>
@@ -163,7 +232,7 @@ const ConnectionStatus = () => {
               {backendStatus?.tagoConnection.sdkVersion && (
                 <Group justify="space-between">
                   <Text size="sm">SDK Version:</Text>
-                  <Text size="sm" c="dimmed">
+                  <Text size="sm" ff="monospace">
                     {backendStatus.tagoConnection.sdkVersion}
                   </Text>
                 </Group>
@@ -172,7 +241,7 @@ const ConnectionStatus = () => {
               {backendStatus?.container_health.uptime && (
                 <Group justify="space-between">
                   <Text size="sm">Uptime:</Text>
-                  <Text size="sm" c="dimmed">
+                  <Text size="sm" ff="monospace">
                     {backendStatus.container_health.uptime.formatted}
                   </Text>
                 </Group>
@@ -183,11 +252,12 @@ const ConnectionStatus = () => {
               <>
                 <Divider />
                 <Stack gap="xs">
-                  <Text size="sm" c="dimmed">
+                  <Text size="sm" c="dimmed" fw={500}>
                     {getStatusText()}
                   </Text>
                   <Button
-                    variant="subtle"
+                    variant="gradient"
+                    gradient={{ from: 'brand.5', to: 'accent.6' }}
                     size="xs"
                     onClick={handleRetryConnection}
                     leftSection={<IconRefresh size={14} />}

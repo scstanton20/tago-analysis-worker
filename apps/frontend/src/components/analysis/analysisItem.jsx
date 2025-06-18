@@ -180,18 +180,27 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
   };
 
   return (
-    <Paper p="md" withBorder radius="md">
+    <Paper
+      p="md"
+      withBorder
+      radius="md"
+      className="analysis-card"
+      style={{
+        borderLeft: '3px solid var(--mantine-color-brand-4)',
+        transition: 'all 0.3s ease',
+      }}
+    >
       <Stack>
         <Group justify="space-between">
           <Group>
-            <Text fw={600} size="md">
+            <Text fw={600} size="md" c="brand.8">
               {analysis.name}
             </Text>
             <StatusBadge status={analysis.status || 'stopped'} />
             {currentDepartment && (
               <Badge
                 variant="light"
-                color="gray"
+                color="brand"
                 size="sm"
                 leftSection={
                   <Box
@@ -225,7 +234,8 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
               <Button
                 onClick={handleRun}
                 loading={isLoading}
-                color="green"
+                variant="gradient"
+                gradient={{ from: 'teal.6', to: 'green.6' }}
                 size="xs"
                 leftSection={<IconPlayerPlay size={16} />}
               >
@@ -237,6 +247,7 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
             <Button
               onClick={onToggleLogs}
               variant="light"
+              color="brand"
               size="xs"
               leftSection={<IconFileText size={16} />}
             >
@@ -250,7 +261,7 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
               closeOnItemClick={true}
             >
               <Menu.Target>
-                <ActionIcon variant="subtle" size="lg">
+                <ActionIcon variant="subtle" size="lg" color="brand">
                   <IconDotsVertical size={20} />
                 </ActionIcon>
               </Menu.Target>

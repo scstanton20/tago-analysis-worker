@@ -320,7 +320,7 @@ export default function AnalysisCreator({
                 <IconX size={20} />
               </ActionIcon>
             )}
-            <ActionIcon variant="subtle">
+            <ActionIcon variant="subtle" color="brand">
               {isExpanded ? (
                 <IconChevronUp size={20} />
               ) : (

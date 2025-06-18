@@ -194,6 +194,7 @@ export default function AnalysisList({
               onClick={toggleAllLogs}
               variant="light"
               size="sm"
+              color="brand"
               leftSection={<IconFileText size={16} />}
             >
               {openLogIds.size === analysesArray.length

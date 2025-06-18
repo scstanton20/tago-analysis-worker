@@ -347,6 +347,7 @@ export default function DepartmentManagementModal({
                   }
                   loading={isLoading}
                   size="sm"
+                  color="green"
                 >
                   Create
                 </Button>

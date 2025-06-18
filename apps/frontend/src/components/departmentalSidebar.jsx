@@ -60,11 +60,34 @@ const SortableDepartmentItem = ({
   };
 
   return (
-    <div ref={setNodeRef} style={style}>
+    <div
+      ref={setNodeRef}
+      style={style}
+      onMouseEnter={(e) => {
+        const handle = e.currentTarget.querySelector('.department-drag-handle');
+        if (handle) handle.style.opacity = '1';
+      }}
+      onMouseLeave={(e) => {
+        const handle = e.currentTarget.querySelector('.department-drag-handle');
+        if (handle) handle.style.opacity = '0';
+      }}
+    >
       <NavLink
         active={isSelected}
         onClick={onClick}
-        label={department.name}
+        label={
+          <Text
+            size="md"
+            fw={500}
+            style={{
+              wordWrap: 'break-word',
+              whiteSpace: 'normal',
+              lineHeight: 1.3,
+            }}
+          >
+            {department.name}
+          </Text>
+        }
         leftSection={
           <Group gap={6}>
             <ColorSwatch color={department.color} size={16} />
@@ -72,11 +95,11 @@ const SortableDepartmentItem = ({
           </Group>
         }
         rightSection={
-          <Group gap={4}>
+          <Group gap={4} align="center">
             <Badge
-              size="xs"
+              size="md"
               variant={isSelected ? 'filled' : 'light'}
-              color={isSelected ? 'blue.4' : 'gray'}
+              color={isSelected ? 'brand' : 'gray'}
             >
               {analysisCount}
             </Badge>
@@ -85,16 +108,17 @@ const SortableDepartmentItem = ({
                 {...attributes}
                 {...listeners}
                 className="department-drag-handle"
-                styles={{
-                  root: {
-                    cursor: 'grab',
-                    opacity: 0,
-                    transition: 'opacity 200ms',
-                    '.mantine-NavLink-root:hover &': {
-                      opacity: 1,
-                    },
-                  },
+                style={{
+                  cursor: 'grab',
+                  opacity: 0,
+                  transition: 'opacity 200ms',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '4px',
+                  borderRadius: '4px',
                 }}
+                onMouseDown={(e) => e.stopPropagation()}
               >
                 <IconGripVertical size={16} />
               </Box>
@@ -105,6 +129,27 @@ const SortableDepartmentItem = ({
           root: {
             borderRadius: 'var(--mantine-radius-md)',
             marginBottom: 4,
+            minHeight: 44, // Ensure consistent height for text wrapping
+            '&[data-active]': {
+              background:
+                'linear-gradient(135deg, var(--mantine-color-brand-1) 0%, var(--mantine-color-accent-1) 100%)',
+              color: 'var(--mantine-color-brand-8)',
+              borderLeft: '3px solid var(--mantine-color-brand-6)',
+              fontWeight: 500,
+            },
+            '&:hover': {
+              '& .department-drag-handle': {
+                opacity: 1,
+              },
+            },
+          },
+          label: {
+            flex: 1,
+            overflow: 'visible',
+          },
+          section: {
+            alignItems: 'flex-start',
+            paddingTop: 2,
           },
         }}
       />
@@ -190,14 +235,19 @@ export default function DepartmentalSidebar({
         }}
       >
         <Group justify="space-between">
-          <Text fw={600} size="lg">
+          <Text fw={600} size="xl" c="brand.8">
             Departments
           </Text>
         </Group>
 
         <Group mt="md" gap="xs">
           <Button
-            variant={!selectedDepartment ? 'filled' : 'default'}
+            variant={!selectedDepartment ? 'gradient' : 'default'}
+            gradient={
+              !selectedDepartment
+                ? { from: 'brand.6', to: 'accent.6' }
+                : undefined
+            }
             size="xs"
             style={{ flex: 1 }}
             onClick={() => handleDepartmentClick(null)}
@@ -206,7 +256,8 @@ export default function DepartmentalSidebar({
           </Button>
           <Tooltip label="Manage departments">
             <ActionIcon
-              variant="default"
+              variant="light"
+              color="brand"
               size="lg"
               onClick={() => setShowManageModal(true)}
             >
@@ -242,7 +293,7 @@ export default function DepartmentalSidebar({
                     style={{
                       borderRadius: 'var(--mantine-radius-md)',
                       outline: draggedAnalysis
-                        ? '2px solid var(--mantine-color-blue-filled)'
+                        ? '2px solid var(--mantine-color-brand-filled)'
                         : 'none',
                       outlineOffset: '2px',
                     }}
