@@ -1,11 +1,23 @@
 import { v4 as uuidv4 } from 'uuid';
 
+/**
+ * Service class for managing departments and their relationships with analyses
+ * Handles department CRUD operations, analysis-department assignments, and config migration
+ */
 class DepartmentService {
   constructor() {
+    /** @type {Object|null} Reference to the analysis service instance */
     this.analysisService = null;
+    /** @type {boolean} Whether the service has been initialized */
     this.initialized = false;
   }
 
+  /**
+   * Initialize the department service with analysis service integration
+   * @param {Object} analysisService - Analysis service instance for config management
+   * @returns {Promise<void>}
+   * @throws {Error} If initialization or migration fails
+   */
   async initialize(analysisService) {
     if (this.initialized) return;
 
@@ -26,6 +38,12 @@ class DepartmentService {
     }
   }
 
+  /**
+   * Migrate configuration from older versions to version 2.0
+   * Creates default uncategorized department and ensures all analyses have department assignments
+   * @returns {Promise<void>}
+   * @throws {Error} If migration fails
+   */
   async migrateConfig() {
     console.log('Migrating config to version 2.0...');
 
@@ -63,18 +81,38 @@ class DepartmentService {
     console.log('Migration completed');
   }
 
-  // Department CRUD operations
+  /**
+   * Get all departments sorted by order
+   * @returns {Promise<Array>} Array of department objects sorted by order
+   * @throws {Error} If config retrieval fails
+   */
   async getAllDepartments() {
     const config = await this.analysisService.getConfig();
     const departments = Object.values(config.departments || {});
     return departments.sort((a, b) => a.order - b.order);
   }
 
+  /**
+   * Get a specific department by ID
+   * @param {string} id - Department ID to retrieve
+   * @returns {Promise<Object|undefined>} Department object or undefined if not found
+   * @throws {Error} If config retrieval fails
+   */
   async getDepartment(id) {
     const config = await this.analysisService.getConfig();
     return config.departments?.[id];
   }
 
+  /**
+   * Create a new department
+   * @param {Object} data - Department data
+   * @param {string} data.name - Department name
+   * @param {string} [data.color='#3b82f6'] - Department color (hex code)
+   * @param {string} [data.id] - Custom department ID (generates UUID if not provided)
+   * @param {number} [data.order] - Display order (defaults to end of list)
+   * @returns {Promise<Object>} Created department object
+   * @throws {Error} If department with ID already exists or creation fails
+   */
   async createDepartment(data) {
     const config = await this.analysisService.getConfig();
 
@@ -102,6 +140,16 @@ class DepartmentService {
     return department;
   }
 
+  /**
+   * Update an existing department
+   * @param {string} id - Department ID to update
+   * @param {Object} updates - Updates to apply
+   * @param {string} [updates.name] - New department name
+   * @param {string} [updates.color] - New department color
+   * @param {number} [updates.order] - New display order
+   * @returns {Promise<Object>} Updated department object
+   * @throws {Error} If department not found, system department modification attempted, or update fails
+   */
   async updateDepartment(id, updates) {
     const config = await this.analysisService.getConfig();
 
@@ -128,6 +176,13 @@ class DepartmentService {
     return updated;
   }
 
+  /**
+   * Delete a department and optionally move its analyses to another department
+   * @param {string} id - Department ID to delete
+   * @param {string} [moveAnalysesTo='uncategorized'] - Department ID to move analyses to
+   * @returns {Promise<Object>} Deletion result with moved analysis count
+   * @throws {Error} If department not found, system department deletion attempted, or deletion fails
+   */
   async deleteDepartment(id, moveAnalysesTo = 'uncategorized') {
     const config = await this.analysisService.getConfig();
 
@@ -171,6 +226,12 @@ class DepartmentService {
     };
   }
 
+  /**
+   * Reorder departments by providing new order of IDs
+   * @param {string[]} orderedIds - Array of department IDs in desired order
+   * @returns {Promise<Array>} Updated departments array sorted by new order
+   * @throws {Error} If any department ID is not found or reorder fails
+   */
   async reorderDepartments(orderedIds) {
     const config = await this.analysisService.getConfig();
 
@@ -191,7 +252,12 @@ class DepartmentService {
     return this.getAllDepartments();
   }
 
-  // Analysis-Department operations
+  /**
+   * Get all analyses belonging to a specific department
+   * @param {string} departmentId - Department ID to get analyses for
+   * @returns {Promise<Array>} Array of analysis objects with name and metadata
+   * @throws {Error} If department not found or config retrieval fails
+   */
   async getAnalysesByDepartment(departmentId) {
     const config = await this.analysisService.getConfig();
 
@@ -211,6 +277,13 @@ class DepartmentService {
     return analyses;
   }
 
+  /**
+   * Move an analysis to a different department
+   * @param {string} analysisName - Name of the analysis to move
+   * @param {string} departmentId - Target department ID
+   * @returns {Promise<Object>} Move result with from/to department info
+   * @throws {Error} If analysis or department not found, or move fails
+   */
   async moveAnalysisToDepartment(analysisName, departmentId) {
     const config = await this.analysisService.getConfig();
 
@@ -236,7 +309,12 @@ class DepartmentService {
     };
   }
 
-  // Helper method for analysis service integration
+  /**
+   * Ensure an analysis has a department assignment (defaults to uncategorized)
+   * @param {string} analysisName - Name of the analysis to check
+   * @returns {Promise<void>}
+   * @throws {Error} If config update fails
+   */
   async ensureAnalysisHasDepartment(analysisName) {
     const config = await this.analysisService.getConfig();
 
@@ -249,7 +327,13 @@ class DepartmentService {
     }
   }
 
-  // Bulk operations
+  /**
+   * Move multiple analyses to a target department in a single operation
+   * @param {string[]} analysisNames - Array of analysis names to move
+   * @param {string} targetDepartmentId - Target department ID
+   * @returns {Promise<Array>} Array of move results with success/failure status for each analysis
+   * @throws {Error} If target department not found or config update fails
+   */
   async bulkMoveAnalyses(analysisNames, targetDepartmentId) {
     const config = await this.analysisService.getConfig();
 

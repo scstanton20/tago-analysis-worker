@@ -35,6 +35,7 @@ import {
   IconGripVertical,
 } from '@tabler/icons-react';
 import DepartmentManagementModal from './modals/departmentManagementModal';
+import { departmentService } from '../services/departmentService';
 
 // Sortable Department Item
 const SortableDepartmentItem = ({
@@ -142,20 +143,8 @@ export default function DepartmentalSidebar({
     if (!draggedAnalysis) return;
 
     try {
-      const response = await fetch(
-        `/api/departments/analyses/${draggedAnalysis}/department`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ departmentId: deptId }),
-        },
-      );
-
-      if (response.ok) {
-        console.log(
-          `Moved analysis ${draggedAnalysis} to department ${deptId}`,
-        );
-      }
+      await departmentService.moveAnalysisToDepartment(draggedAnalysis, deptId);
+      console.log(`Moved analysis ${draggedAnalysis} to department ${deptId}`);
     } catch (error) {
       console.error('Error moving analysis:', error);
     }
@@ -174,15 +163,7 @@ export default function DepartmentalSidebar({
         const newOrder = arrayMove(departmentsArray, oldIndex, newIndex);
 
         try {
-          const response = await fetch('/api/departments/reorder', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ orderedIds: newOrder.map((d) => d.id) }),
-          });
-
-          if (!response.ok) {
-            console.error('Failed to reorder departments');
-          }
+          await departmentService.reorderDepartments(newOrder.map((d) => d.id));
         } catch (error) {
           console.error('Error reordering departments:', error);
         }

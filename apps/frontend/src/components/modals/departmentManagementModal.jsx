@@ -1,4 +1,4 @@
-// frontend/src/components/DepartmentManagementModal.jsx
+// frontend/src/components/modals/departmentManagementModal.jsx
 import { useState, useMemo } from 'react';
 import {
   DndContext,
@@ -28,6 +28,7 @@ import {
   CheckIcon,
 } from '@mantine/core';
 import { IconEdit, IconTrash, IconX } from '@tabler/icons-react';
+import { departmentService } from '../../services/departmentService';
 
 const PREDEFINED_COLORS = [
   '#3b82f6', // blue
@@ -94,6 +95,7 @@ export default function DepartmentManagementModal({
   const [editingName, setEditingName] = useState('');
   const [editingColor, setEditingColor] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Convert departments object to sorted array for display
   const departmentsArray = useMemo(
@@ -123,7 +125,7 @@ export default function DepartmentManagementModal({
 
   const handleCreateDepartment = async (e) => {
     e.preventDefault();
-    if (!newDeptName.trim() || !newDeptColor) return;
+    if (!newDeptName.trim() || !newDeptColor || isLoading) return;
 
     // Check for duplicate name
     if (usedNames.has(newDeptName.toLowerCase().trim())) {
@@ -133,25 +135,25 @@ export default function DepartmentManagementModal({
       return;
     }
 
+    setIsLoading(true);
     try {
-      const response = await fetch('/api/departments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newDeptName, color: newDeptColor }),
-      });
-
-      if (response.ok) {
-        setNewDeptName('');
-        setNewDeptColor('');
-      }
+      await departmentService.createDepartment(
+        newDeptName.trim(),
+        newDeptColor,
+      );
+      setNewDeptName('');
+      setNewDeptColor('');
     } catch (error) {
       console.error('Error creating department:', error);
+      alert(`Failed to create department: ${error.message}`);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleUpdateName = async (id) => {
     const currentDept = departmentsArray.find((d) => d.id === id);
-    if (!editingName.trim() || editingName === currentDept?.name) {
+    if (!editingName.trim() || editingName === currentDept?.name || isLoading) {
       setEditingId(null);
       return;
     }
@@ -170,18 +172,17 @@ export default function DepartmentManagementModal({
       return;
     }
 
+    setIsLoading(true);
     try {
-      const response = await fetch(`/api/departments/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: editingName }),
+      await departmentService.updateDepartment(id, {
+        name: editingName.trim(),
       });
-
-      if (response.ok) {
-        setEditingId(null);
-      }
+      setEditingId(null);
     } catch (error) {
-      console.error('Error updating department:', error);
+      console.error('Error updating department name:', error);
+      alert(`Failed to update department name: ${error.message}`);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -191,64 +192,56 @@ export default function DepartmentManagementModal({
   };
 
   const handleSaveColorChange = async (id) => {
-    if (!editingColor) {
+    if (!editingColor || isLoading) {
       setEditingId(null);
       setEditingColor('');
       return;
     }
 
+    setIsLoading(true);
     try {
-      const response = await fetch(`/api/departments/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ color: editingColor }),
-      });
-
-      if (response.ok) {
-        setEditingId(null);
-        setEditingColor('');
-      }
+      await departmentService.updateDepartment(id, { color: editingColor });
+      setEditingId(null);
+      setEditingColor('');
     } catch (error) {
       console.error('Error updating department color:', error);
+      alert(`Failed to update department color: ${error.message}`);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleDelete = async (id) => {
-    try {
-      const response = await fetch(`/api/departments/${id}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ moveAnalysesTo: 'uncategorized' }),
-      });
+    if (isLoading) return;
 
-      if (response.ok) {
-        setShowDeleteConfirm(null);
-      }
+    setIsLoading(true);
+    try {
+      await departmentService.deleteDepartment(id, 'uncategorized');
+      setShowDeleteConfirm(null);
     } catch (error) {
       console.error('Error deleting department:', error);
+      alert(`Failed to delete department: ${error.message}`);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleDragEnd = async (event) => {
     const { active, over } = event;
 
-    if (active.id !== over.id) {
+    if (active.id !== over.id && !isLoading) {
       const oldIndex = departmentsArray.findIndex((d) => d.id === active.id);
       const newIndex = departmentsArray.findIndex((d) => d.id === over.id);
       const newOrder = arrayMove(departmentsArray, oldIndex, newIndex);
 
+      setIsLoading(true);
       try {
-        const response = await fetch('/api/departments/reorder', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ orderedIds: newOrder.map((d) => d.id) }),
-        });
-
-        if (!response.ok) {
-          console.error('Failed to reorder departments');
-        }
+        await departmentService.reorderDepartments(newOrder.map((d) => d.id));
       } catch (error) {
         console.error('Error reordering departments:', error);
+        alert(`Failed to reorder departments: ${error.message}`);
+      } finally {
+        setIsLoading(false);
       }
     }
   };
@@ -296,6 +289,7 @@ export default function DepartmentManagementModal({
                 onChange={(e) => setNewDeptName(e.target.value)}
                 placeholder="Department name"
                 size="sm"
+                disabled={isLoading}
                 error={
                   usedNames.has(newDeptName.toLowerCase().trim()) &&
                   newDeptName.trim()
@@ -348,8 +342,10 @@ export default function DepartmentManagementModal({
                   disabled={
                     !newDeptName.trim() ||
                     !newDeptColor ||
-                    usedNames.has(newDeptName.toLowerCase().trim())
+                    usedNames.has(newDeptName.toLowerCase().trim()) ||
+                    isLoading
                   }
+                  loading={isLoading}
                   size="sm"
                 >
                   Create
@@ -393,6 +389,7 @@ export default function DepartmentManagementModal({
                           }}
                           size="sm"
                           autoFocus
+                          disabled={isLoading}
                           error={(() => {
                             const trimmed = editingName.toLowerCase().trim();
                             const otherNames = new Set(
@@ -444,6 +441,8 @@ export default function DepartmentManagementModal({
                               <Button
                                 size="xs"
                                 onClick={() => handleSaveColorChange(dept.id)}
+                                loading={isLoading}
+                                disabled={isLoading}
                               >
                                 Save
                               </Button>
@@ -453,6 +452,8 @@ export default function DepartmentManagementModal({
                                 size="xs"
                                 variant="light"
                                 onClick={() => handleUpdateName(dept.id)}
+                                loading={isLoading}
+                                disabled={isLoading}
                               >
                                 Save Name
                               </Button>
@@ -464,6 +465,7 @@ export default function DepartmentManagementModal({
                                 setEditingId(null);
                                 setEditingColor('');
                               }}
+                              disabled={isLoading}
                             >
                               {(editingColor && editingColor !== dept.color) ||
                               editingName !== dept.name
@@ -486,6 +488,7 @@ export default function DepartmentManagementModal({
                               variant="subtle"
                               size="sm"
                               onClick={() => startEditingColor(dept)}
+                              disabled={isLoading}
                             >
                               <IconEdit size={16} />
                             </ActionIcon>
@@ -494,6 +497,7 @@ export default function DepartmentManagementModal({
                               size="sm"
                               color="red"
                               onClick={() => setShowDeleteConfirm(dept.id)}
+                              disabled={isLoading}
                             >
                               <IconTrash size={16} />
                             </ActionIcon>
@@ -520,6 +524,8 @@ export default function DepartmentManagementModal({
                 size="xs"
                 color="red"
                 onClick={() => handleDelete(showDeleteConfirm)}
+                loading={isLoading}
+                disabled={isLoading}
               >
                 Delete
               </Button>
@@ -527,6 +533,7 @@ export default function DepartmentManagementModal({
                 size="xs"
                 variant="default"
                 onClick={() => setShowDeleteConfirm(null)}
+                disabled={isLoading}
               >
                 Cancel
               </Button>
