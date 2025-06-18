@@ -205,7 +205,7 @@ function AppContent() {
                             ? 'var(--mantine-color-brand-4)'
                             : 'var(--mantine-color-gray-4)',
                         border: '1px solid',
-                        '&[data-checked]': {
+                        '&[dataChecked]': {
                           backgroundColor: 'var(--mantine-color-brand-1)',
                           borderColor: 'var(--mantine-color-brand-6)',
                         },
@@ -217,7 +217,7 @@ function AppContent() {
                             ? 'var(--mantine-color-brand-6)'
                             : 'var(--mantine-color-gray-6)',
                         border: 'none',
-                        '&[data-checked]': {
+                        '&[dataChecked]': {
                           backgroundColor: 'var(--mantine-color-brand-7)',
                         },
                       },

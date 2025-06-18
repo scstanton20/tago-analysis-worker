@@ -4,6 +4,43 @@ import { broadcast, broadcastRefresh } from '../utils/websocket.js';
 import path from 'path';
 import config from '../config/default.js';
 import { promises as fs } from 'fs';
+import sanitize from 'sanitize-filename';
+
+// Helper function to validate that a path is within the expected directory
+function validatePath(targetPath, allowedBasePath) {
+  const resolvedTarget = path.resolve(targetPath);
+  const resolvedBase = path.resolve(allowedBasePath);
+
+  // Check if the resolved target path starts with the resolved base path
+  if (
+    !resolvedTarget.startsWith(resolvedBase + path.sep) &&
+    resolvedTarget !== resolvedBase
+  ) {
+    throw new Error('Path traversal attempt detected');
+  }
+
+  return resolvedTarget;
+}
+
+// Helper function to sanitize and validate filename
+function sanitizeAndValidateFilename(filename) {
+  if (!filename || typeof filename !== 'string') {
+    throw new Error('Invalid filename');
+  }
+
+  const sanitized = sanitize(filename, { replacement: '_' });
+
+  if (
+    !sanitized ||
+    sanitized.length === 0 ||
+    sanitized === '.' ||
+    sanitized === '..'
+  ) {
+    throw new Error('Filename cannot be empty or invalid after sanitization');
+  }
+
+  return sanitized;
+}
 
 const analysisController = {
   async uploadAnalysis(req, res) {
@@ -62,17 +99,20 @@ const analysisController = {
     try {
       const { fileName } = req.params;
 
-      const result = await analysisService.runAnalysis(fileName);
+      // Sanitize the fileName to prevent path traversal
+      const sanitizedFileName = sanitizeAndValidateFilename(fileName);
+
+      const result = await analysisService.runAnalysis(sanitizedFileName);
 
       // Get updated analysis data
       const analyses = await analysisService.getAllAnalyses();
-      const updatedAnalysis = analyses[fileName];
+      const updatedAnalysis = analyses[sanitizedFileName];
 
       // Broadcast status change with complete analysis data
       broadcast({
         type: 'analysisStatus',
         data: {
-          fileName,
+          fileName: sanitizedFileName,
           status: 'running',
           enabled: true,
           ...updatedAnalysis,
@@ -82,6 +122,14 @@ const analysisController = {
       res.json(result);
     } catch (error) {
       console.error('Run analysis error:', error);
+
+      if (
+        error.message.includes('Path traversal') ||
+        error.message.includes('Invalid filename')
+      ) {
+        return res.status(400).json({ error: 'Invalid file path' });
+      }
+
       res.status(500).json({
         success: false,
         error: error.message,
@@ -92,17 +140,21 @@ const analysisController = {
   async stopAnalysis(req, res) {
     try {
       const { fileName } = req.params;
-      const result = await analysisService.stopAnalysis(fileName);
+
+      // Sanitize the fileName to prevent path traversal
+      const sanitizedFileName = sanitizeAndValidateFilename(fileName);
+
+      const result = await analysisService.stopAnalysis(sanitizedFileName);
 
       // Get updated analysis data
       const analyses = await analysisService.getAllAnalyses();
-      const updatedAnalysis = analyses[fileName];
+      const updatedAnalysis = analyses[sanitizedFileName];
 
       // Broadcast status change with complete analysis data
       broadcast({
         type: 'analysisStatus',
         data: {
-          fileName,
+          fileName: sanitizedFileName,
           status: 'stopped',
           enabled: false,
           ...updatedAnalysis,
@@ -112,6 +164,14 @@ const analysisController = {
       res.json(result);
     } catch (error) {
       console.error('Stop analysis error:', error);
+
+      if (
+        error.message.includes('Path traversal') ||
+        error.message.includes('Invalid filename')
+      ) {
+        return res.status(400).json({ error: 'Invalid file path' });
+      }
+
       res.status(500).json({
         success: false,
         error: error.message,
@@ -123,17 +183,20 @@ const analysisController = {
     try {
       const { fileName } = req.params;
 
+      // Sanitize the fileName to prevent path traversal
+      const sanitizedFileName = sanitizeAndValidateFilename(fileName);
+
       // Get analysis data before deletion for broadcast
       const analyses = await analysisService.getAllAnalyses();
-      const analysisToDelete = analyses[fileName];
+      const analysisToDelete = analyses[sanitizedFileName];
 
-      await analysisService.deleteAnalysis(fileName);
+      await analysisService.deleteAnalysis(sanitizedFileName);
 
       // Broadcast deletion with analysis data
       broadcast({
         type: 'analysisDeleted',
         data: {
-          fileName,
+          fileName: sanitizedFileName,
           department: analysisToDelete?.department,
         },
       });
@@ -141,6 +204,14 @@ const analysisController = {
       res.json({ success: true });
     } catch (error) {
       console.error('Delete analysis error:', error);
+
+      if (
+        error.message.includes('Path traversal') ||
+        error.message.includes('Invalid filename')
+      ) {
+        return res.status(400).json({ error: 'Invalid file path' });
+      }
+
       res.status(500).json({ error: error.message });
     }
   },
@@ -149,21 +220,33 @@ const analysisController = {
     try {
       const { fileName } = req.params;
 
+      // Sanitize the fileName to prevent path traversal
+      const sanitizedFileName = sanitizeAndValidateFilename(fileName);
+
       try {
-        const content = await analysisService.getAnalysisContent(fileName);
+        const content =
+          await analysisService.getAnalysisContent(sanitizedFileName);
         res.set('Content-Type', 'text/plain');
         res.send(content);
       } catch (error) {
         console.error('Error getting analysis content:', error);
         if (error.code === 'ENOENT') {
           return res.status(404).json({
-            error: `Analysis file ${fileName} not found`,
+            error: `Analysis file ${sanitizedFileName} not found`,
           });
         }
         throw error;
       }
     } catch (error) {
       console.error('Controller error:', error);
+
+      if (
+        error.message.includes('Path traversal') ||
+        error.message.includes('Invalid filename')
+      ) {
+        return res.status(400).json({ error: 'Invalid file path' });
+      }
+
       res.status(500).json({
         error: error.message,
       });
@@ -174,6 +257,9 @@ const analysisController = {
     try {
       const { fileName } = req.params;
       const { content } = req.body;
+
+      // Sanitize the fileName to prevent path traversal
+      const sanitizedFileName = sanitizeAndValidateFilename(fileName);
 
       if (!content) {
         console.warn('No content provided in request body');
@@ -189,19 +275,19 @@ const analysisController = {
         });
       }
 
-      const result = await analysisService.updateAnalysis(fileName, {
+      const result = await analysisService.updateAnalysis(sanitizedFileName, {
         content,
       });
 
       // Get updated analysis data
       const analyses = await analysisService.getAllAnalyses();
-      const updatedAnalysis = analyses[fileName];
+      const updatedAnalysis = analyses[sanitizedFileName];
 
       // Broadcast update with complete analysis data
       broadcast({
         type: 'analysisUpdated',
         data: {
-          fileName,
+          fileName: sanitizedFileName,
           status: 'updated',
           restarted: result.restarted,
           ...updatedAnalysis,
@@ -215,6 +301,14 @@ const analysisController = {
       });
     } catch (error) {
       console.error('Controller error:', error);
+
+      if (
+        error.message.includes('Path traversal') ||
+        error.message.includes('Invalid filename')
+      ) {
+        return res.status(400).json({ error: 'Invalid file path' });
+      }
+
       res.status(500).json({
         error: error.message,
       });
@@ -225,6 +319,10 @@ const analysisController = {
     try {
       const { fileName } = req.params;
       const { newFileName } = req.body;
+
+      // Sanitize both filenames to prevent path traversal
+      const sanitizedFileName = sanitizeAndValidateFilename(fileName);
+      const sanitizedNewFileName = sanitizeAndValidateFilename(newFileName);
 
       if (!newFileName) {
         console.warn('No new filename provided in request body');
@@ -241,20 +339,20 @@ const analysisController = {
       }
 
       const result = await analysisService.renameAnalysis(
-        fileName,
-        newFileName,
+        sanitizedFileName,
+        sanitizedNewFileName,
       );
 
       // Get updated analysis data
       const analyses = await analysisService.getAllAnalyses();
-      const renamedAnalysis = analyses[newFileName];
+      const renamedAnalysis = analyses[sanitizedNewFileName];
 
       // Broadcast update with complete analysis data
       broadcast({
         type: 'analysisRenamed',
         data: {
-          oldFileName: fileName,
-          newFileName: newFileName,
+          oldFileName: sanitizedFileName,
+          newFileName: sanitizedNewFileName,
           status: 'updated',
           restarted: result.restarted,
           ...renamedAnalysis,
@@ -268,6 +366,14 @@ const analysisController = {
       });
     } catch (error) {
       console.error('Rename analysis error:', error);
+
+      if (
+        error.message.includes('Path traversal') ||
+        error.message.includes('Invalid filename')
+      ) {
+        return res.status(400).json({ error: 'Invalid file path' });
+      }
+
       res.status(500).json({ error: error.message });
     }
   },
@@ -278,10 +384,25 @@ const analysisController = {
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 100;
 
-      const logs = await analysisService.getLogs(fileName, page, limit);
+      // Sanitize the fileName to prevent path traversal
+      const sanitizedFileName = sanitizeAndValidateFilename(fileName);
+
+      const logs = await analysisService.getLogs(
+        sanitizedFileName,
+        page,
+        limit,
+      );
       res.json(logs);
     } catch (error) {
       console.error('Get logs error:', error);
+
+      if (
+        error.message.includes('Path traversal') ||
+        error.message.includes('Invalid filename')
+      ) {
+        return res.status(400).json({ error: 'Invalid file path' });
+      }
+
       res.status(500).json({ error: error.message });
     }
   },
@@ -299,6 +420,9 @@ const analysisController = {
         return res.status(400).json({ error: 'timeRange is required' });
       }
 
+      // Sanitize the fileName to prevent path traversal
+      const sanitizedFileName = sanitizeAndValidateFilename(fileName);
+
       // Validate time range
       if (!analysisService.validateTimeRange(timeRange)) {
         return res.status(400).json({
@@ -306,45 +430,70 @@ const analysisController = {
         });
       }
 
-      // Get logs from analysisService
+      // Get logs from analysisService using sanitized filename
       const { logFile, content } = await analysisService.getLogsForDownload(
-        fileName,
+        sanitizedFileName,
         timeRange,
       );
 
-      // Define log path inside the analysis subfolder
+      // Define log path inside the analysis subfolder with sanitized filename
       const analysisLogsDir = path.join(
         config.paths.analysis,
-        fileName,
+        sanitizedFileName,
         'logs',
       );
+
+      // Validate that the logs directory is within the expected analysis path
+      validatePath(analysisLogsDir, config.paths.analysis);
+
       await fs.mkdir(analysisLogsDir, { recursive: true });
 
       if (timeRange === 'all') {
-        // Directly download the full log file
-        return res.download(
-          logFile,
-          `${path.parse(fileName).name}.log`,
-          (err) => {
-            if (err && !res.headersSent) {
-              return res.status(500).json({ error: 'Failed to download file' });
-            }
-          },
+        // Validate that the log file is in the expected location
+        validatePath(logFile, config.paths.analysis);
+
+        // Set the download filename using headers with sanitized name
+        const downloadFilename = `${sanitize(path.parse(sanitizedFileName).name)}.log`;
+        res.setHeader(
+          'Content-Disposition',
+          `attachment; filename="${downloadFilename}"`,
         );
+        res.setHeader('Content-Type', 'text/plain');
+
+        // Directly download the full log file
+        return res.sendFile(logFile, (err) => {
+          if (err && !res.headersSent) {
+            return res.status(500).json({ error: 'Failed to download file' });
+          }
+        });
       }
 
-      // Create a temporary file in the correct logs directory
+      // Create a temporary file in the correct logs directory with sanitized filename
       const tempLogFile = path.join(
         analysisLogsDir,
-        `${path.parse(fileName).name}_${timeRange}_temp.log`,
+        `${sanitize(path.parse(sanitizedFileName).name)}_${sanitize(timeRange)}_temp.log`,
       );
+
+      // Validate that the temp file path is within the expected directory
+      validatePath(tempLogFile, analysisLogsDir);
 
       try {
         await fs.writeFile(tempLogFile, content);
 
+        // Set the download filename using headers with sanitized name
+        const downloadFilename = `${sanitize(path.parse(sanitizedFileName).name)}.log`;
+        res.setHeader(
+          'Content-Disposition',
+          `attachment; filename="${downloadFilename}"`,
+        );
+        res.setHeader('Content-Type', 'text/plain');
+
         // Send the file
-        res.download(tempLogFile, `${path.parse(fileName).name}.log`, (err) => {
-          fs.unlink(tempLogFile).catch(console.error); // Clean up temp file
+        res.sendFile(tempLogFile, (err) => {
+          // Clean up temp file using the already validated tempLogFile path
+          fs.unlink(tempLogFile).catch((unlinkError) => {
+            console.error('Error cleaning up temporary file:', unlinkError);
+          });
 
           if (err && !res.headersSent) {
             return res.status(500).json({ error: 'Failed to download file' });
@@ -363,6 +512,13 @@ const analysisController = {
         return res.status(404).json({ error: error.message });
       }
 
+      if (
+        error.message.includes('Path traversal') ||
+        error.message.includes('Invalid filename')
+      ) {
+        return res.status(400).json({ error: 'Invalid file path' });
+      }
+
       res.status(500).json({ error: error.message });
     }
   },
@@ -370,17 +526,29 @@ const analysisController = {
   async clearLogs(req, res) {
     try {
       const { fileName } = req.params;
-      const result = await analysisService.clearLogs(fileName);
+
+      // Sanitize the fileName to prevent path traversal
+      const sanitizedFileName = sanitizeAndValidateFilename(fileName);
+
+      const result = await analysisService.clearLogs(sanitizedFileName);
 
       // Broadcast logs cleared
       broadcast({
         type: 'logsCleared',
-        data: { fileName },
+        data: { fileName: sanitizedFileName },
       });
 
       res.json(result);
     } catch (error) {
       console.error('Clear logs error:', error);
+
+      if (
+        error.message.includes('Path traversal') ||
+        error.message.includes('Invalid filename')
+      ) {
+        return res.status(400).json({ error: 'Invalid file path' });
+      }
+
       res.status(500).json({ error: error.message });
     }
   },
@@ -388,20 +556,39 @@ const analysisController = {
   async downloadAnalysis(req, res) {
     try {
       const { fileName } = req.params;
-      const filePath = path.join(config.paths.analysis, fileName, 'index.cjs');
+
+      // Sanitize the fileName to prevent path traversal
+      const sanitizedFileName = sanitizeAndValidateFilename(fileName);
+
+      const filePath = path.join(
+        config.paths.analysis,
+        sanitizedFileName,
+        'index.cjs',
+      );
+
+      // Validate that the file path is within the expected analysis directory
+      validatePath(filePath, config.paths.analysis);
 
       try {
         await fs.access(filePath);
       } catch (error) {
         if (error.code === 'ENOENT') {
           return res.status(404).json({
-            error: `Analysis file ${fileName} not found`,
+            error: `Analysis file ${sanitizedFileName} not found`,
           });
         }
         throw error;
       }
 
-      res.download(filePath, `${fileName}.cjs`, (err) => {
+      // Set the download filename using headers with sanitized name
+      const downloadFilename = `${sanitize(sanitizedFileName)}.cjs`;
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${downloadFilename}"`,
+      );
+      res.setHeader('Content-Type', 'application/javascript');
+
+      res.sendFile(filePath, (err) => {
         if (err) {
           console.error('Download error:', err);
           if (!res.headersSent) {
@@ -411,6 +598,14 @@ const analysisController = {
       });
     } catch (error) {
       console.error('Download analysis error:', error);
+
+      if (
+        error.message.includes('Path traversal') ||
+        error.message.includes('Invalid filename')
+      ) {
+        return res.status(400).json({ error: 'Invalid file path' });
+      }
+
       res.status(500).json({ error: error.message });
     }
   },
@@ -422,23 +617,29 @@ const environmentController = {
       const { fileName } = req.params;
       const { env } = req.body;
 
+      // Sanitize the fileName to prevent path traversal
+      const sanitizedFileName = sanitizeAndValidateFilename(fileName);
+
       if (!env || typeof env !== 'object') {
         return res.status(400).json({
           error: 'Environment variables must be provided as an object',
         });
       }
 
-      const result = await analysisService.updateEnvironment(fileName, env);
+      const result = await analysisService.updateEnvironment(
+        sanitizedFileName,
+        env,
+      );
 
       // Get updated analysis data
       const analyses = await analysisService.getAllAnalyses();
-      const updatedAnalysis = analyses[fileName];
+      const updatedAnalysis = analyses[sanitizedFileName];
 
       // Broadcast update with complete analysis data
       broadcast({
         type: 'analysisEnvironmentUpdated',
         data: {
-          fileName,
+          fileName: sanitizedFileName,
           status: 'updated',
           restarted: result.restarted,
           ...updatedAnalysis,
@@ -452,6 +653,14 @@ const environmentController = {
       });
     } catch (error) {
       console.error('Update environment error:', error);
+
+      if (
+        error.message.includes('Path traversal') ||
+        error.message.includes('Invalid filename')
+      ) {
+        return res.status(400).json({ error: 'Invalid file path' });
+      }
+
       res.status(500).json({ error: error.message });
     }
   },
@@ -459,10 +668,22 @@ const environmentController = {
   async getEnvironment(req, res) {
     try {
       const { fileName } = req.params;
-      const env = await analysisService.getEnvironment(fileName);
+
+      // Sanitize the fileName to prevent path traversal
+      const sanitizedFileName = sanitizeAndValidateFilename(fileName);
+
+      const env = await analysisService.getEnvironment(sanitizedFileName);
       res.json(env);
     } catch (error) {
       console.error('Get environment error:', error);
+
+      if (
+        error.message.includes('Path traversal') ||
+        error.message.includes('Invalid filename')
+      ) {
+        return res.status(400).json({ error: 'Invalid file path' });
+      }
+
       res.status(500).json({ error: error.message });
     }
   },

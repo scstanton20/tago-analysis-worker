@@ -1,4 +1,5 @@
 // config/default.js
+import crypto from 'crypto';
 import path from 'path';
 
 function determineStorageBase() {
@@ -14,9 +15,19 @@ function determineStorageBase() {
 const config = {
   env: process.env.NODE_ENV,
   secretKey:
-    process.env.NODE_ENV === 'development'
-      ? 'development'
-      : process.env.SECRET_KEY,
+    process.env.SECRET_KEY ||
+    (() => {
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error(
+          'SECRET_KEY environment variable is required in production!',
+        );
+      }
+      // Generate a secure random secret for development instead of hardcoding
+      console.warn(
+        'Warning: Using auto-generated SECRET_KEY for development. Set SECRET_KEY environment variable.',
+      );
+      return crypto.randomBytes(32).toString('hex');
+    })(),
   storage: {
     base: determineStorageBase(),
     createDirs: true,

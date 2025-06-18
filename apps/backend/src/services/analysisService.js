@@ -34,6 +34,10 @@ class AnalysisService {
     this.configPath = path.join(config.paths.config, 'analyses-config.json');
   }
 
+  validateTimeRange(timeRange) {
+    const validRanges = ['1h', '24h', '7d', '30d', 'all'];
+    return validRanges.includes(timeRange);
+  }
   /**
    * Ensure required directories exist
    * @returns {Promise<void>}

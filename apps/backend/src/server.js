@@ -47,6 +47,7 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json());
 app.use(fileUpload());
+app.set('trust proxy', 1);
 
 const PORT = process.env.PORT || 3000;
 
@@ -148,11 +149,6 @@ async function startServer() {
       // Broadcast status update to all connected clients
       broadcastStatusUpdate();
     });
-
-    // Periodic status broadcasts (every 30 seconds)
-    setInterval(() => {
-      broadcastStatusUpdate();
-    }, 30000);
   } catch (error) {
     console.error('Failed to start server:', error);
     updateContainerState({

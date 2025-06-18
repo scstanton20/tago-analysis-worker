@@ -1,5 +1,6 @@
 // frontend/src/services/analysisService.js
 import { fetchWithHeaders, handleResponse } from '../utils/apiUtils';
+import sanitize from 'sanitize-filename';
 
 export const analysisService = {
   async getAnalyses() {
@@ -206,6 +207,10 @@ export const analysisService = {
   async downloadLogs(fileName, timeRange) {
     try {
       console.log('Downloading logs for:', fileName, 'timeRange:', timeRange);
+
+      // Sanitize the filename to prevent XSS
+      const safeFileName = sanitize(fileName);
+
       const response = await fetchWithHeaders(
         `/analyses/${fileName}/logs/download?timeRange=${timeRange}`,
         { method: 'GET' },
@@ -219,9 +224,16 @@ export const analysisService = {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${fileName}.log`;
+      // Use sanitized filename for download attribute
+      a.download = `${safeFileName}.log`;
+
+      // Set additional security attributes
+      a.style.display = 'none';
+      a.rel = 'noopener noreferrer';
+
       document.body.appendChild(a);
       a.click();
+
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (error) {
@@ -323,6 +335,10 @@ export const analysisService = {
   async downloadAnalysis(fileName) {
     try {
       console.log('Downloading analysis:', fileName);
+
+      // Sanitize the filename to prevent XSS
+      const safeFileName = sanitize(fileName);
+
       const response = await fetchWithHeaders(
         `/analyses/${fileName}/download`,
         { method: 'GET' },
@@ -336,9 +352,13 @@ export const analysisService = {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${fileName}.cjs`;
+      a.download = `${safeFileName}.cjs`;
+      a.style.display = 'none';
+      a.rel = 'noopener noreferrer';
+
       document.body.appendChild(a);
       a.click();
+
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
     } catch (error) {

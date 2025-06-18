@@ -130,7 +130,7 @@ const SortableDepartmentItem = ({
             borderRadius: 'var(--mantine-radius-md)',
             marginBottom: 4,
             minHeight: 44, // Ensure consistent height for text wrapping
-            '&[data-active]': {
+            '&[dataActive]': {
               background:
                 'linear-gradient(135deg, var(--mantine-color-brand-1) 0%, var(--mantine-color-accent-1) 100%)',
               color: 'var(--mantine-color-brand-8)',

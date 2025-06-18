@@ -114,11 +114,9 @@ export function setupWebSocket(server) {
       }
     });
 
-    ws.on('close', (code, reason) => {
+    ws.on('close', (code) => {
       clients.delete(ws);
-      console.log(
-        `WebSocket connection closed, Code: ${code}, Reason: ${reason.toString()})`,
-      );
+      console.log(`WebSocket connection closed, Code: ${code})`);
     });
 
     // Fixed: Use the error parameter
