@@ -22,7 +22,7 @@ import DepartmentalSidebar from './components/departmentalSidebar';
 import AnalysisList from './components/analysis/analysisList';
 import AnalysisCreator from './components/analysis/uploadAnalysis';
 import ConnectionStatus from './components/connectionStatus';
-import Logo from './components/Logo';
+import Logo from './components/logo';
 
 function AppContent() {
   const {
