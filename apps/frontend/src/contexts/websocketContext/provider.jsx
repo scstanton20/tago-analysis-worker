@@ -21,6 +21,7 @@ export function WebSocketProvider({ children }) {
   const maxReconnectDelay = 30000;
   const mountedRef = useRef(true);
   const componentIdRef = useRef(null); // Track this component instance
+  const connectionStatusRef = useRef('connecting'); // Track connection status for event handlers
 
   // Track log sequences to prevent duplicates
   const logSequences = useRef(new Map()); // fileName -> Set of sequence numbers
@@ -461,6 +462,7 @@ export function WebSocketProvider({ children }) {
           if (mountedRef.current) {
             setSocket(websocket);
             setConnectionStatus('connected');
+            connectionStatusRef.current = 'connected';
             reconnectAttemptsRef.current = 0;
           }
 
@@ -485,6 +487,7 @@ export function WebSocketProvider({ children }) {
 
         if (mountedRef.current) {
           setConnectionStatus('disconnected');
+          connectionStatusRef.current = 'disconnected';
           setSocket(null);
           // Clear backend status when connection is lost
           setBackendStatus(null);
@@ -512,6 +515,7 @@ export function WebSocketProvider({ children }) {
         `WebSocket max reconnection attempts reached (${maxReconnectAttempts})`,
       );
       setConnectionStatus('failed');
+      connectionStatusRef.current = 'failed';
       return;
     }
 
@@ -529,12 +533,14 @@ export function WebSocketProvider({ children }) {
       if (!mountedRef.current) return;
 
       setConnectionStatus('connecting');
+      connectionStatusRef.current = 'connecting';
       try {
         await createConnection();
       } catch (error) {
         console.error(`WebSocket reconnection failed:`, error);
         if (mountedRef.current) {
           setConnectionStatus('disconnected');
+          connectionStatusRef.current = 'disconnected';
           reconnect();
         }
       }
@@ -547,6 +553,7 @@ export function WebSocketProvider({ children }) {
     const connect = async () => {
       try {
         setConnectionStatus('connecting');
+        connectionStatusRef.current = 'connecting';
         console.log(`Starting live listener connection...`);
 
         const ws = await createConnection();
@@ -559,6 +566,7 @@ export function WebSocketProvider({ children }) {
 
             if (mountedRef.current) {
               setConnectionStatus('disconnected');
+              connectionStatusRef.current = 'disconnected';
               setSocket(null);
               setBackendStatus(null); // Clear backend status on disconnect
               reconnect();
@@ -570,6 +578,7 @@ export function WebSocketProvider({ children }) {
 
             if (mountedRef.current) {
               setConnectionStatus('disconnected');
+              connectionStatusRef.current = 'disconnected';
               setSocket(null);
               setBackendStatus(null); // Clear backend status on error
             }
@@ -579,16 +588,59 @@ export function WebSocketProvider({ children }) {
         console.error(`WebSocket initial connection failed:`, error);
         if (mountedRef.current) {
           setConnectionStatus('disconnected');
+          connectionStatusRef.current = 'disconnected';
           reconnect();
+        }
+      }
+    };
+
+    // Handle page visibility changes for automatic reconnection
+    const handleVisibilityChange = () => {
+      if (!document.hidden && mountedRef.current) {
+        // Page became visible - check if we need to reconnect
+        if (
+          connectionStatusRef.current === 'disconnected' ||
+          !globalWebSocket ||
+          globalWebSocket.readyState !== WebSocket.OPEN
+        ) {
+          console.log(
+            'Page became visible, attempting WebSocket reconnection...',
+          );
+          connect();
+        }
+      }
+    };
+
+    // Handle focus events as backup for older browsers
+    const handleFocus = () => {
+      if (mountedRef.current) {
+        // Window gained focus - check if we need to reconnect
+        if (
+          connectionStatusRef.current === 'disconnected' ||
+          !globalWebSocket ||
+          globalWebSocket.readyState !== WebSocket.OPEN
+        ) {
+          console.log(
+            'Window gained focus, attempting WebSocket reconnection...',
+          );
+          connect();
         }
       }
     };
 
     connect();
 
+    // Add event listeners for automatic reconnection
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
     return () => {
       console.log(`WebSocket client cleanup starting`);
       mountedRef.current = false;
+
+      // Remove event listeners
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
 
       // Only close if this component created the global connection
       if (globalWebSocket) {
