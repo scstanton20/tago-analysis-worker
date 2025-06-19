@@ -60,22 +60,42 @@ class AnalysisService {
   }
 
   /**
-   * Update complete configuration
+   * Update complete configuration while preserving existing AnalysisProcess instances
+   * This method updates the configuration without destroying in-memory AnalysisProcess instances,
+   * ensuring that running analyses and their state are preserved during department moves and other config updates.
+   *
    * @param {Object} config - Configuration object to update
    * @param {string} config.version - Configuration version
    * @param {Object} config.departments - Departments configuration
-   * @param {Object} config.analyses - Analyses configuration
+   * @param {Object} config.analyses - Analyses configuration with updated properties
    * @returns {Promise<void>}
    * @throws {Error} If config update fails
    */
   async updateConfig(config) {
     this.configCache = { ...config };
-
-    // Update internal analyses Map from config
-    this.analyses.clear();
     if (config.analyses) {
-      Object.entries(config.analyses).forEach(([name, analysis]) => {
-        this.analyses.set(name, analysis);
+      this.analyses.forEach((analysis, name) => {
+        if (config.analyses[name] && analysis instanceof AnalysisProcess) {
+          // Update properties of existing AnalysisProcess instance
+          analysis.type = config.analyses[name].type;
+          analysis.enabled = config.analyses[name].enabled;
+          analysis.status = config.analyses[name].status;
+          analysis.lastStartTime = config.analyses[name].lastStartTime;
+          analysis.department = config.analyses[name].department;
+        }
+      });
+
+      // Remove analyses that no longer exist in config
+      for (const [name] of this.analyses) {
+        if (!config.analyses[name]) {
+          this.analyses.delete(name);
+        }
+      }
+
+      Object.entries(config.analyses).forEach(([name, analysisConfig]) => {
+        if (!this.analyses.has(name)) {
+          this.analyses.set(name, analysisConfig);
+        }
       });
     }
 

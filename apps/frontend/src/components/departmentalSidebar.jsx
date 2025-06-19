@@ -289,27 +289,35 @@ export default function DepartmentalSidebar({
                 items={departmentsArray.map((d) => d.id)}
                 strategy={verticalListSortingStrategy}
               >
-                {departmentsArray.map((dept) => (
-                  <div
-                    key={dept.id}
-                    onDrop={(e) => handleAnalysisDrop(e, dept.id)}
-                    onDragOver={(e) => e.preventDefault()}
-                    style={{
-                      borderRadius: 'var(--mantine-radius-md)',
-                      outline: draggedAnalysis
-                        ? '2px solid var(--mantine-color-brand-filled)'
-                        : 'none',
-                      outlineOffset: '2px',
-                    }}
-                  >
-                    <SortableDepartmentItem
-                      department={dept}
-                      isSelected={selectedDepartment === dept.id}
-                      onClick={() => handleDepartmentClick(dept.id)}
-                      analysisCount={getAnalysisCount(dept.id)}
-                    />
-                  </div>
-                ))}
+                {departmentsArray
+                  .filter((dept) => {
+                    // Hide system departments if they have no analyses
+                    if (dept.isSystem) {
+                      return getAnalysisCount(dept.id) > 0;
+                    }
+                    return true; // Show all non-system departments regardless of count
+                  })
+                  .map((dept) => (
+                    <div
+                      key={dept.id}
+                      onDrop={(e) => handleAnalysisDrop(e, dept.id)}
+                      onDragOver={(e) => e.preventDefault()}
+                      style={{
+                        borderRadius: 'var(--mantine-radius-md)',
+                        outline: draggedAnalysis
+                          ? '2px solid var(--mantine-color-brand-filled)'
+                          : 'none',
+                        outlineOffset: '2px',
+                      }}
+                    >
+                      <SortableDepartmentItem
+                        department={dept}
+                        isSelected={selectedDepartment === dept.id}
+                        onClick={() => handleDepartmentClick(dept.id)}
+                        analysisCount={getAnalysisCount(dept.id)}
+                      />
+                    </div>
+                  ))}
               </SortableContext>
               <DragOverlay>
                 {activeDeptId ? (
