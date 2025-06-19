@@ -193,9 +193,19 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
       <Stack>
         <Group justify="space-between">
           <Group>
-            <Text fw={600} size="md" c="brand.8">
-              {analysis.name}
-            </Text>
+            <Box
+              px="sm"
+              py="xs"
+              style={{
+                backgroundColor: 'var(--mantine-color-brand-9)',
+                borderRadius: 'var(--mantine-radius-sm)',
+                border: '1px solid var(--mantine-color-brand-7)',
+              }}
+            >
+              <Text fw={600} size="md" c="white">
+                {analysis.name}
+              </Text>
+            </Box>
             <StatusBadge status={analysis.status || 'stopped'} />
             {currentDepartment && (
               <Badge
