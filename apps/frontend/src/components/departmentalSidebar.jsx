@@ -51,7 +51,10 @@ const SortableDepartmentItem = ({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: department.id });
+  } = useSortable({
+    id: department.id,
+    disabled: department.isSystem,
+  });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -129,7 +132,8 @@ const SortableDepartmentItem = ({
           root: {
             borderRadius: 'var(--mantine-radius-md)',
             marginBottom: 4,
-            minHeight: 44, // Ensure consistent height for text wrapping
+            minHeight: 44,
+            cursor: department.isSystem ? 'pointer' : 'default', // Different cursor for system departments
             '&[dataActive]': {
               background:
                 'linear-gradient(135deg, var(--mantine-color-brand-1) 0%, var(--mantine-color-accent-1) 100%)',
