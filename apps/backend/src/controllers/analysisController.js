@@ -431,10 +431,55 @@ const analysisController = {
       }
 
       // Get logs from analysisService using sanitized filename
-      const { logFile, content } = await analysisService.getLogsForDownload(
+      const result = await analysisService.getLogsForDownload(
         sanitizedFileName,
         timeRange,
       );
+
+      if (timeRange === 'all') {
+        // For 'all' time range, construct the expected log file path securely
+        // instead of trusting the service-provided path
+        const expectedLogFile = path.join(
+          config.paths.analysis,
+          sanitizedFileName,
+          'logs',
+          'analysis.log',
+        );
+
+        // Validate that our expected path is within allowed directory
+        validatePath(expectedLogFile, config.paths.analysis);
+
+        // Verify the file exists before attempting to serve it
+        try {
+          await fs.access(expectedLogFile);
+        } catch (error) {
+          if (error.code === 'ENOENT') {
+            return res.status(404).json({
+              error: `Log file for ${sanitizedFileName} not found`,
+            });
+          }
+          throw error;
+        }
+
+        // Set download headers
+        const downloadFilename = `${sanitize(path.parse(sanitizedFileName).name)}.log`;
+        res.setHeader(
+          'Content-Disposition',
+          `attachment; filename="${downloadFilename}"`,
+        );
+        res.setHeader('Content-Type', 'text/plain');
+
+        // Stream the file directly - no memory loading
+        return res.sendFile(expectedLogFile, (err) => {
+          if (err && !res.headersSent) {
+            console.error('Error streaming log file:', err);
+            return res.status(500).json({ error: 'Failed to download file' });
+          }
+        });
+      }
+
+      // For filtered time ranges, use the content approach since files are smaller
+      const { content } = result;
 
       // Define log path inside the analysis subfolder with sanitized filename
       const analysisLogsDir = path.join(
@@ -447,26 +492,6 @@ const analysisController = {
       validatePath(analysisLogsDir, config.paths.analysis);
 
       await fs.mkdir(analysisLogsDir, { recursive: true });
-
-      if (timeRange === 'all') {
-        // Validate that the log file is in the expected location
-        validatePath(logFile, config.paths.analysis);
-
-        // Set the download filename using headers with sanitized name
-        const downloadFilename = `${sanitize(path.parse(sanitizedFileName).name)}.log`;
-        res.setHeader(
-          'Content-Disposition',
-          `attachment; filename="${downloadFilename}"`,
-        );
-        res.setHeader('Content-Type', 'text/plain');
-
-        // Directly download the full log file
-        return res.sendFile(logFile, (err) => {
-          if (err && !res.headersSent) {
-            return res.status(500).json({ error: 'Failed to download file' });
-          }
-        });
-      }
 
       // Create a temporary file in the correct logs directory with sanitized filename
       const tempLogFile = path.join(
@@ -488,7 +513,7 @@ const analysisController = {
         );
         res.setHeader('Content-Type', 'text/plain');
 
-        // Send the file
+        // Send the file using the full tempLogFile path
         res.sendFile(tempLogFile, (err) => {
           // Clean up temp file using the already validated tempLogFile path
           fs.unlink(tempLogFile).catch((unlinkError) => {
