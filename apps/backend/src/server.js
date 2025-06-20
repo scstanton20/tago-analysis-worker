@@ -3,12 +3,14 @@ import express from 'express';
 import http from 'http';
 import cors from 'cors';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import fileUpload from 'express-fileupload';
 import config from './config/default.js';
 import {
   setupWebSocket,
   updateContainerState,
   broadcastStatusUpdate,
+  broadcast,
 } from './utils/websocket.js';
 import errorHandler from './middleware/errorHandler.js';
 import {
@@ -20,6 +22,10 @@ import {
 import analysisRoutes from './routes/analysisRoutes.js';
 import statusRoutes from './routes/statusRoutes.js';
 import departmentRoutes from './routes/departmentRoutes.js';
+import authRoutes from './routes/authRoutes.js';
+import webauthnRoutes from './routes/webauthnRoutes.js';
+import { apiRateLimit } from './middleware/auth.js';
+import userService from './services/userService.js';
 
 // Api prefix
 const API_PREFIX = '/api';
@@ -45,9 +51,12 @@ if (!wsInitialized) {
 // Middleware
 app.use(helmet());
 app.use(cors());
+app.use(cookieParser());
 app.use(express.json());
 app.use(fileUpload());
 app.set('trust proxy', 1);
+
+app.use(apiRateLimit);
 
 const PORT = process.env.PORT || 3000;
 
@@ -104,18 +113,27 @@ async function startServer() {
       message: 'Initializing server components',
     });
 
-    // IMPORTANT: Initialize analysis service BEFORE setting up routes
-    console.log('Initializing analysis service...');
+    // IMPORTANT: Initialize services BEFORE setting up routes
+    console.log('Initializing services...');
     await initializeAnalyses();
-    console.log('Analysis service initialized successfully');
+    await userService.loadUsers();
+    console.log('Services initialized successfully');
 
     updateContainerState({
       status: 'setting_up_routes',
       message: 'Setting up API routes',
     });
 
-    // NOW set up routes after analysisService is initialized
+    // NOW set up routes after services are initialized
     console.log('Setting up routes...');
+
+    // Public auth routes
+    app.use(`${API_PREFIX}/auth`, authRoutes);
+    console.log(`✓ Auth routes mounted at ${API_PREFIX}/auth`);
+
+    // WebAuthn routes under auth (session-free)
+    app.use(`${API_PREFIX}/auth/webauthn`, webauthnRoutes);
+    console.log(`✓ WebAuthn routes mounted at ${API_PREFIX}/auth/webauthn`);
 
     app.use(`${API_PREFIX}/status`, statusRoutes(analysisService));
     console.log(`✓ Status routes mounted at ${API_PREFIX}/status`);
@@ -167,10 +185,19 @@ process.on('SIGINT', () => {
     message: 'Server is shutting down',
   });
 
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
+  // Broadcast session invalidation to all users before shutdown
+  broadcast({
+    type: 'sessionInvalidated',
+    reason: 'Server is shutting down',
+    timestamp: new Date().toISOString(),
   });
+
+  setTimeout(() => {
+    server.close(() => {
+      console.log('Server closed');
+      process.exit(0);
+    });
+  }, 1000); // Give time for broadcast to reach clients
 });
 
 process.on('SIGTERM', () => {
@@ -180,10 +207,19 @@ process.on('SIGTERM', () => {
     message: 'Server is shutting down',
   });
 
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
+  // Broadcast session invalidation to all users before shutdown
+  broadcast({
+    type: 'sessionInvalidated',
+    reason: 'Server is shutting down',
+    timestamp: new Date().toISOString(),
   });
+
+  setTimeout(() => {
+    server.close(() => {
+      console.log('Server closed');
+      process.exit(0);
+    });
+  }, 1000); // Give time for broadcast to reach clients
 });
 
 startServer();

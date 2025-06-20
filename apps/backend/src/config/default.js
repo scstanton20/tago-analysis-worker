@@ -1,5 +1,4 @@
 // config/default.js
-import crypto from 'crypto';
 import path from 'path';
 
 function determineStorageBase() {
@@ -22,11 +21,11 @@ const config = {
           'SECRET_KEY environment variable is required in production!',
         );
       }
-      // Generate a secure random secret for development instead of hardcoding
+      // Use a consistent key for development to persist encrypted data across restarts
       console.warn(
-        'Warning: Using auto-generated SECRET_KEY for development. Set SECRET_KEY environment variable.',
+        'Warning: Using consistent development SECRET_KEY. Set SECRET_KEY environment variable for production.',
       );
-      return crypto.randomBytes(32).toString('hex');
+      return 'dev-secret-key-for-tago-analysis-runner-change-in-production';
     })(),
   storage: {
     base: determineStorageBase(),

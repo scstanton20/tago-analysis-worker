@@ -18,6 +18,7 @@ export async function fetchWithHeaders(url, options = {}) {
   const baseUrl = getBaseUrl();
   return fetch(`${baseUrl}${url}`, {
     ...options,
+    credentials: 'include', // Include cookies in requests
     headers: {
       ...defaultHeaders,
       ...options.headers,
@@ -27,14 +28,22 @@ export async function fetchWithHeaders(url, options = {}) {
 
 export async function handleResponse(response) {
   if (!response.ok) {
-    let errorMessage;
+    let errorData;
     try {
-      const errorData = await response.json();
-      errorMessage = errorData.error || response.statusText;
+      errorData = await response.json();
     } catch {
-      errorMessage = response.statusText;
+      throw new Error(response.statusText);
     }
-    throw new Error(errorMessage);
+
+    // Handle special cases
+    if (errorData.mustChangePassword) {
+      const error = new Error(errorData.error || 'Password change required');
+      error.mustChangePassword = true;
+      error.user = errorData.user;
+      throw error;
+    }
+
+    throw new Error(errorData.error || response.statusText);
   }
   return response.json();
 }

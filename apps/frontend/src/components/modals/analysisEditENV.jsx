@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import Editor from '@monaco-editor/react';
 import { analysisService } from '../../services/analysisService';
-import { useWebSocket } from '../../contexts/websocketContext'; // Added for consistency
+import { useWebSocket } from '../../contexts/websocketContext';
 import {
   Modal,
   Stack,
@@ -16,7 +16,11 @@ import {
 } from '@mantine/core';
 import { IconAlertCircle } from '@tabler/icons-react';
 
-export default function EditAnalysisENVModal({ onClose, analysis }) {
+export default function EditAnalysisENVModal({
+  onClose,
+  analysis,
+  readOnly = false,
+}) {
   const [content, setContent] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -103,7 +107,7 @@ export default function EditAnalysisENVModal({ onClose, analysis }) {
       size="90%"
       title={
         <Group gap="xs">
-          <Text fw={600}>Editing Environment:</Text>
+          <Text fw={600}>{readOnly ? 'Viewing' : 'Editing'} Environment:</Text>
           <Text>{currentAnalysis.name}</Text>
           {currentAnalysis.status && (
             <Text size="sm" c="dimmed">
@@ -168,7 +172,7 @@ export default function EditAnalysisENVModal({ onClose, analysis }) {
                 lineNumbers: 'on',
                 folding: true,
                 foldingStrategy: 'indentation',
-                readOnly: isLoading,
+                readOnly: isLoading || readOnly,
               }}
             />
           )}
@@ -180,16 +184,18 @@ export default function EditAnalysisENVModal({ onClose, analysis }) {
           style={{ borderTop: '1px solid var(--mantine-color-gray-3)' }}
         >
           <Button variant="default" onClick={onClose} disabled={isLoading}>
-            Cancel
+            {readOnly ? 'Close' : 'Cancel'}
           </Button>
-          <Button
-            onClick={handleSave}
-            disabled={!hasChanges}
-            loading={isLoading}
-            color="brand"
-          >
-            Save Changes
-          </Button>
+          {!readOnly && (
+            <Button
+              onClick={handleSave}
+              disabled={!hasChanges}
+              loading={isLoading}
+              color="brand"
+            >
+              Save Changes
+            </Button>
+          )}
         </Group>
       </Stack>
     </Modal>
@@ -201,4 +207,5 @@ EditAnalysisENVModal.propTypes = {
     name: PropTypes.string.isRequired,
   }).isRequired,
   onClose: PropTypes.func.isRequired,
+  readOnly: PropTypes.bool,
 };

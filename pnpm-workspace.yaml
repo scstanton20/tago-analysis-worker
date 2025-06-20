@@ -1,10 +1,15 @@
 packages:
   - ./apps/*
+
 ignoredBuiltDependencies:
   - '@tailwindcss/oxide'
+
 injectWorkspacePackages: true
+
 onlyBuiltDependencies:
   - '@swc/core'
+  - bcrypt
   - esbuild
+
 syncInjectedDepsAfterScripts:
   - build
