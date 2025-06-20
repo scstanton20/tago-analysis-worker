@@ -70,10 +70,11 @@ export const changePassword = async (req, res) => {
         .json({ error: 'Current and new passwords are required' });
     }
 
-    if (newPassword.length < 6) {
-      return res
-        .status(400)
-        .json({ error: 'New password must be at least 6 characters long' });
+    // Validate newPassword type and length
+    if (typeof newPassword !== 'string' || newPassword.length < 6) {
+      return res.status(400).json({
+        error: 'New password must be a string with at least 6 characters',
+      });
     }
 
     const isValidCurrent = await userService.validateUser(
@@ -137,10 +138,11 @@ export const forceChangePassword = async (req, res) => {
       });
     }
 
-    if (newPassword.length < 6) {
-      return res
-        .status(400)
-        .json({ error: 'New password must be at least 6 characters long' });
+    // Validate newPassword type and length
+    if (typeof newPassword !== 'string' || newPassword.length < 6) {
+      return res.status(400).json({
+        error: 'New password must be a string with at least 6 characters',
+      });
     }
 
     // Validate the current password
@@ -341,10 +343,13 @@ export const updateUser = async (req, res) => {
     delete updates.id;
     delete updates.createdAt;
 
-    if (updates.password && updates.password.length < 6) {
-      return res
-        .status(400)
-        .json({ error: 'Password must be at least 6 characters long' });
+    if (
+      updates.password &&
+      (typeof updates.password !== 'string' || updates.password.length < 6)
+    ) {
+      return res.status(400).json({
+        error: 'Password must be a string with at least 6 characters',
+      });
     }
 
     // Check if trying to change role from admin to user

@@ -65,6 +65,15 @@ export const loginRateLimit = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => {
+    // Use X-Forwarded-For header if available, otherwise fall back to remoteAddress
+    return (
+      req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+      req.headers['x-real-ip'] ||
+      req.socket.remoteAddress ||
+      'unknown'
+    );
+  },
 });
 
 export const apiRateLimit = rateLimit({
@@ -75,4 +84,13 @@ export const apiRateLimit = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => {
+    // Use X-Forwarded-For header if available, otherwise fall back to remoteAddress
+    return (
+      req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+      req.headers['x-real-ip'] ||
+      req.socket.remoteAddress ||
+      'unknown'
+    );
+  },
 });

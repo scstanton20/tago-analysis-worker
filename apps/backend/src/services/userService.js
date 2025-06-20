@@ -5,6 +5,7 @@ import { encrypt, decrypt } from '../utils/cryptoUtils.js';
 import config from '../config/default.js';
 
 const USERS_FILE = path.join(config.storage.base, 'users.json.enc');
+const saltRounds = 12;
 
 class UserService {
   constructor() {
@@ -106,7 +107,7 @@ class UserService {
 
     const defaultUsername = 'admin';
     const defaultPassword = 'admin123'; // This should be changed on first login
-    const hashedPassword = await bcrypt.hash(defaultPassword, 12);
+    const hashedPassword = await bcrypt.hash(defaultPassword, saltRounds);
 
     this.users[defaultUsername] = {
       id: '1',
@@ -154,7 +155,7 @@ class UserService {
       throw new Error('User already exists');
     }
 
-    const hashedPassword = await bcrypt.hash(password, 12);
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
     const userId = Date.now().toString();
 
     this.users[username] = {
@@ -199,7 +200,7 @@ class UserService {
     if (!user) throw new Error('User not found');
 
     if (updates.password) {
-      const hashedPassword = await bcrypt.hash(updates.password, 12);
+      const hashedPassword = await bcrypt.hash(updates.password, saltRounds);
       updates = {
         ...updates,
         password: hashedPassword,

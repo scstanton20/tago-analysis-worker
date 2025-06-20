@@ -50,7 +50,15 @@ if (!wsInitialized) {
 
 // Middleware
 app.use(helmet());
-app.use(cors());
+// For development, enable CORS conditionally
+if (process.env.NODE_ENV === 'development') {
+  app.use(
+    cors({
+      origin: 'http://localhost:5173',
+      credentials: true,
+    }),
+  );
+}
 app.use(cookieParser());
 app.use(express.json());
 app.use(fileUpload());
@@ -123,8 +131,6 @@ async function startServer() {
       status: 'setting_up_routes',
       message: 'Setting up API routes',
     });
-
-    // NOW set up routes after services are initialized
     console.log('Setting up routes...');
 
     // Public auth routes
@@ -138,6 +144,7 @@ async function startServer() {
     app.use(`${API_PREFIX}/status`, statusRoutes(analysisService));
     console.log(`✓ Status routes mounted at ${API_PREFIX}/status`);
 
+    // Protected routes
     app.use(`${API_PREFIX}/analyses`, analysisRoutes);
     console.log(`✓ Analysis routes mounted at ${API_PREFIX}/analyses`);
 

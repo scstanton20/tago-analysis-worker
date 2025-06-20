@@ -32,8 +32,6 @@ services:
     networks:
       - backend
     env_file: stack.env
-    ports:
-      - 3000:3000
     environment:
       TZ: 'America/New_York'
       SECRET_KEY: ${SECRET_KEY}
