@@ -9,7 +9,7 @@ let globalWebSocket = null;
 let globalConnectionPromise = null;
 
 export function WebSocketProvider({ children }) {
-  const { getToken, isAuthenticated } = useAuth();
+  const { isAuthenticated } = useAuth();
   const [socket, setSocket] = useState(null);
   const [analyses, setAnalyses] = useState({}); // Object: { analysisName: analysisData }
   const [departments, setDepartments] = useState({}); // Object: { deptId: deptData }
@@ -42,8 +42,9 @@ export function WebSocketProvider({ children }) {
   }, []);
 
   const getWebSocketUrl = useCallback(() => {
-    const token = getToken();
-    if (!token) return null;
+    // Authentication is now handled via httpOnly cookies automatically
+    // No need to include token in URL
+    if (!isAuthenticated) return null;
 
     let baseUrl;
     if (import.meta.env.DEV && import.meta.env.VITE_WS_URL) {
@@ -53,8 +54,8 @@ export function WebSocketProvider({ children }) {
       baseUrl = `${protocol}//${window.location.host}/ws`;
     }
 
-    return `${baseUrl}?token=${encodeURIComponent(token)}`;
-  }, [getToken]);
+    return baseUrl;
+  }, [isAuthenticated]);
 
   // Function to request status update from server
   const requestStatusUpdate = useCallback(() => {
@@ -434,11 +435,8 @@ export function WebSocketProvider({ children }) {
               window.authService.token = null;
               window.authService.user = null;
 
-              // Clear cookies
-              import('js-cookie').then(({ default: Cookies }) => {
-                Cookies.remove('access_token', { path: '/' });
-                Cookies.remove('refresh_token', { path: '/' });
-              });
+              // Clear authentication status
+              localStorage.removeItem('auth_status');
 
               // Force immediate page reload to show login page
               window.location.reload();
@@ -614,6 +612,31 @@ export function WebSocketProvider({ children }) {
         return;
       }
 
+      // Don't create multiple connections
+      if (globalWebSocket && globalWebSocket.readyState === WebSocket.OPEN) {
+        setSocket(globalWebSocket);
+        setConnectionStatus('connected');
+        return;
+      }
+
+      // If there's already a connection attempt in progress, wait for it
+      if (globalConnectionPromise) {
+        try {
+          const existingWs = await globalConnectionPromise;
+          if (
+            existingWs &&
+            existingWs.readyState === WebSocket.OPEN &&
+            mountedRef.current
+          ) {
+            setSocket(existingWs);
+            setConnectionStatus('connected');
+          }
+        } catch {
+          // Connection failed, continue with new attempt
+        }
+        return;
+      }
+
       try {
         setConnectionStatus('connecting');
         connectionStatusRef.current = 'connecting';
@@ -710,7 +733,8 @@ export function WebSocketProvider({ children }) {
       }
     };
 
-    connect();
+    // Small delay to prevent rapid connections in development (React StrictMode)
+    const timeoutId = setTimeout(connect, 50);
 
     // Add event listeners for automatic reconnection
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -720,12 +744,15 @@ export function WebSocketProvider({ children }) {
       console.log(`WebSocket client cleanup starting`);
       mountedRef.current = false;
 
+      // Clear timeout
+      clearTimeout(timeoutId);
+
       // Remove event listeners
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleFocus);
 
       // Only close if this component created the global connection
-      if (globalWebSocket) {
+      if (globalWebSocket && globalWebSocket.readyState === WebSocket.OPEN) {
         console.log(`WebSocket closing connection`);
         globalWebSocket.close();
         globalWebSocket = null;

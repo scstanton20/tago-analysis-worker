@@ -5,6 +5,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import fileUpload from 'express-fileupload';
+import session from 'express-session';
 import config from './config/default.js';
 import {
   setupWebSocket,
@@ -23,6 +24,7 @@ import analysisRoutes from './routes/analysisRoutes.js';
 import statusRoutes from './routes/statusRoutes.js';
 import departmentRoutes from './routes/departmentRoutes.js';
 import authRoutes from './routes/authRoutes.js';
+import webauthnRoutes from './routes/webauthnRoutes.js';
 import { apiRateLimit } from './middleware/auth.js';
 import userService from './services/userService.js';
 
@@ -54,6 +56,19 @@ app.use(cookieParser());
 app.use(express.json());
 app.use(fileUpload());
 app.set('trust proxy', 1);
+
+// Session middleware for WebAuthn usernameless authentication (only for WebAuthn routes)
+const sessionMiddleware = session({
+  secret: config.secretKey,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 5 * 60 * 1000, // 5 minutes for WebAuthn challenges
+  },
+});
+
 app.use(apiRateLimit);
 
 const PORT = process.env.PORT || 3000;
@@ -128,6 +143,10 @@ async function startServer() {
     // Public auth routes
     app.use(`${API_PREFIX}/auth`, authRoutes);
     console.log(`✓ Auth routes mounted at ${API_PREFIX}/auth`);
+
+    // WebAuthn routes under auth (with session middleware)
+    app.use(`${API_PREFIX}/auth/webauthn`, sessionMiddleware, webauthnRoutes);
+    console.log(`✓ WebAuthn routes mounted at ${API_PREFIX}/auth/webauthn`);
 
     app.use(`${API_PREFIX}/status`, statusRoutes(analysisService));
     console.log(`✓ Status routes mounted at ${API_PREFIX}/status`);

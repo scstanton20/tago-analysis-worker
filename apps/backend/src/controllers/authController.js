@@ -34,10 +34,24 @@ export const login = async (req, res) => {
 
     const { accessToken, refreshToken } = generateTokens(user);
 
+    // Set tokens as httpOnly cookies for security
+    res.cookie('access_token', accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 15 * 60 * 1000, // 15 minutes
+    });
+
+    res.cookie('refresh_token', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
     res.json({
       user,
-      accessToken,
-      refreshToken,
+      message: 'Login successful',
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -80,6 +94,21 @@ export const changePassword = async (req, res) => {
     // Generate new tokens after password change
     const { accessToken, refreshToken } = generateTokens(updatedUser);
 
+    // Set new tokens as httpOnly cookies
+    res.cookie('access_token', accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 15 * 60 * 1000, // 15 minutes
+    });
+
+    res.cookie('refresh_token', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
     // Broadcast logout to other sessions
     broadcastToUser(updatedUser.id, {
       type: 'sessionInvalidated',
@@ -90,8 +119,6 @@ export const changePassword = async (req, res) => {
     res.json({
       message: 'Password changed successfully',
       user: updatedUser,
-      accessToken,
-      refreshToken,
       invalidatedSessions: invalidatedSessions.length,
     });
   } catch (error) {
@@ -138,11 +165,24 @@ export const forceChangePassword = async (req, res) => {
     // Generate tokens after successful password change
     const { accessToken, refreshToken } = generateTokens(updatedUser);
 
+    // Set tokens as httpOnly cookies
+    res.cookie('access_token', accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 15 * 60 * 1000, // 15 minutes
+    });
+
+    res.cookie('refresh_token', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
     res.json({
       message: 'Password changed successfully',
       user: updatedUser,
-      accessToken,
-      refreshToken,
     });
   } catch (error) {
     console.error('Force change password error:', error);
@@ -152,7 +192,9 @@ export const forceChangePassword = async (req, res) => {
 
 export const logout = async (req, res) => {
   try {
-    const token = extractTokenFromHeader(req.headers.authorization);
+    const token =
+      extractTokenFromHeader(req.headers.authorization) ||
+      req.cookies?.access_token;
     const userId = req.user?.id;
 
     if (token) {
@@ -167,6 +209,10 @@ export const logout = async (req, res) => {
         });
       }
     }
+
+    // Clear httpOnly cookies
+    res.clearCookie('access_token');
+    res.clearCookie('refresh_token');
 
     res.json({ message: 'Logged out successfully' });
   } catch (error) {
@@ -189,6 +235,10 @@ export const logoutAllSessions = async (req, res) => {
       timestamp: new Date().toISOString(),
     });
 
+    // Clear httpOnly cookies
+    res.clearCookie('access_token');
+    res.clearCookie('refresh_token');
+
     res.json({
       message: 'All sessions logged out successfully',
       invalidatedSessions: invalidatedSessions.length,
@@ -204,6 +254,44 @@ export const getProfile = async (req, res) => {
     res.json({ user: req.user });
   } catch (error) {
     console.error('Get profile error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const updateProfile = async (req, res) => {
+  try {
+    const { username, email } = req.body;
+    const currentUser = req.user;
+
+    // Validate input
+    if (!username || !email) {
+      return res.status(400).json({ error: 'Username and email are required' });
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Invalid email format' });
+    }
+
+    // Check if username is already taken by another user
+    if (username !== currentUser.username) {
+      const existingUser = await userService.getUserByUsername(username);
+      if (existingUser) {
+        return res.status(409).json({ error: 'Username is already taken' });
+      }
+    }
+
+    // Only allow updating username and email
+    const updates = { username, email };
+    const updatedUser = await userService.updateUser(
+      currentUser.username,
+      updates,
+    );
+
+    res.json({ user: updatedUser });
+  } catch (error) {
+    console.error('Update profile error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

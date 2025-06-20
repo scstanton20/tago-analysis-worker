@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   TextInput,
   PasswordInput,
@@ -10,21 +10,30 @@ import {
   Alert,
   Container,
   Card,
+  Divider,
+  Group,
 } from '@mantine/core';
-import { IconAlertCircle, IconLogin } from '@tabler/icons-react';
+import {
+  IconAlertCircle,
+  IconLogin,
+  IconFingerprint,
+} from '@tabler/icons-react';
 import { useAuth } from '../../hooks/useAuth';
+import { webauthnService } from '../../services/webauthnService';
 import Logo from '../logo';
 import ForcePasswordChange from './ForcePasswordChange';
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, loginWithPasskey } = useAuth();
   const [formData, setFormData] = useState({
     username: '',
     password: '',
   });
   const [loading, setLoading] = useState(false);
+  const [passkeyLoading, setPasskeyLoading] = useState(false);
   const [error, setError] = useState('');
   const [passwordChangeRequired, setPasswordChangeRequired] = useState(null);
+  const [isWebAuthnSupported, setIsWebAuthnSupported] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -53,6 +62,52 @@ export default function LoginPage() {
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
     if (error) setError('');
+  };
+
+  // Check WebAuthn support on component mount
+  useEffect(() => {
+    const checkSupport = async () => {
+      const supported = webauthnService.isSupported();
+      setIsWebAuthnSupported(supported);
+    };
+    checkSupport();
+  }, []);
+
+  const handlePasskeyLogin = async () => {
+    setPasskeyLoading(true);
+    setError('');
+
+    try {
+      // Try usernameless authentication first
+      const result = await webauthnService.authenticateUsernameless();
+
+      if (result.success) {
+        // Tokens are now in httpOnly cookies, just pass the user data
+        await loginWithPasskey(result.user);
+      } else {
+        throw new Error('Authentication failed');
+      }
+    } catch (err) {
+      // If usernameless fails and we have a username, try username-based auth
+      if (formData.username && err.message.includes('usernameless')) {
+        try {
+          const result = await webauthnService.authenticateWithUsername(
+            formData.username,
+          );
+          if (result.success) {
+            await loginWithPasskey(result.user);
+          } else {
+            throw new Error('Authentication failed');
+          }
+        } catch (usernameErr) {
+          setError(usernameErr.message || 'Passkey authentication failed');
+        }
+      } else {
+        setError(err.message || 'Passkey authentication failed');
+      }
+    } finally {
+      setPasskeyLoading(false);
+    }
   };
 
   // Show password change component if required
@@ -161,13 +216,39 @@ export default function LoginPage() {
                 style={{
                   fontWeight: 600,
                 }}
+                disabled={passkeyLoading}
               >
                 {loading ? 'Signing in...' : 'Sign In'}
               </Button>
 
-              <Text size="xs" c="dimmed" ta="center" mt="md">
-                Default login: admin / admin123
-              </Text>
+              {isWebAuthnSupported && (
+                <>
+                  <Divider label="OR" labelPosition="center" />
+
+                  <Button
+                    onClick={handlePasskeyLogin}
+                    loading={passkeyLoading}
+                    fullWidth
+                    size="md"
+                    leftSection={<IconFingerprint size="1rem" />}
+                    variant="light"
+                    color="blue"
+                    radius="md"
+                    style={{
+                      fontWeight: 600,
+                    }}
+                    disabled={loading}
+                  >
+                    {passkeyLoading
+                      ? 'Authenticating...'
+                      : 'Sign in with Passkey'}
+                  </Button>
+
+                  <Text size="xs" c="dimmed" ta="center">
+                    Use Face ID, Touch ID, Windows Hello, or your security key
+                  </Text>
+                </>
+              )}
             </Stack>
           </form>
         </Card>

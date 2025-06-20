@@ -1,8 +1,4 @@
 import { fetchWithHeaders, handleResponse } from '../utils/apiUtils.js';
-import Cookies from 'js-cookie';
-
-const TOKEN_KEY = 'access_token';
-const REFRESH_TOKEN_KEY = 'refresh_token';
 
 class AuthService {
   constructor() {
@@ -14,12 +10,14 @@ class AuthService {
     const response = await fetchWithHeaders('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ username, password }),
+      credentials: 'include', // Include cookies in request
     });
 
     const data = await handleResponse(response);
 
-    this.setTokens(data.accessToken, data.refreshToken);
+    this.token = 'cookie-auth'; // Placeholder to indicate authenticated
     this.user = data.user;
+    localStorage.setItem('auth_status', 'authenticated');
 
     return data;
   }
@@ -29,12 +27,15 @@ class AuthService {
       const response = await fetchWithHeaders('/auth/force-change-password', {
         method: 'POST',
         body: JSON.stringify({ username, currentPassword, newPassword }),
+        credentials: 'include',
       });
 
       const data = await handleResponse(response);
 
-      this.setTokens(data.accessToken, data.refreshToken);
+      // Tokens are now set as httpOnly cookies by the server
+      this.token = 'cookie-auth';
       this.user = data.user;
+      localStorage.setItem('auth_status', 'authenticated');
 
       return data;
     } catch (error) {
@@ -47,18 +48,13 @@ class AuthService {
       const response = await fetchWithHeaders('/auth/change-password', {
         method: 'POST',
         body: JSON.stringify({ currentPassword, newPassword }),
-        headers: {
-          Authorization: `Bearer ${this.token}`,
-        },
+        credentials: 'include',
       });
 
       const data = await handleResponse(response);
 
-      // Update tokens if they were refreshed
-      if (data.accessToken && data.refreshToken) {
-        this.setTokens(data.accessToken, data.refreshToken);
-        this.user = data.user;
-      }
+      this.user = data.user;
+      localStorage.setItem('auth_status', 'authenticated');
 
       return data;
     } catch (error) {
@@ -70,9 +66,7 @@ class AuthService {
     try {
       const response = await fetchWithHeaders('/auth/profile', {
         method: 'GET',
-        headers: {
-          Authorization: `Bearer ${this.token}`,
-        },
+        credentials: 'include',
       });
 
       const data = await handleResponse(response);
@@ -89,14 +83,28 @@ class AuthService {
     }
   }
 
+  async updateProfile(username, email) {
+    try {
+      const response = await fetchWithHeaders('/auth/profile', {
+        method: 'PUT',
+        body: JSON.stringify({ username, email }),
+        credentials: 'include',
+      });
+
+      const data = await handleResponse(response);
+      this.user = data.user;
+      return data;
+    } catch (error) {
+      throw new Error(error.message || 'Profile update failed');
+    }
+  }
+
   async createUser(userData) {
     try {
       const response = await fetchWithHeaders('/auth/users', {
         method: 'POST',
         body: JSON.stringify(userData),
-        headers: {
-          Authorization: `Bearer ${this.token}`,
-        },
+        credentials: 'include',
       });
 
       return await handleResponse(response);
@@ -110,9 +118,7 @@ class AuthService {
       const response = await fetchWithHeaders(`/auth/users/${username}`, {
         method: 'PUT',
         body: JSON.stringify(updates),
-        headers: {
-          Authorization: `Bearer ${this.token}`,
-        },
+        credentials: 'include',
       });
 
       return await handleResponse(response);
@@ -125,9 +131,7 @@ class AuthService {
     try {
       const response = await fetchWithHeaders(`/auth/users/${username}`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${this.token}`,
-        },
+        credentials: 'include',
       });
 
       return await handleResponse(response);
@@ -140,9 +144,7 @@ class AuthService {
     try {
       const response = await fetchWithHeaders('/auth/users', {
         method: 'GET',
-        headers: {
-          Authorization: `Bearer ${this.token}`,
-        },
+        credentials: 'include',
       });
 
       return await handleResponse(response);
@@ -157,9 +159,7 @@ class AuthService {
         `/auth/users/${username}/reset-password`,
         {
           method: 'POST',
-          headers: {
-            Authorization: `Bearer ${this.token}`,
-          },
+          credentials: 'include',
         },
       );
 
@@ -175,9 +175,7 @@ class AuthService {
         `/auth/users/${username}/permissions`,
         {
           method: 'GET',
-          headers: {
-            Authorization: `Bearer ${this.token}`,
-          },
+          credentials: 'include',
         },
       );
 
@@ -194,9 +192,7 @@ class AuthService {
         {
           method: 'PUT',
           body: JSON.stringify(permissions),
-          headers: {
-            Authorization: `Bearer ${this.token}`,
-          },
+          credentials: 'include',
         },
       );
 
@@ -210,9 +206,7 @@ class AuthService {
     try {
       const response = await fetchWithHeaders('/auth/departments', {
         method: 'GET',
-        headers: {
-          Authorization: `Bearer ${this.token}`,
-        },
+        credentials: 'include',
       });
 
       return await handleResponse(response);
@@ -225,9 +219,7 @@ class AuthService {
     try {
       const response = await fetchWithHeaders('/auth/actions', {
         method: 'GET',
-        headers: {
-          Authorization: `Bearer ${this.token}`,
-        },
+        credentials: 'include',
       });
 
       return await handleResponse(response);
@@ -236,54 +228,32 @@ class AuthService {
     }
   }
 
-  setTokens(accessToken, refreshToken) {
-    this.token = accessToken;
-
-    // Store in cookies only
-    const cookieOptions = {
-      expires: 1, // 1 day
-      secure: window.location.protocol === 'https:',
-      sameSite: 'strict',
-      path: '/',
-    };
-
-    Cookies.set(TOKEN_KEY, accessToken, cookieOptions);
-
-    if (refreshToken) {
-      Cookies.set(REFRESH_TOKEN_KEY, refreshToken, {
-        ...cookieOptions,
-        expires: 7, // 7 days
-      });
-    }
-  }
-
   getStoredToken() {
-    return Cookies.get(TOKEN_KEY);
+    // Check if we have authentication status from previous login
+    return localStorage.getItem('auth_status') === 'authenticated'
+      ? 'cookie-auth'
+      : null;
   }
 
   getStoredRefreshToken() {
-    return Cookies.get(REFRESH_TOKEN_KEY);
+    return null;
   }
 
   async logout() {
     try {
-      // Call logout endpoint to invalidate token server-side
-      if (this.token) {
-        await fetchWithHeaders('/auth/logout', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${this.token}`,
-          },
-        });
-      }
+      // Call logout endpoint to clear httpOnly cookies server-side
+      await fetchWithHeaders('/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+      });
     } catch (error) {
       console.error('Logout error:', error);
       // Continue with local cleanup even if server logout fails
     } finally {
       this.user = null;
       this.token = null;
-      Cookies.remove(TOKEN_KEY, { path: '/' });
-      Cookies.remove(REFRESH_TOKEN_KEY, { path: '/' });
+      localStorage.removeItem('auth_status');
+      // httpOnly cookies are cleared by the server
     }
   }
 

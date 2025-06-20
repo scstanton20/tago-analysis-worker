@@ -22,13 +22,19 @@ export function setupWebSocket(server) {
   wss.on('connection', async (ws, req) => {
     console.log(`WebSocket connection attempt`);
 
-    // Extract token from query params or headers
-    const url = new URL(req.url, `http://${req.headers.host}`);
-    const token =
-      url.searchParams.get('token') ||
-      req.headers.authorization?.replace('Bearer ', '');
+    // Extract token from cookies (httpOnly cookies sent automatically)
+    const cookies = req.headers.cookie;
+    let token = null;
+
+    if (cookies) {
+      const cookieMatch = cookies.match(/access_token=([^;]+)/);
+      if (cookieMatch) {
+        token = cookieMatch[1];
+      }
+    }
 
     if (!token) {
+      console.log('WebSocket authentication failed: No access token cookie');
       ws.close(1008, 'Authentication required');
       return;
     }
@@ -38,6 +44,7 @@ export function setupWebSocket(server) {
       const user = await userService.getUserById(decoded.id);
 
       if (!user) {
+        console.log('WebSocket authentication failed: Invalid user');
         ws.close(1008, 'Invalid user');
         return;
       }

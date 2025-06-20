@@ -207,7 +207,24 @@ class UserService {
       };
     }
 
-    Object.assign(user, updates);
+    // Handle username change
+    const newUsername = updates.username;
+    if (newUsername && newUsername !== username) {
+      // Check if new username already exists
+      if (this.users[newUsername]) {
+        throw new Error('Username already exists');
+      }
+
+      // Update the user object
+      Object.assign(user, updates);
+
+      // Move user to new key and delete old key
+      this.users[newUsername] = user;
+      delete this.users[username];
+    } else {
+      Object.assign(user, updates);
+    }
+
     await this.saveUsers();
 
     // Return user without password
@@ -310,6 +327,121 @@ class UserService {
       actions: user.permissions?.actions || [],
       isAdmin: false,
     };
+  }
+
+  // WebAuthn Methods
+  async storeWebAuthnChallenge(username, challengeData) {
+    if (!this.users) await this.loadUsers();
+
+    const user = this.users[username];
+    if (!user) throw new Error('User not found');
+
+    if (!user.webauthn) {
+      user.webauthn = {};
+    }
+
+    user.webauthn.currentChallenge = challengeData;
+    await this.saveUsers();
+  }
+
+  async getWebAuthnChallenge(username) {
+    if (!this.users) await this.loadUsers();
+
+    const user = this.users[username];
+    if (!user) return null;
+
+    const challenge = user.webauthn?.currentChallenge;
+
+    // Check if challenge is expired (5 minutes)
+    if (challenge && Date.now() - challenge.timestamp > 5 * 60 * 1000) {
+      await this.clearWebAuthnChallenge(username);
+      return null;
+    }
+
+    return challenge;
+  }
+
+  async clearWebAuthnChallenge(username) {
+    if (!this.users) await this.loadUsers();
+
+    const user = this.users[username];
+    if (!user || !user.webauthn) return;
+
+    delete user.webauthn.currentChallenge;
+    await this.saveUsers();
+  }
+
+  async addWebAuthnAuthenticator(username, authenticator) {
+    if (!this.users) await this.loadUsers();
+
+    const user = this.users[username];
+    if (!user) throw new Error('User not found');
+
+    if (!user.webauthn) {
+      user.webauthn = { authenticators: [] };
+    }
+    if (!user.webauthn.authenticators) {
+      user.webauthn.authenticators = [];
+    }
+
+    user.webauthn.authenticators.push(authenticator);
+    await this.saveUsers();
+  }
+
+  async removeWebAuthnAuthenticator(username, credentialId) {
+    if (!this.users) await this.loadUsers();
+
+    const user = this.users[username];
+    if (!user || !user.webauthn?.authenticators) return false;
+
+    const initialLength = user.webauthn.authenticators.length;
+    user.webauthn.authenticators = user.webauthn.authenticators.filter(
+      (auth) => auth.credentialID !== credentialId,
+    );
+
+    if (user.webauthn.authenticators.length < initialLength) {
+      await this.saveUsers();
+      return true;
+    }
+
+    return false;
+  }
+
+  async updateWebAuthnCounter(username, credentialId, newCounter) {
+    if (!this.users) await this.loadUsers();
+
+    const user = this.users[username];
+    if (!user || !user.webauthn?.authenticators) return false;
+
+    const authenticator = user.webauthn.authenticators.find(
+      (auth) => auth.credentialID === credentialId,
+    );
+
+    if (authenticator) {
+      authenticator.counter = Number(newCounter) || 0; // Ensure counter is a number
+      await this.saveUsers();
+      return true;
+    }
+
+    return false;
+  }
+
+  async getUserByCredentialID(credentialId) {
+    if (!this.users) await this.loadUsers();
+
+    for (const user of Object.values(this.users)) {
+      if (user.webauthn?.authenticators) {
+        const hasCredential = user.webauthn.authenticators.some(
+          (auth) => auth.credentialID === credentialId,
+        );
+        if (hasCredential) {
+          const { password: _, ...userWithoutPassword } = user;
+          return userWithoutPassword;
+        }
+      }
+    }
+
+    return null;
   }
 }
 

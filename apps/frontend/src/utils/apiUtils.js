@@ -1,6 +1,4 @@
 // frontend/src/services/utils.js
-import Cookies from 'js-cookie';
-
 const getBaseUrl = () => {
   if (import.meta.env.DEV && import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL; // Use Docker URL in Docker dev
@@ -15,14 +13,6 @@ export async function fetchWithHeaders(url, options = {}) {
 
   if (options.body && !(options.body instanceof FormData)) {
     defaultHeaders['Content-Type'] = 'application/json';
-  }
-
-  // Add auth token if available and not already provided
-  if (!options.headers?.Authorization) {
-    const token = Cookies.get('access_token');
-    if (token) {
-      defaultHeaders.Authorization = `Bearer ${token}`;
-    }
   }
 
   const baseUrl = getBaseUrl();

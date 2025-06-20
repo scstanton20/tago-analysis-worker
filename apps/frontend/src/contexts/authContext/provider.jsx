@@ -62,6 +62,30 @@ const AuthProvider = ({ children }) => {
     return data;
   };
 
+  const loginWithPasskey = async (user) => {
+    // Tokens are now handled as httpOnly cookies by the server
+    authService.token = 'cookie-auth';
+    authService.user = user;
+    localStorage.setItem('auth_status', 'authenticated');
+
+    setUser(user);
+    setIsAuthenticated(true);
+
+    // Extract permissions from user data
+    const userPerms = user.permissions;
+    if (userPerms) {
+      setUserPermissions({
+        departments: userPerms.departments || [],
+        actions: userPerms.actions || [],
+        isAdmin: user.role === 'admin',
+      });
+    } else {
+      setUserPermissions(null);
+    }
+
+    return { user };
+  };
+
   const logout = async () => {
     await authService.logout();
     setUser(null);
@@ -99,6 +123,12 @@ const AuthProvider = ({ children }) => {
 
   const changePassword = async (currentPassword, newPassword) => {
     const data = await authService.changePassword(currentPassword, newPassword);
+    setUser(data.user);
+    return data;
+  };
+
+  const updateProfile = async (username, email) => {
+    const data = await authService.updateProfile(username, email);
     setUser(data.user);
     return data;
   };
@@ -191,9 +221,11 @@ const AuthProvider = ({ children }) => {
     isAuthenticated,
     userPermissions,
     login,
+    loginWithPasskey,
     logout,
     forceChangePassword,
     changePassword,
+    updateProfile,
     createUser,
     updateUser,
     deleteUser,
