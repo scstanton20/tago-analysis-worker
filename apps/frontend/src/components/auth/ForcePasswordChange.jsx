@@ -152,6 +152,8 @@ export default function ForcePasswordChange({ username, onSuccess }) {
                   required
                   size="md"
                   autoComplete="current-password"
+                  name="current-password"
+                  id="current-password"
                 />
 
                 <PasswordInput
@@ -164,6 +166,8 @@ export default function ForcePasswordChange({ username, onSuccess }) {
                   required
                   size="md"
                   autoComplete="new-password"
+                  name="new-password"
+                  id="new-password"
                 />
 
                 <PasswordInput
@@ -176,6 +180,8 @@ export default function ForcePasswordChange({ username, onSuccess }) {
                   required
                   size="md"
                   autoComplete="new-password"
+                  name="confirm-password"
+                  id="confirm-password"
                 />
               </Stack>
 

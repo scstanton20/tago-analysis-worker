@@ -210,7 +210,7 @@ export const logout = async (req, res) => {
       }
     }
 
-    // Clear httpOnly cookies
+    // Clear httpOnly cookies (JWT tokens only - no sessions)
     res.clearCookie('access_token');
     res.clearCookie('refresh_token');
 
@@ -235,7 +235,7 @@ export const logoutAllSessions = async (req, res) => {
       timestamp: new Date().toISOString(),
     });
 
-    // Clear httpOnly cookies
+    // Clear httpOnly cookies (JWT tokens only - no sessions)
     res.clearCookie('access_token');
     res.clearCookie('refresh_token');
 

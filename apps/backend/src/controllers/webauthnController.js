@@ -6,6 +6,7 @@ import {
 } from '@simplewebauthn/server';
 import userService from '../services/userService.js';
 import { generateTokens } from '../utils/jwt.js';
+import { challengeStorage } from '../utils/challengeStorage.js';
 
 // WebAuthn configuration
 const RP_NAME = 'Tago Analysis Runner';
@@ -197,16 +198,18 @@ class WebAuthnController {
           userVerification: 'preferred',
         });
 
-        // Store challenge in session or temporary storage
-        // For usernameless, we'll need to match after verification
-        req.session = req.session || {};
-        req.session.webauthnChallenge = {
+        // Store challenge in memory storage for usernameless flow
+        const challengeId = challengeStorage.store({
           challenge: options.challenge,
           type: 'authentication',
           timestamp: Date.now(),
-        };
+        });
 
-        res.json(options);
+        // Include challenge ID in response for verification
+        res.json({
+          ...options,
+          challengeId,
+        });
       }
     } catch (error) {
       console.error('WebAuthn authentication generation error:', error);
@@ -219,7 +222,7 @@ class WebAuthnController {
   // Verify authentication response and login the user
   async verifyAuthentication(req, res) {
     try {
-      const { response, username } = req.body;
+      const { response, username, challengeId } = req.body;
 
       let challengeData;
       let userData;
@@ -233,8 +236,14 @@ class WebAuthnController {
           username: userData?.username,
         });
       } else {
-        // Usernameless - get challenge from session and find user by credential ID
-        challengeData = req.session?.webauthnChallenge;
+        // Usernameless - get challenge from memory storage
+        if (!challengeId) {
+          return res.status(400).json({
+            error: 'Challenge ID required for usernameless authentication',
+          });
+        }
+
+        challengeData = challengeStorage.consume(challengeId);
         if (!challengeData) {
           return res
             .status(400)
@@ -316,11 +325,9 @@ class WebAuthnController {
         );
       }
 
-      // Clear challenge
+      // Clear challenge (for username flow only - usernameless challenges are already consumed)
       if (username) {
         await userService.clearWebAuthnChallenge(username);
-      } else {
-        delete req.session.webauthnChallenge;
       }
 
       const { accessToken, refreshToken } = generateTokens(userData);

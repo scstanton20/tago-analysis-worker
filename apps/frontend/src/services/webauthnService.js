@@ -124,17 +124,24 @@ class WebAuthnService {
       );
 
       const options = await handleResponse(optionsResponse);
-      console.log('WebAuthn usernameless authentication options:', options);
+
+      // Extract challengeId from options (returned by server for usernameless flow)
+      const { challengeId, ...webauthnOptions } = options;
 
       // Step 2: Start authentication ceremony with browser
-      const authResp = await startAuthentication({ optionsJSON: options });
+      const authResp = await startAuthentication({
+        optionsJSON: webauthnOptions,
+      });
 
-      // Step 3: Send response to server for verification
+      // Step 3: Send response to server for verification (include challengeId)
       const verificationResponse = await fetchWithHeaders(
         `${this.baseUrl}/authentication/verify`,
         {
           method: 'POST',
-          body: JSON.stringify({ response: authResp }), // No username
+          body: JSON.stringify({
+            response: authResp,
+            challengeId, // Include challengeId for usernameless verification
+          }),
         },
       );
 

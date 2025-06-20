@@ -509,6 +509,9 @@ export default function UserManagementModal({ opened, onClose }) {
                     <PasswordInput
                       label="New Password (leave blank to keep current)"
                       placeholder="Enter new password"
+                      autoComplete="new-password"
+                      name="admin-new-password"
+                      id="admin-new-password"
                       {...form.getInputProps('password')}
                     />
                   )}

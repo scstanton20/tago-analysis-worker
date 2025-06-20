@@ -417,6 +417,9 @@ export default function ProfileModal({ opened, onClose }) {
                 label="Current Password"
                 placeholder="Enter your current password"
                 required
+                autoComplete="current-password"
+                name="current-password"
+                id="profile-current-password"
                 {...passwordForm.getInputProps('currentPassword')}
               />
 
@@ -424,6 +427,9 @@ export default function ProfileModal({ opened, onClose }) {
                 label="New Password"
                 placeholder="Enter new password (min 6 characters)"
                 required
+                autoComplete="new-password"
+                name="new-password"
+                id="profile-new-password"
                 {...passwordForm.getInputProps('newPassword')}
               />
 
@@ -431,6 +437,9 @@ export default function ProfileModal({ opened, onClose }) {
                 label="Confirm New Password"
                 placeholder="Confirm your new password"
                 required
+                autoComplete="new-password"
+                name="confirm-password"
+                id="profile-confirm-password"
                 {...passwordForm.getInputProps('confirmPassword')}
               />
 

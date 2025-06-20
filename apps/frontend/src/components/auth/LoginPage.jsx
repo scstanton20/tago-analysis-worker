@@ -35,6 +35,46 @@ export default function LoginPage() {
   const [passwordChangeRequired, setPasswordChangeRequired] = useState(null);
   const [isWebAuthnSupported, setIsWebAuthnSupported] = useState(false);
 
+  // Handle password manager autofill
+  useEffect(() => {
+    const handleAutofill = () => {
+      // Small delay to allow password managers to fill fields
+      setTimeout(() => {
+        const usernameInput = document.getElementById('username');
+        const passwordInput = document.getElementById('password');
+
+        if (
+          usernameInput &&
+          usernameInput.value &&
+          usernameInput.value !== formData.username
+        ) {
+          setFormData((prev) => ({ ...prev, username: usernameInput.value }));
+        }
+        if (
+          passwordInput &&
+          passwordInput.value &&
+          passwordInput.value !== formData.password
+        ) {
+          setFormData((prev) => ({ ...prev, password: passwordInput.value }));
+        }
+      }, 100);
+    };
+
+    // Listen for autofill events
+    document.addEventListener('DOMContentLoaded', handleAutofill);
+    window.addEventListener('load', handleAutofill);
+
+    // Also check periodically for the first few seconds
+    const interval = setInterval(handleAutofill, 500);
+    setTimeout(() => clearInterval(interval), 3000);
+
+    return () => {
+      document.removeEventListener('DOMContentLoaded', handleAutofill);
+      window.removeEventListener('load', handleAutofill);
+      clearInterval(interval);
+    };
+  }, [formData.username, formData.password]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.username || !formData.password) {
@@ -142,7 +182,7 @@ export default function LoginPage() {
             border: '1px solid var(--mantine-color-gray-3)',
           }}
         >
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} method="post" action="">
             <Stack gap="lg">
               <Box ta="center">
                 <Logo size={104} />
@@ -178,7 +218,7 @@ export default function LoginPage() {
                 </Alert>
               )}
 
-              <Stack gap="md">
+              <Stack gap="md" key="login-form-fields">
                 <TextInput
                   label="Username"
                   placeholder="Enter your username"
@@ -189,6 +229,8 @@ export default function LoginPage() {
                   required
                   size="md"
                   autoComplete="username"
+                  name="username"
+                  id="username"
                 />
 
                 <PasswordInput
@@ -201,6 +243,8 @@ export default function LoginPage() {
                   required
                   size="md"
                   autoComplete="current-password"
+                  name="password"
+                  id="password"
                 />
               </Stack>
 
