@@ -1,4 +1,6 @@
 // frontend/src/services/utils.js
+import Cookies from 'js-cookie';
+
 const getBaseUrl = () => {
   if (import.meta.env.DEV && import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL; // Use Docker URL in Docker dev
@@ -15,9 +17,18 @@ export async function fetchWithHeaders(url, options = {}) {
     defaultHeaders['Content-Type'] = 'application/json';
   }
 
+  // Add auth token if available and not already provided
+  if (!options.headers?.Authorization) {
+    const token = Cookies.get('access_token');
+    if (token) {
+      defaultHeaders.Authorization = `Bearer ${token}`;
+    }
+  }
+
   const baseUrl = getBaseUrl();
   return fetch(`${baseUrl}${url}`, {
     ...options,
+    credentials: 'include', // Include cookies in requests
     headers: {
       ...defaultHeaders,
       ...options.headers,
@@ -27,14 +38,22 @@ export async function fetchWithHeaders(url, options = {}) {
 
 export async function handleResponse(response) {
   if (!response.ok) {
-    let errorMessage;
+    let errorData;
     try {
-      const errorData = await response.json();
-      errorMessage = errorData.error || response.statusText;
+      errorData = await response.json();
     } catch {
-      errorMessage = response.statusText;
+      throw new Error(response.statusText);
     }
-    throw new Error(errorMessage);
+
+    // Handle special cases
+    if (errorData.mustChangePassword) {
+      const error = new Error(errorData.error || 'Password change required');
+      error.mustChangePassword = true;
+      error.user = errorData.user;
+      throw error;
+    }
+
+    throw new Error(errorData.error || response.statusText);
   }
   return response.json();
 }

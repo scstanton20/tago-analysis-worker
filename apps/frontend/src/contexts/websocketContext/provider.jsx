@@ -2,18 +2,21 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { WebSocketContext } from './context';
+import { useAuth } from '../../hooks/useAuth';
 
 // Global connection tracking to prevent multiple connections across StrictMode renders
 let globalWebSocket = null;
 let globalConnectionPromise = null;
 
 export function WebSocketProvider({ children }) {
+  const { getToken, isAuthenticated } = useAuth();
   const [socket, setSocket] = useState(null);
   const [analyses, setAnalyses] = useState({}); // Object: { analysisName: analysisData }
   const [departments, setDepartments] = useState({}); // Object: { deptId: deptData }
   const [loadingAnalyses, setLoadingAnalyses] = useState(new Set());
   const [connectionStatus, setConnectionStatus] = useState('connecting');
   const [backendStatus, setBackendStatus] = useState(null);
+  const [serverShutdown, setServerShutdown] = useState(false);
   const [hasInitialData, setHasInitialData] = useState(false);
   const lastMessageRef = useRef({ type: null, timestamp: 0 });
   const reconnectAttemptsRef = useRef(0);
@@ -38,13 +41,20 @@ export function WebSocketProvider({ children }) {
     });
   }, []);
 
-  const getWebSocketUrl = () => {
+  const getWebSocketUrl = useCallback(() => {
+    const token = getToken();
+    if (!token) return null;
+
+    let baseUrl;
     if (import.meta.env.DEV && import.meta.env.VITE_WS_URL) {
-      return import.meta.env.VITE_WS_URL;
+      baseUrl = import.meta.env.VITE_WS_URL;
+    } else {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      baseUrl = `${protocol}//${window.location.host}/ws`;
     }
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${protocol}//${window.location.host}/ws`;
-  };
+
+    return `${baseUrl}?token=${encodeURIComponent(token)}`;
+  }, [getToken]);
 
   // Function to request status update from server
   const requestStatusUpdate = useCallback(() => {
@@ -408,6 +418,33 @@ export function WebSocketProvider({ children }) {
             }
             break;
 
+          case 'sessionInvalidated':
+            console.log('Session invalidated:', data.reason);
+
+            // Check if this is a server shutdown
+            if (data.reason?.includes('Server is shutting down')) {
+              setServerShutdown(true);
+              setConnectionStatus('server_shutdown');
+              return; // Don't logout immediately, show reconnection overlay
+            }
+
+            // Force logout on session invalidation immediately
+            if (window.authService) {
+              // Clear tokens without calling server logout to avoid loops
+              window.authService.token = null;
+              window.authService.user = null;
+
+              // Clear cookies
+              import('js-cookie').then(({ default: Cookies }) => {
+                Cookies.remove('access_token', { path: '/' });
+                Cookies.remove('refresh_token', { path: '/' });
+              });
+
+              // Force immediate page reload to show login page
+              window.location.reload();
+            }
+            break;
+
           default:
             console.log('Unhandled WebSocket message type:', data.type);
             break;
@@ -421,6 +458,11 @@ export function WebSocketProvider({ children }) {
 
   const createConnection = useCallback(async () => {
     const componentId = componentIdRef.current;
+    const wsUrl = getWebSocketUrl();
+
+    if (!wsUrl) {
+      throw new Error('Authentication required for WebSocket connection');
+    }
 
     // If we already have a working connection, reuse it
     if (globalWebSocket && globalWebSocket.readyState === WebSocket.OPEN) {
@@ -437,7 +479,7 @@ export function WebSocketProvider({ children }) {
     }
 
     globalConnectionPromise = new Promise((resolve, reject) => {
-      const websocket = new WebSocket(getWebSocketUrl());
+      const websocket = new WebSocket(wsUrl);
       websocket._componentId = componentId;
       let resolved = false;
 
@@ -486,7 +528,17 @@ export function WebSocketProvider({ children }) {
         );
 
         if (mountedRef.current) {
-          setConnectionStatus('disconnected');
+          // Check if this is a server shutdown (code 1001 or 1006 typically)
+          if (
+            event.code === 1001 ||
+            event.code === 1006 ||
+            event.code === 1005
+          ) {
+            setServerShutdown(true);
+            setConnectionStatus('server_shutdown');
+          } else {
+            setConnectionStatus('disconnected');
+          }
           connectionStatusRef.current = 'disconnected';
           setSocket(null);
           // Clear backend status when connection is lost
@@ -504,7 +556,7 @@ export function WebSocketProvider({ children }) {
     });
 
     return globalConnectionPromise;
-  }, [handleMessage]);
+  }, [handleMessage, getWebSocketUrl]);
 
   const reconnect = useCallback(async () => {
     if (!mountedRef.current) return;
@@ -551,6 +603,17 @@ export function WebSocketProvider({ children }) {
     mountedRef.current = true;
 
     const connect = async () => {
+      if (!isAuthenticated) {
+        setConnectionStatus('disconnected');
+        // Close any existing connection when not authenticated
+        if (globalWebSocket) {
+          globalWebSocket.close();
+          globalWebSocket = null;
+        }
+        globalConnectionPromise = null;
+        return;
+      }
+
       try {
         setConnectionStatus('connecting');
         connectionStatusRef.current = 'connecting';
@@ -565,11 +628,30 @@ export function WebSocketProvider({ children }) {
             );
 
             if (mountedRef.current) {
-              setConnectionStatus('disconnected');
+              // Check if this is a server shutdown
+              if (
+                event.code === 1001 ||
+                event.code === 1006 ||
+                event.code === 1005
+              ) {
+                setServerShutdown(true);
+                setConnectionStatus('server_shutdown');
+              } else {
+                setConnectionStatus('disconnected');
+              }
               connectionStatusRef.current = 'disconnected';
               setSocket(null);
               setBackendStatus(null); // Clear backend status on disconnect
-              reconnect();
+
+              // Only reconnect if not a server shutdown
+              if (
+                !serverShutdown &&
+                event.code !== 1001 &&
+                event.code !== 1006 &&
+                event.code !== 1005
+              ) {
+                reconnect();
+              }
             }
           };
 
@@ -650,7 +732,7 @@ export function WebSocketProvider({ children }) {
       }
       globalConnectionPromise = null;
     };
-  }, [createConnection, reconnect]);
+  }, [createConnection, reconnect, isAuthenticated, serverShutdown]);
 
   // Request status updates periodically (fallback)
   useEffect(() => {
@@ -677,6 +759,7 @@ export function WebSocketProvider({ children }) {
     requestStatusUpdate,
     getDepartment,
     hasInitialData,
+    serverShutdown,
   };
 
   return (
