@@ -25,7 +25,7 @@ export const login = async (req, res) => {
 
     // Check if user must change password
     if (user.mustChangePassword) {
-      return res.status(403).json({
+      return res.status(428).json({
         error: 'Password change required',
         mustChangePassword: true,
         user: { username: user.username, email: user.email },
