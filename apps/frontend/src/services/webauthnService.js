@@ -4,12 +4,22 @@ import {
 } from '@simplewebauthn/browser';
 import { fetchWithHeaders, handleResponse } from '../utils/apiUtils.js';
 
+/**
+ * WebAuthn service for handling passkey registration and authentication on the frontend
+ * Provides methods for WebAuthn credential management and browser compatibility checks
+ */
 class WebAuthnService {
+  /**
+   * Create a new WebAuthnService instance
+   */
   constructor() {
     this.baseUrl = '/auth/webauthn';
   }
 
-  // Check if WebAuthn is supported in this browser
+  /**
+   * Check if WebAuthn is supported in this browser
+   * @returns {boolean} True if WebAuthn is supported
+   */
   isSupported() {
     return (
       window.PublicKeyCredential &&
@@ -18,7 +28,10 @@ class WebAuthnService {
     );
   }
 
-  // Check if the device supports platform authenticators (like Face ID, Touch ID, Windows Hello)
+  /**
+   * Check if the device supports platform authenticators (like Face ID, Touch ID, Windows Hello)
+   * @returns {Promise<boolean>} True if platform authenticator is available
+   */
   async isPlatformAuthenticatorAvailable() {
     if (!this.isSupported()) return false;
 
@@ -33,7 +46,12 @@ class WebAuthnService {
     }
   }
 
-  // Register a new passkey for the current user
+  /**
+   * Register a new passkey for the current user
+   * @param {string} authenticatorName - Name for the new authenticator
+   * @returns {Promise<Object>} Authenticator data if successful
+   * @throws {Error} If registration fails
+   */
   async registerPasskey(authenticatorName) {
     try {
       // Step 1: Get registration options from server
@@ -72,7 +90,12 @@ class WebAuthnService {
     }
   }
 
-  // Authenticate with passkey (with username)
+  /**
+   * Authenticate with passkey using a username
+   * @param {string} username - Username to authenticate
+   * @returns {Promise<Object>} Authentication result with user data
+   * @throws {Error} If authentication fails
+   */
   async authenticateWithUsername(username) {
     try {
       // Step 1: Get authentication options from server
@@ -111,7 +134,11 @@ class WebAuthnService {
     }
   }
 
-  // Authenticate with passkey (usernameless - resident key)
+  /**
+   * Authenticate with passkey without providing a username (resident key)
+   * @returns {Promise<Object>} Authentication result with user data
+   * @throws {Error} If authentication fails
+   */
   async authenticateUsernameless() {
     try {
       // Step 1: Get authentication options from server (no username)
@@ -158,7 +185,11 @@ class WebAuthnService {
     }
   }
 
-  // Get user's registered passkeys
+  /**
+   * Get user's registered passkeys
+   * @returns {Promise<Object[]>} Array of user's authenticators
+   * @throws {Error} If request fails
+   */
   async getAuthenticators() {
     try {
       const response = await fetchWithHeaders(
@@ -176,7 +207,12 @@ class WebAuthnService {
     }
   }
 
-  // Delete a passkey
+  /**
+   * Delete a passkey
+   * @param {string} credentialId - ID of the credential to delete
+   * @returns {Promise<boolean>} True if deletion was successful
+   * @throws {Error} If deletion fails
+   */
   async deleteAuthenticator(credentialId) {
     try {
       const response = await fetchWithHeaders(
@@ -194,7 +230,11 @@ class WebAuthnService {
     }
   }
 
-  // Get a user-friendly name for the authenticator type
+  /**
+   * Get a user-friendly name for the authenticator type based on transport methods
+   * @param {string[]} transports - Array of transport methods
+   * @returns {string} Human-readable authenticator type name
+   */
   getAuthenticatorTypeName(transports) {
     if (!Array.isArray(transports)) return 'Security Key';
 

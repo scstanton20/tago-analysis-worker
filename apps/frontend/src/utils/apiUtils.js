@@ -35,6 +35,7 @@ export async function handleResponse(response, originalUrl, originalOptions) {
     let errorData;
     try {
       errorData = await response.json();
+      console.log('API Error Data:', errorData);
     } catch {
       throw new Error(response.statusText);
     }

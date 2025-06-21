@@ -83,25 +83,6 @@ class AuthService {
     }
   }
 
-  async changePassword(currentPassword, newPassword) {
-    try {
-      const response = await fetchWithHeaders('/auth/change-password', {
-        method: 'POST',
-        body: JSON.stringify({ currentPassword, newPassword }),
-        credentials: 'include',
-      });
-
-      const data = await handleResponse(response);
-
-      this.user = data.user;
-      localStorage.setItem('auth_status', 'authenticated');
-
-      return data;
-    } catch (error) {
-      throw new Error(error.message || 'Password change failed');
-    }
-  }
-
   async getProfile() {
     try {
       const options = {
