@@ -17,9 +17,8 @@ services:
     labels:
       traefik.enable: 'true'
       traefik.http.routers.tago-runner.rule: 'Host(`tago-runner.scstanton.net`)'
-      traefik.http.routers.tago-runner.middlewares: 'secured@file,tago-auth'
+      traefik.http.routers.tago-runner.middlewares: 'secured@file'
       traefik.http.routers.tago-runner.entrypoints: 'https'
-      traefik.http.middlewares.tago-auth.basicauth.users: 'parkwide:${BASIC_AUTH_PASS}'
       traefik.http.routers.tago-runner.tls: 'true'
       traefik.docker.network: 'traefik-public'
 
