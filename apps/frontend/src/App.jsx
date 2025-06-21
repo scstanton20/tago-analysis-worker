@@ -32,7 +32,7 @@ const AnalysisCreator = lazy(
 );
 import ConnectionStatus from './components/connectionStatus';
 import LoginPage from './components/auth/LoginPage';
-import ForcePasswordChange from './components/auth/ForcePasswordChange';
+import ForcePasswordChange from './components/auth/PasswordOnboarding';
 import Logo from './components/logo';
 
 function AppContent() {
@@ -160,32 +160,6 @@ function AppContent() {
 
   return (
     <>
-      <LoadingOverlay
-        visible={isInitialLoading}
-        zIndex={1000}
-        overlayProps={{ blur: 2, radius: 'sm' }}
-        loaderProps={{
-          size: 'xl',
-          children: (
-            <Stack align="center" gap="lg">
-              <Logo size={48} className="pulse" />
-              <Text size="lg" fw={500}>
-                Connecting to Tago Analysis Runner...
-              </Text>
-              <Text size="sm" c="dimmed">
-                {connectionStatus === 'connecting' &&
-                  'Establishing WebSocket connection...'}
-                {connectionStatus === 'disconnected' &&
-                  'Connection lost, retrying...'}
-                {connectionStatus === 'server_shutdown' &&
-                  'Server is restarting, please wait...'}
-              </Text>
-            </Stack>
-          ),
-        }}
-        pos="fixed"
-      />
-
       <AppShell
         header={{ height: 60 }}
         navbar={{
@@ -297,34 +271,12 @@ function AppContent() {
         </AppShell.Header>
 
         <AppShell.Navbar>
-          <Suspense
-            fallback={
-              <LoadingOverlay
-                visible={true}
-                zIndex={1000}
-                overlayProps={{ blur: 2, radius: 'sm' }}
-                loaderProps={{
-                  size: 'md',
-                  children: (
-                    <Stack align="center" gap="md">
-                      <Logo size={32} className="pulse" />
-                      <Text size="sm" fw={500}>
-                        Loading sidebar...
-                      </Text>
-                    </Stack>
-                  ),
-                }}
-                pos="absolute"
-              />
-            }
-          >
-            <DepartmentalSidebar
-              selectedDepartment={selectedDepartment}
-              onDepartmentSelect={setSelectedDepartment}
-              opened={desktopOpened}
-              onToggle={toggleDesktop}
-            />
-          </Suspense>
+          <DepartmentalSidebar
+            selectedDepartment={selectedDepartment}
+            onDepartmentSelect={setSelectedDepartment}
+            opened={desktopOpened}
+            onToggle={toggleDesktop}
+          />
         </AppShell.Navbar>
 
         <AppShell.Main
@@ -336,21 +288,29 @@ function AppContent() {
             <Suspense
               fallback={
                 <LoadingOverlay
-                  visible={true}
+                  visible={isInitialLoading}
                   zIndex={1000}
                   overlayProps={{ blur: 2, radius: 'sm' }}
                   loaderProps={{
-                    size: 'md',
+                    size: 'xl',
                     children: (
-                      <Stack align="center" gap="md">
-                        <Logo size={32} className="pulse" />
-                        <Text size="sm" fw={500}>
-                          Loading upload component...
+                      <Stack align="center" gap="lg">
+                        <Logo size={48} className="pulse" />
+                        <Text size="lg" fw={500}>
+                          Connecting to Tago Analysis Runner...
+                        </Text>
+                        <Text size="sm" c="dimmed">
+                          {connectionStatus === 'connecting' &&
+                            'Establishing WebSocket connection...'}
+                          {connectionStatus === 'disconnected' &&
+                            'Connection lost, retrying...'}
+                          {connectionStatus === 'server_shutdown' &&
+                            'Server is restarting, please wait...'}
                         </Text>
                       </Stack>
                     ),
                   }}
-                  pos="absolute"
+                  pos="fixed"
                 />
               }
             >
@@ -363,21 +323,29 @@ function AppContent() {
           <Suspense
             fallback={
               <LoadingOverlay
-                visible={true}
+                visible={isInitialLoading}
                 zIndex={1000}
                 overlayProps={{ blur: 2, radius: 'sm' }}
                 loaderProps={{
-                  size: 'md',
+                  size: 'xl',
                   children: (
-                    <Stack align="center" gap="md">
-                      <Logo size={32} className="pulse" />
-                      <Text size="sm" fw={500}>
-                        Loading analyses...
+                    <Stack align="center" gap="lg">
+                      <Logo size={48} className="pulse" />
+                      <Text size="lg" fw={500}>
+                        Connecting to Tago Analysis Runner...
+                      </Text>
+                      <Text size="sm" c="dimmed">
+                        {connectionStatus === 'connecting' &&
+                          'Establishing WebSocket connection...'}
+                        {connectionStatus === 'disconnected' &&
+                          'Connection lost, retrying...'}
+                        {connectionStatus === 'server_shutdown' &&
+                          'Server is restarting, please wait...'}
                       </Text>
                     </Stack>
                   ),
                 }}
-                pos="absolute"
+                pos="fixed"
               />
             }
           >

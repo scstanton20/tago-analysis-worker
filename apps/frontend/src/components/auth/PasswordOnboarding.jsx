@@ -1,7 +1,5 @@
 import { useState } from 'react';
 import {
-  Paper,
-  TextInput,
   PasswordInput,
   Button,
   Title,
@@ -16,10 +14,9 @@ import { IconAlertCircle, IconKey } from '@tabler/icons-react';
 import { useAuth } from '../../hooks/useAuth';
 import Logo from '../logo';
 
-export default function ForcePasswordChange({ username, onSuccess }) {
-  const { forceChangePassword } = useAuth();
+export default function PasswordOnboarding({ username, onSuccess }) {
+  const { passwordOnboarding } = useAuth();
   const [formData, setFormData] = useState({
-    currentPassword: '',
     newPassword: '',
     confirmPassword: '',
   });
@@ -29,11 +26,7 @@ export default function ForcePasswordChange({ username, onSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (
-      !formData.currentPassword ||
-      !formData.newPassword ||
-      !formData.confirmPassword
-    ) {
+    if (!formData.newPassword || !formData.confirmPassword) {
       setError('Please fill in all fields');
       return;
     }
@@ -52,11 +45,7 @@ export default function ForcePasswordChange({ username, onSuccess }) {
     setError('');
 
     try {
-      await forceChangePassword(
-        username,
-        formData.currentPassword,
-        formData.newPassword,
-      );
+      await passwordOnboarding(formData.newPassword);
       onSuccess();
     } catch (err) {
       setError(err.message || 'Password change failed');
@@ -126,8 +115,8 @@ export default function ForcePasswordChange({ username, onSuccess }) {
                 variant="light"
                 radius="md"
               >
-                For security reasons, you must change your temporary password
-                before accessing the application.
+                Please set a new password to complete your account setup and
+                access the application.
               </Alert>
 
               {error && (
@@ -142,20 +131,6 @@ export default function ForcePasswordChange({ username, onSuccess }) {
               )}
 
               <Stack gap="md">
-                <PasswordInput
-                  label="Current Password"
-                  placeholder="Enter your current password"
-                  value={formData.currentPassword}
-                  onChange={(e) =>
-                    handleInputChange('currentPassword', e.target.value)
-                  }
-                  required
-                  size="md"
-                  autoComplete="current-password"
-                  name="current-password"
-                  id="current-password"
-                />
-
                 <PasswordInput
                   label="New Password"
                   placeholder="Enter your new password"

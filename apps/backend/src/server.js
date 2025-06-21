@@ -26,6 +26,8 @@ import authRoutes from './routes/authRoutes.js';
 import webauthnRoutes from './routes/webauthnRoutes.js';
 import { apiRateLimit } from './middleware/auth.js';
 import userService from './services/userService.js';
+import { specs, swaggerUi } from './docs/swagger.js';
+import { swaggerAuthMiddleware, swaggerUiOptions } from './docs/swaggerAuth.js';
 
 // Api prefix
 const API_PREFIX = '/api';
@@ -49,8 +51,21 @@ if (!wsInitialized) {
 }
 
 // Middleware
-app.use(helmet());
-// For development, enable CORS conditionally
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        connectSrc: ["'self'", 'http://localhost:3000', 'ws://localhost:3000'],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'https:'],
+      },
+    },
+  }),
+);
+
+// CORS configuration
 if (process.env.NODE_ENV === 'development') {
   app.use(
     cors({
@@ -59,6 +74,7 @@ if (process.env.NODE_ENV === 'development') {
     }),
   );
 }
+
 app.use(cookieParser());
 app.use(express.json());
 app.use(fileUpload());
@@ -150,6 +166,15 @@ async function startServer() {
 
     app.use(`${API_PREFIX}/departments`, departmentRoutes);
     console.log(`✓ Department routes mounted at ${API_PREFIX}/departments`);
+
+    // Swagger API Documentation - protected by authentication
+    app.use(
+      `${API_PREFIX}/docs`,
+      swaggerAuthMiddleware,
+      swaggerUi.serve,
+      swaggerUi.setup(specs, swaggerUiOptions),
+    );
+    console.log(`✓ Swagger API docs mounted at ${API_PREFIX}/docs`);
 
     // Error handling (must be after routes)
     app.use(errorHandler);

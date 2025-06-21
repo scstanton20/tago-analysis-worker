@@ -13,7 +13,11 @@ class AuthService {
       credentials: 'include', // Include cookies in request
     });
 
-    const data = await handleResponse(response);
+    const data = await handleResponse(response, '/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+      credentials: 'include',
+    });
 
     this.token = 'cookie-auth'; // Placeholder to indicate authenticated
     this.user = data.user;
@@ -22,18 +26,54 @@ class AuthService {
     return data;
   }
 
-  async forceChangePassword(username, currentPassword, newPassword) {
+  async passwordOnboarding(newPassword) {
     try {
-      const response = await fetchWithHeaders('/auth/force-change-password', {
+      const options = {
         method: 'POST',
-        body: JSON.stringify({ username, currentPassword, newPassword }),
+        body: JSON.stringify({ newPassword }),
         credentials: 'include',
-      });
+      };
+      const response = await fetchWithHeaders(
+        '/auth/password-onboarding',
+        options,
+      );
 
-      const data = await handleResponse(response);
+      const data = await handleResponse(
+        response,
+        '/auth/password-onboarding',
+        options,
+      );
 
       // Tokens are now set as httpOnly cookies by the server
       this.token = 'cookie-auth';
+      this.user = data.user;
+      localStorage.setItem('auth_status', 'authenticated');
+
+      return data;
+    } catch (error) {
+      throw new Error(error.message || 'Password onboarding failed');
+    }
+  }
+
+  async changeProfilePassword(currentPassword, newPassword) {
+    try {
+      const options = {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword, newPassword }),
+        credentials: 'include',
+      };
+      const response = await fetchWithHeaders(
+        '/auth/profile/change-password',
+        options,
+      );
+
+      const data = await handleResponse(
+        response,
+        '/auth/profile/change-password',
+        options,
+      );
+
+      // Update user data
       this.user = data.user;
       localStorage.setItem('auth_status', 'authenticated');
 
@@ -64,12 +104,13 @@ class AuthService {
 
   async getProfile() {
     try {
-      const response = await fetchWithHeaders('/auth/profile', {
+      const options = {
         method: 'GET',
         credentials: 'include',
-      });
+      };
+      const response = await fetchWithHeaders('/auth/profile', options);
 
-      const data = await handleResponse(response);
+      const data = await handleResponse(response, '/auth/profile', options);
       this.user = data.user;
       return data;
     } catch (error) {
@@ -236,7 +277,37 @@ class AuthService {
   }
 
   getStoredRefreshToken() {
-    return null;
+    // Refresh tokens are stored as httpOnly cookies, not accessible to JS
+    return 'cookie-refresh';
+  }
+
+  async refreshToken() {
+    try {
+      const options = {
+        method: 'POST',
+        credentials: 'include',
+      };
+      const response = await fetchWithHeaders('/auth/refresh', options);
+
+      const data = await handleResponse(response, '/auth/refresh', options);
+
+      this.user = data.user;
+      this.token = 'cookie-auth';
+      localStorage.setItem('auth_status', 'authenticated');
+
+      return data;
+    } catch (error) {
+      // If refresh fails, user needs to log in again
+      if (
+        error.message.includes('Invalid refresh token') ||
+        error.message.includes('Refresh token expired') ||
+        error.message.includes('Refresh token required')
+      ) {
+        this.logout();
+        throw new Error('Session expired, please log in again');
+      }
+      throw error;
+    }
   }
 
   async logout() {

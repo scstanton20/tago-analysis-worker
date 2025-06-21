@@ -4,6 +4,8 @@ import {
   invalidateToken,
   invalidateAllUserSessions,
   extractTokenFromHeader,
+  verifyRefreshToken,
+  updateRefreshTokenActivity,
 } from '../utils/jwt.js';
 import { broadcastToUser } from '../utils/websocket.js';
 
@@ -23,15 +25,6 @@ export const login = async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    // Check if user must change password
-    if (user.mustChangePassword) {
-      return res.status(428).json({
-        error: 'Password change required',
-        mustChangePassword: true,
-        user: { username: user.username, email: user.email },
-      });
-    }
-
     const { accessToken, refreshToken } = generateTokens(user);
 
     // Set tokens as httpOnly cookies for security
@@ -46,8 +39,17 @@ export const login = async (req, res) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: 90 * 24 * 60 * 60 * 1000, // 90 days
     });
+
+    // Check if user must change password
+    if (user.mustChangePassword) {
+      return res.status(428).json({
+        error: 'Password change required',
+        mustChangePassword: true,
+        user: { username: user.username, email: user.email },
+      });
+    }
 
     res.json({
       user,
@@ -56,6 +58,73 @@ export const login = async (req, res) => {
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const refresh = async (req, res) => {
+  try {
+    const refreshToken = req.cookies?.refresh_token;
+
+    if (!refreshToken) {
+      return res.status(401).json({ error: 'Refresh token required' });
+    }
+
+    const decoded = verifyRefreshToken(refreshToken);
+    const user = await userService.getUserById(decoded.id);
+
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+
+    // Update activity tracking
+    updateRefreshTokenActivity(decoded.sessionId);
+
+    // Generate new tokens
+    const { accessToken, refreshToken: newRefreshToken } = generateTokens(
+      user,
+      true,
+    );
+
+    // Set new tokens as httpOnly cookies
+    res.cookie('access_token', accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 15 * 60 * 1000, // 15 minutes
+    });
+
+    res.cookie('refresh_token', newRefreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 90 * 24 * 60 * 60 * 1000, // 90 days
+    });
+
+    res.json({
+      user,
+      message: 'Tokens refreshed successfully',
+    });
+  } catch (error) {
+    // Only log full error details for unexpected errors, not session invalidation
+    if (
+      error.message &&
+      (error.message.includes('expired') ||
+        error.message.includes('invalid') ||
+        error.message.includes('Session invalidated'))
+    ) {
+      console.log('Session invalidated:', error.message);
+    } else {
+      console.error('Refresh token error:', error);
+    }
+
+    // Clear invalid refresh token
+    res.clearCookie('refresh_token');
+    res.clearCookie('access_token');
+
+    res.status(401).json({
+      error: error.message || 'Invalid refresh token',
+      requiresLogin: true,
+    });
   }
 };
 
@@ -107,7 +176,7 @@ export const changePassword = async (req, res) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: 90 * 24 * 60 * 60 * 1000, // 90 days
     });
 
     // Broadcast logout to other sessions
@@ -128,13 +197,15 @@ export const changePassword = async (req, res) => {
   }
 };
 
-export const forceChangePassword = async (req, res) => {
+// For authenticated users changing password in profile
+export const changeProfilePassword = async (req, res) => {
   try {
-    const { username, currentPassword, newPassword } = req.body;
+    const { currentPassword, newPassword } = req.body;
+    const username = req.user.username; // Use authenticated user
 
-    if (!username || !currentPassword || !newPassword) {
+    if (!currentPassword || !newPassword) {
       return res.status(400).json({
-        error: 'Username, current password, and new password are required',
+        error: 'Current password and new password are required',
       });
     }
 
@@ -148,20 +219,14 @@ export const forceChangePassword = async (req, res) => {
     // Validate the current password
     const user = await userService.validateUser(username, currentPassword);
     if (!user) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
-    // Ensure the user is required to change password
-    if (!user.mustChangePassword) {
-      return res.status(400).json({ error: 'Password change not required' });
+      return res.status(401).json({ error: 'Invalid current password' });
     }
 
     const updatedUser = await userService.updateUser(username, {
       password: newPassword,
-      mustChangePassword: false,
     });
 
-    // Invalidate all other sessions for security (if any exist)
+    // Invalidate all other sessions for security
     invalidateAllUserSessions(updatedUser.id);
 
     // Generate tokens after successful password change
@@ -179,7 +244,7 @@ export const forceChangePassword = async (req, res) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: 90 * 24 * 60 * 60 * 1000, // 90 days
     });
 
     res.json({
@@ -187,7 +252,70 @@ export const forceChangePassword = async (req, res) => {
       user: updatedUser,
     });
   } catch (error) {
-    console.error('Force change password error:', error);
+    console.error('Profile password change error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// For password onboarding (first login) - PROTECTED and restricted
+export const passwordOnboarding = async (req, res) => {
+  try {
+    const { newPassword } = req.body;
+    const username = req.user.username; // Use authenticated user
+    const user = req.user; // User is already validated by authMiddleware
+
+    if (!newPassword) {
+      return res.status(400).json({
+        error: 'New password is required',
+      });
+    }
+
+    // Validate newPassword type and length
+    if (typeof newPassword !== 'string' || newPassword.length < 6) {
+      return res.status(400).json({
+        error: 'New password must be a string with at least 6 characters',
+      });
+    }
+
+    // SECURITY: Only allow if user is required to change password
+    if (!user.mustChangePassword) {
+      return res.status(403).json({
+        error: 'Password change not required for this user',
+      });
+    }
+
+    const updatedUser = await userService.updateUser(username, {
+      password: newPassword,
+      mustChangePassword: false,
+    });
+
+    // Invalidate all other sessions for security
+    invalidateAllUserSessions(updatedUser.id);
+
+    // Generate tokens after successful password change
+    const { accessToken, refreshToken } = generateTokens(updatedUser);
+
+    // Set tokens as httpOnly cookies
+    res.cookie('access_token', accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 15 * 60 * 1000, // 15 minutes
+    });
+
+    res.cookie('refresh_token', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 90 * 24 * 60 * 60 * 1000, // 90 days
+    });
+
+    res.json({
+      message: 'Password changed successfully',
+      user: updatedUser,
+    });
+  } catch (error) {
+    console.error('Password onboarding error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

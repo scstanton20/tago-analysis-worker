@@ -1,5 +1,9 @@
 import rateLimit from 'express-rate-limit';
-import { verifyToken, extractTokenFromHeader } from '../utils/jwt.js';
+import {
+  verifyToken,
+  extractTokenFromHeader,
+  updateRefreshTokenActivity,
+} from '../utils/jwt.js';
 import userService from '../services/userService.js';
 
 export const authMiddleware = async (req, res, next) => {
@@ -20,6 +24,11 @@ export const authMiddleware = async (req, res, next) => {
 
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
+    }
+
+    // Update refresh token activity on successful API usage
+    if (decoded.sessionId) {
+      updateRefreshTokenActivity(decoded.sessionId);
     }
 
     // Create new request object to avoid race condition

@@ -32,7 +32,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { webauthnService } from '../../services/webauthnService';
 
 export default function ProfileModal({ opened, onClose }) {
-  const { user, changePassword, updateProfile } = useAuth();
+  const { user, changeProfilePassword, updateProfile } = useAuth();
 
   // Password change state
   const [passwordLoading, setPasswordLoading] = useState(false);
@@ -140,7 +140,7 @@ export default function ProfileModal({ opened, onClose }) {
       setPasswordError('');
       setPasswordSuccess(false);
 
-      await changePassword(values.currentPassword, values.newPassword);
+      await changeProfilePassword(values.currentPassword, values.newPassword);
 
       setPasswordSuccess(true);
       passwordForm.reset();

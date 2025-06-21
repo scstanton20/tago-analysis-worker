@@ -11,7 +11,6 @@ import {
   Container,
   Card,
   Divider,
-  Group,
 } from '@mantine/core';
 import {
   IconAlertCircle,
@@ -21,7 +20,7 @@ import {
 import { useAuth } from '../../hooks/useAuth';
 import { webauthnService } from '../../services/webauthnService';
 import Logo from '../logo';
-import ForcePasswordChange from './ForcePasswordChange';
+import PasswordOnboarding from './PasswordOnboarding';
 
 export default function LoginPage() {
   const { login, loginWithPasskey } = useAuth();
@@ -153,7 +152,7 @@ export default function LoginPage() {
   // Show password change component if required
   if (passwordChangeRequired) {
     return (
-      <ForcePasswordChange
+      <PasswordOnboarding
         username={passwordChangeRequired.username}
         onSuccess={() => window.location.reload()}
       />
