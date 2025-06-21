@@ -4,18 +4,11 @@ import {
   invalidateToken,
   invalidateAllUserSessions,
   extractTokenFromHeader,
+  verifyRefreshToken,
+  updateRefreshTokenActivity,
 } from '../utils/jwt.js';
 import { broadcastToUser } from '../utils/websocket.js';
 
-/**
- * Authenticate user with username and password
- * @param {Object} req - Express request object
- * @param {Object} req.body - Request body
- * @param {string} req.body.username - Username
- * @param {string} req.body.password - Password
- * @param {Object} res - Express response object
- * @returns {Promise<void>} User data and authentication tokens or error response
- */
 export const login = async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -32,15 +25,6 @@ export const login = async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    // Check if user must change password
-    if (user.mustChangePassword) {
-      return res.status(428).json({
-        error: 'Password change required',
-        mustChangePassword: true,
-        user: { username: user.username, email: user.email },
-      });
-    }
-
     const { accessToken, refreshToken } = generateTokens(user);
 
     // Set tokens as httpOnly cookies for security
@@ -55,8 +39,17 @@ export const login = async (req, res) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: 90 * 24 * 60 * 60 * 1000, // 90 days
     });
+
+    // Check if user must change password
+    if (user.mustChangePassword) {
+      return res.status(428).json({
+        error: 'Password change required',
+        mustChangePassword: true,
+        user: { username: user.username, email: user.email },
+      });
+    }
 
     res.json({
       user,
@@ -68,16 +61,73 @@ export const login = async (req, res) => {
   }
 };
 
-/**
- * Change password for authenticated user
- * @param {Object} req - Express request object
- * @param {Object} req.body - Request body
- * @param {string} req.body.currentPassword - Current password
- * @param {string} req.body.newPassword - New password
- * @param {Object} req.user - Authenticated user from middleware
- * @param {Object} res - Express response object
- * @returns {Promise<void>} Success message and updated user data or error response
- */
+export const refresh = async (req, res) => {
+  try {
+    const refreshToken = req.cookies?.refresh_token;
+
+    if (!refreshToken) {
+      return res.status(401).json({ error: 'Refresh token required' });
+    }
+
+    const decoded = verifyRefreshToken(refreshToken);
+    const user = await userService.getUserById(decoded.id);
+
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+
+    // Update activity tracking
+    updateRefreshTokenActivity(decoded.sessionId);
+
+    // Generate new tokens
+    const { accessToken, refreshToken: newRefreshToken } = generateTokens(
+      user,
+      true,
+    );
+
+    // Set new tokens as httpOnly cookies
+    res.cookie('access_token', accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 15 * 60 * 1000, // 15 minutes
+    });
+
+    res.cookie('refresh_token', newRefreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 90 * 24 * 60 * 60 * 1000, // 90 days
+    });
+
+    res.json({
+      user,
+      message: 'Tokens refreshed successfully',
+    });
+  } catch (error) {
+    // Only log full error details for unexpected errors, not session invalidation
+    if (
+      error.message &&
+      (error.message.includes('expired') ||
+        error.message.includes('invalid') ||
+        error.message.includes('Session invalidated'))
+    ) {
+      console.log('Session invalidated:', error.message);
+    } else {
+      console.error('Refresh token error:', error);
+    }
+
+    // Clear invalid refresh token
+    res.clearCookie('refresh_token');
+    res.clearCookie('access_token');
+
+    res.status(401).json({
+      error: error.message || 'Invalid refresh token',
+      requiresLogin: true,
+    });
+  }
+};
+
 export const changePassword = async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
@@ -126,7 +176,7 @@ export const changePassword = async (req, res) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: 90 * 24 * 60 * 60 * 1000, // 90 days
     });
 
     // Broadcast logout to other sessions
@@ -147,23 +197,15 @@ export const changePassword = async (req, res) => {
   }
 };
 
-/**
- * Force password change for users who must change their password
- * @param {Object} req - Express request object
- * @param {Object} req.body - Request body
- * @param {string} req.body.username - Username
- * @param {string} req.body.currentPassword - Current password
- * @param {string} req.body.newPassword - New password
- * @param {Object} res - Express response object
- * @returns {Promise<void>} Success message and user data or error response
- */
-export const forceChangePassword = async (req, res) => {
+// For authenticated users changing password in profile
+export const changeProfilePassword = async (req, res) => {
   try {
-    const { username, currentPassword, newPassword } = req.body;
+    const { currentPassword, newPassword } = req.body;
+    const username = req.user.username; // Use authenticated user
 
-    if (!username || !currentPassword || !newPassword) {
+    if (!currentPassword || !newPassword) {
       return res.status(400).json({
-        error: 'Username, current password, and new password are required',
+        error: 'Current password and new password are required',
       });
     }
 
@@ -177,20 +219,14 @@ export const forceChangePassword = async (req, res) => {
     // Validate the current password
     const user = await userService.validateUser(username, currentPassword);
     if (!user) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
-    // Ensure the user is required to change password
-    if (!user.mustChangePassword) {
-      return res.status(400).json({ error: 'Password change not required' });
+      return res.status(401).json({ error: 'Invalid current password' });
     }
 
     const updatedUser = await userService.updateUser(username, {
       password: newPassword,
-      mustChangePassword: false,
     });
 
-    // Invalidate all other sessions for security (if any exist)
+    // Invalidate all other sessions for security
     invalidateAllUserSessions(updatedUser.id);
 
     // Generate tokens after successful password change
@@ -208,7 +244,7 @@ export const forceChangePassword = async (req, res) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: 90 * 24 * 60 * 60 * 1000, // 90 days
     });
 
     res.json({
@@ -216,20 +252,74 @@ export const forceChangePassword = async (req, res) => {
       user: updatedUser,
     });
   } catch (error) {
-    console.error('Force change password error:', error);
+    console.error('Profile password change error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
 
-/**
- * Logout user and invalidate current session
- * @param {Object} req - Express request object
- * @param {Object} req.headers - Request headers
- * @param {Object} req.cookies - Request cookies
- * @param {Object} req.user - Authenticated user from middleware
- * @param {Object} res - Express response object
- * @returns {Promise<void>} Success message
- */
+// For password onboarding (first login) - PROTECTED and restricted
+export const passwordOnboarding = async (req, res) => {
+  try {
+    const { newPassword } = req.body;
+    const username = req.user.username; // Use authenticated user
+    const user = req.user; // User is already validated by authMiddleware
+
+    if (!newPassword) {
+      return res.status(400).json({
+        error: 'New password is required',
+      });
+    }
+
+    // Validate newPassword type and length
+    if (typeof newPassword !== 'string' || newPassword.length < 6) {
+      return res.status(400).json({
+        error: 'New password must be a string with at least 6 characters',
+      });
+    }
+
+    // SECURITY: Only allow if user is required to change password
+    if (!user.mustChangePassword) {
+      return res.status(403).json({
+        error: 'Password change not required for this user',
+      });
+    }
+
+    const updatedUser = await userService.updateUser(username, {
+      password: newPassword,
+      mustChangePassword: false,
+    });
+
+    // Invalidate all other sessions for security
+    invalidateAllUserSessions(updatedUser.id);
+
+    // Generate tokens after successful password change
+    const { accessToken, refreshToken } = generateTokens(updatedUser);
+
+    // Set tokens as httpOnly cookies
+    res.cookie('access_token', accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 15 * 60 * 1000, // 15 minutes
+    });
+
+    res.cookie('refresh_token', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 90 * 24 * 60 * 60 * 1000, // 90 days
+    });
+
+    res.json({
+      message: 'Password changed successfully',
+      user: updatedUser,
+    });
+  } catch (error) {
+    console.error('Password onboarding error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 export const logout = async (req, res) => {
   try {
     const token =
@@ -261,13 +351,6 @@ export const logout = async (req, res) => {
   }
 };
 
-/**
- * Logout user from all sessions
- * @param {Object} req - Express request object
- * @param {Object} req.user - Authenticated user from middleware
- * @param {Object} res - Express response object
- * @returns {Promise<void>} Success message with count of invalidated sessions
- */
 export const logoutAllSessions = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -296,13 +379,6 @@ export const logoutAllSessions = async (req, res) => {
   }
 };
 
-/**
- * Get authenticated user's profile
- * @param {Object} req - Express request object
- * @param {Object} req.user - Authenticated user from middleware
- * @param {Object} res - Express response object
- * @returns {Promise<void>} User profile data
- */
 export const getProfile = async (req, res) => {
   try {
     res.json({ user: req.user });
@@ -312,16 +388,6 @@ export const getProfile = async (req, res) => {
   }
 };
 
-/**
- * Update authenticated user's profile
- * @param {Object} req - Express request object
- * @param {Object} req.body - Request body
- * @param {string} req.body.username - New username
- * @param {string} req.body.email - New email
- * @param {Object} req.user - Authenticated user from middleware
- * @param {Object} res - Express response object
- * @returns {Promise<void>} Updated user data or error response
- */
 export const updateProfile = async (req, res) => {
   try {
     const { username, email } = req.body;
@@ -360,18 +426,6 @@ export const updateProfile = async (req, res) => {
   }
 };
 
-/**
- * Create a new user (admin only)
- * @param {Object} req - Express request object
- * @param {Object} req.body - Request body
- * @param {string} req.body.username - Username
- * @param {string} req.body.email - Email
- * @param {string} [req.body.role] - User role (defaults to 'user')
- * @param {string[]} [req.body.departments] - Department permissions
- * @param {string[]} [req.body.actions] - Action permissions
- * @param {Object} res - Express response object
- * @returns {Promise<void>} Created user data with default password or error response
- */
 export const createUser = async (req, res) => {
   try {
     const { username, email, role, departments, actions } = req.body;
@@ -409,15 +463,6 @@ export const createUser = async (req, res) => {
   }
 };
 
-/**
- * Update user data (admin only)
- * @param {Object} req - Express request object
- * @param {Object} req.params - Request parameters
- * @param {string} req.params.username - Username of user to update
- * @param {Object} req.body - Request body with updates
- * @param {Object} res - Express response object
- * @returns {Promise<void>} Updated user data or error response
- */
 export const updateUser = async (req, res) => {
   try {
     const { username } = req.params;
@@ -478,15 +523,6 @@ export const updateUser = async (req, res) => {
   }
 };
 
-/**
- * Delete a user (admin only)
- * @param {Object} req - Express request object
- * @param {Object} req.params - Request parameters
- * @param {string} req.params.username - Username of user to delete
- * @param {Object} req.user - Authenticated user from middleware
- * @param {Object} res - Express response object
- * @returns {Promise<void>} Success message or error response
- */
 export const deleteUser = async (req, res) => {
   try {
     const { username } = req.params;
@@ -519,12 +555,6 @@ export const deleteUser = async (req, res) => {
   }
 };
 
-/**
- * Get all users (admin only)
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- * @returns {Promise<void>} List of all users or error response
- */
 export const getAllUsers = async (req, res) => {
   try {
     const users = await userService.getAllUsers();
@@ -535,14 +565,6 @@ export const getAllUsers = async (req, res) => {
   }
 };
 
-/**
- * Reset user password (admin only)
- * @param {Object} req - Express request object
- * @param {Object} req.params - Request parameters
- * @param {string} req.params.username - Username of user to reset password for
- * @param {Object} res - Express response object
- * @returns {Promise<void>} Success message with new password or error response
- */
 export const resetUserPassword = async (req, res) => {
   try {
     const { username } = req.params;
@@ -584,15 +606,6 @@ export const resetUserPassword = async (req, res) => {
   }
 };
 
-/**
- * Get user permissions
- * @param {Object} req - Express request object
- * @param {Object} req.params - Request parameters
- * @param {string} req.params.username - Username to get permissions for
- * @param {Object} req.user - Authenticated user from middleware
- * @param {Object} res - Express response object
- * @returns {Promise<void>} User permissions or error response
- */
 export const getUserPermissions = async (req, res) => {
   try {
     const { username } = req.params;
@@ -621,17 +634,6 @@ export const getUserPermissions = async (req, res) => {
   }
 };
 
-/**
- * Update user permissions (admin only)
- * @param {Object} req - Express request object
- * @param {Object} req.params - Request parameters
- * @param {string} req.params.username - Username to update permissions for
- * @param {Object} req.body - Request body
- * @param {string[]} req.body.departments - Department permissions
- * @param {string[]} req.body.actions - Action permissions
- * @param {Object} res - Express response object
- * @returns {Promise<void>} Updated user data or error response
- */
 export const updateUserPermissions = async (req, res) => {
   try {
     const { username } = req.params;
@@ -672,12 +674,6 @@ export const updateUserPermissions = async (req, res) => {
   }
 };
 
-/**
- * Get available departments for permission assignment
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- * @returns {Promise<void>} List of available departments or error response
- */
 export const getAvailableDepartments = async (req, res) => {
   try {
     // Import department service dynamically to avoid circular dependency
@@ -700,12 +696,6 @@ export const getAvailableDepartments = async (req, res) => {
   }
 };
 
-/**
- * Get available actions for permission assignment
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- * @returns {Promise<void>} List of available actions or error response
- */
 export const getAvailableActions = async (req, res) => {
   try {
     const actions = [

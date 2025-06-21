@@ -26,7 +26,11 @@ export async function fetchWithHeaders(url, options = {}) {
   });
 }
 
-export async function handleResponse(response) {
+// Track if we're currently refreshing to prevent infinite loops
+let isRefreshing = false;
+let refreshPromise = null;
+
+export async function handleResponse(response, originalUrl, originalOptions) {
   if (!response.ok) {
     let errorData;
     try {
@@ -42,6 +46,56 @@ export async function handleResponse(response) {
       error.mustChangePassword = true;
       error.user = errorData.user;
       throw error;
+    }
+
+    // Handle 401 errors with automatic token refresh
+    if (
+      response.status === 401 &&
+      !isRefreshing &&
+      !originalUrl?.includes('/auth/refresh') &&
+      !originalUrl?.includes('/auth/login')
+    ) {
+      // Avoid circular import by dynamically importing authService
+      const { default: authService } = await import(
+        '../services/authService.js'
+      );
+
+      // Check if we have a refresh token available
+      if (authService.getStoredRefreshToken()) {
+        // If we're not already refreshing, start the refresh process
+        if (!refreshPromise) {
+          isRefreshing = true;
+          refreshPromise = authService
+            .refreshToken()
+            .then(() => {
+              // Reset the refresh state on success
+              isRefreshing = false;
+              refreshPromise = null;
+              return true;
+            })
+            .catch((error) => {
+              // Reset the refresh state on failure
+              isRefreshing = false;
+              refreshPromise = null;
+              throw error;
+            });
+        }
+
+        try {
+          // Wait for the refresh to complete
+          await refreshPromise;
+
+          // Retry the original request with the new token
+          const retryResponse = await fetchWithHeaders(
+            originalUrl,
+            originalOptions,
+          );
+          return handleResponse(retryResponse, originalUrl, originalOptions);
+        } catch {
+          // If refresh fails, throw the original error
+          throw new Error(errorData.error || response.statusText);
+        }
+      }
     }
 
     throw new Error(errorData.error || response.statusText);

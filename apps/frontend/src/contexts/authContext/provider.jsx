@@ -93,16 +93,8 @@ const AuthProvider = ({ children }) => {
     setUserPermissions(null);
   };
 
-  const forceChangePassword = async (
-    username,
-    currentPassword,
-    newPassword,
-  ) => {
-    const data = await authService.forceChangePassword(
-      username,
-      currentPassword,
-      newPassword,
-    );
+  const passwordOnboarding = async (newPassword) => {
+    const data = await authService.passwordOnboarding(newPassword);
     setUser(data.user);
     setIsAuthenticated(true);
 
@@ -118,6 +110,15 @@ const AuthProvider = ({ children }) => {
       setUserPermissions(null);
     }
 
+    return data;
+  };
+
+  const changeProfilePassword = async (currentPassword, newPassword) => {
+    const data = await authService.changeProfilePassword(
+      currentPassword,
+      newPassword,
+    );
+    setUser(data.user);
     return data;
   };
 
@@ -223,7 +224,8 @@ const AuthProvider = ({ children }) => {
     login,
     loginWithPasskey,
     logout,
-    forceChangePassword,
+    passwordOnboarding,
+    changeProfilePassword,
     changePassword,
     updateProfile,
     createUser,
