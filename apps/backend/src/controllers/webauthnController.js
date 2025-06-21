@@ -19,8 +19,20 @@ const ORIGIN =
     ? `https://${process.env.PRODUCTION_DOMAIN}`
     : 'http://localhost:5173';
 
+/**
+ * WebAuthn controller for handling passkey authentication
+ * Provides endpoints for registration, authentication, and management of WebAuthn credentials
+ */
 class WebAuthnController {
-  // Generate registration options for a new passkey
+  /**
+   * Generate registration options for a new passkey
+   * @param {Object} req - Express request object
+   * @param {Object} req.user - Authenticated user from middleware
+   * @param {Object} req.body - Request body
+   * @param {string} req.body.authenticatorName - Name for the new authenticator
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>} Registration options or error response
+   */
   async generateRegistration(req, res) {
     try {
       const { user } = req; // From auth middleware
@@ -76,7 +88,15 @@ class WebAuthnController {
     }
   }
 
-  // Verify registration response and save the new passkey
+  /**
+   * Verify registration response and save the new passkey
+   * @param {Object} req - Express request object
+   * @param {Object} req.user - Authenticated user from middleware
+   * @param {Object} req.body - Request body
+   * @param {Object} req.body.response - WebAuthn registration response
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>} Verification result or error response
+   */
   async verifyRegistration(req, res) {
     try {
       const { user } = req; // From auth middleware
@@ -154,7 +174,15 @@ class WebAuthnController {
     }
   }
 
-  // Generate authentication options for passkey login
+  /**
+   * Generate authentication options for passkey login
+   * Supports both username-based and usernameless (resident key) authentication
+   * @param {Object} req - Express request object
+   * @param {Object} req.body - Request body
+   * @param {string} [req.body.username] - Username for user-specific auth (optional for usernameless)
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>} Authentication options or error response
+   */
   async generateAuthentication(req, res) {
     try {
       const { username } = req.body;
@@ -219,7 +247,17 @@ class WebAuthnController {
     }
   }
 
-  // Verify authentication response and login the user
+  /**
+   * Verify authentication response and login the user
+   * Handles both username-based and usernameless authentication flows
+   * @param {Object} req - Express request object
+   * @param {Object} req.body - Request body
+   * @param {Object} req.body.response - WebAuthn authentication response
+   * @param {string} [req.body.username] - Username (for username-based auth)
+   * @param {string} [req.body.challengeId] - Challenge ID (for usernameless auth)
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>} Authentication result with user data or error response
+   */
   async verifyAuthentication(req, res) {
     try {
       const { response, username, challengeId } = req.body;
@@ -365,7 +403,13 @@ class WebAuthnController {
     }
   }
 
-  // Get user's registered passkeys
+  /**
+   * Get user's registered passkeys
+   * @param {Object} req - Express request object
+   * @param {Object} req.user - Authenticated user from middleware
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>} List of user's authenticators or error response
+   */
   async getAuthenticators(req, res) {
     try {
       const { user } = req; // From auth middleware
@@ -392,7 +436,15 @@ class WebAuthnController {
     }
   }
 
-  // Delete a passkey
+  /**
+   * Delete a passkey
+   * @param {Object} req - Express request object
+   * @param {Object} req.user - Authenticated user from middleware
+   * @param {Object} req.params - Request parameters
+   * @param {string} req.params.credentialId - ID of the credential to delete
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>} Success confirmation or error response
+   */
   async deleteAuthenticator(req, res) {
     try {
       const { user } = req; // From auth middleware

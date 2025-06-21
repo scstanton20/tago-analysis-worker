@@ -7,11 +7,24 @@ import config from '../config/default.js';
 const USERS_FILE = path.join(config.storage.base, 'users.json.enc');
 const saltRounds = 12;
 
+/**
+ * User service for managing user authentication, permissions, and WebAuthn credentials
+ * Handles encrypted storage of user data and provides RBAC functionality
+ */
 class UserService {
+  /**
+   * Create a new UserService instance
+   */
   constructor() {
     this.users = null;
   }
 
+  /**
+   * Load users from encrypted storage file
+   * Creates default admin user if no users exist
+   * @returns {Promise<void>}
+   * @throws {Error} If storage file is corrupted or unreadable
+   */
   async loadUsers() {
     try {
       // Ensure storage directory exists
@@ -51,12 +64,21 @@ class UserService {
     }
   }
 
+  /**
+   * Save users to encrypted storage file
+   * @returns {Promise<void>}
+   * @throws {Error} If unable to write to storage file
+   */
   async saveUsers() {
     const userData = JSON.stringify(this.users, null, 2);
     const encryptedData = encrypt(userData);
     await fs.writeFile(USERS_FILE, encryptedData, 'utf8');
   }
 
+  /**
+   * Migrate admin users to ensure they have all required permissions
+   * @returns {Promise<void>}
+   */
   async migrateAdminPermissions() {
     // Migration: Ensure admin users have all current permissions
     let hasChanges = false;
@@ -99,6 +121,10 @@ class UserService {
     }
   }
 
+  /**
+   * Create default admin user if no users exist
+   * @returns {Promise<void>}
+   */
   async createDefaultUser() {
     // Only create default user if no users exist
     if (Object.keys(this.users).length > 0) {
@@ -138,6 +164,19 @@ class UserService {
     );
   }
 
+  /**
+   * Create a new user
+   * @param {Object} userData - User data
+   * @param {string} userData.username - Username
+   * @param {string} userData.password - Password
+   * @param {string} userData.email - Email
+   * @param {string} [userData.role='user'] - User role
+   * @param {string[]} [userData.departments=[]] - Department permissions
+   * @param {string[]} [userData.actions=['view_analyses']] - Action permissions
+   * @param {boolean} [userData.mustChangePassword=true] - Whether user must change password
+   * @returns {Promise<Object>} Created user data without password
+   * @throws {Error} If user already exists
+   */
   async createUser(userData) {
     if (!this.users) await this.loadUsers();
 
@@ -179,6 +218,12 @@ class UserService {
     return userWithoutPassword;
   }
 
+  /**
+   * Validate user credentials
+   * @param {string} username - Username
+   * @param {string} password - Password
+   * @returns {Promise<Object|null>} User data without password if valid, null if invalid
+   */
   async validateUser(username, password) {
     if (!this.users) await this.loadUsers();
 
@@ -193,6 +238,13 @@ class UserService {
     return userWithoutPassword;
   }
 
+  /**
+   * Update user data
+   * @param {string} username - Username of user to update
+   * @param {Object} updates - Fields to update
+   * @returns {Promise<Object>} Updated user data without password
+   * @throws {Error} If user not found or username already exists
+   */
   async updateUser(username, updates) {
     if (!this.users) await this.loadUsers();
 
@@ -233,6 +285,12 @@ class UserService {
     return userWithoutPassword;
   }
 
+  /**
+   * Delete a user
+   * @param {string} username - Username of user to delete
+   * @returns {Promise<void>}
+   * @throws {Error} If user not found
+   */
   async deleteUser(username) {
     if (!this.users) await this.loadUsers();
 
@@ -244,6 +302,10 @@ class UserService {
     await this.saveUsers();
   }
 
+  /**
+   * Get all users
+   * @returns {Promise<Object[]>} Array of all users without passwords
+   */
   async getAllUsers() {
     if (!this.users) await this.loadUsers();
 
@@ -253,6 +315,11 @@ class UserService {
     });
   }
 
+  /**
+   * Get user by ID
+   * @param {string} userId - User ID
+   * @returns {Promise<Object|null>} User data without password or null if not found
+   */
   async getUserById(userId) {
     if (!this.users) await this.loadUsers();
 
@@ -263,6 +330,11 @@ class UserService {
     return userWithoutPassword;
   }
 
+  /**
+   * Get user by username
+   * @param {string} username - Username
+   * @returns {Promise<Object|null>} User data without password or null if not found
+   */
   async getUserByUsername(username) {
     if (!this.users) await this.loadUsers();
 
@@ -273,7 +345,12 @@ class UserService {
     return userWithoutPassword;
   }
 
-  // RBAC helper methods
+  /**
+   * Check if user has a specific permission
+   * @param {string} userId - User ID
+   * @param {string} action - Action to check permission for
+   * @returns {Promise<boolean>} True if user has permission
+   */
   async userHasPermission(userId, action) {
     if (!this.users) await this.loadUsers();
 
@@ -287,6 +364,12 @@ class UserService {
     return user.permissions?.actions?.includes(action) || false;
   }
 
+  /**
+   * Check if user has access to a specific department
+   * @param {string} userId - User ID
+   * @param {string} departmentId - Department ID
+   * @returns {Promise<boolean>} True if user has access
+   */
   async userHasDepartmentAccess(userId, departmentId) {
     if (!this.users) await this.loadUsers();
 
@@ -300,6 +383,11 @@ class UserService {
     return user.permissions?.departments?.includes(departmentId) || false;
   }
 
+  /**
+   * Get user's permissions
+   * @param {string} userId - User ID
+   * @returns {Promise<Object|null>} User permissions object or null if user not found
+   */
   async getUserPermissions(userId) {
     if (!this.users) await this.loadUsers();
 
@@ -330,7 +418,16 @@ class UserService {
     };
   }
 
-  // WebAuthn Methods
+  /**
+   * Store WebAuthn challenge for user
+   * @param {string} username - Username
+   * @param {Object} challengeData - Challenge data
+   * @param {string} challengeData.challenge - Challenge string
+   * @param {string} challengeData.type - Challenge type ('registration' or 'authentication')
+   * @param {number} challengeData.timestamp - Challenge timestamp
+   * @returns {Promise<void>}
+   * @throws {Error} If user not found
+   */
   async storeWebAuthnChallenge(username, challengeData) {
     if (!this.users) await this.loadUsers();
 
@@ -345,6 +442,11 @@ class UserService {
     await this.saveUsers();
   }
 
+  /**
+   * Get WebAuthn challenge for user
+   * @param {string} username - Username
+   * @returns {Promise<Object|null>} Challenge data or null if not found/expired
+   */
   async getWebAuthnChallenge(username) {
     if (!this.users) await this.loadUsers();
 
@@ -362,6 +464,11 @@ class UserService {
     return challenge;
   }
 
+  /**
+   * Clear WebAuthn challenge for user
+   * @param {string} username - Username
+   * @returns {Promise<void>}
+   */
   async clearWebAuthnChallenge(username) {
     if (!this.users) await this.loadUsers();
 
@@ -372,6 +479,19 @@ class UserService {
     await this.saveUsers();
   }
 
+  /**
+   * Add WebAuthn authenticator for user
+   * @param {string} username - Username
+   * @param {Object} authenticator - Authenticator data
+   * @param {string} authenticator.credentialID - Credential ID
+   * @param {string} authenticator.credentialPublicKey - Public key
+   * @param {number} authenticator.counter - Signature counter
+   * @param {string[]} authenticator.transports - Transport methods
+   * @param {string} authenticator.name - Authenticator name
+   * @param {string} authenticator.createdAt - Creation timestamp
+   * @returns {Promise<void>}
+   * @throws {Error} If user not found
+   */
   async addWebAuthnAuthenticator(username, authenticator) {
     if (!this.users) await this.loadUsers();
 
@@ -389,6 +509,12 @@ class UserService {
     await this.saveUsers();
   }
 
+  /**
+   * Remove WebAuthn authenticator for user
+   * @param {string} username - Username
+   * @param {string} credentialId - Credential ID to remove
+   * @returns {Promise<boolean>} True if authenticator was removed
+   */
   async removeWebAuthnAuthenticator(username, credentialId) {
     if (!this.users) await this.loadUsers();
 
@@ -408,6 +534,13 @@ class UserService {
     return false;
   }
 
+  /**
+   * Update WebAuthn authenticator counter
+   * @param {string} username - Username
+   * @param {string} credentialId - Credential ID
+   * @param {number} newCounter - New counter value
+   * @returns {Promise<boolean>} True if counter was updated
+   */
   async updateWebAuthnCounter(username, credentialId, newCounter) {
     if (!this.users) await this.loadUsers();
 
@@ -427,6 +560,11 @@ class UserService {
     return false;
   }
 
+  /**
+   * Get user by WebAuthn credential ID
+   * @param {string} credentialId - Credential ID
+   * @returns {Promise<Object|null>} User data without password or null if not found
+   */
   async getUserByCredentialID(credentialId) {
     if (!this.users) await this.loadUsers();
 

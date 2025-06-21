@@ -7,6 +7,15 @@ import {
 } from '../utils/jwt.js';
 import { broadcastToUser } from '../utils/websocket.js';
 
+/**
+ * Authenticate user with username and password
+ * @param {Object} req - Express request object
+ * @param {Object} req.body - Request body
+ * @param {string} req.body.username - Username
+ * @param {string} req.body.password - Password
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>} User data and authentication tokens or error response
+ */
 export const login = async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -59,6 +68,16 @@ export const login = async (req, res) => {
   }
 };
 
+/**
+ * Change password for authenticated user
+ * @param {Object} req - Express request object
+ * @param {Object} req.body - Request body
+ * @param {string} req.body.currentPassword - Current password
+ * @param {string} req.body.newPassword - New password
+ * @param {Object} req.user - Authenticated user from middleware
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>} Success message and updated user data or error response
+ */
 export const changePassword = async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
@@ -128,6 +147,16 @@ export const changePassword = async (req, res) => {
   }
 };
 
+/**
+ * Force password change for users who must change their password
+ * @param {Object} req - Express request object
+ * @param {Object} req.body - Request body
+ * @param {string} req.body.username - Username
+ * @param {string} req.body.currentPassword - Current password
+ * @param {string} req.body.newPassword - New password
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>} Success message and user data or error response
+ */
 export const forceChangePassword = async (req, res) => {
   try {
     const { username, currentPassword, newPassword } = req.body;
@@ -192,6 +221,15 @@ export const forceChangePassword = async (req, res) => {
   }
 };
 
+/**
+ * Logout user and invalidate current session
+ * @param {Object} req - Express request object
+ * @param {Object} req.headers - Request headers
+ * @param {Object} req.cookies - Request cookies
+ * @param {Object} req.user - Authenticated user from middleware
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>} Success message
+ */
 export const logout = async (req, res) => {
   try {
     const token =
@@ -223,6 +261,13 @@ export const logout = async (req, res) => {
   }
 };
 
+/**
+ * Logout user from all sessions
+ * @param {Object} req - Express request object
+ * @param {Object} req.user - Authenticated user from middleware
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>} Success message with count of invalidated sessions
+ */
 export const logoutAllSessions = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -251,6 +296,13 @@ export const logoutAllSessions = async (req, res) => {
   }
 };
 
+/**
+ * Get authenticated user's profile
+ * @param {Object} req - Express request object
+ * @param {Object} req.user - Authenticated user from middleware
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>} User profile data
+ */
 export const getProfile = async (req, res) => {
   try {
     res.json({ user: req.user });
@@ -260,6 +312,16 @@ export const getProfile = async (req, res) => {
   }
 };
 
+/**
+ * Update authenticated user's profile
+ * @param {Object} req - Express request object
+ * @param {Object} req.body - Request body
+ * @param {string} req.body.username - New username
+ * @param {string} req.body.email - New email
+ * @param {Object} req.user - Authenticated user from middleware
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>} Updated user data or error response
+ */
 export const updateProfile = async (req, res) => {
   try {
     const { username, email } = req.body;
@@ -298,6 +360,18 @@ export const updateProfile = async (req, res) => {
   }
 };
 
+/**
+ * Create a new user (admin only)
+ * @param {Object} req - Express request object
+ * @param {Object} req.body - Request body
+ * @param {string} req.body.username - Username
+ * @param {string} req.body.email - Email
+ * @param {string} [req.body.role] - User role (defaults to 'user')
+ * @param {string[]} [req.body.departments] - Department permissions
+ * @param {string[]} [req.body.actions] - Action permissions
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>} Created user data with default password or error response
+ */
 export const createUser = async (req, res) => {
   try {
     const { username, email, role, departments, actions } = req.body;
@@ -335,6 +409,15 @@ export const createUser = async (req, res) => {
   }
 };
 
+/**
+ * Update user data (admin only)
+ * @param {Object} req - Express request object
+ * @param {Object} req.params - Request parameters
+ * @param {string} req.params.username - Username of user to update
+ * @param {Object} req.body - Request body with updates
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>} Updated user data or error response
+ */
 export const updateUser = async (req, res) => {
   try {
     const { username } = req.params;
@@ -395,6 +478,15 @@ export const updateUser = async (req, res) => {
   }
 };
 
+/**
+ * Delete a user (admin only)
+ * @param {Object} req - Express request object
+ * @param {Object} req.params - Request parameters
+ * @param {string} req.params.username - Username of user to delete
+ * @param {Object} req.user - Authenticated user from middleware
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>} Success message or error response
+ */
 export const deleteUser = async (req, res) => {
   try {
     const { username } = req.params;
@@ -427,6 +519,12 @@ export const deleteUser = async (req, res) => {
   }
 };
 
+/**
+ * Get all users (admin only)
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>} List of all users or error response
+ */
 export const getAllUsers = async (req, res) => {
   try {
     const users = await userService.getAllUsers();
@@ -437,6 +535,14 @@ export const getAllUsers = async (req, res) => {
   }
 };
 
+/**
+ * Reset user password (admin only)
+ * @param {Object} req - Express request object
+ * @param {Object} req.params - Request parameters
+ * @param {string} req.params.username - Username of user to reset password for
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>} Success message with new password or error response
+ */
 export const resetUserPassword = async (req, res) => {
   try {
     const { username } = req.params;
@@ -478,6 +584,15 @@ export const resetUserPassword = async (req, res) => {
   }
 };
 
+/**
+ * Get user permissions
+ * @param {Object} req - Express request object
+ * @param {Object} req.params - Request parameters
+ * @param {string} req.params.username - Username to get permissions for
+ * @param {Object} req.user - Authenticated user from middleware
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>} User permissions or error response
+ */
 export const getUserPermissions = async (req, res) => {
   try {
     const { username } = req.params;
@@ -506,6 +621,17 @@ export const getUserPermissions = async (req, res) => {
   }
 };
 
+/**
+ * Update user permissions (admin only)
+ * @param {Object} req - Express request object
+ * @param {Object} req.params - Request parameters
+ * @param {string} req.params.username - Username to update permissions for
+ * @param {Object} req.body - Request body
+ * @param {string[]} req.body.departments - Department permissions
+ * @param {string[]} req.body.actions - Action permissions
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>} Updated user data or error response
+ */
 export const updateUserPermissions = async (req, res) => {
   try {
     const { username } = req.params;
@@ -546,6 +672,12 @@ export const updateUserPermissions = async (req, res) => {
   }
 };
 
+/**
+ * Get available departments for permission assignment
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>} List of available departments or error response
+ */
 export const getAvailableDepartments = async (req, res) => {
   try {
     // Import department service dynamically to avoid circular dependency
@@ -568,6 +700,12 @@ export const getAvailableDepartments = async (req, res) => {
   }
 };
 
+/**
+ * Get available actions for permission assignment
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @returns {Promise<void>} List of available actions or error response
+ */
 export const getAvailableActions = async (req, res) => {
   try {
     const actions = [
