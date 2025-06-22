@@ -34,10 +34,6 @@ class AnalysisService {
     this.configPath = path.join(config.paths.config, 'analyses-config.json');
   }
 
-  validateTimeRange(timeRange) {
-    const validRanges = ['1h', '24h', '7d', '30d', 'all'];
-    return validRanges.includes(timeRange);
-  }
   /**
    * Ensure required directories exist
    * @returns {Promise<void>}
@@ -60,42 +56,22 @@ class AnalysisService {
   }
 
   /**
-   * Update complete configuration while preserving existing AnalysisProcess instances
-   * This method updates the configuration without destroying in-memory AnalysisProcess instances,
-   * ensuring that running analyses and their state are preserved during department moves and other config updates.
-   *
+   * Update complete configuration
    * @param {Object} config - Configuration object to update
    * @param {string} config.version - Configuration version
    * @param {Object} config.departments - Departments configuration
-   * @param {Object} config.analyses - Analyses configuration with updated properties
+   * @param {Object} config.analyses - Analyses configuration
    * @returns {Promise<void>}
    * @throws {Error} If config update fails
    */
   async updateConfig(config) {
     this.configCache = { ...config };
+
+    // Update internal analyses Map from config
+    this.analyses.clear();
     if (config.analyses) {
-      this.analyses.forEach((analysis, name) => {
-        if (config.analyses[name] && analysis instanceof AnalysisProcess) {
-          // Update properties of existing AnalysisProcess instance
-          analysis.type = config.analyses[name].type;
-          analysis.enabled = config.analyses[name].enabled;
-          analysis.status = config.analyses[name].status;
-          analysis.lastStartTime = config.analyses[name].lastStartTime;
-          analysis.department = config.analyses[name].department;
-        }
-      });
-
-      // Remove analyses that no longer exist in config
-      for (const [name] of this.analyses) {
-        if (!config.analyses[name]) {
-          this.analyses.delete(name);
-        }
-      }
-
-      Object.entries(config.analyses).forEach(([name, analysisConfig]) => {
-        if (!this.analyses.has(name)) {
-          this.analyses.set(name, analysisConfig);
-        }
+      Object.entries(config.analyses).forEach(([name, analysis]) => {
+        this.analyses.set(name, analysis);
       });
     }
 
@@ -442,17 +418,15 @@ class AnalysisService {
   /**
    * Start/run an analysis process
    * @param {string} analysisName - Name of the analysis to run
-   * @param {string} [type='listener'] - Type of analysis (default: 'listener')
    * @returns {Promise<Object>} Result object with success status and analysis info
    * @throws {Error} If analysis start fails
    */
-  async runAnalysis(analysisName, type = 'listener') {
+  async runAnalysis(analysisName) {
     let analysis = this.analyses.get(analysisName);
 
     if (!analysis) {
       console.log(`Creating new analysis instance: ${analysisName}`);
-      // Fix: Pass type and service parameters correctly
-      analysis = new AnalysisProcess(analysisName, type, this);
+      analysis = new AnalysisProcess(analysisName, this);
       this.analyses.set(analysisName, analysis);
       await this.saveConfig();
     }

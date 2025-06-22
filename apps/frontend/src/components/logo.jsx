@@ -12,7 +12,6 @@ const Logo = ({ size = 32, className = '', ...props }) => {
       height={size}
       style={{
         display: 'block',
-        margin: '0 auto',
         objectFit: 'contain',
         ...props.style,
       }}

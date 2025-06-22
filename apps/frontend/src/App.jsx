@@ -1,5 +1,5 @@
 // frontend/src/App.jsx
-import { useState, lazy, Suspense } from 'react';
+import { useState } from 'react';
 import {
   AppShell,
   Box,
@@ -18,21 +18,10 @@ import { useDisclosure } from '@mantine/hooks';
 import { IconSun, IconMoon } from '@tabler/icons-react';
 import { useWebSocket } from './contexts/websocketContext';
 import { WebSocketProvider } from './contexts/websocketContext/provider';
-import { AuthProvider } from './contexts/authContext';
-import { useAuth } from './hooks/useAuth';
-import { useIdleTimeout } from './hooks/useIdleTimeout';
-import { usePermissions } from './hooks/usePermissions';
-// Lazy load heavy components that make API calls
-const DepartmentalSidebar = lazy(
-  () => import('./components/departmentalSidebar'),
-);
-const AnalysisList = lazy(() => import('./components/analysis/analysisList'));
-const AnalysisCreator = lazy(
-  () => import('./components/analysis/uploadAnalysis'),
-);
+import DepartmentalSidebar from './components/departmentalSidebar';
+import AnalysisList from './components/analysis/analysisList';
+import AnalysisCreator from './components/analysis/uploadAnalysis';
 import ConnectionStatus from './components/connectionStatus';
-import LoginPage from './components/auth/LoginPage';
-import ForcePasswordChange from './components/auth/PasswordOnboarding';
 import Logo from './components/logo';
 
 function AppContent() {
@@ -43,11 +32,6 @@ function AppContent() {
     connectionStatus,
     hasInitialData,
   } = useWebSocket();
-  const { canUploadAnalyses, canAccessDepartment, canViewAnalyses, isAdmin } =
-    usePermissions();
-
-  // Enable idle timeout for authenticated users
-  useIdleTimeout();
 
   const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure();
@@ -56,52 +40,16 @@ function AppContent() {
   const computedColorScheme = useComputedColorScheme('light');
 
   const getFilteredAnalyses = () => {
-    // For admins, show all analyses
-    if (isAdmin) {
-      if (!selectedDepartment) {
-        return analyses;
-      }
-      // Filter by selected department only
-      const filteredAnalyses = {};
-      Object.entries(analyses).forEach(([name, analysis]) => {
-        if (analysis.department === selectedDepartment) {
-          filteredAnalyses[name] = analysis;
-        }
-      });
-      return filteredAnalyses;
+    if (!selectedDepartment) {
+      // Return all analyses as object
+      return analyses;
     }
 
-    // For non-admin users, filter by department access and file view permission
+    // Filter analyses by department and return as object
     const filteredAnalyses = {};
     Object.entries(analyses).forEach(([name, analysis]) => {
-      // First check if user has view_analyses permission
-      if (!canViewAnalyses()) {
-        return; // Skip if no view permission
-      }
-
-      // Allow access if:
-      // 1. User has access to the analysis's department, OR
-      // 2. Analysis is uncategorized (null, undefined, or 'uncategorized')
-      // 3. Analysis has no department set
-      const isUncategorized =
-        !analysis.department || analysis.department === 'uncategorized';
-      const hasDeptAccess = analysis.department
-        ? canAccessDepartment(analysis.department)
-        : false;
-
-      const canAccess = hasDeptAccess || isUncategorized;
-
-      if (canAccess) {
-        // If a specific department is selected, also filter by that
-        // Always show if no department filter is active OR matches the selected department
-        // Also show uncategorized items when showing "All Departments"
-        if (
-          !selectedDepartment ||
-          analysis.department === selectedDepartment ||
-          (selectedDepartment === 'uncategorized' && isUncategorized)
-        ) {
-          filteredAnalyses[name] = analysis;
-        }
+      if (analysis.department === selectedDepartment) {
+        filteredAnalyses[name] = analysis;
       }
     });
     return filteredAnalyses;
@@ -115,9 +63,7 @@ function AppContent() {
   // Show initial loading overlay only when we haven't loaded data yet
   const isInitialLoading =
     !hasInitialData &&
-    (connectionStatus === 'connecting' ||
-      connectionStatus === 'disconnected' ||
-      connectionStatus === 'server_shutdown');
+    (connectionStatus === 'connecting' || connectionStatus === 'disconnected');
   const connectionFailed = connectionStatus === 'failed';
 
   if (connectionFailed) {
@@ -160,6 +106,30 @@ function AppContent() {
 
   return (
     <>
+      <LoadingOverlay
+        visible={isInitialLoading}
+        zIndex={1000}
+        overlayProps={{ blur: 2, radius: 'sm' }}
+        loaderProps={{
+          size: 'xl',
+          children: (
+            <Stack align="center" gap="lg">
+              <Logo size={48} className="pulse" />
+              <Text size="lg" fw={500}>
+                Connecting to Tago Analysis Runner...
+              </Text>
+              <Text size="sm" c="dimmed">
+                {connectionStatus === 'connecting' &&
+                  'Establishing WebSocket connection...'}
+                {connectionStatus === 'disconnected' &&
+                  'Connection lost, retrying...'}
+              </Text>
+            </Stack>
+          ),
+        }}
+        pos="fixed"
+      />
+
       <AppShell
         header={{ height: 60 }}
         navbar={{
@@ -235,7 +205,7 @@ function AppContent() {
                             ? 'var(--mantine-color-brand-4)'
                             : 'var(--mantine-color-gray-4)',
                         border: '1px solid',
-                        '&[dataChecked]': {
+                        '&[data-checked]': {
                           backgroundColor: 'var(--mantine-color-brand-1)',
                           borderColor: 'var(--mantine-color-brand-6)',
                         },
@@ -247,7 +217,7 @@ function AppContent() {
                             ? 'var(--mantine-color-brand-6)'
                             : 'var(--mantine-color-gray-6)',
                         border: 'none',
-                        '&[dataChecked]': {
+                        '&[data-checked]': {
                           backgroundColor: 'var(--mantine-color-brand-7)',
                         },
                       },
@@ -284,139 +254,26 @@ function AppContent() {
             background: 'var(--mantine-color-body)',
           }}
         >
-          {canUploadAnalyses() && (
-            <Suspense
-              fallback={
-                <LoadingOverlay
-                  visible={isInitialLoading}
-                  zIndex={1000}
-                  overlayProps={{ blur: 2, radius: 'sm' }}
-                  loaderProps={{
-                    size: 'xl',
-                    children: (
-                      <Stack align="center" gap="lg">
-                        <Logo size={48} className="pulse" />
-                        <Text size="lg" fw={500}>
-                          Connecting to Tago Analysis Runner...
-                        </Text>
-                        <Text size="sm" c="dimmed">
-                          {connectionStatus === 'connecting' &&
-                            'Establishing WebSocket connection...'}
-                          {connectionStatus === 'disconnected' &&
-                            'Connection lost, retrying...'}
-                          {connectionStatus === 'server_shutdown' &&
-                            'Server is restarting, please wait...'}
-                        </Text>
-                      </Stack>
-                    ),
-                  }}
-                  pos="fixed"
-                />
-              }
-            >
-              <AnalysisCreator
-                targetDepartment={selectedDepartment}
-                departmentName={currentDepartment?.name || 'All Departments'}
-              />
-            </Suspense>
-          )}
-          <Suspense
-            fallback={
-              <LoadingOverlay
-                visible={isInitialLoading}
-                zIndex={1000}
-                overlayProps={{ blur: 2, radius: 'sm' }}
-                loaderProps={{
-                  size: 'xl',
-                  children: (
-                    <Stack align="center" gap="lg">
-                      <Logo size={48} className="pulse" />
-                      <Text size="lg" fw={500}>
-                        Connecting to Tago Analysis Runner...
-                      </Text>
-                      <Text size="sm" c="dimmed">
-                        {connectionStatus === 'connecting' &&
-                          'Establishing WebSocket connection...'}
-                        {connectionStatus === 'disconnected' &&
-                          'Connection lost, retrying...'}
-                        {connectionStatus === 'server_shutdown' &&
-                          'Server is restarting, please wait...'}
-                      </Text>
-                    </Stack>
-                  ),
-                }}
-                pos="fixed"
-              />
-            }
-          >
-            <AnalysisList
-              analyses={getFilteredAnalyses()}
-              showDepartmentLabels={!selectedDepartment}
-              departments={departments}
-              selectedDepartment={selectedDepartment}
-            />
-          </Suspense>
+          <AnalysisCreator
+            targetDepartment={selectedDepartment}
+            departmentName={currentDepartment?.name || 'All Departments'}
+          />
+          <AnalysisList
+            analyses={getFilteredAnalyses()}
+            showDepartmentLabels={!selectedDepartment}
+            departments={departments}
+            selectedDepartment={selectedDepartment}
+          />
         </AppShell.Main>
       </AppShell>
     </>
   );
 }
 
-// Authenticated App Content with WebSocket
-function AuthenticatedApp() {
+export default function App() {
   return (
     <WebSocketProvider>
       <AppContent />
     </WebSocketProvider>
   );
-}
-
-export default function App() {
-  return (
-    <AuthProvider>
-      <AppRouter />
-    </AuthProvider>
-  );
-}
-
-// Router component to conditionally load authenticated vs login components
-function AppRouter() {
-  const { isAuthenticated, isLoading, user } = useAuth();
-
-  if (isLoading) {
-    return (
-      <Box
-        style={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Stack align="center" gap="lg">
-          <Logo size={64} className="pulse" />
-          <Text size="lg" fw={500}>
-            Loading...
-          </Text>
-        </Stack>
-      </Box>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return <LoginPage />;
-  }
-
-  // Check if user must change password
-  if (user?.mustChangePassword) {
-    return (
-      <ForcePasswordChange
-        username={user.username}
-        onSuccess={() => window.location.reload()}
-      />
-    );
-  }
-
-  // Only load WebSocket and heavy components when authenticated
-  return <AuthenticatedApp />;
 }

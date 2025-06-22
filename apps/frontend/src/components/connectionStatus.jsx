@@ -12,7 +12,7 @@ import {
   Box,
   Indicator,
 } from '@mantine/core';
-import { IconRefresh, IconBook } from '@tabler/icons-react';
+import { IconRefresh } from '@tabler/icons-react';
 
 const ConnectionStatus = () => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -62,11 +62,6 @@ const ConnectionStatus = () => {
 
   const handleRetryConnection = () => {
     requestStatusUpdate();
-  };
-
-  const handleOpenApiDocs = () => {
-    const apiDocsUrl = `${window.location.origin}/api/docs`;
-    window.open(apiDocsUrl, '_blank', 'noopener,noreferrer');
   };
 
   if (!backendStatus && connectionStatus === 'connecting') {
@@ -253,19 +248,10 @@ const ConnectionStatus = () => {
               )}
             </Stack>
 
-            <Divider />
-            <Stack gap="xs">
-              <Button
-                variant="light"
-                size="xs"
-                onClick={handleOpenApiDocs}
-                leftSection={<IconBook size={14} />}
-                fullWidth
-              >
-                API Documentation
-              </Button>
-              {isDisconnected && (
-                <>
+            {isDisconnected && (
+              <>
+                <Divider />
+                <Stack gap="xs">
                   <Text size="sm" c="dimmed" fw={500}>
                     {getStatusText()}
                   </Text>
@@ -278,9 +264,9 @@ const ConnectionStatus = () => {
                   >
                     Refresh Status
                   </Button>
-                </>
-              )}
-            </Stack>
+                </Stack>
+              </>
+            )}
           </Stack>
         </Popover.Dropdown>
       </Popover>

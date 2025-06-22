@@ -84,6 +84,7 @@ export const departmentService = {
    */
   async reorderDepartments(orderedIds) {
     try {
+      console.log('Reordering departments:', orderedIds);
       const response = await fetchWithHeaders('/departments/reorder', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },

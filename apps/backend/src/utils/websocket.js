@@ -1,8 +1,6 @@
 // backend/src/utils/websocket.js
 import { WebSocketServer } from 'ws';
 import departmentService from '../services/departmentService.js';
-import { verifyToken } from './jwt.js';
-import userService from '../services/userService.js';
 
 let wss = null;
 const clients = new Set();
@@ -19,46 +17,9 @@ export function setupWebSocket(server) {
   });
   console.log('WebSocket server setup complete');
 
-  wss.on('connection', async (ws, req) => {
-    console.log(`WebSocket connection attempt`);
-
-    // Extract token from cookies (httpOnly cookies sent automatically)
-    const cookies = req.headers.cookie;
-    let token = null;
-
-    if (cookies) {
-      const cookieMatch = cookies.match(/access_token=([^;]+)/);
-      if (cookieMatch) {
-        token = cookieMatch[1];
-      }
-    }
-
-    if (!token) {
-      console.log('WebSocket authentication failed: No access token cookie');
-      ws.close(1008, 'Authentication required');
-      return;
-    }
-
-    try {
-      const decoded = verifyToken(token);
-      const user = await userService.getUserById(decoded.id);
-
-      if (!user) {
-        console.log('WebSocket authentication failed: Invalid user');
-        ws.close(1008, 'Invalid user');
-        return;
-      }
-
-      ws.user = user;
-      clients.add(ws);
-      console.log(
-        `WebSocket connection established for user: ${user.username}`,
-      );
-    } catch (error) {
-      console.error('WebSocket authentication failed:', error.message);
-      ws.close(1008, 'Authentication failed');
-      return;
-    }
+  wss.on('connection', async (ws) => {
+    console.log(`WebSocket connection established`);
+    clients.add(ws);
 
     try {
       const { analysisService } = await import(
@@ -153,9 +114,11 @@ export function setupWebSocket(server) {
       }
     });
 
-    ws.on('close', (code) => {
+    ws.on('close', (code, reason) => {
       clients.delete(ws);
-      console.log(`WebSocket connection closed, Code: ${code})`);
+      console.log(
+        `WebSocket connection closed, Code: ${code}, Reason: ${reason.toString()})`,
+      );
     });
 
     // Fixed: Use the error parameter
@@ -179,23 +142,6 @@ export function broadcast(data) {
         client.send(message);
       } catch (error) {
         console.error(`Error broadcasting message`, error.message);
-        clients.delete(client);
-      }
-    }
-  });
-}
-
-// Broadcast to specific user's sessions
-export function broadcastToUser(userId, data) {
-  if (!wss) return;
-
-  const message = JSON.stringify(data);
-  clients.forEach((client) => {
-    if (client.readyState === client.OPEN && client.user?.id === userId) {
-      try {
-        client.send(message);
-      } catch (error) {
-        console.error(`Error broadcasting to user ${userId}:`, error.message);
         clients.delete(client);
       }
     }

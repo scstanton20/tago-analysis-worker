@@ -3,14 +3,12 @@ import express from 'express';
 import http from 'http';
 import cors from 'cors';
 import helmet from 'helmet';
-import cookieParser from 'cookie-parser';
 import fileUpload from 'express-fileupload';
 import config from './config/default.js';
 import {
   setupWebSocket,
   updateContainerState,
   broadcastStatusUpdate,
-  broadcast,
 } from './utils/websocket.js';
 import errorHandler from './middleware/errorHandler.js';
 import {
@@ -22,12 +20,6 @@ import {
 import analysisRoutes from './routes/analysisRoutes.js';
 import statusRoutes from './routes/statusRoutes.js';
 import departmentRoutes from './routes/departmentRoutes.js';
-import authRoutes from './routes/authRoutes.js';
-import webauthnRoutes from './routes/webauthnRoutes.js';
-import { apiRateLimit } from './middleware/auth.js';
-import userService from './services/userService.js';
-import { specs, swaggerUi } from './docs/swagger.js';
-import { swaggerAuthMiddleware, swaggerUiOptions } from './docs/swaggerAuth.js';
 
 // Api prefix
 const API_PREFIX = '/api';
@@ -51,36 +43,10 @@ if (!wsInitialized) {
 }
 
 // Middleware
-app.use(
-  helmet({
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        connectSrc: ["'self'", 'http://localhost:3000', 'ws://localhost:3000'],
-        styleSrc: ["'self'", "'unsafe-inline'"],
-        scriptSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", 'data:', 'https:'],
-      },
-    },
-  }),
-);
-
-// CORS configuration
-if (process.env.NODE_ENV === 'development') {
-  app.use(
-    cors({
-      origin: 'http://localhost:5173',
-      credentials: true,
-    }),
-  );
-}
-
-app.use(cookieParser());
+app.use(helmet());
+app.use(cors());
 app.use(express.json());
 app.use(fileUpload());
-app.set('trust proxy', 1);
-
-app.use(apiRateLimit);
 
 const PORT = process.env.PORT || 3000;
 
@@ -95,21 +61,7 @@ async function restartRunningProcesses() {
     console.log('Checking for analyses that need to be restarted...');
 
     const configuration = await analysisService.getConfig();
-    const configuration = await analysisService.getConfig();
 
-    // Check if configuration has analyses property
-    if (configuration.analyses) {
-      for (const [analysisName, config] of Object.entries(
-        configuration.analyses,
-      )) {
-        if (config.status === 'running' || config.enabled === true) {
-          console.log(`Restarting analysis: ${analysisName}`);
-          // Pass the type from config, but default to 'listener' if not found
-          await analysisService.runAnalysis(
-            analysisName,
-            config.type || 'listener',
-          );
-        }
     // Check if configuration has analyses property
     if (configuration.analyses) {
       for (const [analysisName, config] of Object.entries(
@@ -154,41 +106,43 @@ async function startServer() {
     // IMPORTANT: Initialize analysis service BEFORE setting up routes
     console.log('Initializing analysis service...');
     await initializeAnalyses();
-    await userService.loadUsers();
-    console.log('Services initialized successfully');
+    console.log('Analysis service initialized successfully');
 
     updateContainerState({
       status: 'setting_up_routes',
       message: 'Setting up API routes',
     });
+
+    // NOW set up routes after analysisService is initialized
     console.log('Setting up routes...');
+    try {
+      app.use(`${API_PREFIX}/status`, statusRoutes(analysisService));
+      console.log(`✓ Status routes mounted at ${API_PREFIX}/status`);
 
-    // Public auth routes
-    app.use(`${API_PREFIX}/auth`, authRoutes);
-    console.log(`✓ Auth routes mounted at ${API_PREFIX}/auth`);
+      app.use(`${API_PREFIX}/analyses`, analysisRoutes);
+      console.log(`✓ Analysis routes mounted at ${API_PREFIX}/analyses`);
 
-    // WebAuthn routes under auth (session-free)
-    app.use(`${API_PREFIX}/auth/webauthn`, webauthnRoutes);
-    console.log(`✓ WebAuthn routes mounted at ${API_PREFIX}/auth/webauthn`);
+      app.use(`${API_PREFIX}/departments`, departmentRoutes);
+      console.log(`✓ Department routes mounted at ${API_PREFIX}/departments`);
+    } catch (routeError) {
+      console.error('Error setting up routes:', routeError);
+      throw routeError;
+    }
 
-    app.use(`${API_PREFIX}/status`, statusRoutes(analysisService));
-    console.log(`✓ Status routes mounted at ${API_PREFIX}/status`);
-
-    // Protected routes
-    app.use(`${API_PREFIX}/analyses`, analysisRoutes);
-    console.log(`✓ Analysis routes mounted at ${API_PREFIX}/analyses`);
-
-    app.use(`${API_PREFIX}/departments`, departmentRoutes);
-    console.log(`✓ Department routes mounted at ${API_PREFIX}/departments`);
-
-    // Swagger API Documentation - protected by authentication
-    app.use(
-      `${API_PREFIX}/docs`,
-      swaggerAuthMiddleware,
-      swaggerUi.serve,
-      swaggerUi.setup(specs, swaggerUiOptions),
-    );
-    console.log(`✓ Swagger API docs mounted at ${API_PREFIX}/docs`);
+    // Add catch-all route for debugging 404s
+    app.use('*', (req, res) => {
+      console.log(`404 - Route not found: ${req.method} ${req.originalUrl}`);
+      res.status(404).json({
+        error: 'Route not found',
+        method: req.method,
+        path: req.originalUrl,
+        availableRoutes: [
+          `${API_PREFIX}/status`,
+          `${API_PREFIX}/analyses`,
+          `${API_PREFIX}/departments`,
+        ],
+      });
+    });
 
     // Error handling (must be after routes)
     app.use(errorHandler);
@@ -213,6 +167,11 @@ async function startServer() {
       // Broadcast status update to all connected clients
       broadcastStatusUpdate();
     });
+
+    // Periodic status broadcasts (every 30 seconds)
+    setInterval(() => {
+      broadcastStatusUpdate();
+    }, 30000);
   } catch (error) {
     console.error('Failed to start server:', error);
     updateContainerState({
@@ -231,19 +190,10 @@ process.on('SIGINT', () => {
     message: 'Server is shutting down',
   });
 
-  // Broadcast session invalidation to all users before shutdown
-  broadcast({
-    type: 'sessionInvalidated',
-    reason: 'Server is shutting down',
-    timestamp: new Date().toISOString(),
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
   });
-
-  setTimeout(() => {
-    server.close(() => {
-      console.log('Server closed');
-      process.exit(0);
-    });
-  }, 1000); // Give time for broadcast to reach clients
 });
 
 process.on('SIGTERM', () => {
@@ -253,19 +203,10 @@ process.on('SIGTERM', () => {
     message: 'Server is shutting down',
   });
 
-  // Broadcast session invalidation to all users before shutdown
-  broadcast({
-    type: 'sessionInvalidated',
-    reason: 'Server is shutting down',
-    timestamp: new Date().toISOString(),
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
   });
-
-  setTimeout(() => {
-    server.close(() => {
-      console.log('Server closed');
-      process.exit(0);
-    });
-  }, 1000); // Give time for broadcast to reach clients
 });
 
 startServer();

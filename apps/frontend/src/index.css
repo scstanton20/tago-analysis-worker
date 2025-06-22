@@ -79,6 +79,17 @@ button:disabled {
   }
 }
 
+/* Logo styling */
+.app-logo {
+  transition: all 0.3s ease;
+  filter: drop-shadow(0 0 5px rgba(168, 85, 247, 0.2));
+}
+
+.app-logo:hover {
+  animation: logoGlow 2s ease-in-out infinite;
+  transform: scale(1.05);
+}
+
 /* Connection status indicator with pulsing effect */
 .connection-status-indicator {
   position: relative;
@@ -312,6 +323,10 @@ button:disabled {
   );
 }
 
+[data-mantine-color-scheme='dark'] .app-logo {
+  filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.4));
+}
+
 [data-mantine-color-scheme='dark'] .analysis-card:hover {
   box-shadow: 0 8px 25px rgba(168, 85, 247, 0.25);
 }
@@ -510,6 +525,10 @@ button:disabled {
     var(--mantine-color-brand-9) 0%,
     var(--mantine-color-accent-9) 100%
   );
+}
+
+[data-mantine-color-scheme='dark'] .app-logo {
+  filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.4));
 }
 
 [data-mantine-color-scheme='dark'] .analysis-card:hover {
