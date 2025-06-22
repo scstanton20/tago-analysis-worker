@@ -14,9 +14,19 @@ function determineStorageBase() {
 const config = {
   env: process.env.NODE_ENV,
   secretKey:
-    process.env.NODE_ENV === 'development'
-      ? 'development'
-      : process.env.SECRET_KEY,
+    process.env.SECRET_KEY ||
+    (() => {
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error(
+          'SECRET_KEY environment variable is required in production!',
+        );
+      }
+      // Use a consistent key for development to persist encrypted data across restarts
+      console.warn(
+        'Warning: Using consistent development SECRET_KEY. Set SECRET_KEY environment variable for production.',
+      );
+      return 'dev-secret-key-for-tago-analysis-runner-change-in-production';
+    })(),
   storage: {
     base: determineStorageBase(),
     createDirs: true,

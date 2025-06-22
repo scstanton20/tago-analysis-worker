@@ -16,59 +16,73 @@ class StatusController {
   }
 
   async getSystemStatus(_req, res) {
-    const runningAnalyses = Array.from(
-      this.analysisService.analyses.values(),
-    ).filter((analysis) => analysis.status === 'running');
-
-    // Get Tago SDK version from package.json
-    let tagoVersion;
     try {
-      const packageJson = require('@tago-io/sdk/package.json');
-      tagoVersion = packageJson.version;
-    } catch (error) {
-      console.error('Error reading tago SDK version:', error);
-      tagoVersion = 'unknown';
-    }
+      // Add safety checks for analyses collection
+      const analyses = this.analysisService?.analyses;
+      let runningAnalyses = [];
 
-    // Calculate uptime safely
-    const startTime = this.containerState.lastStartTime || new Date();
-    const uptimeMs = new Date() - startTime;
+      if (analyses && typeof analyses.values === 'function') {
+        runningAnalyses = Array.from(analyses.values()).filter(
+          (analysis) => analysis && analysis.status === 'running',
+        );
+      }
 
-    // Ensure we have valid values for ms()
-    let formattedUptime;
-    try {
-      formattedUptime = ms(uptimeMs, { long: true });
-    } catch (error) {
-      console.error('Error formatting uptime:', error);
-      formattedUptime = 'unknown';
-    }
+      // Get Tago SDK version from package.json
+      let tagoVersion;
+      try {
+        const packageJson = require('@tago-io/sdk/package.json');
+        tagoVersion = packageJson.version;
+      } catch (error) {
+        console.error('Error reading tago SDK version:', error);
+        tagoVersion = 'unknown';
+      }
 
-    const status = {
-      container_health: {
-        status:
-          this.containerState.status === 'ready' ? 'healthy' : 'initializing',
-        message: this.containerState.message,
-        uptime: {
-          seconds: Math.floor(uptimeMs / 1000),
-          formatted: formattedUptime,
+      // Calculate uptime safely
+      const startTime = this.containerState.lastStartTime || new Date();
+      const uptimeMs = new Date() - startTime;
+
+      // Ensure we have valid values for ms()
+      let formattedUptime;
+      try {
+        formattedUptime = ms(uptimeMs, { long: true });
+      } catch (error) {
+        console.error('Error formatting uptime:', error);
+        formattedUptime = 'unknown';
+      }
+
+      const status = {
+        container_health: {
+          status:
+            this.containerState.status === 'ready' ? 'healthy' : 'initializing',
+          message: this.containerState.message,
+          uptime: {
+            seconds: Math.floor(uptimeMs / 1000),
+            formatted: formattedUptime,
+          },
         },
-      },
-      tagoConnection: {
-        sdkVersion: tagoVersion,
-        runningAnalyses: runningAnalyses.length,
-      },
-      serverTime: new Date().toString(),
-    };
+        tagoConnection: {
+          sdkVersion: tagoVersion,
+          runningAnalyses: runningAnalyses.length,
+        },
+        serverTime: new Date().toString(),
+      };
 
-    // Return appropriate HTTP status code based on container state
-    const httpStatus =
-      this.containerState.status === 'ready'
-        ? 200
-        : this.containerState.status === 'error'
-          ? 500
-          : 203; // 203 = Non-Authoritative Information
+      // Return appropriate HTTP status code based on container state
+      const httpStatus =
+        currentContainerState.status === 'ready'
+          ? 200
+          : currentContainerState.status === 'error'
+            ? 500
+            : 203; // 203 = Non-Authoritative Information
 
-    res.status(httpStatus).json(status);
+      res.status(httpStatus).json(status);
+    } catch (error) {
+      console.error('Error in getSystemStatus:', error);
+      res.status(500).json({
+        error: 'Internal server error',
+        message: error.message,
+      });
+    }
   }
 }
 

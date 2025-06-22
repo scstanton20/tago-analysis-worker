@@ -33,9 +33,17 @@ import {
   IconSettings,
   IconFolder,
   IconGripVertical,
+  IconLogout,
+  IconUser,
+  IconUsers,
+  IconUserCog,
 } from '@tabler/icons-react';
 import DepartmentManagementModal from './modals/departmentManagementModal';
+import UserManagementModal from './modals/userManagementModal';
+import ProfileModal from './modals/profileModal';
 import { departmentService } from '../services/departmentService';
+import { useAuth } from '../hooks/useAuth';
+import { usePermissions } from '../hooks/usePermissions';
 
 // Sortable Department Item
 const SortableDepartmentItem = ({
@@ -51,7 +59,10 @@ const SortableDepartmentItem = ({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: department.id });
+  } = useSortable({
+    id: department.id,
+    disabled: department.isSystem,
+  });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -129,8 +140,9 @@ const SortableDepartmentItem = ({
           root: {
             borderRadius: 'var(--mantine-radius-md)',
             marginBottom: 4,
-            minHeight: 44, // Ensure consistent height for text wrapping
-            '&[data-active]': {
+            minHeight: 44,
+            cursor: department.isSystem ? 'pointer' : 'default', // Different cursor for system departments
+            '&[dataActive]': {
               background:
                 'linear-gradient(135deg, var(--mantine-color-brand-1) 0%, var(--mantine-color-accent-1) 100%)',
               color: 'var(--mantine-color-brand-8)',
@@ -163,16 +175,36 @@ export default function DepartmentalSidebar({
   onDepartmentSelect,
 }) {
   const { departments, getDepartmentAnalysisCount } = useWebSocket();
+  const { user, logout, isAdmin } = useAuth();
+  const { canAccessDepartment, isAdmin: hasAdminPerms } = usePermissions();
 
   const [showManageModal, setShowManageModal] = useState(false);
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const [draggedAnalysis, setDraggedAnalysis] = useState(null);
   const [activeDeptId, setActiveDeptId] = useState(null);
 
-  // Convert departments object to sorted array for display (memoized)
-  const departmentsArray = useMemo(
-    () => Object.values(departments).sort((a, b) => a.order - b.order),
-    [departments],
-  );
+  // Convert departments object to sorted array for display, filtered by user access (memoized)
+  const departmentsArray = useMemo(() => {
+    const allDepts = Object.values(departments).sort(
+      (a, b) => a.order - b.order,
+    );
+
+    // If user is admin, return all departments
+    if (hasAdminPerms) {
+      return allDepts;
+    }
+
+    // For non-admin users, filter departments based on permissions
+    return allDepts.filter((dept) => {
+      // Always show system departments if they have analyses (they are shown regardless of permissions)
+      if (dept.isSystem) {
+        return true; // System department visibility is handled elsewhere
+      }
+      // For custom departments, check if user has access
+      return canAccessDepartment(dept.id);
+    });
+  }, [departments, hasAdminPerms, canAccessDepartment]);
 
   // Use the efficient count function from WebSocket hook
   const getAnalysisCount = (deptId) => {
@@ -254,16 +286,30 @@ export default function DepartmentalSidebar({
           >
             All Analyses
           </Button>
-          <Tooltip label="Manage departments">
-            <ActionIcon
-              variant="light"
-              color="brand"
-              size="lg"
-              onClick={() => setShowManageModal(true)}
-            >
-              <IconSettings size={18} />
-            </ActionIcon>
-          </Tooltip>
+          {hasAdminPerms && (
+            <Tooltip label="Manage departments">
+              <ActionIcon
+                variant="light"
+                color="brand"
+                size="lg"
+                onClick={() => setShowManageModal(true)}
+              >
+                <IconSettings size={18} />
+              </ActionIcon>
+            </Tooltip>
+          )}
+          {isAdmin() && (
+            <Tooltip label="Manage users">
+              <ActionIcon
+                variant="light"
+                color="accent"
+                size="lg"
+                onClick={() => setShowUserModal(true)}
+              >
+                <IconUsers size={18} />
+              </ActionIcon>
+            </Tooltip>
+          )}
         </Group>
       </Box>
 
@@ -285,27 +331,35 @@ export default function DepartmentalSidebar({
                 items={departmentsArray.map((d) => d.id)}
                 strategy={verticalListSortingStrategy}
               >
-                {departmentsArray.map((dept) => (
-                  <div
-                    key={dept.id}
-                    onDrop={(e) => handleAnalysisDrop(e, dept.id)}
-                    onDragOver={(e) => e.preventDefault()}
-                    style={{
-                      borderRadius: 'var(--mantine-radius-md)',
-                      outline: draggedAnalysis
-                        ? '2px solid var(--mantine-color-brand-filled)'
-                        : 'none',
-                      outlineOffset: '2px',
-                    }}
-                  >
-                    <SortableDepartmentItem
-                      department={dept}
-                      isSelected={selectedDepartment === dept.id}
-                      onClick={() => handleDepartmentClick(dept.id)}
-                      analysisCount={getAnalysisCount(dept.id)}
-                    />
-                  </div>
-                ))}
+                {departmentsArray
+                  .filter((dept) => {
+                    // Hide system departments if they have no analyses
+                    if (dept.isSystem) {
+                      return getAnalysisCount(dept.id) > 0;
+                    }
+                    return true; // Show all non-system departments regardless of count
+                  })
+                  .map((dept) => (
+                    <div
+                      key={dept.id}
+                      onDrop={(e) => handleAnalysisDrop(e, dept.id)}
+                      onDragOver={(e) => e.preventDefault()}
+                      style={{
+                        borderRadius: 'var(--mantine-radius-md)',
+                        outline: draggedAnalysis
+                          ? '2px solid var(--mantine-color-brand-filled)'
+                          : 'none',
+                        outlineOffset: '2px',
+                      }}
+                    >
+                      <SortableDepartmentItem
+                        department={dept}
+                        isSelected={selectedDepartment === dept.id}
+                        onClick={() => handleDepartmentClick(dept.id)}
+                        analysisCount={getAnalysisCount(dept.id)}
+                      />
+                    </div>
+                  ))}
               </SortableContext>
               <DragOverlay>
                 {activeDeptId ? (
@@ -326,11 +380,69 @@ export default function DepartmentalSidebar({
         </Stack>
       </ScrollArea>
 
+      {/* User Footer */}
+      <Box
+        p="md"
+        style={{
+          borderTop: '1px solid var(--mantine-color-default-border)',
+        }}
+      >
+        <Group justify="space-between" align="center">
+          <Group gap="xs" style={{ flex: 1, minWidth: 0 }}>
+            <IconUser size={16} color="var(--mantine-color-brand-6)" />
+            <Box style={{ flex: 1, minWidth: 0 }}>
+              <Text size="sm" fw={500} truncate>
+                Hi, {user?.username || 'User'}
+              </Text>
+              {user?.role && (
+                <Text size="xs" c="dimmed" truncate>
+                  {user.role}
+                </Text>
+              )}
+            </Box>
+          </Group>
+          <Group gap="xs">
+            <Tooltip label="Profile Settings">
+              <ActionIcon
+                variant="light"
+                color="brand"
+                size="sm"
+                onClick={() => setShowProfileModal(true)}
+              >
+                <IconUserCog size={14} />
+              </ActionIcon>
+            </Tooltip>
+            <Tooltip label="Logout">
+              <ActionIcon
+                variant="light"
+                color="red"
+                size="sm"
+                onClick={logout}
+              >
+                <IconLogout size={14} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
+        </Group>
+      </Box>
+
       {/* Department Management Modal */}
       <DepartmentManagementModal
         opened={showManageModal}
         onClose={() => setShowManageModal(false)}
         departments={departments}
+      />
+
+      {/* User Management Modal */}
+      <UserManagementModal
+        opened={showUserModal}
+        onClose={() => setShowUserModal(false)}
+      />
+
+      {/* Profile Modal */}
+      <ProfileModal
+        opened={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
       />
     </Stack>
   );

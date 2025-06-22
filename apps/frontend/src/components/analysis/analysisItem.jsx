@@ -24,13 +24,18 @@ import {
   IconFolderCog,
 } from '@tabler/icons-react';
 import { analysisService } from '../../services/analysisService';
+import { departmentService } from '../../services/departmentService';
 import AnalysisLogs from './analysisLogs';
 import StatusBadge from './statusBadge';
-import EditAnalysisModal from '../modals/analysisEdit';
-import EditAnalysisENVModal from '../modals/analysisEditENV';
+import { lazy, Suspense } from 'react';
+
+// Lazy load heavy components that include Monaco editor
+const AnalysisEditModal = lazy(() => import('../modals/analysisEdit'));
+const AnalysisEditENVModal = lazy(() => import('../modals/analysisEditENV'));
 import LogDownloadDialog from '../modals/logDownload';
 import DepartmentSelectModal from '../modals/changeDepartmentModal';
 import { useWebSocket } from '../../contexts/websocketContext';
+import { usePermissions } from '../../hooks/usePermissions';
 
 export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
   const [showEditAnalysisModal, setShowEditAnalysisModal] = useState(false);
@@ -44,6 +49,15 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
     removeLoadingAnalysis,
     departments,
   } = useWebSocket();
+  const {
+    canRunAnalyses,
+    canViewAnalyses,
+    canEditAnalyses,
+    canDeleteAnalyses,
+    canDownloadAnalyses,
+    canAccessDepartment,
+    isAdmin,
+  } = usePermissions();
   const isLoading = loadingAnalyses.has(analysis.name);
 
   if (!analysis || !analysis.name) {
@@ -51,9 +65,14 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
   }
 
   // Get current department info
-  const departmentsArray = Array.isArray(departments)
+  const allDepartments = Array.isArray(departments)
     ? departments
     : Object.values(departments || {});
+
+  // Filter departments based on user permissions (admins see all, users see only accessible ones)
+  const departmentsArray = isAdmin
+    ? allDepartments
+    : allDepartments.filter((dept) => canAccessDepartment(dept.id));
   const currentDepartment = departmentsArray.find(
     (d) => d.id === analysis.department,
   );
@@ -112,6 +131,20 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
     }
   };
 
+  const handleEditAnalysis = async () => {
+    if (!canViewAnalyses()) {
+      return; // No permission to view analysis files
+    }
+    setShowEditAnalysisModal(true);
+  };
+
+  const handleEditENV = async () => {
+    if (!canViewAnalyses()) {
+      return; // No permission to view analysis files
+    }
+    setShowEditENVModal(true);
+  };
+
   const handleDownloadLogs = async (timeRange) => {
     try {
       await analysisService.downloadLogs(analysis.name, timeRange);
@@ -157,23 +190,14 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
 
   const handleDepartmentChange = async (departmentId) => {
     try {
-      const response = await fetch(
-        `/api/departments/analyses/${analysis.name}/department`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ departmentId }),
-        },
+      await departmentService.moveAnalysisToDepartment(
+        analysis.name,
+        departmentId,
       );
-
-      if (response.ok) {
-        console.log(
-          `Moved analysis ${analysis.name} to department ${departmentId}`,
-        );
-        setShowDepartmentModal(false);
-      } else {
-        throw new Error('Failed to move analysis');
-      }
+      console.log(
+        `Moved analysis ${analysis.name} to department ${departmentId}`,
+      );
+      setShowDepartmentModal(false);
     } catch (error) {
       console.error('Error moving analysis:', error);
     }
@@ -193,9 +217,19 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
       <Stack>
         <Group justify="space-between">
           <Group>
-            <Text fw={600} size="md" c="brand.8">
-              {analysis.name}
-            </Text>
+            <Box
+              px="sm"
+              py="xs"
+              style={{
+                backgroundColor: 'var(--mantine-color-brand-9)',
+                borderRadius: 'var(--mantine-radius-sm)',
+                border: '1px solid var(--mantine-color-brand-7)',
+              }}
+            >
+              <Text fw={600} size="md" c="white">
+                {analysis.name}
+              </Text>
+            </Box>
             <StatusBadge status={analysis.status || 'stopped'} />
             {currentDepartment && (
               <Badge
@@ -220,28 +254,29 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
 
           <Group gap="xs">
             {/* Primary Actions */}
-            {analysis.status === 'running' ? (
-              <Button
-                onClick={handleStop}
-                loading={isLoading}
-                color="red"
-                size="xs"
-                leftSection={<IconPlayerStop size={16} />}
-              >
-                Stop
-              </Button>
-            ) : (
-              <Button
-                onClick={handleRun}
-                loading={isLoading}
-                variant="gradient"
-                gradient={{ from: 'teal.6', to: 'green.6' }}
-                size="xs"
-                leftSection={<IconPlayerPlay size={16} />}
-              >
-                Run
-              </Button>
-            )}
+            {canRunAnalyses() &&
+              (analysis.status === 'running' ? (
+                <Button
+                  onClick={handleStop}
+                  loading={isLoading}
+                  color="red"
+                  size="xs"
+                  leftSection={<IconPlayerStop size={16} />}
+                >
+                  Stop
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleRun}
+                  loading={isLoading}
+                  variant="gradient"
+                  gradient={{ from: 'teal.6', to: 'green.6' }}
+                  size="xs"
+                  leftSection={<IconPlayerPlay size={16} />}
+                >
+                  Run
+                </Button>
+              ))}
 
             {/* Log Actions */}
             <Button
@@ -253,85 +288,124 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
             >
               {showLogs ? 'Hide Logs' : 'Show Logs'}
             </Button>
-            <Menu
-              shadow="md"
-              width={200}
-              withinPortal={true}
-              position="bottom-end"
-              closeOnItemClick={true}
-            >
-              <Menu.Target>
-                <ActionIcon variant="subtle" size="lg" color="brand">
-                  <IconDotsVertical size={20} />
-                </ActionIcon>
-              </Menu.Target>
 
-              <Menu.Dropdown>
-                {/* Department Management */}
-                <Menu.Item
-                  onClick={() => setShowDepartmentModal(true)}
-                  leftSection={
-                    isUncategorized ? (
-                      <IconFolderPlus size={16} />
-                    ) : (
-                      <IconFolderCog size={16} />
-                    )
-                  }
-                >
-                  {isUncategorized ? 'Add to Department' : 'Change Department'}
-                </Menu.Item>
+            {/* Show menu if user has any permissions */}
+            {(isAdmin ||
+              canViewAnalyses() ||
+              canDownloadAnalyses() ||
+              canEditAnalyses() ||
+              canDeleteAnalyses()) && (
+              <Menu
+                shadow="md"
+                width={200}
+                withinPortal={true}
+                position="bottom-end"
+                closeOnItemClick={true}
+              >
+                <Menu.Target>
+                  <ActionIcon variant="subtle" size="lg" color="brand">
+                    <IconDotsVertical size={20} />
+                  </ActionIcon>
+                </Menu.Target>
 
-                <Menu.Divider />
+                <Menu.Dropdown>
+                  {/* Department Management - Admins can move any analysis, users can move uncategorized */}
+                  {(isAdmin || isUncategorized) && (
+                    <>
+                      <Menu.Item
+                        onClick={() => setShowDepartmentModal(true)}
+                        leftSection={
+                          isUncategorized ? (
+                            <IconFolderPlus size={16} />
+                          ) : (
+                            <IconFolderCog size={16} />
+                          )
+                        }
+                      >
+                        {isUncategorized
+                          ? 'Add to Department'
+                          : 'Change Department'}
+                      </Menu.Item>
+                      <Menu.Divider />
+                    </>
+                  )}
 
-                {/* File Operations */}
-                <Menu.Item
-                  onClick={handleDownloadAnalysis}
-                  leftSection={<IconDownload size={16} />}
-                >
-                  Download Analysis File
-                </Menu.Item>
-                <Menu.Item
-                  onClick={() => setShowLogDownloadDialog(true)}
-                  leftSection={<IconDownload size={16} />}
-                >
-                  Download Logs
-                </Menu.Item>
+                  {/* File Operations */}
+                  {canDownloadAnalyses() && (
+                    <>
+                      <Menu.Item
+                        onClick={handleDownloadAnalysis}
+                        leftSection={<IconDownload size={16} />}
+                      >
+                        Download Analysis File
+                      </Menu.Item>
+                      <Menu.Item
+                        onClick={() => setShowLogDownloadDialog(true)}
+                        leftSection={<IconDownload size={16} />}
+                      >
+                        Download Logs
+                      </Menu.Item>
+                      <Menu.Divider />
+                    </>
+                  )}
 
-                <Menu.Divider />
+                  {/* Analysis File Operations - Show view or edit based on permissions */}
+                  {canViewAnalyses() && (
+                    <>
+                      <Menu.Item
+                        onClick={handleEditAnalysis}
+                        leftSection={
+                          canEditAnalyses() ? (
+                            <IconEdit size={16} />
+                          ) : (
+                            <IconFileText size={16} />
+                          )
+                        }
+                      >
+                        {canEditAnalyses()
+                          ? 'Edit Analysis'
+                          : 'View Analysis File'}
+                      </Menu.Item>
+                      <Menu.Item
+                        onClick={handleEditENV}
+                        leftSection={
+                          canEditAnalyses() ? (
+                            <IconEdit size={16} />
+                          ) : (
+                            <IconFileText size={16} />
+                          )
+                        }
+                      >
+                        {canEditAnalyses()
+                          ? 'Edit Environment'
+                          : 'View Environment'}
+                      </Menu.Item>
+                      <Menu.Divider />
+                    </>
+                  )}
 
-                {/* Edit Operations */}
-                <Menu.Item
-                  onClick={() => setShowEditAnalysisModal(true)}
-                  leftSection={<IconEdit size={16} />}
-                >
-                  Edit Analysis
-                </Menu.Item>
-                <Menu.Item
-                  onClick={() => setShowEditENVModal(true)}
-                  leftSection={<IconEdit size={16} />}
-                >
-                  Edit Environment
-                </Menu.Item>
-
-                <Menu.Divider />
-
-                {/* Destructive Operations */}
-                <Menu.Item
-                  onClick={handleDeleteLogs}
-                  color="red"
-                  leftSection={<IconTrash size={16} />}
-                >
-                  Clear/Delete All Logs
-                </Menu.Item>
-                <Menu.Item
-                  onClick={handleDeleteAnalysis}
-                  color="red"
-                  leftSection={<IconTrash size={16} />}
-                >
-                  Delete Analysis
-                </Menu.Item>
-              </Menu.Dropdown>
-            </Menu>
+                  {/* Destructive Operations */}
+                  {canDeleteAnalyses() && (
+                    <>
+                      <Menu.Item
+                        onClick={handleDeleteLogs}
+                        color="red"
+                        leftSection={<IconTrash size={16} />}
+                      >
+                        Clear/Delete All Logs
+                      </Menu.Item>
+                      <Menu.Item
+                        onClick={handleDeleteAnalysis}
+                        color="red"
+                        leftSection={<IconTrash size={16} />}
+                      >
+                        Delete Analysis
+                      </Menu.Item>
+                    </>
+                  )}
+                </Menu.Dropdown>
+              </Menu>
+            )}
           </Group>
         </Group>
 
@@ -339,20 +413,26 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
         {showLogs && <AnalysisLogs analysis={analysis} />}
       </Stack>
 
-      {/* Modals */}
-      {showEditAnalysisModal && (
-        <EditAnalysisModal
-          analysis={analysis}
-          onClose={() => setShowEditAnalysisModal(false)}
-          onSave={handleSaveAnalysis}
-        />
+      {/* Modals - Render if user can view analyses */}
+      {showEditAnalysisModal && canViewAnalyses() && (
+        <Suspense fallback={<div>Loading editor...</div>}>
+          <AnalysisEditModal
+            analysis={analysis}
+            onClose={() => setShowEditAnalysisModal(false)}
+            onSave={handleSaveAnalysis}
+            readOnly={!canEditAnalyses()}
+          />
+        </Suspense>
       )}
-      {showEditENVModal && (
-        <EditAnalysisENVModal
-          analysis={analysis}
-          onClose={() => setShowEditENVModal(false)}
-          onSave={handleSaveENV}
-        />
+      {showEditENVModal && canViewAnalyses() && (
+        <Suspense fallback={<div>Loading editor...</div>}>
+          <AnalysisEditENVModal
+            analysis={analysis}
+            onClose={() => setShowEditENVModal(false)}
+            onSave={handleSaveENV}
+            readOnly={!canEditAnalyses()}
+          />
+        </Suspense>
       )}
       <LogDownloadDialog
         isOpen={showLogDownloadDialog}
