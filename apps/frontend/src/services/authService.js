@@ -4,6 +4,13 @@ class AuthService {
   constructor() {
     this.user = null;
     this.token = this.getStoredToken();
+    this.refreshTimer = null;
+    this.REFRESH_INTERVAL = 12 * 60 * 1000; // 12 minutes
+
+    // Start proactive refresh if already authenticated
+    if (this.token) {
+      this.startProactiveRefresh();
+    }
   }
 
   async login(username, password) {
@@ -22,6 +29,9 @@ class AuthService {
     this.token = 'cookie-auth'; // Placeholder to indicate authenticated
     this.user = data.user;
     localStorage.setItem('auth_status', 'authenticated');
+
+    // Start proactive token refresh
+    this.startProactiveRefresh();
 
     return data;
   }
@@ -48,6 +58,9 @@ class AuthService {
       this.token = 'cookie-auth';
       this.user = data.user;
       localStorage.setItem('auth_status', 'authenticated');
+
+      // Start proactive token refresh
+      this.startProactiveRefresh();
 
       return data;
     } catch (error) {
@@ -275,6 +288,10 @@ class AuthService {
       this.user = data.user;
       this.token = 'cookie-auth';
       localStorage.setItem('auth_status', 'authenticated');
+      localStorage.setItem('last_token_refresh', Date.now().toString());
+
+      // Restart proactive token refresh after manual refresh
+      this.startProactiveRefresh();
 
       return data;
     } catch (error) {
@@ -305,7 +322,11 @@ class AuthService {
       this.user = null;
       this.token = null;
       localStorage.removeItem('auth_status');
+      localStorage.removeItem('last_token_refresh');
       // httpOnly cookies are cleared by the server
+
+      // Stop proactive token refresh
+      this.stopProactiveRefresh();
     }
   }
 
@@ -323,6 +344,69 @@ class AuthService {
 
   isAdmin() {
     return this.user?.role === 'admin';
+  }
+
+
+  startProactiveRefresh() {
+    // Clear any existing timer
+    this.stopProactiveRefresh();
+
+    // Only start if authenticated
+    if (!this.isAuthenticated()) {
+      return;
+    }
+
+    this.refreshTimer = setInterval(async () => {
+      try {
+        // Only refresh if page is visible and user is still authenticated
+        if (document.visibilityState === 'visible' && this.isAuthenticated()) {
+          console.log('Proactively refreshing token...');
+          await this.refreshToken();
+          console.log('Token refreshed successfully');
+        }
+      } catch (error) {
+        console.error('Proactive token refresh failed:', error);
+        // If refresh fails, the refreshToken method will handle logout
+      }
+    }, this.REFRESH_INTERVAL);
+
+    // Also refresh when page becomes visible after being hidden
+    document.addEventListener(
+      'visibilitychange',
+      this.handleVisibilityChange.bind(this),
+    );
+  }
+
+  stopProactiveRefresh() {
+    if (this.refreshTimer) {
+      console.log('Stopping proactive token refresh');
+      clearInterval(this.refreshTimer);
+      this.refreshTimer = null;
+    }
+
+    document.removeEventListener(
+      'visibilitychange',
+      this.handleVisibilityChange.bind(this),
+    );
+  }
+
+  async handleVisibilityChange() {
+    // When tab becomes visible, check if we need to refresh token
+    if (document.visibilityState === 'visible' && this.isAuthenticated()) {
+      // Check if it's been more than 10 minutes since last refresh
+      const lastRefresh = localStorage.getItem('last_token_refresh');
+      const now = Date.now();
+
+      if (!lastRefresh || now - parseInt(lastRefresh) > 10 * 60 * 1000) {
+        try {
+          console.log('Refreshing token after tab became visible');
+          await this.refreshToken();
+          localStorage.setItem('last_token_refresh', now.toString());
+        } catch (error) {
+          console.error('Token refresh on visibility change failed:', error);
+        }
+      }
+    }
   }
 }
 

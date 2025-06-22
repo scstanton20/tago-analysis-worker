@@ -19,11 +19,13 @@ import {
 } from '@tabler/icons-react';
 import { useAuth } from '../../hooks/useAuth';
 import { webauthnService } from '../../services/webauthnService';
+import { useNotifications } from '../../hooks/useNotifications.jsx';
 import Logo from '../logo';
 import PasswordOnboarding from './PasswordOnboarding';
 
 export default function LoginPage() {
   const { login, loginWithPasskey } = useAuth();
+  const notify = useNotifications();
   const [formData, setFormData] = useState({
     username: '',
     password: '',
@@ -85,7 +87,9 @@ export default function LoginPage() {
     setError('');
 
     try {
-      await login(formData.username, formData.password);
+      await notify.login(
+        login(formData.username.toLowerCase(), formData.password),
+      );
     } catch (err) {
       if (err.mustChangePassword) {
         setPasswordChangeRequired(err.user);
@@ -131,7 +135,7 @@ export default function LoginPage() {
       if (formData.username && err.message.includes('usernameless')) {
         try {
           const result = await webauthnService.authenticateWithUsername(
-            formData.username,
+            formData.username.toLowerCase(),
           );
           if (result.success) {
             await loginWithPasskey(result.user);

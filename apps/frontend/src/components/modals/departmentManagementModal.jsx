@@ -29,6 +29,7 @@ import {
 } from '@mantine/core';
 import { IconEdit, IconTrash, IconX } from '@tabler/icons-react';
 import { departmentService } from '../../services/departmentService';
+import { useNotifications } from '../../hooks/useNotifications.jsx';
 
 const PREDEFINED_COLORS = [
   '#3b82f6', // blue
@@ -96,6 +97,7 @@ export default function DepartmentManagementModal({
   const [editingColor, setEditingColor] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const notify = useNotifications();
 
   // Convert departments object to sorted array for display
   const departmentsArray = useMemo(
@@ -129,7 +131,7 @@ export default function DepartmentManagementModal({
 
     // Check for duplicate name
     if (usedNames.has(newDeptName.toLowerCase().trim())) {
-      alert(
+      notify.error(
         'A department with this name already exists. Please choose a different name.',
       );
       return;
@@ -137,15 +139,14 @@ export default function DepartmentManagementModal({
 
     setIsLoading(true);
     try {
-      await departmentService.createDepartment(
+      await notify.createDepartment(
+        departmentService.createDepartment(newDeptName.trim(), newDeptColor),
         newDeptName.trim(),
-        newDeptColor,
       );
       setNewDeptName('');
       setNewDeptColor('');
     } catch (error) {
       console.error('Error creating department:', error);
-      alert(`Failed to create department: ${error.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -166,7 +167,7 @@ export default function DepartmentManagementModal({
     );
 
     if (otherNames.has(editingName.toLowerCase().trim())) {
-      alert(
+      notify.error(
         'A department with this name already exists. Please choose a different name.',
       );
       return;
@@ -174,13 +175,15 @@ export default function DepartmentManagementModal({
 
     setIsLoading(true);
     try {
-      await departmentService.updateDepartment(id, {
-        name: editingName.trim(),
-      });
+      await notify.updateDepartment(
+        departmentService.updateDepartment(id, {
+          name: editingName.trim(),
+        }),
+        editingName.trim(),
+      );
       setEditingId(null);
     } catch (error) {
       console.error('Error updating department name:', error);
-      alert(`Failed to update department name: ${error.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -200,12 +203,18 @@ export default function DepartmentManagementModal({
 
     setIsLoading(true);
     try {
-      await departmentService.updateDepartment(id, { color: editingColor });
+      const currentDept = departmentsArray.find((d) => d.id === id);
+      await notify.executeWithNotification(
+        departmentService.updateDepartment(id, { color: editingColor }),
+        {
+          loading: `Updating ${currentDept?.name || 'department'} color...`,
+          success: 'Department color updated successfully.',
+        },
+      );
       setEditingId(null);
       setEditingColor('');
     } catch (error) {
       console.error('Error updating department color:', error);
-      alert(`Failed to update department color: ${error.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -216,11 +225,14 @@ export default function DepartmentManagementModal({
 
     setIsLoading(true);
     try {
-      await departmentService.deleteDepartment(id, 'uncategorized');
+      const currentDept = departmentsArray.find((d) => d.id === id);
+      await notify.deleteDepartment(
+        departmentService.deleteDepartment(id, 'uncategorized'),
+        currentDept?.name || 'department',
+      );
       setShowDeleteConfirm(null);
     } catch (error) {
       console.error('Error deleting department:', error);
-      alert(`Failed to delete department: ${error.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -236,10 +248,15 @@ export default function DepartmentManagementModal({
 
       setIsLoading(true);
       try {
-        await departmentService.reorderDepartments(newOrder.map((d) => d.id));
+        await notify.executeWithNotification(
+          departmentService.reorderDepartments(newOrder.map((d) => d.id)),
+          {
+            loading: 'Reordering departments...',
+            success: 'Departments reordered successfully.',
+          },
+        );
       } catch (error) {
         console.error('Error reordering departments:', error);
-        alert(`Failed to reorder departments: ${error.message}`);
       } finally {
         setIsLoading(false);
       }

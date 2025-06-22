@@ -22,6 +22,7 @@ import {
   IconAlertCircle,
 } from '@tabler/icons-react';
 import { useWebSocket } from '../../contexts/websocketContext';
+import { useNotifications } from '../../hooks/useNotifications.jsx';
 
 export default function EditAnalysisModal({
   onClose,
@@ -37,6 +38,7 @@ export default function EditAnalysisModal({
 
   // FIXED: Get analyses object from WebSocket context
   const { analyses } = useWebSocket();
+  const notify = useNotifications();
 
   // FIXED: Use direct object lookup instead of array.find()
   const currentAnalysis = analyses?.[initialAnalysis.name] || initialAnalysis;
@@ -80,9 +82,11 @@ export default function EditAnalysisModal({
       setIsLoading(true);
       setError(null);
 
-      await analysisService.updateAnalysis(currentAnalysis.name, content);
+      await notify.updateAnalysis(
+        analysisService.updateAnalysis(currentAnalysis.name, content),
+        currentAnalysis.name,
+      );
 
-      alert('Analysis content updated successfully!');
       setHasChanges(false);
       onClose();
     } catch (error) {
@@ -108,7 +112,13 @@ export default function EditAnalysisModal({
       setIsLoading(true);
       setError(null);
 
-      await analysisService.renameAnalysis(currentAnalysis.name, newFileName);
+      await notify.executeWithNotification(
+        analysisService.renameAnalysis(currentAnalysis.name, newFileName),
+        {
+          loading: `Renaming ${currentAnalysis.name} to ${newFileName}...`,
+          success: `Analysis renamed to ${newFileName} successfully.`,
+        },
+      );
 
       // Don't close the modal - WebSockets will update the name
       setIsEditingName(false);

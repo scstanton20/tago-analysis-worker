@@ -25,6 +25,7 @@ import {
 } from '@tabler/icons-react';
 import { analysisService } from '../../services/analysisService';
 import { departmentService } from '../../services/departmentService';
+import { useNotifications } from '../../hooks/useNotifications.jsx';
 import AnalysisLogs from './analysisLogs';
 import StatusBadge from './statusBadge';
 import { lazy, Suspense } from 'react';
@@ -58,6 +59,7 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
     canAccessDepartment,
     isAdmin,
   } = usePermissions();
+  const notify = useNotifications();
   const isLoading = loadingAnalyses.has(analysis.name);
 
   if (!analysis || !analysis.name) {
@@ -82,7 +84,10 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
   const handleRun = async () => {
     addLoadingAnalysis(analysis.name);
     try {
-      await analysisService.runAnalysis(analysis.name);
+      await notify.runAnalysis(
+        analysisService.runAnalysis(analysis.name),
+        analysis.name,
+      );
     } catch (error) {
       console.error('Failed to run analysis:', error);
       removeLoadingAnalysis(analysis.name);
@@ -92,7 +97,10 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
   const handleStop = async () => {
     addLoadingAnalysis(analysis.name);
     try {
-      await analysisService.stopAnalysis(analysis.name);
+      await notify.stopAnalysis(
+        analysisService.stopAnalysis(analysis.name),
+        analysis.name,
+      );
     } catch (error) {
       console.error('Failed to stop analysis:', error);
       removeLoadingAnalysis(analysis.name);
@@ -105,7 +113,10 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
     }
 
     try {
-      await analysisService.deleteAnalysis(analysis.name);
+      await notify.deleteAnalysis(
+        analysisService.deleteAnalysis(analysis.name),
+        analysis.name,
+      );
     } catch (error) {
       console.error('Failed to delete analysis:', error);
     }
@@ -113,7 +124,10 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
 
   const handleSaveAnalysis = async (content) => {
     try {
-      await analysisService.updateAnalysis(analysis.name, content);
+      await notify.updateAnalysis(
+        analysisService.updateAnalysis(analysis.name, content),
+        analysis.name,
+      );
       setShowEditAnalysisModal(false);
     } catch (error) {
       console.error('Failed to save analysis:', error);
@@ -123,7 +137,13 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
 
   const handleSaveENV = async (content) => {
     try {
-      await analysisService.updateAnalysisENV(analysis.name, content);
+      await notify.executeWithNotification(
+        analysisService.updateAnalysisENV(analysis.name, content),
+        {
+          loading: `Updating environment for ${analysis.name}...`,
+          success: 'Environment variables updated successfully.',
+        },
+      );
       setShowEditENVModal(false);
     } catch (error) {
       console.error('Failed to save analysis:', error);
@@ -147,7 +167,13 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
 
   const handleDownloadLogs = async (timeRange) => {
     try {
-      await analysisService.downloadLogs(analysis.name, timeRange);
+      await notify.executeWithNotification(
+        analysisService.downloadLogs(analysis.name, timeRange),
+        {
+          loading: `Downloading logs for ${analysis.name}...`,
+          success: 'Logs downloaded successfully.',
+        },
+      );
     } catch (error) {
       console.error('Failed to download logs:', error);
     }
@@ -167,7 +193,13 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
         onToggleLogs();
       }
 
-      await analysisService.deleteLogs(analysis.name);
+      await notify.executeWithNotification(
+        analysisService.deleteLogs(analysis.name),
+        {
+          loading: `Deleting logs for ${analysis.name}...`,
+          success: 'All logs deleted successfully.',
+        },
+      );
 
       // Wait for the backend to fully process the deletion
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -182,7 +214,13 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
 
   const handleDownloadAnalysis = async () => {
     try {
-      await analysisService.downloadAnalysis(analysis.name);
+      await notify.executeWithNotification(
+        analysisService.downloadAnalysis(analysis.name),
+        {
+          loading: `Downloading ${analysis.name}...`,
+          success: 'Analysis file downloaded successfully.',
+        },
+      );
     } catch (error) {
       console.error('Failed to download analysis:', error);
     }
@@ -190,12 +228,12 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
 
   const handleDepartmentChange = async (departmentId) => {
     try {
-      await departmentService.moveAnalysisToDepartment(
-        analysis.name,
-        departmentId,
-      );
-      console.log(
-        `Moved analysis ${analysis.name} to department ${departmentId}`,
+      await notify.executeWithNotification(
+        departmentService.moveAnalysisToDepartment(analysis.name, departmentId),
+        {
+          loading: `Moving ${analysis.name} to department...`,
+          success: 'Analysis moved to department successfully.',
+        },
       );
       setShowDepartmentModal(false);
     } catch (error) {

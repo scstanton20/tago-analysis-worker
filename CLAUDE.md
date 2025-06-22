@@ -60,6 +60,7 @@ apps/
 - **Real-time Communication**: WebSocket integration for live status updates and log streaming
 - **Department Organization**: Hierarchical structure with drag-and-drop management
 - **Security**: Encryption utilities for sensitive configuration data
+- **Notifications**: Mantine-based notification system for user feedback on async operations
 
 ### Development Workflow
 
@@ -71,6 +72,7 @@ apps/
 ### Environment Variables
 
 - `SECRET_KEY`: Required in production for encryption
+- `PRODUCTION_DOMAIN`: Required in production for WebAuthn
 - `STORAGE_BASE`: Optional custom storage path
 - `NODE_ENV`: development/production
 - `PORT`: Backend port (defaults to 3000)

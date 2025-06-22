@@ -5,6 +5,7 @@ node_modules*
 .DS_Store
 .env*
 npm-debug.log*
+.claude
 
 # Editor directories and files
 .vscode/*

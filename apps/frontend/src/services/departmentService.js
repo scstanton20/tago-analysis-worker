@@ -163,6 +163,7 @@ export const departmentService = {
       return 0; // Return 0 on error rather than throwing
     }
   },
+
 };
 
 export default departmentService;

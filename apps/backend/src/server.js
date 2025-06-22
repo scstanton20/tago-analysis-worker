@@ -28,6 +28,7 @@ import { apiRateLimit } from './middleware/auth.js';
 import userService from './services/userService.js';
 import { specs, swaggerUi } from './docs/swagger.js';
 import { swaggerAuthMiddleware, swaggerUiOptions } from './docs/swaggerAuth.js';
+import { startPeriodicCleanup } from './utils/jwt.js';
 
 // Api prefix
 const API_PREFIX = '/api';
@@ -95,21 +96,7 @@ async function restartRunningProcesses() {
     console.log('Checking for analyses that need to be restarted...');
 
     const configuration = await analysisService.getConfig();
-    const configuration = await analysisService.getConfig();
 
-    // Check if configuration has analyses property
-    if (configuration.analyses) {
-      for (const [analysisName, config] of Object.entries(
-        configuration.analyses,
-      )) {
-        if (config.status === 'running' || config.enabled === true) {
-          console.log(`Restarting analysis: ${analysisName}`);
-          // Pass the type from config, but default to 'listener' if not found
-          await analysisService.runAnalysis(
-            analysisName,
-            config.type || 'listener',
-          );
-        }
     // Check if configuration has analyses property
     if (configuration.analyses) {
       for (const [analysisName, config] of Object.entries(
@@ -151,8 +138,8 @@ async function startServer() {
       message: 'Initializing server components',
     });
 
-    // IMPORTANT: Initialize analysis service BEFORE setting up routes
-    console.log('Initializing analysis service...');
+    // IMPORTANT: Initialize services BEFORE setting up routes
+    console.log('Initializing services...');
     await initializeAnalyses();
     await userService.loadUsers();
     console.log('Services initialized successfully');
@@ -209,6 +196,9 @@ async function startServer() {
 
       // Check for processes to restart
       await restartRunningProcesses();
+
+      // Start periodic JWT cleanup
+      startPeriodicCleanup();
 
       // Broadcast status update to all connected clients
       broadcastStatusUpdate();

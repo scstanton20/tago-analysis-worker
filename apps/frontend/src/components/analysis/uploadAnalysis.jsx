@@ -2,6 +2,7 @@
 import { useState, useRef } from 'react';
 import { analysisService } from '../../services/analysisService';
 import { useWebSocket } from '../../contexts/websocketContext/index';
+import { useNotifications } from '../../hooks/useNotifications.jsx';
 import Editor from '@monaco-editor/react';
 import {
   Paper,
@@ -53,6 +54,9 @@ export default function AnalysisCreator({
 
   // WebSocket context
   const { loadingAnalyses, analyses } = useWebSocket();
+  
+  // Notifications
+  const notify = useNotifications();
 
   // Use WebSocket analyses data directly
   const existingAnalyses = analyses ? Object.keys(analyses) : [];
@@ -209,18 +213,10 @@ export default function AnalysisCreator({
         const blob = new Blob([editorContent], { type: 'text/javascript' });
         file = new File([blob], finalFileName, { type: 'text/javascript' });
       }
-      await analysisService.uploadAnalysis(
-        file,
-        analysisType,
-        targetDepartment,
-      );
-
-      window.alert(
-        `Successfully ${mode === 'upload' ? 'uploaded' : 'created'} analysis ${finalFileName}${
-          departmentName && departmentName !== 'All Departments'
-            ? ` in ${departmentName}`
-            : ''
-        }`,
+      
+      await notify.uploadAnalysis(
+        analysisService.uploadAnalysis(file, analysisType, targetDepartment),
+        finalFileName
       );
 
       resetForm();

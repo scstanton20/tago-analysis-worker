@@ -366,6 +366,7 @@ export const analysisService = {
       throw error;
     }
   },
+
 };
 
 export default analysisService;

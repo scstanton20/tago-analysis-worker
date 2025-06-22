@@ -28,6 +28,37 @@ const router = express.Router();
 
 /**
  * @swagger
+ * components:
+ *   schemas:
+ *     AuthenticationInfo:
+ *       type: object
+ *       description: |
+ *         **Authentication System Overview:**
+ *
+ *         This API uses a secure JWT-based authentication system with the following features:
+ *
+ *         **Security Features:**
+ *         - HTTPOnly cookies for token storage (prevents XSS attacks)
+ *         - Automatic token rotation on refresh (prevents replay attacks)
+ *         - Session-based token management with activity tracking
+ *         - Periodic cleanup of expired tokens and sessions
+ *         - Rate limiting on login attempts
+ *
+ *         **Token Lifecycle:**
+ *         - Access tokens: 15 minutes lifespan
+ *         - Refresh tokens: 90 days maximum, 14 days inactivity limit
+ *         - Automatic cleanup runs every hour to remove expired data
+ *         - Token rotation invalidates old refresh tokens immediately
+ *
+ *         **Session Management:**
+ *         - Multi-device session support with individual session tracking
+ *         - Bulk session invalidation (logout from all devices)
+ *         - Activity-based session expiration (14 days inactivity)
+ *         - Automatic session cleanup and memory management
+ */
+
+/**
+ * @swagger
  * /auth/login:
  *   post:
  *     summary: User login
@@ -95,13 +126,25 @@ router.post('/login', loginRateLimit, login);
  * @swagger
  * /auth/refresh:
  *   post:
- *     summary: Refresh access token
- *     description: Use refresh token to get new access and refresh tokens
+ *     summary: Refresh access token with token rotation
+ *     description: |
+ *       Use refresh token to get new access and refresh tokens with automatic token rotation for enhanced security.
+ *
+ *       **Token Rotation Security:**
+ *       - Old refresh token is immediately invalidated upon use
+ *       - New refresh token is issued with each request
+ *       - Prevents refresh token replay attacks
+ *       - Session activity is automatically tracked
+ *
+ *       **Session Management:**
+ *       - Updates last activity timestamp for inactivity tracking
+ *       - Maintains session continuity across token refreshes
+ *       - Automatic cleanup of expired session data
  *     tags: [Authentication]
  *     security: []
  *     responses:
  *       200:
- *         description: Tokens refreshed successfully
+ *         description: Tokens refreshed successfully with rotation
  *         content:
  *           application/json:
  *             schema:
@@ -111,13 +154,15 @@ router.post('/login', loginRateLimit, login);
  *                   $ref: '#/components/schemas/User'
  *                 message:
  *                   type: string
+ *                   example: "Tokens refreshed successfully"
  *         headers:
  *           Set-Cookie:
+ *             description: New JWT tokens set as httpOnly cookies (both access and refresh tokens rotated)
  *             schema:
  *               type: string
- *               example: access_token=new_jwt_token; HttpOnly; Secure; SameSite=Strict
+ *               example: "access_token=new_jwt_token; HttpOnly; Secure; SameSite=Strict, refresh_token=new_refresh_token; HttpOnly; Secure; SameSite=Strict"
  *       401:
- *         description: Invalid or expired refresh token
+ *         description: Invalid, expired, or already used refresh token
  *         content:
  *           application/json:
  *             schema:
@@ -125,8 +170,31 @@ router.post('/login', loginRateLimit, login);
  *               properties:
  *                 error:
  *                   type: string
+ *                   enum:
+ *                     - "Refresh token required"
+ *                     - "Refresh token expired"
+ *                     - "Refresh token already used"
+ *                     - "Refresh token expired due to inactivity"
+ *                     - "Session invalidated"
  *                 requiresLogin:
  *                   type: boolean
+ *                   example: true
+ *       404:
+ *         description: User not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "User not found"
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.post('/refresh', refresh);
 
@@ -189,7 +257,7 @@ router.post('/password-onboarding', authMiddleware, passwordOnboarding);
  *   get:
  *     summary: Get user profile
  *     description: Get current authenticated user's profile information
- *     tags: [Authentication]
+ *     tags: [User Management]
  *     responses:
  *       200:
  *         description: User profile retrieved successfully
@@ -214,7 +282,7 @@ router.get('/profile', authMiddleware, getProfile);
  *   put:
  *     summary: Update user profile
  *     description: Update current authenticated user's profile information
- *     tags: [Authentication]
+ *     tags: [User Management]
  *     requestBody:
  *       required: true
  *       content:

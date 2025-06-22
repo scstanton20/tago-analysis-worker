@@ -6,6 +6,7 @@ import {
   extractTokenFromHeader,
   verifyRefreshToken,
   updateRefreshTokenActivity,
+  rotateRefreshToken,
 } from '../utils/jwt.js';
 import { broadcastToUser } from '../utils/websocket.js';
 
@@ -79,10 +80,10 @@ export const refresh = async (req, res) => {
     // Update activity tracking
     updateRefreshTokenActivity(decoded.sessionId);
 
-    // Generate new tokens
-    const { accessToken, refreshToken: newRefreshToken } = generateTokens(
+    // Rotate refresh token (invalidate old one and generate new tokens)
+    const { accessToken, refreshToken: newRefreshToken } = rotateRefreshToken(
+      refreshToken,
       user,
-      true,
     );
 
     // Set new tokens as httpOnly cookies

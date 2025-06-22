@@ -29,6 +29,7 @@ import {
 } from '@tabler/icons-react';
 import { useAuth } from '../../hooks/useAuth';
 import { useWebSocket } from '../../contexts/websocketContext';
+import { useNotifications } from '../../hooks/useNotifications.jsx';
 
 export default function UserManagementModal({ opened, onClose }) {
   const {
@@ -41,6 +42,7 @@ export default function UserManagementModal({ opened, onClose }) {
     user: currentUser,
   } = useAuth();
   const { departments: wsaDepartments } = useWebSocket();
+  const notify = useNotifications();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
@@ -182,7 +184,13 @@ export default function UserManagementModal({ opened, onClose }) {
         }
 
         // Single request to update everything
-        await updateUser(editingUser.username, userUpdateData);
+        await notify.executeWithNotification(
+          updateUser(editingUser.username, userUpdateData),
+          {
+            loading: `Updating user ${editingUser.username}...`,
+            success: `User ${editingUser.username} updated successfully.`,
+          },
+        );
 
         // Refresh permissions if updating current user
         if (editingUser.username === currentUser?.username) {
@@ -195,7 +203,13 @@ export default function UserManagementModal({ opened, onClose }) {
         // Create user - don't pass password, let backend generate it
         const createData = { ...values };
         delete createData.password;
-        const response = await createUser(createData);
+        const response = await notify.executeWithNotification(
+          createUser(createData),
+          {
+            loading: `Creating user ${values.username}...`,
+            success: `User ${values.username} created successfully.`,
+          },
+        );
 
         // Show the generated password to admin
         setCreatedUserInfo({
@@ -248,7 +262,10 @@ export default function UserManagementModal({ opened, onClose }) {
     try {
       setLoading(true);
       setError('');
-      await deleteUser(username);
+      await notify.executeWithNotification(deleteUser(username), {
+        loading: `Deleting user ${username}...`,
+        success: `User ${username} deleted successfully.`,
+      });
       await loadUsers();
     } catch (err) {
       setError(err.message || 'Failed to delete user');

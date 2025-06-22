@@ -4,6 +4,7 @@ import PropTypes from 'prop-types';
 import Editor from '@monaco-editor/react';
 import { analysisService } from '../../services/analysisService';
 import { useWebSocket } from '../../contexts/websocketContext';
+import { useNotifications } from '../../hooks/useNotifications.jsx';
 import {
   Modal,
   Stack,
@@ -29,6 +30,7 @@ export default function EditAnalysisENVModal({
   // ADDED: Get current analysis from WebSocket context for consistency
   const { getAnalysis } = useWebSocket();
   const currentAnalysis = getAnalysis(analysis.name) || analysis;
+  const notify = useNotifications();
 
   useEffect(() => {
     async function loadContent() {
@@ -86,10 +88,14 @@ export default function EditAnalysisENVModal({
       setIsLoading(true);
       setError(null);
 
-      await analysisService.updateAnalysisENV(currentAnalysis.name, content);
+      await notify.executeWithNotification(
+        analysisService.updateAnalysisENV(currentAnalysis.name, content),
+        {
+          loading: `Updating environment for ${currentAnalysis.name}...`,
+          success: 'Environment variables updated successfully.',
+        },
+      );
 
-      console.log('ENV content saved successfully');
-      alert('Analysis ENV updated successfully!');
       setHasChanges(false);
       onClose();
     } catch (error) {

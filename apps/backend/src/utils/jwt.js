@@ -14,6 +14,10 @@ const DEV_DATA_DIR = path.join(process.cwd(), '.dev-session-data');
 const BLACKLIST_FILE = path.join(DEV_DATA_DIR, 'blacklist.json');
 const SESSIONS_FILE = path.join(DEV_DATA_DIR, 'sessions.json');
 const ACTIVITY_FILE = path.join(DEV_DATA_DIR, 'activity.json');
+const USED_REFRESH_TOKENS_FILE = path.join(
+  DEV_DATA_DIR,
+  'used-refresh-tokens.json',
+);
 
 // In-memory blacklist for invalidated tokens (in production, use Redis)
 const tokenBlacklist = new Set();
@@ -24,10 +28,13 @@ const activeSessions = new Map();
 // Track last activity for refresh token management
 const refreshTokenActivity = new Map();
 
+// Track used refresh tokens to prevent reuse (rotation)
+const usedRefreshTokens = new Map(); // Map to store token with timestamp
+
 // Development session persistence functions
 function loadDevSessionData() {
   if (process.env.NODE_ENV !== 'development') return;
-  
+
   try {
     // Create directory if it doesn't exist
     if (!fs.existsSync(DEV_DATA_DIR)) {
@@ -38,8 +45,10 @@ function loadDevSessionData() {
     // Load blacklist
     if (fs.existsSync(BLACKLIST_FILE)) {
       const blacklistData = JSON.parse(fs.readFileSync(BLACKLIST_FILE, 'utf8'));
-      blacklistData.forEach(token => tokenBlacklist.add(token));
-      console.log(`Restored ${blacklistData.length} blacklisted tokens from development storage`);
+      blacklistData.forEach((token) => tokenBlacklist.add(token));
+      console.log(
+        `Restored ${blacklistData.length} blacklisted tokens from development storage`,
+      );
     }
 
     // Load active sessions
@@ -48,7 +57,9 @@ function loadDevSessionData() {
       Object.entries(sessionsData).forEach(([userId, sessions]) => {
         activeSessions.set(userId, new Set(sessions));
       });
-      console.log(`Restored ${activeSessions.size} user sessions from development storage`);
+      console.log(
+        `Restored ${activeSessions.size} user sessions from development storage`,
+      );
     }
 
     // Load refresh token activity
@@ -61,7 +72,23 @@ function loadDevSessionData() {
           created: new Date(activity.created),
         });
       });
-      console.log(`Restored ${refreshTokenActivity.size} session activities from development storage`);
+      console.log(
+        `Restored ${refreshTokenActivity.size} session activities from development storage`,
+      );
+    }
+
+    // Load used refresh tokens
+    if (fs.existsSync(USED_REFRESH_TOKENS_FILE)) {
+      const usedTokensData = JSON.parse(
+        fs.readFileSync(USED_REFRESH_TOKENS_FILE, 'utf8'),
+      );
+      // Convert array to Map with current timestamp for existing tokens
+      usedTokensData.forEach((token) =>
+        usedRefreshTokens.set(token, Date.now()),
+      );
+      console.log(
+        `Restored ${usedTokensData.length} used refresh tokens from development storage`,
+      );
     }
   } catch (error) {
     console.warn('Failed to load development session data:', error.message);
@@ -70,7 +97,7 @@ function loadDevSessionData() {
 
 function saveDevSessionData() {
   if (process.env.NODE_ENV !== 'development') return;
-  
+
   try {
     // Ensure directory exists
     if (!fs.existsSync(DEV_DATA_DIR)) {
@@ -78,7 +105,10 @@ function saveDevSessionData() {
     }
 
     // Save blacklist
-    fs.writeFileSync(BLACKLIST_FILE, JSON.stringify(Array.from(tokenBlacklist)));
+    fs.writeFileSync(
+      BLACKLIST_FILE,
+      JSON.stringify(Array.from(tokenBlacklist)),
+    );
 
     // Save active sessions
     const sessionsData = {};
@@ -97,6 +127,12 @@ function saveDevSessionData() {
       };
     });
     fs.writeFileSync(ACTIVITY_FILE, JSON.stringify(activityData));
+
+    // Save used refresh tokens
+    fs.writeFileSync(
+      USED_REFRESH_TOKENS_FILE,
+      JSON.stringify(Array.from(usedRefreshTokens.keys())),
+    );
   } catch (error) {
     console.warn('Failed to save development session data:', error.message);
   }
@@ -191,6 +227,18 @@ export function verifyRefreshToken(token) {
       throw new Error('Refresh token invalidated');
     }
 
+    // Check if refresh token has been used (rotation security)
+    // Allow a 30-second grace period for concurrent requests
+    if (usedRefreshTokens.has(token)) {
+      const usedTime = usedRefreshTokens.get(token);
+      const gracePeriod = 30 * 1000; // 30 seconds
+      if (Date.now() - usedTime > gracePeriod) {
+        throw new Error('Refresh token already used');
+      }
+      // Within grace period - allow the request but log it
+      console.log('Refresh token used within grace period, allowing request');
+    }
+
     const decoded = jwt.verify(token, JWT_SECRET, {
       issuer: 'tago-analysis-runner',
     });
@@ -213,7 +261,10 @@ export function verifyRefreshToken(token) {
         (now - activity.lastActivity) / (1000 * 60 * 60 * 24);
 
       // If inactive for more than 14 days, expire the token
-      if (daysSinceLastActivity > 14) {
+      const inactiveDays = parseInt(
+        JWT_REFRESH_INACTIVE_EXPIRES_IN.replace('d', ''),
+      );
+      if (daysSinceLastActivity > inactiveDays) {
         throw new Error('Refresh token expired due to inactivity');
       }
     }
@@ -227,6 +278,48 @@ export function verifyRefreshToken(token) {
     }
     throw error;
   }
+}
+
+export function rotateRefreshToken(oldToken, user) {
+  // Mark old token as used with timestamp
+  usedRefreshTokens.set(oldToken, Date.now());
+
+  // Generate new tokens (this will create a new sessionId and refresh token)
+  const newTokens = generateTokens(user, true);
+
+  // Clean up used tokens periodically to prevent memory bloat
+  if (usedRefreshTokens.size > 10000) {
+    cleanupUsedRefreshTokens();
+  }
+
+  return newTokens;
+}
+
+function cleanupUsedRefreshTokens() {
+  const currentTime = Math.floor(Date.now() / 1000);
+  const gracePeriod = 30 * 1000; // 30 seconds
+  const tokensToRemove = [];
+
+  for (const [token, usedTime] of usedRefreshTokens.entries()) {
+    try {
+      const decoded = jwt.decode(token);
+      // Remove tokens that have expired or are older than grace period
+      if (
+        (decoded && decoded.exp && decoded.exp < currentTime) ||
+        Date.now() - usedTime > gracePeriod
+      ) {
+        tokensToRemove.push(token);
+      }
+    } catch {
+      // Remove invalid tokens
+      tokensToRemove.push(token);
+    }
+  }
+
+  tokensToRemove.forEach((token) => usedRefreshTokens.delete(token));
+  console.log(
+    `Cleaned up ${tokensToRemove.length} expired used refresh tokens`,
+  );
 }
 
 export function updateRefreshTokenActivity(sessionId) {
@@ -314,6 +407,75 @@ function cleanupBlacklist() {
   }
 
   tokensToRemove.forEach((token) => tokenBlacklist.delete(token));
+  console.log(`Cleaned up ${tokensToRemove.length} expired blacklisted tokens`);
+}
+
+export function cleanupExpiredSessions() {
+  const now = new Date();
+  const expiredSessions = [];
+  const inactiveDays = parseInt(
+    JWT_REFRESH_INACTIVE_EXPIRES_IN.replace('d', ''),
+  );
+
+  // Clean up inactive refresh token activities
+  refreshTokenActivity.forEach((activity, sessionId) => {
+    const daysSinceLastActivity =
+      (now - activity.lastActivity) / (1000 * 60 * 60 * 24);
+    const daysSinceCreated = (now - activity.created) / (1000 * 60 * 60 * 24);
+
+    // Remove if inactive for too long or if created more than 90 days ago
+    if (daysSinceLastActivity > inactiveDays || daysSinceCreated > 90) {
+      expiredSessions.push(sessionId);
+      refreshTokenActivity.delete(sessionId);
+    }
+  });
+
+  // Remove expired sessions from active sessions
+  expiredSessions.forEach((sessionId) => {
+    activeSessions.forEach((sessions, userId) => {
+      if (sessions.has(sessionId)) {
+        sessions.delete(sessionId);
+        if (sessions.size === 0) {
+          activeSessions.delete(userId);
+        }
+      }
+    });
+  });
+
+  // Clean up blacklist and used refresh tokens
+  cleanupBlacklist();
+  cleanupUsedRefreshTokens();
+
+  console.log(`Cleaned up ${expiredSessions.length} expired sessions`);
+
+  // Save updated state in development
+  if (process.env.NODE_ENV === 'development') {
+    saveDevSessionData();
+  }
+
+  return expiredSessions.length;
+}
+
+export function startPeriodicCleanup() {
+  // Run cleanup every hour
+  const cleanupInterval = 60 * 60 * 1000; // 1 hour
+
+  const cleanup = () => {
+    try {
+      const cleaned = cleanupExpiredSessions();
+      console.log(`Periodic cleanup completed: ${cleaned} sessions cleaned`);
+    } catch (error) {
+      console.error('Periodic cleanup failed:', error);
+    }
+  };
+
+  // Run initial cleanup after 5 minutes
+  setTimeout(cleanup, 5 * 60 * 1000);
+
+  // Then run every hour
+  setInterval(cleanup, cleanupInterval);
+
+  console.log('Started periodic session cleanup (every hour)');
 }
 
 export function extractTokenFromHeader(authHeader) {

@@ -1,8 +1,10 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useAuth } from './useAuth';
+import authService from '../services/authService';
 
 const DEFAULT_IDLE_TIME = 15 * 60 * 1000; // 15 minutes
 const WARNING_TIME = 2 * 60 * 1000; // 2 minutes warning
+const PROACTIVE_REFRESH_THRESHOLD = 30 * 60 * 1000; // 30 minutes when proactive refresh is active
 
 export function useIdleTimeout(idleTime = DEFAULT_IDLE_TIME) {
   const { logout, isAuthenticated } = useAuth();
@@ -23,22 +25,39 @@ export function useIdleTimeout(idleTime = DEFAULT_IDLE_TIME) {
       clearTimeout(warningTimeoutRef.current);
     }
 
+    // Use longer timeout if proactive refresh is active and page is visible
+    const effectiveIdleTime =
+      document.visibilityState === 'visible' && authService.refreshTimer
+        ? PROACTIVE_REFRESH_THRESHOLD
+        : idleTime;
+
     // Set warning timeout
-    warningTimeoutRef.current = setTimeout(() => {
-      const shouldLogout = confirm(
+    warningTimeoutRef.current = setTimeout(async () => {
+      const shouldStayLoggedIn = confirm(
         'Your session will expire in 2 minutes due to inactivity. Click OK to stay logged in or Cancel to logout now.',
       );
 
-      if (!shouldLogout) {
+      if (shouldStayLoggedIn) {
+        // User wants to stay logged in, proactively refresh token and reset timer
+        try {
+          await authService.refreshToken();
+          console.log('Token refreshed after user chose to stay logged in');
+          resetTimer(); // Reset the idle timer after successful refresh
+        } catch (error) {
+          console.error('Failed to refresh token:', error);
+          // If refresh fails, logout anyway
+          logout();
+        }
+      } else {
         logout();
       }
-    }, idleTime - WARNING_TIME);
+    }, effectiveIdleTime - WARNING_TIME);
 
     // Set logout timeout
     timeoutRef.current = setTimeout(() => {
       console.log('Session expired due to inactivity');
       logout();
-    }, idleTime);
+    }, effectiveIdleTime);
   }, [idleTime, logout, isAuthenticated]);
 
   const handleActivity = useCallback(() => {
@@ -99,7 +118,7 @@ export function useIdleTimeout(idleTime = DEFAULT_IDLE_TIME) {
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (!document.hidden && isAuthenticated) {
-        // Page became visible, reset timer
+        // Page became visible, reset timer with potentially longer timeout
         resetTimer();
       }
     };

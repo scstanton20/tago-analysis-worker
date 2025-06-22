@@ -12,10 +12,12 @@ import {
 } from '@mantine/core';
 import { IconAlertCircle, IconKey } from '@tabler/icons-react';
 import { useAuth } from '../../hooks/useAuth';
+import { useNotifications } from '../../hooks/useNotifications.jsx';
 import Logo from '../logo';
 
 export default function PasswordOnboarding({ username, onSuccess }) {
   const { passwordOnboarding } = useAuth();
+  const notify = useNotifications();
   const [formData, setFormData] = useState({
     newPassword: '',
     confirmPassword: '',
@@ -45,7 +47,9 @@ export default function PasswordOnboarding({ username, onSuccess }) {
     setError('');
 
     try {
-      await passwordOnboarding(formData.newPassword);
+      await notify.passwordChange(
+        passwordOnboarding(formData.newPassword)
+      );
       onSuccess();
     } catch (err) {
       setError(err.message || 'Password change failed');

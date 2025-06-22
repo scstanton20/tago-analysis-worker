@@ -30,9 +30,11 @@ import {
 } from '@tabler/icons-react';
 import { useAuth } from '../../hooks/useAuth';
 import { webauthnService } from '../../services/webauthnService';
+import { useNotifications } from '../../hooks/useNotifications.jsx';
 
 export default function ProfileModal({ opened, onClose }) {
   const { user, changeProfilePassword, updateProfile } = useAuth();
+  const notify = useNotifications();
 
   // Password change state
   const [passwordLoading, setPasswordLoading] = useState(false);
@@ -140,7 +142,9 @@ export default function ProfileModal({ opened, onClose }) {
       setPasswordError('');
       setPasswordSuccess(false);
 
-      await changeProfilePassword(values.currentPassword, values.newPassword);
+      await notify.passwordChange(
+        changeProfilePassword(values.currentPassword, values.newPassword),
+      );
 
       setPasswordSuccess(true);
       passwordForm.reset();
@@ -165,7 +169,7 @@ export default function ProfileModal({ opened, onClose }) {
       setProfileError('');
       setProfileSuccess(false);
 
-      await updateProfile(values.username, values.email);
+      await notify.profileUpdate(updateProfile(values.username, values.email));
 
       setProfileSuccess(true);
       setIsEditingProfile(false);
@@ -196,7 +200,13 @@ export default function ProfileModal({ opened, onClose }) {
       setRegisteringPasskey(true);
       setPasskeysError('');
 
-      await webauthnService.registerPasskey(values.name);
+      await notify.executeWithNotification(
+        webauthnService.registerPasskey(values.name),
+        {
+          loading: `Registering passkey ${values.name}...`,
+          success: 'Passkey registered successfully.',
+        },
+      );
 
       // Reload passkeys list
       await loadPasskeys();
@@ -222,7 +232,13 @@ export default function ProfileModal({ opened, onClose }) {
 
     try {
       setPasskeysError('');
-      await webauthnService.deleteAuthenticator(credentialId);
+      await notify.executeWithNotification(
+        webauthnService.deleteAuthenticator(credentialId),
+        {
+          loading: 'Deleting passkey...',
+          success: 'Passkey deleted successfully.',
+        },
+      );
       await loadPasskeys();
     } catch (error) {
       setPasskeysError(error.message || 'Failed to delete passkey');
@@ -400,16 +416,6 @@ export default function ProfileModal({ opened, onClose }) {
                   variant="light"
                 >
                   {passwordError}
-                </Alert>
-              )}
-
-              {passwordSuccess && (
-                <Alert
-                  icon={<IconCheck size="1rem" />}
-                  color="green"
-                  variant="light"
-                >
-                  Password changed successfully!
                 </Alert>
               )}
 

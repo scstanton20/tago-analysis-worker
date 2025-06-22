@@ -9,7 +9,7 @@ class StatusController {
     this.analysisService = analysisService;
     this.containerState = containerState || {
       status: 'ready',
-      lastStartTime: new Date(),
+      startTime: new Date(),
       message: 'Container is ready',
     };
     this.getSystemStatus = this.getSystemStatus.bind(this);
@@ -37,26 +37,40 @@ class StatusController {
         tagoVersion = 'unknown';
       }
 
-      // Calculate uptime safely
-      const startTime = this.containerState.lastStartTime || new Date();
-      const uptimeMs = new Date() - startTime;
+      // IMPORTANT: Get current container state instead of using stale reference
+      const { getContainerState } = await import('../utils/websocket.js');
+      const currentContainerState = getContainerState();
 
-      // Ensure we have valid values for ms()
-      let formattedUptime;
+      // Safely calculate uptime with proper null checks
+      const startTime =
+        currentContainerState.startTime ||
+        currentContainerState.lastStartTime ||
+        new Date();
+      const uptimeMs = new Date() - new Date(startTime);
+      const uptimeSeconds = Math.floor(uptimeMs / 1000);
+
+      let formattedUptime = 'unknown';
       try {
-        formattedUptime = ms(uptimeMs, { long: true });
-      } catch (error) {
-        console.error('Error formatting uptime:', error);
-        formattedUptime = 'unknown';
+        // Only call ms() if we have a valid positive number
+        if (uptimeMs > 0) {
+          formattedUptime = ms(uptimeMs, { long: true });
+        } else {
+          formattedUptime = '0 seconds';
+        }
+      } catch (msError) {
+        console.error('Error formatting uptime:', msError);
+        formattedUptime = `${uptimeSeconds} seconds`;
       }
 
       const status = {
         container_health: {
           status:
-            this.containerState.status === 'ready' ? 'healthy' : 'initializing',
-          message: this.containerState.message,
+            currentContainerState.status === 'ready'
+              ? 'healthy'
+              : 'initializing',
+          message: currentContainerState.message || 'Container status unknown',
           uptime: {
-            seconds: Math.floor(uptimeMs / 1000),
+            seconds: uptimeSeconds,
             formatted: formattedUptime,
           },
         },
