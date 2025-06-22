@@ -26,6 +26,7 @@ import { useWebSocket } from '../../contexts/websocketContext';
 export default function EditAnalysisModal({
   onClose,
   analysis: initialAnalysis,
+  readOnly = false,
 }) {
   const [content, setContent] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
@@ -128,8 +129,10 @@ export default function EditAnalysisModal({
       size="90%"
       title={
         <Group gap="xs">
-          <Text fw={600}>Editing Analysis Content:</Text>
-          {isEditingName ? (
+          <Text fw={600}>
+            {readOnly ? 'Viewing' : 'Editing'} Analysis Content:
+          </Text>
+          {!readOnly && isEditingName ? (
             <Group gap="xs">
               <TextInput
                 value={newFileName}
@@ -161,14 +164,16 @@ export default function EditAnalysisModal({
           ) : (
             <Group gap={4}>
               <Text>{currentAnalysis.name}</Text>
-              <ActionIcon
-                variant="subtle"
-                size="sm"
-                onClick={() => setIsEditingName(true)}
-                disabled={isLoading}
-              >
-                <IconEdit size={14} />
-              </ActionIcon>
+              {!readOnly && (
+                <ActionIcon
+                  variant="subtle"
+                  size="sm"
+                  onClick={() => setIsEditingName(true)}
+                  disabled={isLoading}
+                >
+                  <IconEdit size={14} />
+                </ActionIcon>
+              )}
             </Group>
           )}
         </Group>
@@ -210,6 +215,7 @@ export default function EditAnalysisModal({
                 lineNumbers: 'on',
                 folding: true,
                 foldingStrategy: 'indentation',
+                readOnly: readOnly,
               }}
             />
           )}
@@ -221,16 +227,18 @@ export default function EditAnalysisModal({
           style={{ borderTop: '1px solid var(--mantine-color-gray-3)' }}
         >
           <Button variant="default" onClick={onClose}>
-            Cancel
+            {readOnly ? 'Close' : 'Cancel'}
           </Button>
-          <Button
-            onClick={handleSave}
-            disabled={!hasChanges}
-            loading={isLoading}
-            color="brand"
-          >
-            Save Changes
-          </Button>
+          {!readOnly && (
+            <Button
+              onClick={handleSave}
+              disabled={!hasChanges}
+              loading={isLoading}
+              color="brand"
+            >
+              Save Changes
+            </Button>
+          )}
         </Group>
       </Stack>
     </Modal>
@@ -251,4 +259,5 @@ EditAnalysisModal.propTypes = {
     ),
   }).isRequired,
   onClose: PropTypes.func.isRequired,
+  readOnly: PropTypes.bool,
 };

@@ -17,9 +17,8 @@ services:
     labels:
       traefik.enable: 'true'
       traefik.http.routers.tago-runner.rule: 'Host(`tago-runner.scstanton.net`)'
-      traefik.http.routers.tago-runner.middlewares: 'secured@file,tago-auth'
+      traefik.http.routers.tago-runner.middlewares: 'secured@file'
       traefik.http.routers.tago-runner.entrypoints: 'https'
-      traefik.http.middlewares.tago-auth.basicauth.users: 'parkwide:${BASIC_AUTH_PASS}'
       traefik.http.routers.tago-runner.tls: 'true'
       traefik.docker.network: 'traefik-public'
 
@@ -32,8 +31,6 @@ services:
     networks:
       - backend
     env_file: stack.env
-    ports:
-      - 3000:3000
     environment:
       TZ: 'America/New_York'
       SECRET_KEY: ${SECRET_KEY}

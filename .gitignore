@@ -14,5 +14,9 @@ npm-debug.log*
 apps/backend/analyses-storage*
 apps/backend/config*
 apps/backend/dist*
+apps/backend/.dev-session-data*
 apps/backend/tsconfig*
 apps/frontend/dist*
+
+# Development session persistence
+

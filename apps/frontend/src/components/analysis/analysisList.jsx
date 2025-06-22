@@ -1,6 +1,7 @@
 // frontend/src/components/analysis/analysisList.jsx
 import { useState, useMemo } from 'react';
 import { useWebSocket } from '../../contexts/websocketContext';
+import { usePermissions } from '../../hooks/usePermissions';
 import AnalysisItem from './analysisItem';
 import {
   Paper,
@@ -13,7 +14,7 @@ import {
   Box,
   Alert,
 } from '@mantine/core';
-import { IconFileText, IconInfoCircle } from '@tabler/icons-react';
+import { IconFileText, IconInfoCircle, IconUserX } from '@tabler/icons-react';
 
 export default function AnalysisList({
   analyses = null,
@@ -27,6 +28,8 @@ export default function AnalysisList({
     connectionStatus,
     getDepartment,
   } = useWebSocket();
+
+  const { accessibleDepartments, isAdmin } = usePermissions();
 
   const [openLogIds, setOpenLogIds] = useState(new Set());
 
@@ -144,6 +147,10 @@ export default function AnalysisList({
   const hasAnalyses = analysesArray.length > 0;
   const totalAnalyses = Object.keys(allAnalyses).length;
 
+  // Check if user has no department access (non-admin users only)
+  const hasNoDepartmentAccess =
+    !isAdmin && (!accessibleDepartments || accessibleDepartments.length === 0);
+
   // Get current department info for display
   const currentDepartmentInfo = selectedDepartment
     ? getDepartment?.(selectedDepartment)
@@ -206,7 +213,28 @@ export default function AnalysisList({
 
         {/* Content */}
         <Stack gap="md">
-          {hasAnalyses ? (
+          {hasNoDepartmentAccess ? (
+            /* No Department Access State */
+            <Center py="xl">
+              <Stack align="center" gap="md">
+                <Alert
+                  icon={<IconUserX size={20} />}
+                  color="orange"
+                  variant="light"
+                  style={{ maxWidth: 500 }}
+                >
+                  <Stack gap="sm">
+                    <Text fw={500}>No Department Access</Text>
+                    <Text size="sm">
+                      You haven't been assigned to any departments yet. Please
+                      contact an administrator to request access to the
+                      departments you need.
+                    </Text>
+                  </Stack>
+                </Alert>
+              </Stack>
+            </Center>
+          ) : hasAnalyses ? (
             analysesArray.map((analysis) => {
               const departmentInfo = getDepartmentInfo(analysis.department);
 

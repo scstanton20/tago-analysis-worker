@@ -1,5 +1,5 @@
 // frontend/src/components/analysis/uploadAnalysis.jsx
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { analysisService } from '../../services/analysisService';
 import { useWebSocket } from '../../contexts/websocketContext/index';
 import Editor from '@monaco-editor/react';
@@ -46,8 +46,6 @@ export default function AnalysisCreator({
   // UI state
   const [isExpanded, setIsExpanded] = useState(false);
   const [error, setError] = useState(null);
-  const [fetchedAnalyses, setFetchedAnalyses] = useState([]);
-  const [isFetchingAnalyses, setIsFetchingAnalyses] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
   // Refs
@@ -56,12 +54,8 @@ export default function AnalysisCreator({
   // WebSocket context
   const { loadingAnalyses, analyses } = useWebSocket();
 
-  // FIXED: Computed values - handle object instead of array
-  const existingAnalyses = analyses
-    ? Object.keys(analyses) // Get analysis names from object keys
-    : [];
-  const finalExistingAnalyses =
-    existingAnalyses.length > 0 ? existingAnalyses : fetchedAnalyses;
+  // Use WebSocket analyses data directly
+  const existingAnalyses = analyses ? Object.keys(analyses) : [];
   const currentAnalysisName =
     mode === 'upload' ? editableFileName : analysisName;
   const isCurrentAnalysisLoading =
@@ -83,26 +77,8 @@ export default function AnalysisCreator({
     error;
   const isTabDisabled = hasFormContent && !isCurrentAnalysisLoading;
 
-  // Effects
-  useEffect(() => {
-    const fetchAnalyses = async () => {
-      if (isExpanded && (!analyses || Object.keys(analyses).length === 0)) {
-        setIsFetchingAnalyses(true);
-        try {
-          const data = await analysisService.getAnalyses();
-          const analysisNames = Array.isArray(data)
-            ? data.map((analysis) => analysis.name)
-            : Object.keys(data);
-          setFetchedAnalyses(analysisNames);
-        } catch (error) {
-          console.error('Error fetching analyses:', error);
-        } finally {
-          setIsFetchingAnalyses(false);
-        }
-      }
-    };
-    fetchAnalyses();
-  }, [isExpanded, analyses]);
+  // No longer needed - using WebSocket data directly
+  // Removed redundant API call that duplicated WebSocket data
 
   // Validation
   const validateFilename = (filename) => {
@@ -126,11 +102,11 @@ export default function AnalysisCreator({
     }
 
     // Check for duplicate names (case-insensitive)
-    const existingNamesLower = finalExistingAnalyses.map((name) =>
+    const existingNamesLower = existingAnalyses.map((name) =>
       name.toLowerCase(),
     );
     if (existingNamesLower.includes(filename.toLowerCase())) {
-      const existingName = finalExistingAnalyses.find(
+      const existingName = existingAnalyses.find(
         (name) => name.toLowerCase() === filename.toLowerCase(),
       );
       return `An analysis with this name already exists${
@@ -437,13 +413,6 @@ export default function AnalysisCreator({
                 </Stack>
               </Tabs.Panel>
             </Tabs>
-
-            {/* Loading Indicator */}
-            {isFetchingAnalyses && (
-              <Text size="sm" c="dimmed" fs="italic">
-                Loading existing analyses...
-              </Text>
-            )}
 
             {/* Error Message */}
             {error && (
