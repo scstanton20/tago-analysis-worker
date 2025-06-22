@@ -30,6 +30,34 @@ export async function fetchWithHeaders(url, options = {}) {
 let isRefreshing = false;
 let refreshPromise = null;
 
+// Direct refresh token request to avoid circular dependency
+async function refreshTokenRequest() {
+  const baseUrl = getBaseUrl();
+  const response = await fetch(`${baseUrl}/auth/refresh`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    // Clear auth status on failed refresh
+    localStorage.removeItem('auth_status');
+    localStorage.removeItem('last_token_refresh');
+
+    let errorData;
+    try {
+      errorData = await response.json();
+    } catch {
+      throw new Error('Refresh token failed');
+    }
+    throw new Error(errorData.error || 'Refresh token failed');
+  }
+
+  const data = await response.json();
+  localStorage.setItem('auth_status', 'authenticated');
+  localStorage.setItem('last_token_refresh', Date.now().toString());
+  return data;
+}
+
 export async function handleResponse(response, originalUrl, originalOptions) {
   if (!response.ok) {
     let errorData;
@@ -54,18 +82,15 @@ export async function handleResponse(response, originalUrl, originalOptions) {
       !originalUrl?.includes('/auth/refresh') &&
       !originalUrl?.includes('/auth/login')
     ) {
-      // Avoid circular import by dynamically importing authService
-      const { default: authService } = await import(
-        '../services/authService.js'
-      );
+      // Check if we have a refresh token available (stored as httpOnly cookie)
+      const hasRefreshToken =
+        localStorage.getItem('auth_status') === 'authenticated';
 
-      // Check if we have a refresh token available
-      if (authService.getStoredRefreshToken()) {
+      if (hasRefreshToken) {
         // If we're not already refreshing, start the refresh process
         if (!refreshPromise) {
           isRefreshing = true;
-          refreshPromise = authService
-            .refreshToken()
+          refreshPromise = refreshTokenRequest()
             .then(() => {
               // Reset the refresh state on success
               isRefreshing = false;

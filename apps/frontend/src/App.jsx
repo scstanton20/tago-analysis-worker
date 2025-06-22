@@ -2,7 +2,6 @@
 import { useState, lazy, Suspense } from 'react';
 import {
   AppShell,
-  Box,
   Text,
   Burger,
   Group,
@@ -35,14 +34,47 @@ import LoginPage from './components/auth/LoginPage';
 import ForcePasswordChange from './components/auth/PasswordOnboarding';
 import Logo from './components/logo';
 
+// Reusable loading overlay component
+function AppLoadingOverlay({ message, submessage, error, showRetry }) {
+  return (
+    <LoadingOverlay
+      visible={true}
+      zIndex={1000}
+      overlayProps={{ blur: 2, radius: 'sm' }}
+      loaderProps={{
+        size: 'xl',
+        children: (
+          <Stack align="center" gap="lg">
+            <Logo size={48} className={error ? '' : 'pulse'} />
+            <Text size="lg" fw={500} c={error ? 'red' : undefined}>
+              {message}
+            </Text>
+            {submessage && (
+              <Text size="sm" c="dimmed" ta="center" maw={400}>
+                {submessage}
+              </Text>
+            )}
+            {showRetry && (
+              <Button
+                onClick={() => window.location.reload()}
+                variant="gradient"
+                gradient={{ from: 'brand.6', to: 'accent.6' }}
+                mt="md"
+              >
+                Retry Connection
+              </Button>
+            )}
+          </Stack>
+        ),
+      }}
+      pos="fixed"
+    />
+  );
+}
+
 function AppContent() {
-  const {
-    analyses,
-    departments,
-    getDepartment,
-    connectionStatus,
-    hasInitialData,
-  } = useWebSocket();
+  const { analyses, departments, getDepartment, connectionStatus } =
+    useWebSocket();
   const { canUploadAnalyses, canAccessDepartment, canViewAnalyses, isAdmin } =
     usePermissions();
 
@@ -112,49 +144,16 @@ function AppContent() {
     ? getDepartment(selectedDepartment)
     : null;
 
-  // Show initial loading overlay only when we haven't loaded data yet
-  const isInitialLoading =
-    !hasInitialData &&
-    (connectionStatus === 'connecting' ||
-      connectionStatus === 'disconnected' ||
-      connectionStatus === 'server_shutdown');
   const connectionFailed = connectionStatus === 'failed';
 
   if (connectionFailed) {
     return (
-      <Box
-        ta="center"
-        p="xl"
-        style={{
-          minHeight: '100vh',
-          background: 'var(--mantine-color-body)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Stack align="center" gap="lg">
-          <Logo size={64} />
-          <Text size="xl" fw={600} c="red">
-            Connection Failed
-          </Text>
-          <Text size="lg" c="dimmed" ta="center">
-            Unable to connect to the Tago Analysis Runner server
-          </Text>
-          <Text size="sm" c="dimmed" ta="center" maw={400}>
-            Please ensure the backend server is running and accessible at the
-            configured WebSocket endpoint.
-          </Text>
-          <Button
-            onClick={() => window.location.reload()}
-            variant="gradient"
-            gradient={{ from: 'brand.6', to: 'accent.6' }}
-            mt="md"
-          >
-            Retry Connection
-          </Button>
-        </Stack>
-      </Box>
+      <AppLoadingOverlay
+        message="Connection Failed"
+        submessage="Unable to connect to the Tago Analysis Runner server. Please ensure the backend server is running and accessible at the configured WebSocket endpoint."
+        error={true}
+        showRetry={true}
+      />
     );
   }
 
@@ -287,30 +286,17 @@ function AppContent() {
           {canUploadAnalyses() && (
             <Suspense
               fallback={
-                <LoadingOverlay
-                  visible={isInitialLoading}
-                  zIndex={1000}
-                  overlayProps={{ blur: 2, radius: 'sm' }}
-                  loaderProps={{
-                    size: 'xl',
-                    children: (
-                      <Stack align="center" gap="lg">
-                        <Logo size={48} className="pulse" />
-                        <Text size="lg" fw={500}>
-                          Connecting to Tago Analysis Runner...
-                        </Text>
-                        <Text size="sm" c="dimmed">
-                          {connectionStatus === 'connecting' &&
-                            'Establishing WebSocket connection...'}
-                          {connectionStatus === 'disconnected' &&
-                            'Connection lost, retrying...'}
-                          {connectionStatus === 'server_shutdown' &&
-                            'Server is restarting, please wait...'}
-                        </Text>
-                      </Stack>
-                    ),
-                  }}
-                  pos="fixed"
+                <AppLoadingOverlay
+                  message="Connecting to Tago Analysis Runner..."
+                  submessage={
+                    (connectionStatus === 'connecting' &&
+                      'Establishing WebSocket connection...') ||
+                    (connectionStatus === 'disconnected' &&
+                      'Connection lost, retrying...') ||
+                    (connectionStatus === 'server_shutdown' &&
+                      'Server is restarting, please wait...') ||
+                    ''
+                  }
                 />
               }
             >
@@ -322,30 +308,17 @@ function AppContent() {
           )}
           <Suspense
             fallback={
-              <LoadingOverlay
-                visible={isInitialLoading}
-                zIndex={1000}
-                overlayProps={{ blur: 2, radius: 'sm' }}
-                loaderProps={{
-                  size: 'xl',
-                  children: (
-                    <Stack align="center" gap="lg">
-                      <Logo size={48} className="pulse" />
-                      <Text size="lg" fw={500}>
-                        Connecting to Tago Analysis Runner...
-                      </Text>
-                      <Text size="sm" c="dimmed">
-                        {connectionStatus === 'connecting' &&
-                          'Establishing WebSocket connection...'}
-                        {connectionStatus === 'disconnected' &&
-                          'Connection lost, retrying...'}
-                        {connectionStatus === 'server_shutdown' &&
-                          'Server is restarting, please wait...'}
-                      </Text>
-                    </Stack>
-                  ),
-                }}
-                pos="fixed"
+              <AppLoadingOverlay
+                message="Connecting to Tago Analysis Runner..."
+                submessage={
+                  (connectionStatus === 'connecting' &&
+                    'Establishing WebSocket connection...') ||
+                  (connectionStatus === 'disconnected' &&
+                    'Connection lost, retrying...') ||
+                  (connectionStatus === 'server_shutdown' &&
+                    'Server is restarting, please wait...') ||
+                  ''
+                }
               />
             }
           >
@@ -381,26 +354,11 @@ export default function App() {
 
 // Router component to conditionally load authenticated vs login components
 function AppRouter() {
-  const { isAuthenticated, isLoading, user } = useAuth();
+  const { isAuthenticated, user, isLoading } = useAuth();
 
+  // Show loading overlay during initial auth check
   if (isLoading) {
-    return (
-      <Box
-        style={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Stack align="center" gap="lg">
-          <Logo size={64} className="pulse" />
-          <Text size="lg" fw={500}>
-            Loading...
-          </Text>
-        </Stack>
-      </Box>
-    );
+    return <AppLoadingOverlay message="Verifying authentication..." />;
   }
 
   if (!isAuthenticated) {
