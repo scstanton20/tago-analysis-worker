@@ -39,8 +39,25 @@ const AuthProvider = ({ children }) => {
       }
     };
 
+    // Listen for auth state changes from authService
+    const checkAuthState = () => {
+      if (!authService.isAuthenticated() && isAuthenticated) {
+        // Auth service logged out, update context state
+        setUser(null);
+        setIsAuthenticated(false);
+        setUserPermissions(null);
+      }
+    };
+
+    // Check auth state periodically to catch external logouts
+    const authCheckInterval = setInterval(checkAuthState, 1000);
+
     initializeAuth();
-  }, []);
+
+    return () => {
+      clearInterval(authCheckInterval);
+    };
+  }, [isAuthenticated]);
 
   const login = async (username, password) => {
     const data = await authService.login(username, password);

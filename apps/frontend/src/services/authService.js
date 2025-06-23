@@ -7,6 +7,15 @@ class AuthService {
     this.refreshTimer = null;
     this.REFRESH_INTERVAL = 12 * 60 * 1000; // 12 minutes
 
+    // Refresh operation mutex and backoff
+    this.isRefreshing = false;
+    this.refreshPromise = null;
+    this.refreshAttempts = 0;
+    this.maxRefreshAttempts = 3;
+
+    // Session fingerprinting
+    this.sessionFingerprint = this.generateSessionFingerprint();
+
     // Start proactive refresh if already authenticated
     if (this.token) {
       this.startProactiveRefresh();
@@ -276,14 +285,50 @@ class AuthService {
   }
 
   async refreshToken() {
+    // Implement mutex to prevent concurrent refresh operations
+    if (this.isRefreshing) {
+      // Return the existing promise if refresh is already in progress
+      return this.refreshPromise;
+    }
+
+    this.isRefreshing = true;
+    this.refreshPromise = this._performRefresh();
+
+    try {
+      const result = await this.refreshPromise;
+      this.refreshAttempts = 0; // Reset attempts on success
+      return result;
+    } catch (error) {
+      this.refreshAttempts++;
+      throw error;
+    } finally {
+      this.isRefreshing = false;
+      this.refreshPromise = null;
+    }
+  }
+
+  async _performRefresh() {
     try {
       const options = {
         method: 'POST',
         credentials: 'include',
+        headers: {
+          'X-Session-Fingerprint': this.sessionFingerprint,
+        },
       };
       const response = await fetchWithHeaders('/auth/refresh', options);
 
       const data = await handleResponse(response, '/auth/refresh', options);
+
+      // Validate session consistency
+      if (
+        data.sessionFingerprint &&
+        data.sessionFingerprint !== this.sessionFingerprint
+      ) {
+        console.warn('Session fingerprint mismatch detected');
+        this.logout();
+        throw new Error('Session anomaly detected, please log in again');
+      }
 
       this.user = data.user;
       this.token = 'cookie-auth';
@@ -295,16 +340,31 @@ class AuthService {
 
       return data;
     } catch (error) {
-      // If refresh fails, user needs to log in again
+      // Enhanced error handling with exponential backoff
       if (
         error.message.includes('Invalid refresh token') ||
         error.message.includes('Refresh token expired') ||
-        error.message.includes('Refresh token required')
+        error.message.includes('Refresh token required') ||
+        error.message.includes('Session anomaly')
       ) {
         this.logout();
         throw new Error('Session expired, please log in again');
       }
-      throw error;
+
+      // Implement exponential backoff for temporary failures
+      if (this.refreshAttempts < this.maxRefreshAttempts) {
+        const backoffDelay = Math.pow(2, this.refreshAttempts) * 1000; // 1s, 2s, 4s
+        console.log(
+          `Token refresh failed, retrying in ${backoffDelay}ms (attempt ${this.refreshAttempts + 1}/${this.maxRefreshAttempts})`,
+        );
+
+        await new Promise((resolve) => setTimeout(resolve, backoffDelay));
+        return this._performRefresh();
+      }
+
+      // Max attempts reached, logout user
+      this.logout();
+      throw new Error('Unable to refresh session, please log in again');
     }
   }
 
@@ -388,22 +448,58 @@ class AuthService {
   }
 
   async handleVisibilityChange() {
-    // When tab becomes visible, check if we need to refresh token
+    // When tab becomes visible, always attempt to refresh token to ensure session is valid
     if (document.visibilityState === 'visible' && this.isAuthenticated()) {
-      // Check if it's been more than 10 minutes since last refresh
-      const lastRefresh = localStorage.getItem('last_token_refresh');
-      const now = Date.now();
-
-      if (!lastRefresh || now - parseInt(lastRefresh) > 10 * 60 * 1000) {
+      // Only refresh if not already refreshing (mutex protection)
+      if (!this.isRefreshing) {
         try {
           console.log('Refreshing token after tab became visible');
           await this.refreshToken();
-          localStorage.setItem('last_token_refresh', now.toString());
+          localStorage.setItem('last_token_refresh', Date.now().toString());
         } catch (error) {
           console.error('Token refresh on visibility change failed:', error);
+          // The refreshToken method already handles logout on failure
         }
       }
     }
+  }
+
+  generateSessionFingerprint() {
+    // Generate a unique fingerprint for this session
+    const fingerprint = {
+      userAgent: navigator.userAgent,
+      language: navigator.language,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      screen: `${screen.width}x${screen.height}`,
+      timestamp: Date.now(),
+    };
+
+    return btoa(JSON.stringify(fingerprint));
+  }
+
+  validateSessionActivity() {
+    // Validate session based on activity patterns
+    const lastActivity = localStorage.getItem('last_activity');
+    const lastRefresh = localStorage.getItem('last_token_refresh');
+    const now = Date.now();
+
+    if (lastActivity && lastRefresh) {
+      const timeSinceActivity = now - parseInt(lastActivity);
+      const timeSinceRefresh = now - parseInt(lastRefresh);
+
+      // Detect anomalous patterns (e.g., token refresh without activity)
+      if (timeSinceRefresh < timeSinceActivity - 60000) {
+        // 1 minute tolerance
+        console.warn(
+          'Potential session anomaly: token refreshed without recent activity',
+        );
+        return false;
+      }
+    }
+
+    // Update activity timestamp
+    localStorage.setItem('last_activity', now.toString());
+    return true;
   }
 }
 

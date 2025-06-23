@@ -1,11 +1,20 @@
 import fs from 'fs/promises';
 import path from 'path';
-import bcrypt from 'bcrypt';
+import argon2 from 'argon2';
 import { encrypt, decrypt } from '../utils/cryptoUtils.js';
 import config from '../config/default.js';
 
 const USERS_FILE = path.join(config.storage.base, 'users.json.enc');
-const saltRounds = 12;
+
+// Argon2id configuration
+const argon2Config = {
+  type: argon2.argon2id,
+  memoryCost: 2 ** 16, // 64 MB
+  timeCost: 2, // 2 iterations
+  parallelism: 3, // 3 threads
+  salt_length: 16,
+  key_length: 32,
+};
 
 /**
  * User service for managing user authentication, permissions, and WebAuthn credentials
@@ -17,6 +26,7 @@ class UserService {
    */
   constructor() {
     this.users = null;
+    this.userActivity = new Map(); // Track user activity for session validation
   }
 
   /**
@@ -133,7 +143,7 @@ class UserService {
 
     const defaultUsername = 'admin';
     const defaultPassword = 'admin123'; // This should be changed on first login
-    const hashedPassword = await bcrypt.hash(defaultPassword, saltRounds);
+    const hashedPassword = await argon2.hash(defaultPassword, argon2Config);
 
     this.users[defaultUsername] = {
       id: '1',
@@ -194,7 +204,7 @@ class UserService {
       throw new Error('User already exists');
     }
 
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    const hashedPassword = await argon2.hash(password, argon2Config);
     const userId = Date.now().toString();
 
     this.users[username] = {
@@ -230,7 +240,7 @@ class UserService {
     const user = this.users[username];
     if (!user) return null;
 
-    const isValid = await bcrypt.compare(password, user.password);
+    const isValid = await argon2.verify(user.password, password);
     if (!isValid) return null;
 
     // Return user without password
@@ -252,7 +262,7 @@ class UserService {
     if (!user) throw new Error('User not found');
 
     if (updates.password) {
-      const hashedPassword = await bcrypt.hash(updates.password, saltRounds);
+      const hashedPassword = await argon2.hash(updates.password, argon2Config);
       updates = {
         ...updates,
         password: hashedPassword,
@@ -581,6 +591,127 @@ class UserService {
     }
 
     return null;
+  }
+
+  /**
+   * Update user activity tracking for session validation
+   * @param {string} userId - User ID
+   * @param {Object} activityData - Activity data (lastTokenRefresh, lastActivity, etc.)
+   * @returns {Promise<void>}
+   */
+  async updateUserActivity(userId, activityData) {
+    try {
+      await this.loadUsers();
+
+      if (!this.users[userId]) {
+        throw new Error('User not found');
+      }
+
+      // Update in-memory activity tracking
+      const existing = this.userActivity.get(userId) || {};
+      this.userActivity.set(userId, {
+        ...existing,
+        ...activityData,
+        updatedAt: Date.now(),
+      });
+
+      // Also update user record with essential activity data
+      this.users[userId] = {
+        ...this.users[userId],
+        lastTokenRefresh:
+          activityData.lastTokenRefresh || this.users[userId].lastTokenRefresh,
+        lastActivity:
+          activityData.lastActivity || this.users[userId].lastActivity,
+      };
+
+      await this.saveUsers();
+    } catch (error) {
+      console.error('Failed to update user activity:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get user activity data for session validation
+   * @param {string} userId - User ID
+   * @returns {Object|null} Activity data or null if not found
+   */
+  getUserActivity(userId) {
+    return this.userActivity.get(userId) || null;
+  }
+
+  /**
+   * Validate user session based on activity patterns
+   * @param {string} userId - User ID
+   * @param {Object} sessionData - Current session data
+   * @returns {boolean} True if session is valid
+   */
+  validateUserSession(userId, sessionData = {}) {
+    try {
+      const activity = this.getUserActivity(userId);
+      const user = this.users?.[userId];
+
+      if (!activity || !user) {
+        return false;
+      }
+
+      const now = Date.now();
+      const maxInactivity = 15 * 60 * 1000; // 15 minutes
+      const lastActivity = activity.lastActivity || 0;
+
+      // Check if session has been inactive too long
+      if (now - lastActivity > maxInactivity) {
+        console.warn(
+          `Session expired for user ${userId}: inactive for ${Math.round((now - lastActivity) / 60000)} minutes`,
+        );
+        return false;
+      }
+
+      // Additional anomaly checks
+      if (
+        sessionData.userAgent &&
+        activity.userAgent &&
+        sessionData.userAgent !== activity.userAgent
+      ) {
+        console.warn(`User agent change detected for user ${userId}`);
+        // Don't automatically invalidate - user agent changes can be legitimate
+      }
+
+      if (sessionData.ip && activity.ip && sessionData.ip !== activity.ip) {
+        console.warn(
+          `IP address change detected for user ${userId}: ${activity.ip} -> ${sessionData.ip}`,
+        );
+        // Don't automatically invalidate - IP changes can be legitimate (mobile, VPN)
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error validating user session:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Clean up expired user activity data
+   * @returns {Promise<void>}
+   */
+  async cleanupExpiredActivity() {
+    try {
+      const now = Date.now();
+      const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+
+      for (const [userId, activity] of this.userActivity.entries()) {
+        if (now - (activity.updatedAt || 0) > maxAge) {
+          this.userActivity.delete(userId);
+        }
+      }
+
+      console.log(
+        `Cleaned up expired activity data, ${this.userActivity.size} active sessions remaining`,
+      );
+    } catch (error) {
+      console.error('Error cleaning up expired activity:', error);
+    }
   }
 }
 

@@ -145,7 +145,11 @@ if (!JWT_SECRET) {
   throw new Error('SECRET_KEY is required for JWT operations');
 }
 
-export function generateTokens(user, isRefresh = false) {
+export function generateTokens(
+  user,
+  isRefresh = false,
+  sessionFingerprint = null,
+) {
   const sessionId = uuidv4();
   const now = new Date();
   const payload = {
@@ -155,12 +159,17 @@ export function generateTokens(user, isRefresh = false) {
     sessionId,
   };
 
+  // Add session fingerprint for enhanced security
+  if (sessionFingerprint) {
+    payload.fingerprint = sessionFingerprint;
+  }
+
   const accessToken = jwt.sign(payload, JWT_SECRET, {
     expiresIn: JWT_EXPIRES_IN,
     issuer: 'tago-analysis-runner',
   });
 
-  // For refresh tokens, include activity tracking
+  // For refresh tokens, include activity tracking and fingerprint
   const refreshPayload = {
     ...payload,
     type: 'refresh',
@@ -178,13 +187,14 @@ export function generateTokens(user, isRefresh = false) {
   }
   activeSessions.get(user.id).add(sessionId);
 
-  // Track refresh token activity
+  // Track refresh token activity with fingerprint data
   refreshTokenActivity.set(sessionId, {
     userId: user.id,
     lastActivity: now,
     created: isRefresh
       ? refreshTokenActivity.get(sessionId)?.created || now
       : now,
+    fingerprint: sessionFingerprint,
   });
 
   // Save to disk in development
@@ -280,12 +290,12 @@ export function verifyRefreshToken(token) {
   }
 }
 
-export function rotateRefreshToken(oldToken, user) {
+export function rotateRefreshToken(oldToken, user, sessionFingerprint = null) {
   // Mark old token as used with timestamp
   usedRefreshTokens.set(oldToken, Date.now());
 
-  // Generate new tokens (this will create a new sessionId and refresh token)
-  const newTokens = generateTokens(user, true);
+  // Generate new tokens with session fingerprint (this will create a new sessionId and refresh token)
+  const newTokens = generateTokens(user, true, sessionFingerprint);
 
   // Clean up used tokens periodically to prevent memory bloat
   if (usedRefreshTokens.size > 10000) {
@@ -322,10 +332,22 @@ function cleanupUsedRefreshTokens() {
   );
 }
 
-export function updateRefreshTokenActivity(sessionId) {
+export function updateRefreshTokenActivity(sessionId, additionalData = {}) {
   const activity = refreshTokenActivity.get(sessionId);
   if (activity) {
     activity.lastActivity = new Date();
+
+    // Update additional session data for validation
+    if (additionalData.userAgent) {
+      activity.userAgent = additionalData.userAgent;
+    }
+    if (additionalData.ip) {
+      activity.ip = additionalData.ip;
+    }
+    if (additionalData.fingerprint) {
+      activity.fingerprint = additionalData.fingerprint;
+    }
+
     // Save to disk in development (throttle saves to avoid excessive I/O)
     if (process.env.NODE_ENV === 'development') {
       // Debounce saves by using a simple timeout

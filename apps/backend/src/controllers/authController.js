@@ -65,6 +65,7 @@ export const login = async (req, res) => {
 export const refresh = async (req, res) => {
   try {
     const refreshToken = req.cookies?.refresh_token;
+    const sessionFingerprint = req.headers['x-session-fingerprint'];
 
     if (!refreshToken) {
       return res.status(401).json({ error: 'Refresh token required' });
@@ -77,13 +78,46 @@ export const refresh = async (req, res) => {
       return res.status(401).json({ error: 'User not found' });
     }
 
-    // Update activity tracking
-    updateRefreshTokenActivity(decoded.sessionId);
+    // Validate session fingerprint if provided
+    if (
+      sessionFingerprint &&
+      decoded.fingerprint &&
+      decoded.fingerprint !== sessionFingerprint
+    ) {
+      console.warn(
+        `Session fingerprint mismatch for user ${user.username}: expected ${decoded.fingerprint}, got ${sessionFingerprint}`,
+      );
+      return res.status(401).json({ error: 'Session anomaly detected' });
+    }
+
+    // Check for excessive refresh attempts (rate limiting)
+    const now = Date.now();
+    const lastRefresh = user.lastTokenRefresh || 0;
+
+    if (now - lastRefresh < 30000) {
+      // Minimum 30 seconds between refreshes
+      console.warn(`Rapid refresh attempt detected for user ${user.username}`);
+      return res.status(429).json({ error: 'Too many refresh attempts' });
+    }
+
+    // Update activity tracking with additional session validation
+    updateRefreshTokenActivity(decoded.sessionId, {
+      userAgent: req.headers['user-agent'],
+      ip: req.ip,
+      fingerprint: sessionFingerprint,
+    });
+
+    // Update user's last refresh timestamp
+    await userService.updateUserActivity(user.id, {
+      lastTokenRefresh: now,
+      lastActivity: now,
+    });
 
     // Rotate refresh token (invalidate old one and generate new tokens)
     const { accessToken, refreshToken: newRefreshToken } = rotateRefreshToken(
       refreshToken,
       user,
+      sessionFingerprint,
     );
 
     // Set new tokens as httpOnly cookies
@@ -104,6 +138,7 @@ export const refresh = async (req, res) => {
     res.json({
       user,
       message: 'Tokens refreshed successfully',
+      sessionFingerprint: sessionFingerprint, // Echo back for client validation
     });
   } catch (error) {
     // Only log full error details for unexpected errors, not session invalidation

@@ -44,6 +44,17 @@ const options = {
           },
           required: ['error'],
         },
+        SecurityInfo: {
+          type: 'object',
+          description: `**Password Security:**
+            
+This API uses industry-standard **Argon2id** password hashing for maximum security:
+**Password Requirements:**
+- Minimum 6 characters (recommended: 12+ characters)
+- No maximum length limit
+- All character types supported
+- Unicode support for international passwords`,
+        },
         User: {
           type: 'object',
           properties: {
@@ -84,7 +95,8 @@ const options = {
             },
             password: {
               type: 'string',
-              description: 'User password',
+              description: 'User password (hashed with Argon2id for storage)',
+              minLength: 6,
             },
           },
           required: ['username', 'password'],

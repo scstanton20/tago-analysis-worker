@@ -2,15 +2,16 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useAuth } from './useAuth';
 import authService from '../services/authService';
 
-const DEFAULT_IDLE_TIME = 15 * 60 * 1000; // 15 minutes
+const DEFAULT_IDLE_TIME = 15 * 60 * 1000; // 15 minutes - consistent timeout
 const WARNING_TIME = 2 * 60 * 1000; // 2 minutes warning
-const PROACTIVE_REFRESH_THRESHOLD = 30 * 60 * 1000; // 30 minutes when proactive refresh is active
+const ACTIVITY_THROTTLE = 5 * 1000; // 5 seconds throttle (reduced from 10)
 
 export function useIdleTimeout(idleTime = DEFAULT_IDLE_TIME) {
   const { logout, isAuthenticated } = useAuth();
   const timeoutRef = useRef(null);
   const warningTimeoutRef = useRef(null);
   const lastActivityRef = useRef(Date.now());
+  const isWarningActiveRef = useRef(false);
 
   const resetTimer = useCallback(() => {
     if (!isAuthenticated) return;
@@ -25,26 +26,29 @@ export function useIdleTimeout(idleTime = DEFAULT_IDLE_TIME) {
       clearTimeout(warningTimeoutRef.current);
     }
 
-    // Use longer timeout if proactive refresh is active and page is visible
-    const effectiveIdleTime =
-      document.visibilityState === 'visible' && authService.refreshTimer
-        ? PROACTIVE_REFRESH_THRESHOLD
-        : idleTime;
+    // Reset warning state
+    isWarningActiveRef.current = false;
+
+    // Always use consistent idle time (removed variable timeout logic)
+    const effectiveIdleTime = idleTime;
 
     // Set warning timeout
     warningTimeoutRef.current = setTimeout(async () => {
+      // Prevent multiple warning dialogs
+      if (isWarningActiveRef.current) return;
+      isWarningActiveRef.current = true;
+
       const shouldStayLoggedIn = confirm(
         'Your session will expire in 2 minutes due to inactivity. Click OK to stay logged in or Cancel to logout now.',
       );
 
       if (shouldStayLoggedIn) {
-        // User wants to stay logged in, proactively refresh token and reset timer
+        // User wants to stay logged in, refresh token and reset timer
         try {
           await authService.refreshToken();
-          console.log('Token refreshed after user chose to stay logged in');
           resetTimer(); // Reset the idle timer after successful refresh
         } catch (error) {
-          console.error('Failed to refresh token:', error);
+          console.error('Failed to refresh token during idle warning:', error);
           // If refresh fails, logout anyway
           logout();
         }
@@ -61,10 +65,12 @@ export function useIdleTimeout(idleTime = DEFAULT_IDLE_TIME) {
   }, [idleTime, logout, isAuthenticated]);
 
   const handleActivity = useCallback(() => {
+    // Skip if warning is active to prevent interference
+    if (isWarningActiveRef.current) return;
+
     // Only reset if enough time has passed to avoid excessive timer resets
     const now = Date.now();
-    if (now - lastActivityRef.current > 10000) {
-      // 10 seconds throttle
+    if (now - lastActivityRef.current > ACTIVITY_THROTTLE) {
       resetTimer();
     }
   }, [resetTimer]);
@@ -114,11 +120,12 @@ export function useIdleTimeout(idleTime = DEFAULT_IDLE_TIME) {
     };
   }, [isAuthenticated, handleActivity, resetTimer]);
 
-  // Handle page visibility changes
+  // Handle page visibility changes - coordinate with authService
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (!document.hidden && isAuthenticated) {
-        // Page became visible, reset timer with potentially longer timeout
+      if (!document.hidden && isAuthenticated && !isWarningActiveRef.current) {
+        // Page became visible and no warning active, reset timer
+        // Note: authService handles token refresh on visibility change
         resetTimer();
       }
     };

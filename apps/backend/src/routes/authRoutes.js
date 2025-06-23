@@ -43,6 +43,8 @@ const router = express.Router();
  *         - Session-based token management with activity tracking
  *         - Periodic cleanup of expired tokens and sessions
  *         - Rate limiting on login attempts
+ *         - **Argon2id password hashing** with 64MB memory cost and 3 iterations
+ *         - Session fingerprinting and anomaly detection
  *
  *         **Token Lifecycle:**
  *         - Access tokens: 15 minutes lifespan
@@ -203,7 +205,9 @@ router.post('/refresh', refresh);
  * /auth/password-onboarding:
  *   post:
  *     summary: Password onboarding for authenticated users
- *     description: Complete password onboarding for users required to change their temporary password
+ *     description: |
+ *       Complete password onboarding for users required to change their temporary password.
+ *       New password will be securely hashed using Argon2id algorithm with 64MB memory cost.
  *     tags: [Authentication]
  *     requestBody:
  *       required: true
@@ -328,7 +332,9 @@ router.put('/profile', authMiddleware, updateProfile);
  * /auth/profile/change-password:
  *   post:
  *     summary: Change password for authenticated users
- *     description: Change password for authenticated users from profile settings
+ *     description: |
+ *       Change password for authenticated users from profile settings.
+ *       New password will be securely hashed using Argon2id algorithm with 64MB memory cost.
  *     tags: [Authentication]
  *     requestBody:
  *       required: true
@@ -468,7 +474,9 @@ router.get('/users', authMiddleware, requireRole('admin'), getAllUsers);
  * /auth/users:
  *   post:
  *     summary: Create new user
- *     description: Create a new user account (admin only)
+ *     description: |
+ *       Create a new user account (admin only).
+ *       User password will be securely hashed using Argon2id algorithm with 64MB memory cost.
  *     tags: [User Management]
  *     requestBody:
  *       required: true
@@ -534,7 +542,9 @@ router.post('/users', authMiddleware, requireRole('admin'), createUser);
  * /auth/users/{username}:
  *   put:
  *     summary: Update user
- *     description: Update an existing user's information (admin only)
+ *     description: |
+ *       Update an existing user's information (admin only).
+ *       If password is updated, it will be securely hashed using Argon2id algorithm with 64MB memory cost.
  *     tags: [User Management]
  *     parameters:
  *       - in: path
@@ -610,7 +620,9 @@ router.put(
  * /auth/users/{username}/reset-password:
  *   post:
  *     summary: Reset user password
- *     description: Reset a user's password to a new temporary password (admin only)
+ *     description: |
+ *       Reset a user's password to a new temporary password (admin only).
+ *       New password will be securely hashed using Argon2id algorithm with 64MB memory cost.
  *     tags: [User Management]
  *     parameters:
  *       - in: path

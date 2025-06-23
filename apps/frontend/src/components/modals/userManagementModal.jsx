@@ -587,13 +587,20 @@ export default function UserManagementModal({ opened, onClose }) {
                               >
                                 <Stack gap="sm">
                                   {/* Department Header */}
-                                  <Group justify="space-between">
+                                  <Group
+                                    justify="space-between"
+                                    style={{ cursor: 'pointer' }}
+                                    onClick={() =>
+                                      toggleDepartment(department.id)
+                                    }
+                                  >
                                     <Group gap="sm">
                                       <Checkbox
                                         checked={isEnabled}
                                         onChange={() =>
                                           toggleDepartment(department.id)
                                         }
+                                        onClick={(e) => e.stopPropagation()}
                                       />
                                       <ColorSwatch
                                         color={department.color}
