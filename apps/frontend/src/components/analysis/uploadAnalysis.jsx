@@ -54,7 +54,7 @@ export default function AnalysisCreator({
 
   // WebSocket context
   const { loadingAnalyses, analyses } = useWebSocket();
-  
+
   // Notifications
   const notify = useNotifications();
 
@@ -213,10 +213,10 @@ export default function AnalysisCreator({
         const blob = new Blob([editorContent], { type: 'text/javascript' });
         file = new File([blob], finalFileName, { type: 'text/javascript' });
       }
-      
+
       await notify.uploadAnalysis(
         analysisService.uploadAnalysis(file, analysisType, targetDepartment),
-        finalFileName
+        finalFileName,
       );
 
       resetForm();

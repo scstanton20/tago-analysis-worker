@@ -47,9 +47,7 @@ export default function PasswordOnboarding({ username, onSuccess }) {
     setError('');
 
     try {
-      await notify.passwordChange(
-        passwordOnboarding(formData.newPassword)
-      );
+      await notify.passwordChange(passwordOnboarding(formData.newPassword));
       onSuccess();
     } catch (err) {
       setError(err.message || 'Password change failed');

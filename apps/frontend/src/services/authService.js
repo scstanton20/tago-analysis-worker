@@ -346,7 +346,6 @@ class AuthService {
     return this.user?.role === 'admin';
   }
 
-
   startProactiveRefresh() {
     // Clear any existing timer
     this.stopProactiveRefresh();
@@ -360,7 +359,6 @@ class AuthService {
       try {
         // Only refresh if page is visible and user is still authenticated
         if (document.visibilityState === 'visible' && this.isAuthenticated()) {
-          console.log('Proactively refreshing token...');
           await this.refreshToken();
           console.log('Token refreshed successfully');
         }
@@ -379,7 +377,6 @@ class AuthService {
 
   stopProactiveRefresh() {
     if (this.refreshTimer) {
-      console.log('Stopping proactive token refresh');
       clearInterval(this.refreshTimer);
       this.refreshTimer = null;
     }

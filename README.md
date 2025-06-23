@@ -101,24 +101,28 @@ apps/
 ## Key Features
 
 ### Analysis Management
+
 - Upload JavaScript analysis files (.js/.cjs)
 - Real-time execution monitoring
 - Environment variable management
 - Log viewing and downloading
 
 ### Department Organization
+
 - Hierarchical department structure
 - Drag-and-drop analysis organization
 - Color-coded department visualization
 - Permission-based access control
 
 ### User Management
+
 - Role-based permissions (admin/user)
 - Department-specific access control
 - WebAuthn/passkey authentication
 - Secure password management
 
 ### Real-time Updates
+
 - Live analysis status updates
 - Real-time log streaming
 - WebSocket-based communication
