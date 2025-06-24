@@ -38,6 +38,7 @@ class AuthService {
     this.token = 'cookie-auth'; // Placeholder to indicate authenticated
     this.user = data.user;
     localStorage.setItem('auth_status', 'authenticated');
+    localStorage.setItem('last_token_refresh', Date.now().toString());
 
     // Start proactive token refresh
     this.startProactiveRefresh();
@@ -67,6 +68,7 @@ class AuthService {
       this.token = 'cookie-auth';
       this.user = data.user;
       localStorage.setItem('auth_status', 'authenticated');
+      localStorage.setItem('last_token_refresh', Date.now().toString());
 
       // Start proactive token refresh
       this.startProactiveRefresh();

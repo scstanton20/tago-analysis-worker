@@ -541,6 +541,16 @@ export function WebSocketProvider({ children }) {
           setSocket(null);
           // Clear backend status when connection is lost
           setBackendStatus(null);
+
+          // Only reconnect if not a server shutdown
+          if (
+            !serverShutdown &&
+            event.code !== 1001 &&
+            event.code !== 1006 &&
+            event.code !== 1005
+          ) {
+            reconnect();
+          }
         }
 
         // Only clear global references if this is the current global connection
@@ -582,6 +592,21 @@ export function WebSocketProvider({ children }) {
     setTimeout(async () => {
       if (!mountedRef.current) return;
 
+      // Refresh token before reconnecting
+      if (window.authService && isAuthenticated) {
+        try {
+          await window.authService.refreshToken();
+        } catch (error) {
+          console.error('Token refresh failed during reconnection:', error);
+          // If token refresh fails, consider this a failed reconnection
+          if (mountedRef.current) {
+            setConnectionStatus('failed');
+            connectionStatusRef.current = 'failed';
+          }
+          return;
+        }
+      }
+
       setConnectionStatus('connecting');
       connectionStatusRef.current = 'connecting';
       try {
@@ -595,7 +620,7 @@ export function WebSocketProvider({ children }) {
         }
       }
     }, delay);
-  }, [createConnection]);
+  }, [createConnection, reconnect, serverShutdown]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -642,53 +667,7 @@ export function WebSocketProvider({ children }) {
         connectionStatusRef.current = 'connecting';
         console.log(`Starting live listener connection...`);
 
-        const ws = await createConnection();
-
-        if (ws && mountedRef.current) {
-          ws.onclose = (event) => {
-            console.log(
-              `WebSocket connection closed, Code: ${event.code}, Reason: ${event.reason})`,
-            );
-
-            if (mountedRef.current) {
-              // Check if this is a server shutdown
-              if (
-                event.code === 1001 ||
-                event.code === 1006 ||
-                event.code === 1005
-              ) {
-                setServerShutdown(true);
-                setConnectionStatus('server_shutdown');
-              } else {
-                setConnectionStatus('disconnected');
-              }
-              connectionStatusRef.current = 'disconnected';
-              setSocket(null);
-              setBackendStatus(null); // Clear backend status on disconnect
-
-              // Only reconnect if not a server shutdown
-              if (
-                !serverShutdown &&
-                event.code !== 1001 &&
-                event.code !== 1006 &&
-                event.code !== 1005
-              ) {
-                reconnect();
-              }
-            }
-          };
-
-          ws.onerror = (error) => {
-            console.error(`WebSocket error:`, error);
-
-            if (mountedRef.current) {
-              setConnectionStatus('disconnected');
-              connectionStatusRef.current = 'disconnected';
-              setSocket(null);
-              setBackendStatus(null); // Clear backend status on error
-            }
-          };
-        }
+        await createConnection();
       } catch (error) {
         console.error(`WebSocket initial connection failed:`, error);
         if (mountedRef.current) {
@@ -700,7 +679,7 @@ export function WebSocketProvider({ children }) {
     };
 
     // Handle page visibility changes for automatic reconnection
-    const handleVisibilityChange = () => {
+    const handleVisibilityChange = async () => {
       if (!document.hidden && mountedRef.current) {
         // Page became visible - check if we need to reconnect
         if (
@@ -711,13 +690,28 @@ export function WebSocketProvider({ children }) {
           console.log(
             'Page became visible, attempting WebSocket reconnection...',
           );
+
+          // Refresh token before reconnecting
+          if (window.authService && isAuthenticated) {
+            try {
+              await window.authService.refreshToken();
+            } catch (error) {
+              console.error(
+                'Token refresh failed before WebSocket reconnection:',
+                error,
+              );
+              // Don't attempt connection if token refresh fails
+              return;
+            }
+          }
+
           connect();
         }
       }
     };
 
     // Handle focus events as backup for older browsers
-    const handleFocus = () => {
+    const handleFocus = async () => {
       if (mountedRef.current) {
         // Window gained focus - check if we need to reconnect
         if (
@@ -728,6 +722,21 @@ export function WebSocketProvider({ children }) {
           console.log(
             'Window gained focus, attempting WebSocket reconnection...',
           );
+
+          // Refresh token before reconnecting
+          if (window.authService && isAuthenticated) {
+            try {
+              await window.authService.refreshToken();
+            } catch (error) {
+              console.error(
+                'Token refresh failed before WebSocket reconnection:',
+                error,
+              );
+              // Don't attempt connection if token refresh fails
+              return;
+            }
+          }
+
           connect();
         }
       }

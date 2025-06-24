@@ -30,10 +30,24 @@ const AuthProvider = ({ children }) => {
 
     const initializeAuth = async () => {
       try {
-        if (authService.isAuthenticated()) {
-          const profileData = await authService.getProfile();
-          updateUserState(profileData.user);
-          setIsAuthenticated(true);
+        // Check if we have a stored authentication status
+        const storedAuthStatus = localStorage.getItem('auth_status');
+
+        if (storedAuthStatus === 'authenticated') {
+          // Only validate with server if we have recent refresh activity
+          const lastRefresh = localStorage.getItem('last_token_refresh');
+          const isRecentSession =
+            lastRefresh && Date.now() - parseInt(lastRefresh) < 5 * 60 * 1000; // 5 minutes
+
+          if (isRecentSession) {
+            // Recent session, validate with server
+            const profileData = await authService.getProfile();
+            updateUserState(profileData.user);
+            setIsAuthenticated(true);
+          } else {
+            // Stale localStorage, clear auth state without API call
+            authService.logout();
+          }
         }
       } catch (error) {
         console.error('Auth initialization failed:', error);
@@ -105,6 +119,7 @@ const AuthProvider = ({ children }) => {
     authService.token = 'cookie-auth';
     authService.user = user;
     localStorage.setItem('auth_status', 'authenticated');
+    localStorage.setItem('last_token_refresh', Date.now().toString());
 
     updateUserState(user);
     setIsAuthenticated(true);

@@ -38,6 +38,20 @@ export function useIdleTimeout(idleTime = DEFAULT_IDLE_TIME) {
       if (isWarningActiveRef.current) return;
       isWarningActiveRef.current = true;
 
+      // Check if a recent automatic refresh has occurred (within last 30 seconds)
+      const lastRefresh = localStorage.getItem('last_token_refresh');
+      if (lastRefresh) {
+        const timeSinceLastRefresh = Date.now() - parseInt(lastRefresh);
+        if (timeSinceLastRefresh < 30000) {
+          // Recent automatic refresh occurred, reset timer instead of showing warning
+          console.log(
+            'Recent token refresh detected during warning period, resetting timer',
+          );
+          isWarningActiveRef.current = false;
+          return;
+        }
+      }
+
       const shouldStayLoggedIn = confirm(
         'Your session will expire in 2 minutes due to inactivity. Click OK to stay logged in or Cancel to logout now.',
       );
@@ -134,6 +148,34 @@ export function useIdleTimeout(idleTime = DEFAULT_IDLE_TIME) {
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isAuthenticated, resetTimer]);
+
+  // Listen for successful token refresh events to reset idle timer
+  useEffect(() => {
+    if (!isAuthenticated) return; // Don't set up event listeners if not authenticated
+
+    const handleAuthRefreshSuccess = () => {
+      // Reset timer when automatic token refresh succeeds
+      // This includes refreshes triggered by 401 responses, visibility changes, and proactive refreshes
+      resetTimer();
+    };
+
+    const handleAuthRefreshError = () => {
+      // If refresh fails during warning period, we let the existing timeout logic handle it
+      // No action needed here as the warning dialog or automatic logout will proceed
+    };
+
+    // Listen for auth service events
+    window.addEventListener('authRefreshSuccess', handleAuthRefreshSuccess);
+    window.addEventListener('authRefreshError', handleAuthRefreshError);
+
+    return () => {
+      window.removeEventListener(
+        'authRefreshSuccess',
+        handleAuthRefreshSuccess,
+      );
+      window.removeEventListener('authRefreshError', handleAuthRefreshError);
     };
   }, [isAuthenticated, resetTimer]);
 }
