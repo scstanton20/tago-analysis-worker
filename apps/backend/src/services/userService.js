@@ -25,7 +25,8 @@ class UserService {
    * Create a new UserService instance
    */
   constructor() {
-    this.users = null;
+    this.users = null; // Will be keyed by user ID after migration
+    this.usernameIndex = null; // Username -> User ID mapping
     this.userActivity = new Map(); // Track user activity for session validation
   }
 
@@ -42,18 +43,20 @@ class UserService {
 
       const encryptedData = await fs.readFile(USERS_FILE, 'utf8');
       const decryptedData = decrypt(encryptedData);
-      this.users = JSON.parse(decryptedData);
-      console.log(
-        `Loaded ${Object.keys(this.users).length} users from storage`,
-      );
+      const userData = JSON.parse(decryptedData);
 
-      // Migrate existing admin users to have new permissions
-      await this.migrateAdminPermissions();
+      // Expect new format with users keyed by ID and username index
+      this.users = userData.users || {};
+      this.usernameIndex = userData.usernameIndex || {};
+      console.log(
+        `Loaded ${Object.keys(this.users).length} users from storage (ID-based)`,
+      );
     } catch (error) {
       if (error.code === 'ENOENT') {
         // File doesn't exist, create default admin user
         console.log('Users file does not exist, creating default admin user');
         this.users = {};
+        this.usernameIndex = {};
         await this.createDefaultUser();
       } else {
         // Handle decryption errors (corrupted file, wrong key, etc.)
@@ -66,6 +69,7 @@ class UserService {
             'Users file appears corrupted or encrypted with different key. Creating new users file.',
           );
           this.users = {};
+          this.usernameIndex = {};
           await this.createDefaultUser();
         } else {
           throw error;
@@ -80,55 +84,15 @@ class UserService {
    * @throws {Error} If unable to write to storage file
    */
   async saveUsers() {
-    const userData = JSON.stringify(this.users, null, 2);
-    const encryptedData = encrypt(userData);
+    const userData = {
+      users: this.users,
+      usernameIndex: this.usernameIndex,
+      version: '2.0',
+      lastUpdated: new Date().toISOString(),
+    };
+    const dataString = JSON.stringify(userData, null, 2);
+    const encryptedData = encrypt(dataString);
     await fs.writeFile(USERS_FILE, encryptedData, 'utf8');
-  }
-
-  /**
-   * Migrate admin users to ensure they have all required permissions
-   * @returns {Promise<void>}
-   */
-  async migrateAdminPermissions() {
-    // Migration: Ensure admin users have all current permissions
-    let hasChanges = false;
-    const requiredAdminActions = [
-      'view_analyses',
-      'run_analyses',
-      'edit_analyses',
-      'delete_analyses',
-      'upload_analyses',
-      'download_analyses',
-      'manage_users',
-      'manage_departments',
-    ];
-
-    Object.keys(this.users).forEach((username) => {
-      const user = this.users[username];
-      if (user.role === 'admin') {
-        // Check if admin user is missing any required permissions
-        const currentActions = user.permissions?.actions || [];
-        const missingActions = requiredAdminActions.filter(
-          (action) => !currentActions.includes(action),
-        );
-
-        if (missingActions.length > 0) {
-          console.log(
-            `Migrating admin user ${username}: adding permissions [${missingActions.join(', ')}]`,
-          );
-          user.permissions = {
-            departments: [], // Admins have access to all departments
-            actions: requiredAdminActions,
-          };
-          hasChanges = true;
-        }
-      }
-    });
-
-    if (hasChanges) {
-      await this.saveUsers();
-      console.log('Admin user permissions migration completed');
-    }
   }
 
   /**
@@ -145,8 +109,10 @@ class UserService {
     const defaultPassword = 'admin123'; // This should be changed on first login
     const hashedPassword = await argon2.hash(defaultPassword, argon2Config);
 
-    this.users[defaultUsername] = {
-      id: '1',
+    // Use user ID as primary key
+    const userId = '1';
+    this.users[userId] = {
+      id: userId,
       username: defaultUsername,
       password: hashedPassword,
       email: 'admin@localhost',
@@ -167,6 +133,9 @@ class UserService {
       createdAt: new Date().toISOString(),
       mustChangePassword: true,
     };
+
+    // Add to username index
+    this.usernameIndex[defaultUsername] = userId;
 
     await this.saveUsers();
     console.log(
@@ -200,14 +169,16 @@ class UserService {
       mustChangePassword = true,
     } = userData;
 
-    if (this.users[username]) {
+    // Check if username already exists using the index
+    if (this.usernameIndex[username]) {
       throw new Error('User already exists');
     }
 
     const hashedPassword = await argon2.hash(password, argon2Config);
     const userId = Date.now().toString();
 
-    this.users[username] = {
+    // Use user ID as primary key
+    this.users[userId] = {
       id: userId,
       username,
       password: hashedPassword,
@@ -221,10 +192,13 @@ class UserService {
       mustChangePassword,
     };
 
+    // Add to username index
+    this.usernameIndex[username] = userId;
+
     await this.saveUsers();
 
     // Return user without password
-    const { password: _, ...userWithoutPassword } = this.users[username];
+    const { password: _, ...userWithoutPassword } = this.users[userId];
     return userWithoutPassword;
   }
 
@@ -237,7 +211,11 @@ class UserService {
   async validateUser(username, password) {
     if (!this.users) await this.loadUsers();
 
-    const user = this.users[username];
+    // Use username index to find user
+    const userId = this.usernameIndex[username];
+    if (!userId) return null;
+
+    const user = this.users[userId];
     if (!user) return null;
 
     const isValid = await argon2.verify(user.password, password);
@@ -258,7 +236,11 @@ class UserService {
   async updateUser(username, updates) {
     if (!this.users) await this.loadUsers();
 
-    const user = this.users[username];
+    // Find user by username using index
+    const userId = this.usernameIndex[username];
+    if (!userId) throw new Error('User not found');
+
+    const user = this.users[userId];
     if (!user) throw new Error('User not found');
 
     if (updates.password) {
@@ -274,16 +256,16 @@ class UserService {
     const newUsername = updates.username;
     if (newUsername && newUsername !== username) {
       // Check if new username already exists
-      if (this.users[newUsername]) {
+      if (this.usernameIndex[newUsername]) {
         throw new Error('Username already exists');
       }
 
       // Update the user object
       Object.assign(user, updates);
 
-      // Move user to new key and delete old key
-      this.users[newUsername] = user;
-      delete this.users[username];
+      // Update username index: remove old entry, add new entry
+      delete this.usernameIndex[username];
+      this.usernameIndex[newUsername] = userId;
     } else {
       Object.assign(user, updates);
     }
@@ -304,11 +286,16 @@ class UserService {
   async deleteUser(username) {
     if (!this.users) await this.loadUsers();
 
-    if (!this.users[username]) {
+    // Find user by username using index
+    const userId = this.usernameIndex[username];
+    if (!userId || !this.users[userId]) {
       throw new Error('User not found');
     }
 
-    delete this.users[username];
+    // Delete from both users and username index
+    delete this.users[userId];
+    delete this.usernameIndex[username];
+
     await this.saveUsers();
   }
 
@@ -348,7 +335,11 @@ class UserService {
   async getUserByUsername(username) {
     if (!this.users) await this.loadUsers();
 
-    const user = this.users[username];
+    // Use username index to find user ID, then get user
+    const userId = this.usernameIndex[username];
+    if (!userId) return null;
+
+    const user = this.users[userId];
     if (!user) return null;
 
     const { password: _, ...userWithoutPassword } = user;
@@ -441,7 +432,11 @@ class UserService {
   async storeWebAuthnChallenge(username, challengeData) {
     if (!this.users) await this.loadUsers();
 
-    const user = this.users[username];
+    // Use username index to find user ID, then get user
+    const userId = this.usernameIndex[username];
+    if (!userId) throw new Error('User not found');
+
+    const user = this.users[userId];
     if (!user) throw new Error('User not found');
 
     if (!user.webauthn) {
@@ -460,7 +455,11 @@ class UserService {
   async getWebAuthnChallenge(username) {
     if (!this.users) await this.loadUsers();
 
-    const user = this.users[username];
+    // Use username index to find user ID, then get user
+    const userId = this.usernameIndex[username];
+    if (!userId) return null;
+
+    const user = this.users[userId];
     if (!user) return null;
 
     const challenge = user.webauthn?.currentChallenge;
@@ -482,7 +481,11 @@ class UserService {
   async clearWebAuthnChallenge(username) {
     if (!this.users) await this.loadUsers();
 
-    const user = this.users[username];
+    // Use username index to find user ID, then get user
+    const userId = this.usernameIndex[username];
+    if (!userId) return;
+
+    const user = this.users[userId];
     if (!user || !user.webauthn) return;
 
     delete user.webauthn.currentChallenge;
@@ -505,7 +508,11 @@ class UserService {
   async addWebAuthnAuthenticator(username, authenticator) {
     if (!this.users) await this.loadUsers();
 
-    const user = this.users[username];
+    // Use username index to find user ID, then get user
+    const userId = this.usernameIndex[username];
+    if (!userId) throw new Error('User not found');
+
+    const user = this.users[userId];
     if (!user) throw new Error('User not found');
 
     if (!user.webauthn) {
@@ -528,7 +535,11 @@ class UserService {
   async removeWebAuthnAuthenticator(username, credentialId) {
     if (!this.users) await this.loadUsers();
 
-    const user = this.users[username];
+    // Use username index to find user ID, then get user
+    const userId = this.usernameIndex[username];
+    if (!userId) return false;
+
+    const user = this.users[userId];
     if (!user || !user.webauthn?.authenticators) return false;
 
     const initialLength = user.webauthn.authenticators.length;
@@ -554,7 +565,11 @@ class UserService {
   async updateWebAuthnCounter(username, credentialId, newCounter) {
     if (!this.users) await this.loadUsers();
 
-    const user = this.users[username];
+    // Use username index to find user ID, then get user
+    const userId = this.usernameIndex[username];
+    if (!userId) return false;
+
+    const user = this.users[userId];
     if (!user || !user.webauthn?.authenticators) return false;
 
     const authenticator = user.webauthn.authenticators.find(
@@ -603,7 +618,9 @@ class UserService {
     try {
       await this.loadUsers();
 
-      if (!this.users[userId]) {
+      // Find user by ID using proper ID-based lookup
+      const user = this.users[userId];
+      if (!user) {
         throw new Error('User not found');
       }
 
@@ -615,7 +632,7 @@ class UserService {
         updatedAt: Date.now(),
       });
 
-      // Also update user record with essential activity data
+      // Also update user record with essential activity data using user ID as key
       this.users[userId] = {
         ...this.users[userId],
         lastTokenRefresh:

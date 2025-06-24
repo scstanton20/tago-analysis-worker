@@ -185,7 +185,7 @@ export default function UserManagementModal({ opened, onClose }) {
 
         // Single request to update everything
         await notify.executeWithNotification(
-          updateUser(editingUser.username, userUpdateData),
+          updateUser(editingUser.id, userUpdateData),
           {
             loading: `Updating user ${editingUser.username}...`,
             success: `User ${editingUser.username} updated successfully.`,
@@ -254,17 +254,17 @@ export default function UserManagementModal({ opened, onClose }) {
     setShowCreateForm(true);
   };
 
-  const handleDelete = async (username) => {
-    if (!confirm(`Are you sure you want to delete user "${username}"?`)) {
+  const handleDelete = async (user) => {
+    if (!confirm(`Are you sure you want to delete user "${user.username}"?`)) {
       return;
     }
 
     try {
       setLoading(true);
       setError('');
-      await notify.executeWithNotification(deleteUser(username), {
-        loading: `Deleting user ${username}...`,
-        success: `User ${username} deleted successfully.`,
+      await notify.executeWithNotification(deleteUser(user.id), {
+        loading: `Deleting user ${user.username}...`,
+        success: `User ${user.username} deleted successfully.`,
       });
       await loadUsers();
     } catch (err) {
@@ -486,7 +486,7 @@ export default function UserManagementModal({ opened, onClose }) {
                                 variant="light"
                                 color="red"
                                 size="sm"
-                                onClick={() => handleDelete(user.username)}
+                                onClick={() => handleDelete(user)}
                               >
                                 <IconTrash size="1rem" />
                               </ActionIcon>

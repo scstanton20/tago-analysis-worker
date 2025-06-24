@@ -7,6 +7,22 @@ const AuthProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userPermissions, setUserPermissions] = useState(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Helper function to update user state consistently
+  const updateUserState = (userData) => {
+    setUser(userData);
+    const userPerms = userData.permissions;
+    if (userPerms) {
+      setUserPermissions({
+        departments: userPerms.departments || [],
+        actions: userPerms.actions || [],
+        isAdmin: userData.role === 'admin',
+      });
+    } else {
+      setUserPermissions(null);
+    }
+  };
 
   useEffect(() => {
     // Make authService globally accessible for WebSocket session invalidation
@@ -16,20 +32,8 @@ const AuthProvider = ({ children }) => {
       try {
         if (authService.isAuthenticated()) {
           const profileData = await authService.getProfile();
-          setUser(profileData.user);
+          updateUserState(profileData.user);
           setIsAuthenticated(true);
-
-          // Extract permissions from user profile (avoid extra API call)
-          const userPerms = profileData.user.permissions;
-          if (userPerms) {
-            setUserPermissions({
-              departments: userPerms.departments || [],
-              actions: userPerms.actions || [],
-              isAdmin: profileData.user.role === 'admin',
-            });
-          } else {
-            setUserPermissions(null);
-          }
         }
       } catch (error) {
         console.error('Auth initialization failed:', error);
@@ -39,8 +43,13 @@ const AuthProvider = ({ children }) => {
       }
     };
 
-    // Listen for auth state changes from authService
+    // Coordinated auth state checking
     const checkAuthState = () => {
+      // Don't check if authService is currently refreshing
+      if (authService.isRefreshing) {
+        return;
+      }
+
       if (!authService.isAuthenticated() && isAuthenticated) {
         // Auth service logged out, update context state
         setUser(null);
@@ -49,33 +58,45 @@ const AuthProvider = ({ children }) => {
       }
     };
 
-    // Check auth state periodically to catch external logouts
-    const authCheckInterval = setInterval(checkAuthState, 1000);
+    // Refresh coordination event listeners
+    const handleRefreshStart = () => {
+      setIsRefreshing(true);
+    };
+
+    const handleRefreshSuccess = (event) => {
+      const { user: userData } = event.detail;
+      updateUserState(userData);
+      setIsRefreshing(false);
+    };
+
+    const handleRefreshError = (event) => {
+      console.log('AuthContext: Refresh failed', event.detail.error);
+      setIsRefreshing(false);
+      // Don't automatically logout here, let authService handle it
+    };
+
+    // Reduce polling frequency to avoid conflicts (5 seconds instead of 1)
+    const authCheckInterval = setInterval(checkAuthState, 5000);
+
+    // Add event listeners for refresh coordination
+    window.addEventListener('authRefreshStart', handleRefreshStart);
+    window.addEventListener('authRefreshSuccess', handleRefreshSuccess);
+    window.addEventListener('authRefreshError', handleRefreshError);
 
     initializeAuth();
 
     return () => {
       clearInterval(authCheckInterval);
+      window.removeEventListener('authRefreshStart', handleRefreshStart);
+      window.removeEventListener('authRefreshSuccess', handleRefreshSuccess);
+      window.removeEventListener('authRefreshError', handleRefreshError);
     };
   }, [isAuthenticated]);
 
   const login = async (username, password) => {
     const data = await authService.login(username, password);
-    setUser(data.user);
+    updateUserState(data.user);
     setIsAuthenticated(true);
-
-    // Extract permissions from user data (avoid extra API call)
-    const userPerms = data.user.permissions;
-    if (userPerms) {
-      setUserPermissions({
-        departments: userPerms.departments || [],
-        actions: userPerms.actions || [],
-        isAdmin: data.user.role === 'admin',
-      });
-    } else {
-      setUserPermissions(null);
-    }
-
     return data;
   };
 
@@ -85,20 +106,8 @@ const AuthProvider = ({ children }) => {
     authService.user = user;
     localStorage.setItem('auth_status', 'authenticated');
 
-    setUser(user);
+    updateUserState(user);
     setIsAuthenticated(true);
-
-    // Extract permissions from user data
-    const userPerms = user.permissions;
-    if (userPerms) {
-      setUserPermissions({
-        departments: userPerms.departments || [],
-        actions: userPerms.actions || [],
-        isAdmin: user.role === 'admin',
-      });
-    } else {
-      setUserPermissions(null);
-    }
 
     return { user };
   };
@@ -112,21 +121,8 @@ const AuthProvider = ({ children }) => {
 
   const passwordOnboarding = async (newPassword) => {
     const data = await authService.passwordOnboarding(newPassword);
-    setUser(data.user);
+    updateUserState(data.user);
     setIsAuthenticated(true);
-
-    // Extract permissions from user data (avoid extra API call)
-    const userPerms = data.user.permissions;
-    if (userPerms) {
-      setUserPermissions({
-        departments: userPerms.departments || [],
-        actions: userPerms.actions || [],
-        isAdmin: data.user.role === 'admin',
-      });
-    } else {
-      setUserPermissions(null);
-    }
-
     return data;
   };
 
@@ -155,28 +151,28 @@ const AuthProvider = ({ children }) => {
     return await authService.createUser(userData);
   };
 
-  const updateUser = async (username, updates) => {
-    return await authService.updateUser(username, updates);
+  const updateUser = async (userId, updates) => {
+    return await authService.updateUser(userId, updates);
   };
 
-  const deleteUser = async (username) => {
-    return await authService.deleteUser(username);
+  const deleteUser = async (userId) => {
+    return await authService.deleteUser(userId);
   };
 
   const getAllUsers = async () => {
     return await authService.getAllUsers();
   };
 
-  const resetUserPassword = async (username) => {
-    return await authService.resetUserPassword(username);
+  const resetUserPassword = async (userId) => {
+    return await authService.resetUserPassword(userId);
   };
 
-  const getUserPermissions = async (username) => {
-    return await authService.getUserPermissions(username);
+  const getUserPermissions = async (userId) => {
+    return await authService.getUserPermissions(userId);
   };
 
-  const updateUserPermissions = async (username, permissions) => {
-    return await authService.updateUserPermissions(username, permissions);
+  const updateUserPermissions = async (userId, permissions) => {
+    return await authService.updateUserPermissions(userId, permissions);
   };
 
   // DEPRECATED: Use WebSocket departments context instead
@@ -237,6 +233,7 @@ const AuthProvider = ({ children }) => {
     user,
     isLoading,
     isAuthenticated,
+    isRefreshing,
     userPermissions,
     login,
     loginWithPasskey,

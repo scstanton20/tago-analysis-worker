@@ -33,14 +33,14 @@ export const login = async (req, res) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 15 * 60 * 1000, // 15 minutes
+      maxAge: 5 * 60 * 1000, // 5 minutes
     });
 
     res.cookie('refresh_token', refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 90 * 24 * 60 * 60 * 1000, // 90 days
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
     // Check if user must change password
@@ -90,14 +90,21 @@ export const refresh = async (req, res) => {
       return res.status(401).json({ error: 'Session anomaly detected' });
     }
 
-    // Check for excessive refresh attempts (rate limiting)
+    // Enhanced rate limiting with better client feedback
     const now = Date.now();
     const lastRefresh = user.lastTokenRefresh || 0;
+    const timeSinceLastRefresh = now - lastRefresh;
 
-    if (now - lastRefresh < 30000) {
-      // Minimum 30 seconds between refreshes
-      console.warn(`Rapid refresh attempt detected for user ${user.username}`);
-      return res.status(429).json({ error: 'Too many refresh attempts' });
+    if (timeSinceLastRefresh < 10000) {
+      const remainingTime = Math.ceil((10000 - timeSinceLastRefresh) / 1000);
+      console.warn(
+        `Rate limited refresh attempt for user ${user.username}, ${remainingTime}s remaining`,
+      );
+      return res.status(429).json({
+        error: 'Too many refresh attempts',
+        retryAfter: remainingTime,
+        message: `Please wait ${remainingTime} seconds before refreshing again`,
+      });
     }
 
     // Update activity tracking with additional session validation
@@ -125,14 +132,14 @@ export const refresh = async (req, res) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 15 * 60 * 1000, // 15 minutes
+      maxAge: 5 * 60 * 1000, // 5 minutes
     });
 
     res.cookie('refresh_token', newRefreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 90 * 24 * 60 * 60 * 1000, // 90 days
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
     res.json({
@@ -205,7 +212,7 @@ export const changePassword = async (req, res) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 15 * 60 * 1000, // 15 minutes
+      maxAge: 5 * 60 * 1000, // 5 minutes
     });
 
     res.cookie('refresh_token', refreshToken, {
@@ -273,7 +280,7 @@ export const changeProfilePassword = async (req, res) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 15 * 60 * 1000, // 15 minutes
+      maxAge: 5 * 60 * 1000, // 5 minutes
     });
 
     res.cookie('refresh_token', refreshToken, {
@@ -336,7 +343,7 @@ export const passwordOnboarding = async (req, res) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 15 * 60 * 1000, // 15 minutes
+      maxAge: 5 * 60 * 1000, // 5 minutes
     });
 
     res.cookie('refresh_token', refreshToken, {
@@ -501,8 +508,14 @@ export const createUser = async (req, res) => {
 
 export const updateUser = async (req, res) => {
   try {
-    const { username } = req.params;
+    const { userId } = req.params;
     const updates = req.body;
+
+    // Get the target user
+    const targetUser = await userService.getUserById(userId);
+    if (!targetUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
 
     delete updates.id;
     delete updates.createdAt;
@@ -518,8 +531,7 @@ export const updateUser = async (req, res) => {
 
     // Check if trying to change role from admin to user
     if (updates.role && updates.role !== 'admin') {
-      const targetUser = await userService.getUserByUsername(username);
-      if (targetUser && targetUser.role === 'admin') {
+      if (targetUser.role === 'admin') {
         // Count total admin users
         const allUsers = await userService.getAllUsers();
         const adminCount = allUsers.filter((u) => u.role === 'admin').length;
@@ -548,7 +560,7 @@ export const updateUser = async (req, res) => {
       delete updates.actions;
     }
 
-    const user = await userService.updateUser(username, updates);
+    const user = await userService.updateUser(targetUser.username, updates);
     res.json({ user });
   } catch (error) {
     if (error.message === 'User not found') {
@@ -561,15 +573,20 @@ export const updateUser = async (req, res) => {
 
 export const deleteUser = async (req, res) => {
   try {
-    const { username } = req.params;
+    const { userId } = req.params;
 
-    if (username === req.user.username) {
+    // Get the target user
+    const targetUser = await userService.getUserById(userId);
+    if (!targetUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (targetUser.username === req.user.username) {
       return res.status(400).json({ error: 'Cannot delete your own account' });
     }
 
     // Check if trying to delete the last admin user
-    const targetUser = await userService.getUserByUsername(username);
-    if (targetUser && targetUser.role === 'admin') {
+    if (targetUser.role === 'admin') {
       const allUsers = await userService.getAllUsers();
       const adminCount = allUsers.filter((u) => u.role === 'admin').length;
 
@@ -580,7 +597,7 @@ export const deleteUser = async (req, res) => {
       }
     }
 
-    await userService.deleteUser(username);
+    await userService.deleteUser(targetUser.username);
     res.json({ message: 'User deleted successfully' });
   } catch (error) {
     if (error.message === 'User not found') {
@@ -603,16 +620,18 @@ export const getAllUsers = async (req, res) => {
 
 export const resetUserPassword = async (req, res) => {
   try {
-    const { username } = req.params;
+    const { userId } = req.params;
 
-    if (!username) {
-      return res.status(400).json({ error: 'Username is required' });
+    // Get the target user
+    const targetUser = await userService.getUserById(userId);
+    if (!targetUser) {
+      return res.status(404).json({ error: 'User not found' });
     }
 
     // Generate new temporary password
     const newPassword = `temp${Math.random().toString(36).slice(2, 8)}!`;
 
-    const updatedUser = await userService.updateUser(username, {
+    const updatedUser = await userService.updateUser(targetUser.username, {
       password: newPassword,
       mustChangePassword: true,
     });
@@ -644,25 +663,25 @@ export const resetUserPassword = async (req, res) => {
 
 export const getUserPermissions = async (req, res) => {
   try {
-    const { username } = req.params;
+    const { userId } = req.params;
 
-    if (!username) {
-      return res.status(400).json({ error: 'Username is required' });
+    // Get the target user
+    const targetUser = await userService.getUserById(userId);
+    if (!targetUser) {
+      return res.status(404).json({ error: 'User not found' });
     }
 
     // Check if user is admin or requesting their own permissions
-    if (req.user.role !== 'admin' && req.user.username !== username) {
+    if (
+      req.user.role !== 'admin' &&
+      req.user.username !== targetUser.username
+    ) {
       return res.status(403).json({
         error: 'Forbidden: You can only view your own permissions',
       });
     }
 
-    const user = await userService.getUserByUsername(username);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    const permissions = await userService.getUserPermissions(user.id);
+    const permissions = await userService.getUserPermissions(targetUser.id);
     res.json({ permissions });
   } catch (error) {
     console.error('Get user permissions error:', error);
@@ -672,31 +691,28 @@ export const getUserPermissions = async (req, res) => {
 
 export const updateUserPermissions = async (req, res) => {
   try {
-    const { username } = req.params;
+    const { userId } = req.params;
     const { departments, actions } = req.body;
 
-    if (!username) {
-      return res.status(400).json({ error: 'Username is required' });
-    }
-
-    const user = await userService.getUserByUsername(username);
-    if (!user) {
+    // Get the target user
+    const targetUser = await userService.getUserById(userId);
+    if (!targetUser) {
       return res.status(404).json({ error: 'User not found' });
     }
 
     // Don't allow changing admin permissions
-    if (user.role === 'admin') {
+    if (targetUser.role === 'admin') {
       return res.status(400).json({ error: 'Cannot modify admin permissions' });
     }
 
-    const updatedUser = await userService.updateUser(username, {
+    const updatedUser = await userService.updateUser(targetUser.username, {
       permissions: {
         departments: Array.isArray(departments)
           ? departments
-          : user.permissions?.departments || [],
+          : targetUser.permissions?.departments || [],
         actions: Array.isArray(actions)
           ? actions
-          : user.permissions?.actions || ['view_analyses'], // Default fallback
+          : targetUser.permissions?.actions || ['view_analyses'], // Default fallback
       },
     });
 

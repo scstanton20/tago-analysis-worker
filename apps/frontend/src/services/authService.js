@@ -5,7 +5,7 @@ class AuthService {
     this.user = null;
     this.token = this.getStoredToken();
     this.refreshTimer = null;
-    this.REFRESH_INTERVAL = 12 * 60 * 1000; // 12 minutes
+    this.REFRESH_INTERVAL = 4 * 60 * 1000; // 4 minutes
 
     // Refresh operation mutex and backoff
     this.isRefreshing = false;
@@ -157,9 +157,9 @@ class AuthService {
     }
   }
 
-  async updateUser(username, updates) {
+  async updateUser(userId, updates) {
     try {
-      const response = await fetchWithHeaders(`/auth/users/${username}`, {
+      const response = await fetchWithHeaders(`/auth/users/${userId}`, {
         method: 'PUT',
         body: JSON.stringify(updates),
         credentials: 'include',
@@ -171,9 +171,9 @@ class AuthService {
     }
   }
 
-  async deleteUser(username) {
+  async deleteUser(userId) {
     try {
-      const response = await fetchWithHeaders(`/auth/users/${username}`, {
+      const response = await fetchWithHeaders(`/auth/users/${userId}`, {
         method: 'DELETE',
         credentials: 'include',
       });
@@ -197,10 +197,10 @@ class AuthService {
     }
   }
 
-  async resetUserPassword(username) {
+  async resetUserPassword(userId) {
     try {
       const response = await fetchWithHeaders(
-        `/auth/users/${username}/reset-password`,
+        `/auth/users/${userId}/reset-password`,
         {
           method: 'POST',
           credentials: 'include',
@@ -213,10 +213,10 @@ class AuthService {
     }
   }
 
-  async getUserPermissions(username) {
+  async getUserPermissions(userId) {
     try {
       const response = await fetchWithHeaders(
-        `/auth/users/${username}/permissions`,
+        `/auth/users/${userId}/permissions`,
         {
           method: 'GET',
           credentials: 'include',
@@ -229,10 +229,10 @@ class AuthService {
     }
   }
 
-  async updateUserPermissions(username, permissions) {
+  async updateUserPermissions(userId, permissions) {
     try {
       const response = await fetchWithHeaders(
-        `/auth/users/${username}/permissions`,
+        `/auth/users/${userId}/permissions`,
         {
           method: 'PUT',
           body: JSON.stringify(permissions),
@@ -285,10 +285,20 @@ class AuthService {
   }
 
   async refreshToken() {
-    // Implement mutex to prevent concurrent refresh operations
-    if (this.isRefreshing) {
-      // Return the existing promise if refresh is already in progress
+    // Return existing promise if refresh is already in progress
+    if (this.isRefreshing && this.refreshPromise) {
       return this.refreshPromise;
+    }
+
+    // Check frontend rate limiting (minimum 10 seconds between manual refreshes)
+    const lastRefresh = localStorage.getItem('last_token_refresh');
+    if (lastRefresh) {
+      const timeSinceLastRefresh = Date.now() - parseInt(lastRefresh);
+      if (timeSinceLastRefresh < 10000) {
+        // 10 seconds
+        console.log('Refresh rate limited, skipping');
+        return { user: this.user, message: 'Rate limited', rateLimited: true };
+      }
     }
 
     this.isRefreshing = true;
@@ -309,6 +319,9 @@ class AuthService {
 
   async _performRefresh() {
     try {
+      // Emit refresh start event for coordination
+      window.dispatchEvent(new CustomEvent('authRefreshStart'));
+
       const options = {
         method: 'POST',
         credentials: 'include',
@@ -338,8 +351,22 @@ class AuthService {
       // Restart proactive token refresh after manual refresh
       this.startProactiveRefresh();
 
+      // Emit refresh success event
+      window.dispatchEvent(
+        new CustomEvent('authRefreshSuccess', {
+          detail: { user: data.user, timestamp: Date.now() },
+        }),
+      );
+
       return data;
     } catch (error) {
+      // Emit refresh error event
+      window.dispatchEvent(
+        new CustomEvent('authRefreshError', {
+          detail: { error: error.message, timestamp: Date.now() },
+        }),
+      );
+
       // Enhanced error handling with exponential backoff
       if (
         error.message.includes('Invalid refresh token') ||
@@ -349,6 +376,11 @@ class AuthService {
       ) {
         this.logout();
         throw new Error('Session expired, please log in again');
+      }
+
+      // Handle rate limiting specifically
+      if (error.message.includes('Too many refresh attempts')) {
+        throw new Error('Refresh rate limited, please wait');
       }
 
       // Implement exponential backoff for temporary failures
@@ -419,20 +451,20 @@ class AuthService {
       try {
         // Only refresh if page is visible and user is still authenticated
         if (document.visibilityState === 'visible' && this.isAuthenticated()) {
-          await this.refreshToken();
-          console.log('Token refreshed successfully');
+          const result = await this.refreshToken();
+          if (!result.rateLimited) {
+            console.log('Token refresh successful');
+          }
         }
       } catch (error) {
-        console.error('Proactive token refresh failed:', error);
+        console.error('Token refresh failed:', error);
         // If refresh fails, the refreshToken method will handle logout
       }
     }, this.REFRESH_INTERVAL);
 
-    // Also refresh when page becomes visible after being hidden
-    document.addEventListener(
-      'visibilitychange',
-      this.handleVisibilityChange.bind(this),
-    );
+    // Store bound function reference for proper cleanup
+    this.boundVisibilityHandler = this.handleVisibilityChange.bind(this);
+    document.addEventListener('visibilitychange', this.boundVisibilityHandler);
   }
 
   stopProactiveRefresh() {
@@ -441,25 +473,47 @@ class AuthService {
       this.refreshTimer = null;
     }
 
-    document.removeEventListener(
-      'visibilitychange',
-      this.handleVisibilityChange.bind(this),
-    );
+    if (this.boundVisibilityHandler) {
+      document.removeEventListener(
+        'visibilitychange',
+        this.boundVisibilityHandler,
+      );
+      this.boundVisibilityHandler = null;
+    }
   }
 
   async handleVisibilityChange() {
-    // When tab becomes visible, always attempt to refresh token to ensure session is valid
     if (document.visibilityState === 'visible' && this.isAuthenticated()) {
-      // Only refresh if not already refreshing (mutex protection)
-      if (!this.isRefreshing) {
+      // Wait for any ongoing refresh to complete
+      if (this.isRefreshing && this.refreshPromise) {
         try {
-          console.log('Refreshing token after tab became visible');
-          await this.refreshToken();
-          localStorage.setItem('last_token_refresh', Date.now().toString());
-        } catch (error) {
-          console.error('Token refresh on visibility change failed:', error);
-          // The refreshToken method already handles logout on failure
+          await this.refreshPromise;
+          return;
+        } catch {
+          console.log(
+            'Ongoing refresh failed, proceeding with visibility refresh',
+          );
         }
+      }
+
+      // Check if refresh is needed (respect rate limiting)
+      const lastRefresh = localStorage.getItem('last_token_refresh');
+      if (lastRefresh) {
+        const timeSinceLastRefresh = Date.now() - parseInt(lastRefresh);
+        if (timeSinceLastRefresh < 10000) {
+          console.log('Visibility refresh skipped due to rate limit');
+          return;
+        }
+      }
+
+      // Proceed with refresh if needed
+      try {
+        const result = await this.refreshToken();
+        if (!result.rateLimited) {
+          console.log('Visibility refresh completed successfully');
+        }
+      } catch (error) {
+        console.error('Visibility change refresh failed:', error);
       }
     }
   }

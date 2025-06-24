@@ -47,15 +47,15 @@ const router = express.Router();
  *         - Session fingerprinting and anomaly detection
  *
  *         **Token Lifecycle:**
- *         - Access tokens: 15 minutes lifespan
- *         - Refresh tokens: 90 days maximum, 14 days inactivity limit
+ *         - Access tokens: 5 minutes lifespan (rotated silently every 4 minutes)
+ *         - Refresh tokens: 7 days maximum lifespan
  *         - Automatic cleanup runs every hour to remove expired data
  *         - Token rotation invalidates old refresh tokens immediately
  *
  *         **Session Management:**
  *         - Multi-device session support with individual session tracking
  *         - Bulk session invalidation (logout from all devices)
- *         - Activity-based session expiration (14 days inactivity)
+ *         - Activity-based session expiration (7 days maximum)
  *         - Automatic session cleanup and memory management
  */
 
@@ -539,7 +539,7 @@ router.post('/users', authMiddleware, requireRole('admin'), createUser);
 
 /**
  * @swagger
- * /auth/users/{username}:
+ * /auth/users/{userId}:
  *   put:
  *     summary: Update user
  *     description: |
@@ -548,11 +548,11 @@ router.post('/users', authMiddleware, requireRole('admin'), createUser);
  *     tags: [User Management]
  *     parameters:
  *       - in: path
- *         name: username
+ *         name: userId
  *         required: true
  *         schema:
  *           type: string
- *         description: Username of the user to update
+ *         description: User ID of the user to update
  *     requestBody:
  *       required: true
  *       content:
@@ -608,16 +608,11 @@ router.post('/users', authMiddleware, requireRole('admin'), createUser);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.put(
-  '/users/:username',
-  authMiddleware,
-  requireRole('admin'),
-  updateUser,
-);
+router.put('/users/:userId', authMiddleware, requireRole('admin'), updateUser);
 
 /**
  * @swagger
- * /auth/users/{username}/reset-password:
+ * /auth/users/{userId}/reset-password:
  *   post:
  *     summary: Reset user password
  *     description: |
@@ -626,11 +621,11 @@ router.put(
  *     tags: [User Management]
  *     parameters:
  *       - in: path
- *         name: username
+ *         name: userId
  *         required: true
  *         schema:
  *           type: string
- *         description: Username of the user whose password to reset
+ *         description: User ID of the user whose password to reset
  *     responses:
  *       200:
  *         description: Password reset successfully
@@ -663,25 +658,25 @@ router.put(
  *               $ref: '#/components/schemas/Error'
  */
 router.post(
-  '/users/:username/reset-password',
+  '/users/:userId/reset-password',
   authMiddleware,
   requireRole('admin'),
   resetUserPassword,
 );
 /**
  * @swagger
- * /auth/users/{username}/permissions:
+ * /auth/users/{userId}/permissions:
  *   get:
  *     summary: Get user permissions
  *     description: Get permissions for a specific user (admin can view any user, users can view their own)
  *     tags: [User Permissions]
  *     parameters:
  *       - in: path
- *         name: username
+ *         name: userId
  *         required: true
  *         schema:
  *           type: string
- *         description: Username to get permissions for
+ *         description: User ID to get permissions for
  *     responses:
  *       200:
  *         description: User permissions retrieved successfully
@@ -722,22 +717,22 @@ router.post(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/users/:username/permissions', authMiddleware, getUserPermissions);
+router.get('/users/:userId/permissions', authMiddleware, getUserPermissions);
 
 /**
  * @swagger
- * /auth/users/{username}/permissions:
+ * /auth/users/{userId}/permissions:
  *   put:
  *     summary: Update user permissions
  *     description: Update permissions for a specific user (admin only)
  *     tags: [User Permissions]
  *     parameters:
  *       - in: path
- *         name: username
+ *         name: userId
  *         required: true
  *         schema:
  *           type: string
- *         description: Username to update permissions for
+ *         description: User ID to update permissions for
  *     requestBody:
  *       required: true
  *       content:
@@ -781,7 +776,7 @@ router.get('/users/:username/permissions', authMiddleware, getUserPermissions);
  *               $ref: '#/components/schemas/Error'
  */
 router.put(
-  '/users/:username/permissions',
+  '/users/:userId/permissions',
   authMiddleware,
   requireRole('admin'),
   updateUserPermissions,
@@ -789,18 +784,18 @@ router.put(
 
 /**
  * @swagger
- * /auth/users/{username}:
+ * /auth/users/{userId}:
  *   delete:
  *     summary: Delete user
  *     description: Delete a user account (admin only)
  *     tags: [User Management]
  *     parameters:
  *       - in: path
- *         name: username
+ *         name: userId
  *         required: true
  *         schema:
  *           type: string
- *         description: Username of the user to delete
+ *         description: User ID of the user to delete
  *     responses:
  *       200:
  *         description: User deleted successfully
@@ -826,7 +821,7 @@ router.put(
  *               $ref: '#/components/schemas/Error'
  */
 router.delete(
-  '/users/:username',
+  '/users/:userId',
   authMiddleware,
   requireRole('admin'),
   deleteUser,

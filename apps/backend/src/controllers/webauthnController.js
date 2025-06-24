@@ -375,7 +375,7 @@ class WebAuthnController {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict',
-        maxAge: 15 * 60 * 1000, // 15 minutes
+        maxAge: 5 * 60 * 1000, // 5 minutes
       });
 
       res.cookie('refresh_token', refreshToken, {

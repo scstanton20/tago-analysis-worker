@@ -5,9 +5,9 @@ import path from 'path';
 import config from '../config/default.js';
 
 const JWT_SECRET = config.secretKey;
-const JWT_EXPIRES_IN = '15m'; // Short access token life
-const JWT_REFRESH_EXPIRES_IN = '90d'; // 90 days refresh token life
-const JWT_REFRESH_INACTIVE_EXPIRES_IN = '14d'; // 14 days if inactive
+const JWT_EXPIRES_IN = '5m'; // Short access token life
+const JWT_REFRESH_EXPIRES_IN = '7d'; // 7 days refresh token life
+const JWT_REFRESH_INACTIVE_EXPIRES_IN = '7d'; // 7 days if inactive (same as total lifespan)
 
 // Development persistence file paths
 const DEV_DATA_DIR = path.join(process.cwd(), '.dev-session-data');
