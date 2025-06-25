@@ -620,7 +620,7 @@ export function WebSocketProvider({ children }) {
         }
       }
     }, delay);
-  }, [createConnection, reconnect, serverShutdown]);
+  }, [createConnection, isAuthenticated]);
 
   useEffect(() => {
     mountedRef.current = true;
