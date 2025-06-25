@@ -454,7 +454,81 @@ export function WebSocketProvider({ children }) {
     [removeLoadingAnalysis],
   );
 
-  const createConnection = useCallback(async () => {
+  const reconnect = useCallback(async () => {
+    if (!mountedRef.current) return;
+
+    // Stop reconnecting after max attempts
+    if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+      console.log(
+        `WebSocket max reconnection attempts reached (${maxReconnectAttempts})`,
+      );
+      setConnectionStatus('failed');
+      connectionStatusRef.current = 'failed';
+      return;
+    }
+
+    const delay = Math.min(
+      1000 * Math.pow(2, reconnectAttemptsRef.current),
+      maxReconnectDelay,
+    );
+    reconnectAttemptsRef.current++;
+
+    console.log(
+      `WebSocket reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`,
+    );
+
+    setTimeout(async () => {
+      if (!mountedRef.current) return;
+
+      // Refresh token before reconnecting
+      if (window.authService && isAuthenticated) {
+        try {
+          const refreshResult = await window.authService.refreshToken();
+          if (!refreshResult.rateLimited) {
+            console.log(
+              'Token refreshed successfully before WebSocket reconnection',
+            );
+          }
+        } catch (error) {
+          console.error('Token refresh failed during reconnection:', error);
+
+          // Only fail reconnection for definitive auth failures
+          if (
+            error.message.includes('expired') ||
+            error.message.includes('invalid') ||
+            error.message.includes('Session anomaly') ||
+            error.message.includes('log in again')
+          ) {
+            if (mountedRef.current) {
+              setConnectionStatus('failed');
+              connectionStatusRef.current = 'failed';
+            }
+            return;
+          }
+
+          // For network errors, continue with reconnection attempt
+          console.log(
+            'Continuing WebSocket reconnection despite refresh error',
+          );
+        }
+      }
+
+      setConnectionStatus('connecting');
+      connectionStatusRef.current = 'connecting';
+      try {
+        await createConnectionInternal();
+      } catch (error) {
+        console.error(`WebSocket reconnection failed:`, error);
+        if (mountedRef.current) {
+          setConnectionStatus('disconnected');
+          connectionStatusRef.current = 'disconnected';
+          reconnect();
+        }
+      }
+    }, delay);
+  }, [isAuthenticated]);
+
+  const createConnectionInternal = useCallback(async () => {
     const componentId = componentIdRef.current;
     const wsUrl = getWebSocketUrl();
 
@@ -564,63 +638,7 @@ export function WebSocketProvider({ children }) {
     });
 
     return globalConnectionPromise;
-  }, [handleMessage, getWebSocketUrl]);
-
-  const reconnect = useCallback(async () => {
-    if (!mountedRef.current) return;
-
-    // Stop reconnecting after max attempts
-    if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
-      console.log(
-        `WebSocket max reconnection attempts reached (${maxReconnectAttempts})`,
-      );
-      setConnectionStatus('failed');
-      connectionStatusRef.current = 'failed';
-      return;
-    }
-
-    const delay = Math.min(
-      1000 * Math.pow(2, reconnectAttemptsRef.current),
-      maxReconnectDelay,
-    );
-    reconnectAttemptsRef.current++;
-
-    console.log(
-      `WebSocket reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`,
-    );
-
-    setTimeout(async () => {
-      if (!mountedRef.current) return;
-
-      // Refresh token before reconnecting
-      if (window.authService && isAuthenticated) {
-        try {
-          await window.authService.refreshToken();
-        } catch (error) {
-          console.error('Token refresh failed during reconnection:', error);
-          // If token refresh fails, consider this a failed reconnection
-          if (mountedRef.current) {
-            setConnectionStatus('failed');
-            connectionStatusRef.current = 'failed';
-          }
-          return;
-        }
-      }
-
-      setConnectionStatus('connecting');
-      connectionStatusRef.current = 'connecting';
-      try {
-        await createConnection();
-      } catch (error) {
-        console.error(`WebSocket reconnection failed:`, error);
-        if (mountedRef.current) {
-          setConnectionStatus('disconnected');
-          connectionStatusRef.current = 'disconnected';
-          reconnect();
-        }
-      }
-    }, delay);
-  }, [createConnection, isAuthenticated]);
+  }, [handleMessage, getWebSocketUrl, serverShutdown]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -667,7 +685,7 @@ export function WebSocketProvider({ children }) {
         connectionStatusRef.current = 'connecting';
         console.log(`Starting live listener connection...`);
 
-        await createConnection();
+        await createConnectionInternal();
       } catch (error) {
         console.error(`WebSocket initial connection failed:`, error);
         if (mountedRef.current) {
@@ -694,14 +712,32 @@ export function WebSocketProvider({ children }) {
           // Refresh token before reconnecting
           if (window.authService && isAuthenticated) {
             try {
-              await window.authService.refreshToken();
+              const refreshResult = await window.authService.refreshToken();
+              if (!refreshResult.rateLimited) {
+                console.log(
+                  'Token refreshed successfully before WebSocket visibility reconnection',
+                );
+              }
             } catch (error) {
               console.error(
                 'Token refresh failed before WebSocket reconnection:',
                 error,
               );
-              // Don't attempt connection if token refresh fails
-              return;
+
+              // Only skip connection for definitive auth failures
+              if (
+                error.message.includes('expired') ||
+                error.message.includes('invalid') ||
+                error.message.includes('Session anomaly') ||
+                error.message.includes('log in again')
+              ) {
+                return;
+              }
+
+              // For network errors, continue with reconnection attempt
+              console.log(
+                'Continuing WebSocket visibility reconnection despite refresh error',
+              );
             }
           }
 
@@ -726,14 +762,32 @@ export function WebSocketProvider({ children }) {
           // Refresh token before reconnecting
           if (window.authService && isAuthenticated) {
             try {
-              await window.authService.refreshToken();
+              const refreshResult = await window.authService.refreshToken();
+              if (!refreshResult.rateLimited) {
+                console.log(
+                  'Token refreshed successfully before WebSocket focus reconnection',
+                );
+              }
             } catch (error) {
               console.error(
                 'Token refresh failed before WebSocket reconnection:',
                 error,
               );
-              // Don't attempt connection if token refresh fails
-              return;
+
+              // Only skip connection for definitive auth failures
+              if (
+                error.message.includes('expired') ||
+                error.message.includes('invalid') ||
+                error.message.includes('Session anomaly') ||
+                error.message.includes('log in again')
+              ) {
+                return;
+              }
+
+              // For network errors, continue with reconnection attempt
+              console.log(
+                'Continuing WebSocket focus reconnection despite refresh error',
+              );
             }
           }
 
@@ -768,7 +822,7 @@ export function WebSocketProvider({ children }) {
       }
       globalConnectionPromise = null;
     };
-  }, [createConnection, reconnect, isAuthenticated, serverShutdown]);
+  }, [createConnectionInternal, reconnect, isAuthenticated, serverShutdown]);
 
   // Request status updates periodically (fallback)
   useEffect(() => {

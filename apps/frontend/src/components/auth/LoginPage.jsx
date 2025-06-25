@@ -185,7 +185,7 @@ export default function LoginPage() {
             border: '1px solid var(--mantine-color-gray-3)',
           }}
         >
-          <form onSubmit={handleSubmit} method="post" action="">
+          <form onSubmit={handleSubmit}>
             <Stack gap="lg">
               <Box ta="center">
                 <Logo size={104} />

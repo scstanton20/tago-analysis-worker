@@ -292,17 +292,6 @@ class AuthService {
       return this.refreshPromise;
     }
 
-    // Check frontend rate limiting (minimum 10 seconds between manual refreshes)
-    const lastRefresh = localStorage.getItem('last_token_refresh');
-    if (lastRefresh) {
-      const timeSinceLastRefresh = Date.now() - parseInt(lastRefresh);
-      if (timeSinceLastRefresh < 10000) {
-        // 10 seconds
-        console.log('Refresh rate limited, skipping');
-        return { user: this.user, message: 'Rate limited', rateLimited: true };
-      }
-    }
-
     this.isRefreshing = true;
     this.refreshPromise = this._performRefresh();
 
@@ -335,14 +324,16 @@ class AuthService {
 
       const data = await handleResponse(response, '/auth/refresh', options);
 
-      // Validate session consistency
+      // Validate session consistency (if server provides fingerprint)
       if (
         data.sessionFingerprint &&
         data.sessionFingerprint !== this.sessionFingerprint
       ) {
-        console.warn('Session fingerprint mismatch detected');
-        this.logout();
-        throw new Error('Session anomaly detected, please log in again');
+        // For now, ignore fingerprint mismatches as they can occur during
+        // page refresh, development reload, etc.
+        // Uncomment below to enable strict fingerprint validation:
+        // this.logout();
+        // throw new Error('Session anomaly detected, please log in again');
       }
 
       this.user = data.user;
@@ -380,17 +371,28 @@ class AuthService {
         throw new Error('Session expired, please log in again');
       }
 
-      // Handle rate limiting specifically
-      if (error.message.includes('Too many refresh attempts')) {
-        throw new Error('Refresh rate limited, please wait');
+      // Handle backend rate limiting (429 responses)
+      if (
+        error.message.includes('Too many refresh attempts') ||
+        error.message.includes('Please wait')
+      ) {
+        // Extract retry-after time from error message if available
+        const retryMatch = error.message.match(/(\d+)\s*seconds?/);
+        const retryAfter = retryMatch ? parseInt(retryMatch[1]) * 1000 : 10000; // Default 10s
+
+        // Return rate limited response with proper user data
+        return {
+          user: this.user,
+          message: `Rate limited by server, retry in ${retryAfter / 1000}s`,
+          rateLimited: true,
+          hasValidUser: !!this.user,
+          retryAfter,
+        };
       }
 
       // Implement exponential backoff for temporary failures
       if (this.refreshAttempts < this.maxRefreshAttempts) {
         const backoffDelay = Math.pow(2, this.refreshAttempts) * 1000; // 1s, 2s, 4s
-        console.log(
-          `Token refresh failed, retrying in ${backoffDelay}ms (attempt ${this.refreshAttempts + 1}/${this.maxRefreshAttempts})`,
-        );
 
         await new Promise((resolve) => setTimeout(resolve, backoffDelay));
         return this._performRefresh();
@@ -453,13 +455,9 @@ class AuthService {
       try {
         // Only refresh if page is visible and user is still authenticated
         if (document.visibilityState === 'visible' && this.isAuthenticated()) {
-          const result = await this.refreshToken();
-          if (!result.rateLimited) {
-            console.log('Token refresh successful');
-          }
+          await this.refreshToken();
         }
-      } catch (error) {
-        console.error('Token refresh failed:', error);
+      } catch {
         // If refresh fails, the refreshToken method will handle logout
       }
     }, this.REFRESH_INTERVAL);
@@ -492,9 +490,7 @@ class AuthService {
           await this.refreshPromise;
           return;
         } catch {
-          console.log(
-            'Ongoing refresh failed, proceeding with visibility refresh',
-          );
+          // Ongoing refresh failed, proceed with visibility refresh
         }
       }
 
@@ -503,31 +499,28 @@ class AuthService {
       if (lastRefresh) {
         const timeSinceLastRefresh = Date.now() - parseInt(lastRefresh);
         if (timeSinceLastRefresh < 10000) {
-          console.log('Visibility refresh skipped due to rate limit');
           return;
         }
       }
 
       // Proceed with refresh if needed
       try {
-        const result = await this.refreshToken();
-        if (!result.rateLimited) {
-          console.log('Visibility refresh completed successfully');
-        }
-      } catch (error) {
-        console.error('Visibility change refresh failed:', error);
+        await this.refreshToken();
+      } catch {
+        // Visibility change refresh failed
       }
     }
   }
 
   generateSessionFingerprint() {
-    // Generate a unique fingerprint for this session
+    // Generate a stable fingerprint for this browser/device (no timestamp)
     const fingerprint = {
       userAgent: navigator.userAgent,
       language: navigator.language,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       screen: `${screen.width}x${screen.height}`,
-      timestamp: Date.now(),
+      colorDepth: screen.colorDepth,
+      platform: navigator.userAgentData?.platform || 'unknown',
     };
 
     return btoa(JSON.stringify(fingerprint));
@@ -545,10 +538,7 @@ class AuthService {
 
       // Detect anomalous patterns (e.g., token refresh without activity)
       if (timeSinceRefresh < timeSinceActivity - 60000) {
-        // 1 minute tolerance
-        console.warn(
-          'Potential session anomaly: token refreshed without recent activity',
-        );
+        // 1 minute tolerance - potential session anomaly
         return false;
       }
     }

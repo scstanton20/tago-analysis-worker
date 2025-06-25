@@ -16,7 +16,10 @@ export async function fetchWithHeaders(url, options = {}) {
   }
 
   const baseUrl = getBaseUrl();
-  return fetch(`${baseUrl}${url}`, {
+  const fullUrl = `${baseUrl}${url}`;
+
+
+  return fetch(fullUrl, {
     ...options,
     credentials: 'include', // Include cookies in requests
     headers: {
@@ -29,6 +32,20 @@ export async function fetchWithHeaders(url, options = {}) {
 // Track if we're currently refreshing to prevent infinite loops
 let isRefreshing = false;
 let refreshPromise = null;
+
+// Queue for pending requests during refresh
+let refreshQueue = [];
+
+const processQueue = (error, success = false) => {
+  refreshQueue.forEach(({ resolve, reject }) => {
+    if (error) {
+      reject(error);
+    } else {
+      resolve(success);
+    }
+  });
+  refreshQueue = [];
+};
 
 // Direct refresh token request to avoid circular dependency
 async function refreshTokenRequest() {
@@ -78,32 +95,53 @@ export async function handleResponse(response, originalUrl, originalOptions) {
     // Handle 401 errors with automatic token refresh
     if (
       response.status === 401 &&
-      !isRefreshing &&
       !originalUrl?.includes('/auth/refresh') &&
-      !originalUrl?.includes('/auth/login')
+      !originalUrl?.includes('/auth/login') &&
+      !originalOptions?._retry
     ) {
+      // Add retry flag to prevent infinite loops
+      originalOptions._retry = true;
+
       // Check if we have a refresh token available (stored as httpOnly cookie)
       const hasRefreshToken =
         localStorage.getItem('auth_status') === 'authenticated';
 
       if (hasRefreshToken) {
-        // If we're not already refreshing, start the refresh process
-        if (!refreshPromise) {
-          isRefreshing = true;
-          refreshPromise = refreshTokenRequest()
-            .then(() => {
-              // Reset the refresh state on success
-              isRefreshing = false;
-              refreshPromise = null;
-              return true;
-            })
-            .catch((error) => {
-              // Reset the refresh state on failure
-              isRefreshing = false;
-              refreshPromise = null;
-              throw error;
+        // If already refreshing, queue this request
+        if (isRefreshing) {
+          return new Promise((resolve, reject) => {
+            refreshQueue.push({
+              resolve: () => {
+                // Retry the original request after refresh
+                fetchWithHeaders(originalUrl, originalOptions)
+                  .then((response) =>
+                    handleResponse(response, originalUrl, originalOptions),
+                  )
+                  .then(resolve)
+                  .catch(reject);
+              },
+              reject,
             });
+          });
         }
+
+        // Start the refresh process
+        isRefreshing = true;
+        refreshPromise = refreshTokenRequest()
+          .then(() => {
+            // Reset the refresh state on success
+            isRefreshing = false;
+            refreshPromise = null;
+            processQueue(null, true);
+            return true;
+          })
+          .catch((error) => {
+            // Reset the refresh state on failure
+            isRefreshing = false;
+            refreshPromise = null;
+            processQueue(error, false);
+            throw error;
+          });
 
         try {
           // Wait for the refresh to complete

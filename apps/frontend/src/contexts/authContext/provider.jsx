@@ -11,6 +11,11 @@ const AuthProvider = ({ children }) => {
 
   // Helper function to update user state consistently
   const updateUserState = (userData) => {
+    if (!userData) {
+      console.warn('updateUserState called with null/undefined userData');
+      return;
+    }
+
     setUser(userData);
     const userPerms = userData.permissions;
     if (userPerms) {
@@ -34,19 +39,63 @@ const AuthProvider = ({ children }) => {
         const storedAuthStatus = localStorage.getItem('auth_status');
 
         if (storedAuthStatus === 'authenticated') {
-          // Only validate with server if we have recent refresh activity
+          // Check if this is a recent login (within last 10 seconds)
           const lastRefresh = localStorage.getItem('last_token_refresh');
-          const isRecentSession =
-            lastRefresh && Date.now() - parseInt(lastRefresh) < 5 * 60 * 1000; // 5 minutes
+          const isRecentLogin =
+            lastRefresh && Date.now() - parseInt(lastRefresh) < 10000;
 
-          if (isRecentSession) {
-            // Recent session, validate with server
-            const profileData = await authService.getProfile();
-            updateUserState(profileData.user);
+          if (isRecentLogin && authService.user) {
+            // Recent login with existing user data - no need to refresh
+            updateUserState(authService.user);
             setIsAuthenticated(true);
           } else {
-            // Stale localStorage, clear auth state without API call
-            authService.logout();
+            // Always attempt to refresh/validate session on page load
+            // This ensures we use available refresh tokens instead of logging out
+            try {
+              const refreshData = await authService.refreshToken();
+
+              // If refresh succeeds, get fresh user profile
+              if (!refreshData.rateLimited) {
+                const profileData = await authService.getProfile();
+                updateUserState(profileData.user);
+                setIsAuthenticated(true);
+              } else {
+                // Rate limited but session is still valid
+                // Only update state if we have valid user data
+                if (refreshData.hasValidUser && refreshData.user) {
+                  updateUserState(refreshData.user);
+                  setIsAuthenticated(true);
+                } else {
+                  // No user data available, try getProfile as fallback
+                  try {
+                    const profileData = await authService.getProfile();
+                    updateUserState(profileData.user);
+                    setIsAuthenticated(true);
+                  } catch {
+                    authService.logout();
+                  }
+                }
+              }
+            } catch (refreshError) {
+              // Only logout if refresh definitively fails (not network errors)
+              if (
+                refreshError.message.includes('expired') ||
+                refreshError.message.includes('invalid') ||
+                refreshError.message.includes('Session anomaly') ||
+                refreshError.message.includes('log in again')
+              ) {
+                authService.logout();
+              } else {
+                // For network errors or temporary failures, try getProfile as fallback
+                try {
+                  const profileData = await authService.getProfile();
+                  updateUserState(profileData.user);
+                  setIsAuthenticated(true);
+                } catch {
+                  authService.logout();
+                }
+              }
+            }
           }
         }
       } catch (error) {
@@ -83,8 +132,7 @@ const AuthProvider = ({ children }) => {
       setIsRefreshing(false);
     };
 
-    const handleRefreshError = (event) => {
-      console.log('AuthContext: Refresh failed', event.detail.error);
+    const handleRefreshError = () => {
       setIsRefreshing(false);
       // Don't automatically logout here, let authService handle it
     };
