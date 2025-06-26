@@ -104,18 +104,12 @@ const analysisController = {
 
       const result = await analysisService.runAnalysis(sanitizedFileName);
 
-      // Get updated analysis data
-      const analyses = await analysisService.getAllAnalyses();
-      const updatedAnalysis = analyses[sanitizedFileName];
-
-      // Broadcast status change with complete analysis data
       broadcast({
         type: 'analysisStatus',
         data: {
           fileName: sanitizedFileName,
           status: 'running',
           enabled: true,
-          ...updatedAnalysis,
         },
       });
 
@@ -146,18 +140,12 @@ const analysisController = {
 
       const result = await analysisService.stopAnalysis(sanitizedFileName);
 
-      // Get updated analysis data
-      const analyses = await analysisService.getAllAnalyses();
-      const updatedAnalysis = analyses[sanitizedFileName];
-
-      // Broadcast status change with complete analysis data
       broadcast({
         type: 'analysisStatus',
         data: {
           fileName: sanitizedFileName,
           status: 'stopped',
           enabled: false,
-          ...updatedAnalysis,
         },
       });
 

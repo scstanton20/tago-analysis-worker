@@ -18,7 +18,6 @@ export async function fetchWithHeaders(url, options = {}) {
   const baseUrl = getBaseUrl();
   const fullUrl = `${baseUrl}${url}`;
 
-
   return fetch(fullUrl, {
     ...options,
     credentials: 'include', // Include cookies in requests
@@ -46,34 +45,6 @@ const processQueue = (error, success = false) => {
   });
   refreshQueue = [];
 };
-
-// Direct refresh token request to avoid circular dependency
-async function refreshTokenRequest() {
-  const baseUrl = getBaseUrl();
-  const response = await fetch(`${baseUrl}/auth/refresh`, {
-    method: 'POST',
-    credentials: 'include',
-  });
-
-  if (!response.ok) {
-    // Clear auth status on failed refresh
-    localStorage.removeItem('auth_status');
-    localStorage.removeItem('last_token_refresh');
-
-    let errorData;
-    try {
-      errorData = await response.json();
-    } catch {
-      throw new Error('Refresh token failed');
-    }
-    throw new Error(errorData.error || 'Refresh token failed');
-  }
-
-  const data = await response.json();
-  localStorage.setItem('auth_status', 'authenticated');
-  localStorage.setItem('last_token_refresh', Date.now().toString());
-  return data;
-}
 
 export async function handleResponse(response, originalUrl, originalOptions) {
   if (!response.ok) {
@@ -127,11 +98,24 @@ export async function handleResponse(response, originalUrl, originalOptions) {
 
         // Start the refresh process
         isRefreshing = true;
-        refreshPromise = refreshTokenRequest()
-          .then(() => {
+
+        if (!window.authService) {
+          throw new Error('Auth service not available');
+        }
+
+        refreshPromise = window.authService
+          .refreshToken()
+          .then((result) => {
             // Reset the refresh state on success
             isRefreshing = false;
             refreshPromise = null;
+
+            // Handle rate limited responses (still successful)
+            if (result && result.rateLimited) {
+              processQueue(null, true);
+              return true;
+            }
+
             processQueue(null, true);
             return true;
           })

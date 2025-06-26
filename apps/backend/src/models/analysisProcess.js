@@ -273,18 +273,8 @@ class AnalysisProcess {
     this.enabled = enabled;
 
     if (this.type === 'listener' && status === 'running') {
-      this.lastStartTime = new Date().toISOString();
+      this.lastStartTime = new Date().toString();
     }
-
-    broadcast({
-      type: 'analysisStatus',
-      data: {
-        fileName: this.analysisName,
-        status: this.status,
-        enabled: this.enabled,
-        lastStartTime: this.lastStartTime,
-      },
-    });
   }
 
   async stop() {
