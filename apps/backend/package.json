@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@simplewebauthn/server": "^13.1.1",
-    "@tago-io/sdk": "^11.3.10",
+    "@tago-io/sdk": "^12.0.0",
     "argon2": "^0.43.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
