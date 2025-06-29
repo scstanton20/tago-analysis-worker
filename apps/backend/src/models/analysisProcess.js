@@ -205,8 +205,10 @@ class AnalysisProcess {
         if (fullLine) {
           // Check for SDK connection errors
           if (
-            fullLine.includes('¬ Connection was closed, trying to reconnect') ||
-            fullLine.includes('¬ Analysis not found or not active')
+            fullLine.includes(
+              '¬ Connection was closed, trying to reconnect...',
+            ) ||
+            fullLine.includes('¬ Error :: Analysis not found or not active.')
           ) {
             this.addLog('Tago connection lost - restarting process');
             setTimeout(() => {

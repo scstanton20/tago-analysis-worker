@@ -9,6 +9,7 @@ injectWorkspacePackages: true
 
 onlyBuiltDependencies:
   - '@swc/core'
+  - argon2
   - bcrypt
   - esbuild
 
