@@ -18,6 +18,12 @@ jobs:
       - name: Check out
         uses: actions/checkout@v4
 
+      - name: Extract versions from package.json files
+        id: version
+        run: |
+          echo "FRONTEND_VERSION=$(node -p "require('./apps/frontend/package.json').version")" >> $GITHUB_OUTPUT
+          echo "BACKEND_VERSION=$(node -p "require('./apps/backend/package.json').version")" >> $GITHUB_OUTPUT
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3.6.0
 
@@ -40,7 +46,9 @@ jobs:
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
           platforms: linux/amd64,linux/arm64/v8
-          tags: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ steps.version.outputs.BACKEND_VERSION }}
 
       - name: Build and push Frontend image
         uses: docker/build-push-action@v6
@@ -51,4 +59,6 @@ jobs:
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
           platforms: linux/amd64,linux/arm64/v8
-          tags: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ steps.version.outputs.FRONTEND_VERSION }}
