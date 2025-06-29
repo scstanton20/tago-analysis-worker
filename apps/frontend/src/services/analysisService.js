@@ -25,10 +25,8 @@ export const analysisService = {
     formData.append('analysis', file);
     formData.append('type', type);
 
-    // Add department if provided
-    if (department) {
-      formData.append('department', department);
-    }
+    // Always add department - use 'uncategorized' as default if not provided
+    formData.append('department', department || 'uncategorized');
 
     const response = await fetchWithHeaders('/analyses/upload', {
       method: 'POST',

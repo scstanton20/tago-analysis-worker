@@ -1,33 +1,26 @@
-// frontend/src/contexts/websocketContext/provider.jsx
+// frontend/src/contexts/sseContext/provider.jsx
 import { useState, useEffect, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
-import { WebSocketContext } from './context';
+import { SSEContext } from './context';
 import { useAuth } from '../../hooks/useAuth';
 
-// Global connection tracking to prevent multiple connections across StrictMode renders
-let globalWebSocket = null;
-let globalConnectionPromise = null;
-
-export function WebSocketProvider({ children }) {
+export function SSEProvider({ children }) {
   const { isAuthenticated } = useAuth();
-  const [socket, setSocket] = useState(null);
-  const [analyses, setAnalyses] = useState({}); // Object: { analysisName: analysisData }
-  const [departments, setDepartments] = useState({}); // Object: { deptId: deptData }
+  const [analyses, setAnalyses] = useState({});
+  const [departments, setDepartments] = useState({});
   const [loadingAnalyses, setLoadingAnalyses] = useState(new Set());
   const [connectionStatus, setConnectionStatus] = useState('connecting');
   const [backendStatus, setBackendStatus] = useState(null);
   const [serverShutdown, setServerShutdown] = useState(false);
   const [hasInitialData, setHasInitialData] = useState(false);
-  const lastMessageRef = useRef({ type: null, timestamp: 0 });
+
+  const eventSourceRef = useRef(null);
   const reconnectAttemptsRef = useRef(0);
   const maxReconnectAttempts = 10;
   const maxReconnectDelay = 30000;
   const mountedRef = useRef(true);
-  const componentIdRef = useRef(null); // Track this component instance
-  const connectionStatusRef = useRef('connecting'); // Track connection status for event handlers
-
-  // Track log sequences to prevent duplicates
-  const logSequences = useRef(new Map()); // fileName -> Set of sequence numbers
+  const connectionStatusRef = useRef('connecting');
+  const logSequences = useRef(new Map());
 
   const addLoadingAnalysis = useCallback((analysisName) => {
     setLoadingAnalyses((prev) => new Set([...prev, analysisName]));
@@ -41,30 +34,38 @@ export function WebSocketProvider({ children }) {
     });
   }, []);
 
-  const getWebSocketUrl = useCallback(() => {
-    // Authentication is now handled via httpOnly cookies automatically
-    // No need to include token in URL
+  const getSSEUrl = useCallback(() => {
     if (!isAuthenticated) return null;
 
     let baseUrl;
-    if (import.meta.env.DEV && import.meta.env.VITE_WS_URL) {
-      baseUrl = import.meta.env.VITE_WS_URL;
+    if (import.meta.env.DEV && import.meta.env.VITE_API_URL) {
+      baseUrl = `${import.meta.env.VITE_API_URL}/sse/events`;
     } else {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      baseUrl = `${protocol}//${window.location.host}/ws`;
+      const protocol =
+        window.location.protocol === 'https:' ? 'https:' : 'http:';
+      baseUrl = `${protocol}//${window.location.host}/api/sse/events`;
     }
 
     return baseUrl;
   }, [isAuthenticated]);
 
-  // Function to request status update from server
-  const requestStatusUpdate = useCallback(() => {
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: 'requestStatus' }));
-    }
-  }, [socket]);
+  // Function to request status update from server via HTTP
+  const requestStatusUpdate = useCallback(async () => {
+    if (!isAuthenticated) return;
 
-  // ADDED: getDepartment helper function
+    try {
+      const response = await fetch('/api/status', {
+        credentials: 'include',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setBackendStatus(data);
+      }
+    } catch (error) {
+      console.error('Error requesting status update:', error);
+    }
+  }, [isAuthenticated]);
+
   const getDepartment = useCallback(
     (departmentId) => {
       return departments[departmentId] || null;
@@ -78,17 +79,10 @@ export function WebSocketProvider({ children }) {
 
       try {
         const data = JSON.parse(event.data);
-        const now = Date.now();
 
-        // Only deduplicate non-log messages by type and timestamp
-        if (data.type !== 'log' && data.type !== 'statusUpdate') {
-          if (
-            data.type === lastMessageRef.current.type &&
-            now - lastMessageRef.current.timestamp < 50
-          ) {
-            return;
-          }
-          lastMessageRef.current = { type: data.type, timestamp: now };
+        // Skip heartbeat messages
+        if (data.type === 'heartbeat' || data.type === 'connection') {
+          return;
         }
 
         switch (data.type) {
@@ -97,12 +91,10 @@ export function WebSocketProvider({ children }) {
             let analysesObj = {};
             if (data.analyses) {
               if (Array.isArray(data.analyses)) {
-                // Convert array to object
                 data.analyses.forEach((analysis) => {
                   analysesObj[analysis.name] = analysis;
                 });
               } else {
-                // Already an object
                 analysesObj = data.analyses;
               }
             }
@@ -110,20 +102,17 @@ export function WebSocketProvider({ children }) {
             let departmentsObj = {};
             if (data.departments) {
               if (Array.isArray(data.departments)) {
-                // Convert array to object
                 data.departments.forEach((dept) => {
                   departmentsObj[dept.id] = dept;
                 });
               } else {
-                // Already an object
                 departmentsObj = data.departments;
               }
             }
 
             setAnalyses(analysesObj);
             setDepartments(departmentsObj);
-            setHasInitialData(true); // Mark that we've loaded initial data
-            // Data is loaded when we have analyses and departments data
+            setHasInitialData(true);
 
             // Initialize log sequences tracking
             Object.keys(analysesObj).forEach((analysisName) => {
@@ -147,19 +136,15 @@ export function WebSocketProvider({ children }) {
           }
 
           case 'statusUpdate': {
-            // Handle status updates from WebSocket
             if (data.container_health) {
-              // Direct status structure
               setBackendStatus(data);
             } else if (data.data) {
-              // Wrapped in data property
               setBackendStatus(data.data);
             }
             break;
           }
 
           case 'analysisUpdate':
-            // Handle the new update format from broadcast
             if (data.analysisName && data.update) {
               setAnalyses((prev) => ({
                 ...prev,
@@ -172,20 +157,16 @@ export function WebSocketProvider({ children }) {
             break;
 
           case 'refresh':
-            // Re-request data - use the global socket
-            if (
-              globalWebSocket &&
-              globalWebSocket.readyState === WebSocket.OPEN
-            ) {
-              globalWebSocket.send(JSON.stringify({ type: 'requestAnalyses' }));
-            }
+            // Refresh data via SSE instead of page reload
+            console.log(
+              'Received refresh event - data will be updated via other SSE events',
+            );
             break;
 
           case 'analysisCreated':
             if (data.data?.analysis) {
               logSequences.current.set(data.data.analysis, new Set());
 
-              // If we have complete analysis data, add it immediately
               if (data.data.analysisData) {
                 const newAnalysis = {
                   ...data.data.analysisData,
@@ -198,15 +179,7 @@ export function WebSocketProvider({ children }) {
                   [data.data.analysis]: newAnalysis,
                 }));
               } else {
-                // Force refresh to get complete analysis data
-                if (
-                  globalWebSocket &&
-                  globalWebSocket.readyState === WebSocket.OPEN
-                ) {
-                  globalWebSocket.send(
-                    JSON.stringify({ type: 'requestAnalyses' }),
-                  );
-                }
+                window.location.reload();
               }
             }
             break;
@@ -313,7 +286,6 @@ export function WebSocketProvider({ children }) {
             }
             break;
 
-          // FIXED: Department-related messages - handle objects
           case 'departmentCreated':
           case 'departmentUpdated':
             if (data.department) {
@@ -331,7 +303,6 @@ export function WebSocketProvider({ children }) {
                 delete newDepts[data.deleted];
                 return newDepts;
               });
-              // Update analyses to move to new department
               if (data.analysesMovedTo) {
                 setAnalyses((prev) => {
                   const newAnalyses = {};
@@ -363,12 +334,10 @@ export function WebSocketProvider({ children }) {
             if (data.departments) {
               let departmentsObj = {};
               if (Array.isArray(data.departments)) {
-                // Convert array to object
                 data.departments.forEach((dept) => {
                   departmentsObj[dept.id] = dept;
                 });
               } else {
-                // Already an object
                 departmentsObj = data.departments;
               }
               setDepartments(departmentsObj);
@@ -376,14 +345,13 @@ export function WebSocketProvider({ children }) {
             break;
 
           case 'log':
-            // Handle log messages correctly
             if (data.data?.fileName && data.data?.log) {
               const { fileName, log, totalCount } = data.data;
 
               // Check for duplicate using sequence number
               const sequences = logSequences.current.get(fileName) || new Set();
               if (log.sequence && sequences.has(log.sequence)) {
-                return; // Skip duplicate
+                return;
               }
 
               // Add sequence to tracking
@@ -406,14 +374,24 @@ export function WebSocketProvider({ children }) {
           case 'logsCleared':
             if (data.data?.fileName) {
               const fileName = data.data.fileName;
+              console.log(
+                `Clearing logs for ${fileName}, previous log count:`,
+                analyses[fileName]?.logs?.length || 0,
+              );
+
               logSequences.current.set(fileName, new Set());
+
+              // If clearMessage is provided, show it as the only log entry
+              const clearedLogs = data.data.clearMessage
+                ? [data.data.clearMessage]
+                : [];
 
               setAnalyses((prev) => ({
                 ...prev,
                 [fileName]: {
                   ...prev[fileName],
-                  logs: [],
-                  totalLogCount: 0,
+                  logs: clearedLogs,
+                  totalLogCount: clearedLogs.length,
                 },
               }));
             }
@@ -422,33 +400,27 @@ export function WebSocketProvider({ children }) {
           case 'sessionInvalidated':
             console.log('Session invalidated:', data.reason);
 
-            // Check if this is a server shutdown
             if (data.reason?.includes('Server is shutting down')) {
               setServerShutdown(true);
               setConnectionStatus('server_shutdown');
-              return; // Don't logout immediately, show reconnection overlay
+              return;
             }
 
-            // Force logout on session invalidation immediately
+            // Force logout on session invalidation
             if (window.authService) {
-              // Clear tokens without calling server logout to avoid loops
               window.authService.token = null;
               window.authService.user = null;
-
-              // Clear authentication status
               localStorage.removeItem('auth_status');
-
-              // Force immediate page reload to show login page
               window.location.reload();
             }
             break;
 
           default:
-            console.log('Unhandled WebSocket message type:', data.type);
+            console.log('Unhandled SSE message type:', data.type);
             break;
         }
       } catch (error) {
-        console.error('Error handling WebSocket message:', error);
+        console.error('Error handling SSE message:', error);
       }
     },
     [removeLoadingAnalysis],
@@ -457,10 +429,9 @@ export function WebSocketProvider({ children }) {
   const reconnect = useCallback(async () => {
     if (!mountedRef.current) return;
 
-    // Stop reconnecting after max attempts
     if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
       console.log(
-        `WebSocket max reconnection attempts reached (${maxReconnectAttempts})`,
+        `SSE max reconnection attempts reached (${maxReconnectAttempts})`,
       );
       setConnectionStatus('failed');
       connectionStatusRef.current = 'failed';
@@ -474,7 +445,7 @@ export function WebSocketProvider({ children }) {
     reconnectAttemptsRef.current++;
 
     console.log(
-      `WebSocket reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`,
+      `SSE reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`,
     );
 
     setTimeout(async () => {
@@ -485,14 +456,11 @@ export function WebSocketProvider({ children }) {
         try {
           const refreshResult = await window.authService.refreshToken();
           if (!refreshResult.rateLimited) {
-            console.log(
-              'Token refreshed successfully before WebSocket reconnection',
-            );
+            console.log('Token refreshed successfully before SSE reconnection');
           }
         } catch (error) {
           console.error('Token refresh failed during reconnection:', error);
 
-          // Only fail reconnection for definitive auth failures
           if (
             error.message.includes('expired') ||
             error.message.includes('invalid') ||
@@ -506,19 +474,16 @@ export function WebSocketProvider({ children }) {
             return;
           }
 
-          // For network errors, continue with reconnection attempt
-          console.log(
-            'Continuing WebSocket reconnection despite refresh error',
-          );
+          console.log('Continuing SSE reconnection despite refresh error');
         }
       }
 
       setConnectionStatus('connecting');
       connectionStatusRef.current = 'connecting';
       try {
-        await createConnectionInternal();
+        await createConnection();
       } catch (error) {
-        console.error(`WebSocket reconnection failed:`, error);
+        console.error('SSE reconnection failed:', error);
         if (mountedRef.current) {
           setConnectionStatus('disconnected');
           connectionStatusRef.current = 'disconnected';
@@ -528,117 +493,66 @@ export function WebSocketProvider({ children }) {
     }, delay);
   }, [isAuthenticated]);
 
-  const createConnectionInternal = useCallback(async () => {
-    const componentId = componentIdRef.current;
-    const wsUrl = getWebSocketUrl();
+  const createConnection = useCallback(async () => {
+    const sseUrl = getSSEUrl();
 
-    if (!wsUrl) {
-      throw new Error('Authentication required for WebSocket connection');
+    if (!sseUrl) {
+      throw new Error('Authentication required for SSE connection');
     }
 
-    // If we already have a working connection, reuse it
-    if (globalWebSocket && globalWebSocket.readyState === WebSocket.OPEN) {
-      console.log(`WebSocket client reusing connection`);
-      setSocket(globalWebSocket);
-      setConnectionStatus('connected');
-      return globalWebSocket;
+    // Close existing connection
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
     }
 
-    // If connection is in progress, wait for it
-    if (globalConnectionPromise) {
-      console.log(`WebSocket client waiting for connection`);
-      return globalConnectionPromise;
-    }
+    return new Promise((resolve, reject) => {
+      const eventSource = new EventSource(sseUrl, {
+        withCredentials: true,
+      });
 
-    globalConnectionPromise = new Promise((resolve, reject) => {
-      const websocket = new WebSocket(wsUrl);
-      websocket._componentId = componentId;
-      let resolved = false;
+      eventSourceRef.current = eventSource;
 
       const connectionTimeout = setTimeout(() => {
-        if (!resolved) {
-          resolved = true;
-          console.log(`WebSocket connection timeout`);
-          websocket.close();
-          reject(new Error('Connection timeout'));
-        }
+        console.log('SSE connection timeout');
+        eventSource.close();
+        reject(new Error('Connection timeout'));
       }, 5000);
 
-      websocket.onopen = () => {
-        if (!resolved) {
-          resolved = true;
-          clearTimeout(connectionTimeout);
-          globalWebSocket = websocket;
-          globalConnectionPromise = null;
-
-          console.log(`WebSocket connection established`);
-
-          if (mountedRef.current) {
-            setSocket(websocket);
-            setConnectionStatus('connected');
-            connectionStatusRef.current = 'connected';
-            reconnectAttemptsRef.current = 0;
-          }
-
-          resolve(websocket);
-        }
-      };
-
-      websocket.onerror = (error) => {
-        if (!resolved) {
-          resolved = true;
-          clearTimeout(connectionTimeout);
-          globalConnectionPromise = null;
-          console.error('WebSocket connection error', error);
-          reject(error);
-        }
-      };
-
-      websocket.onclose = (event) => {
-        console.log(
-          `WebSocket connection closed Code: ${event.code}, Reason: ${event.reason})`,
-        );
+      eventSource.onopen = () => {
+        clearTimeout(connectionTimeout);
+        console.log('SSE connection established');
 
         if (mountedRef.current) {
-          // Check if this is a server shutdown (code 1001 or 1006 typically)
-          if (
-            event.code === 1001 ||
-            event.code === 1006 ||
-            event.code === 1005
-          ) {
-            setServerShutdown(true);
-            setConnectionStatus('server_shutdown');
-          } else {
-            setConnectionStatus('disconnected');
-          }
-          connectionStatusRef.current = 'disconnected';
-          setSocket(null);
-          // Clear backend status when connection is lost
-          setBackendStatus(null);
+          setConnectionStatus('connected');
+          connectionStatusRef.current = 'connected';
+          reconnectAttemptsRef.current = 0;
+        }
 
-          // Only reconnect if not a server shutdown
-          if (
-            !serverShutdown &&
-            event.code !== 1001 &&
-            event.code !== 1006 &&
-            event.code !== 1005
-          ) {
+        resolve(eventSource);
+      };
+
+      eventSource.onerror = (error) => {
+        clearTimeout(connectionTimeout);
+        console.error('SSE connection error', error);
+
+        if (mountedRef.current) {
+          if (eventSource.readyState === EventSource.CLOSED) {
+            setConnectionStatus('disconnected');
+            connectionStatusRef.current = 'disconnected';
+            setBackendStatus(null);
             reconnect();
           }
         }
 
-        // Only clear global references if this is the current global connection
-        if (globalWebSocket === websocket) {
-          globalWebSocket = null;
-          globalConnectionPromise = null;
+        if (eventSource.readyState === EventSource.CLOSED) {
+          reject(error);
         }
       };
 
-      websocket.onmessage = handleMessage;
+      eventSource.onmessage = handleMessage;
     });
-
-    return globalConnectionPromise;
-  }, [handleMessage, getWebSocketUrl, serverShutdown]);
+  }, [handleMessage, getSSEUrl, reconnect]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -646,36 +560,9 @@ export function WebSocketProvider({ children }) {
     const connect = async () => {
       if (!isAuthenticated) {
         setConnectionStatus('disconnected');
-        // Close any existing connection when not authenticated
-        if (globalWebSocket) {
-          globalWebSocket.close();
-          globalWebSocket = null;
-        }
-        globalConnectionPromise = null;
-        return;
-      }
-
-      // Don't create multiple connections
-      if (globalWebSocket && globalWebSocket.readyState === WebSocket.OPEN) {
-        setSocket(globalWebSocket);
-        setConnectionStatus('connected');
-        return;
-      }
-
-      // If there's already a connection attempt in progress, wait for it
-      if (globalConnectionPromise) {
-        try {
-          const existingWs = await globalConnectionPromise;
-          if (
-            existingWs &&
-            existingWs.readyState === WebSocket.OPEN &&
-            mountedRef.current
-          ) {
-            setSocket(existingWs);
-            setConnectionStatus('connected');
-          }
-        } catch {
-          // Connection failed, continue with new attempt
+        if (eventSourceRef.current) {
+          eventSourceRef.current.close();
+          eventSourceRef.current = null;
         }
         return;
       }
@@ -683,11 +570,11 @@ export function WebSocketProvider({ children }) {
       try {
         setConnectionStatus('connecting');
         connectionStatusRef.current = 'connecting';
-        console.log(`Starting live listener connection...`);
+        console.log('Starting SSE connection...');
 
-        await createConnectionInternal();
+        await createConnection();
       } catch (error) {
-        console.error(`WebSocket initial connection failed:`, error);
+        console.error('SSE initial connection failed:', error);
         if (mountedRef.current) {
           setConnectionStatus('disconnected');
           connectionStatusRef.current = 'disconnected';
@@ -699,32 +586,27 @@ export function WebSocketProvider({ children }) {
     // Handle page visibility changes for automatic reconnection
     const handleVisibilityChange = async () => {
       if (!document.hidden && mountedRef.current) {
-        // Page became visible - check if we need to reconnect
         if (
           connectionStatusRef.current === 'disconnected' ||
-          !globalWebSocket ||
-          globalWebSocket.readyState !== WebSocket.OPEN
+          !eventSourceRef.current ||
+          eventSourceRef.current.readyState !== EventSource.OPEN
         ) {
-          console.log(
-            'Page became visible, attempting WebSocket reconnection...',
-          );
+          console.log('Page became visible, attempting SSE reconnection...');
 
-          // Refresh token before reconnecting
           if (window.authService && isAuthenticated) {
             try {
               const refreshResult = await window.authService.refreshToken();
               if (!refreshResult.rateLimited) {
                 console.log(
-                  'Token refreshed successfully before WebSocket visibility reconnection',
+                  'Token refreshed successfully before SSE visibility reconnection',
                 );
               }
             } catch (error) {
               console.error(
-                'Token refresh failed before WebSocket reconnection:',
+                'Token refresh failed before SSE reconnection:',
                 error,
               );
 
-              // Only skip connection for definitive auth failures
               if (
                 error.message.includes('expired') ||
                 error.message.includes('invalid') ||
@@ -734,9 +616,8 @@ export function WebSocketProvider({ children }) {
                 return;
               }
 
-              // For network errors, continue with reconnection attempt
               console.log(
-                'Continuing WebSocket visibility reconnection despite refresh error',
+                'Continuing SSE visibility reconnection despite refresh error',
               );
             }
           }
@@ -746,35 +627,29 @@ export function WebSocketProvider({ children }) {
       }
     };
 
-    // Handle focus events as backup for older browsers
     const handleFocus = async () => {
       if (mountedRef.current) {
-        // Window gained focus - check if we need to reconnect
         if (
           connectionStatusRef.current === 'disconnected' ||
-          !globalWebSocket ||
-          globalWebSocket.readyState !== WebSocket.OPEN
+          !eventSourceRef.current ||
+          eventSourceRef.current.readyState !== EventSource.OPEN
         ) {
-          console.log(
-            'Window gained focus, attempting WebSocket reconnection...',
-          );
+          console.log('Window gained focus, attempting SSE reconnection...');
 
-          // Refresh token before reconnecting
           if (window.authService && isAuthenticated) {
             try {
               const refreshResult = await window.authService.refreshToken();
               if (!refreshResult.rateLimited) {
                 console.log(
-                  'Token refreshed successfully before WebSocket focus reconnection',
+                  'Token refreshed successfully before SSE focus reconnection',
                 );
               }
             } catch (error) {
               console.error(
-                'Token refresh failed before WebSocket reconnection:',
+                'Token refresh failed before SSE reconnection:',
                 error,
               );
 
-              // Only skip connection for definitive auth failures
               if (
                 error.message.includes('expired') ||
                 error.message.includes('invalid') ||
@@ -784,9 +659,8 @@ export function WebSocketProvider({ children }) {
                 return;
               }
 
-              // For network errors, continue with reconnection attempt
               console.log(
-                'Continuing WebSocket focus reconnection despite refresh error',
+                'Continuing SSE focus reconnection despite refresh error',
               );
             }
           }
@@ -796,51 +670,42 @@ export function WebSocketProvider({ children }) {
       }
     };
 
-    // Small delay to prevent rapid connections in development (React StrictMode)
     const timeoutId = setTimeout(connect, 50);
 
-    // Add event listeners for automatic reconnection
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('focus', handleFocus);
 
     return () => {
-      console.log(`WebSocket client cleanup starting`);
+      console.log('SSE client cleanup starting');
       mountedRef.current = false;
 
-      // Clear timeout
       clearTimeout(timeoutId);
 
-      // Remove event listeners
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleFocus);
 
-      // Only close if this component created the global connection
-      if (globalWebSocket && globalWebSocket.readyState === WebSocket.OPEN) {
-        console.log(`WebSocket closing connection`);
-        globalWebSocket.close();
-        globalWebSocket = null;
+      if (eventSourceRef.current) {
+        console.log('SSE closing connection');
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
       }
-      globalConnectionPromise = null;
     };
-  }, [createConnectionInternal, reconnect, isAuthenticated, serverShutdown]);
+  }, [createConnection, reconnect, isAuthenticated, serverShutdown]);
 
   // Request status updates periodically (fallback)
   useEffect(() => {
-    if (connectionStatus === 'connected' && socket) {
-      // Request initial status
+    if (connectionStatus === 'connected') {
       requestStatusUpdate();
 
-      // Set up periodic status requests (as backup)
-      const interval = setInterval(requestStatusUpdate, 60000); // Every minute
+      const interval = setInterval(requestStatusUpdate, 60000);
 
       return () => clearInterval(interval);
     }
-  }, [connectionStatus, socket, requestStatusUpdate]);
+  }, [connectionStatus, requestStatusUpdate]);
 
   const value = {
-    socket,
-    analyses, // Object format: { analysisName: analysisData }
-    departments, // Object format: { deptId: deptData }
+    analyses,
+    departments,
     loadingAnalyses,
     addLoadingAnalysis,
     removeLoadingAnalysis,
@@ -852,13 +717,9 @@ export function WebSocketProvider({ children }) {
     serverShutdown,
   };
 
-  return (
-    <WebSocketContext.Provider value={value}>
-      {children}
-    </WebSocketContext.Provider>
-  );
+  return <SSEContext.Provider value={value}>{children}</SSEContext.Provider>;
 }
 
-WebSocketProvider.propTypes = {
+SSEProvider.propTypes = {
   children: PropTypes.node.isRequired,
 };

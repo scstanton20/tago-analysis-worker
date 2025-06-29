@@ -2,7 +2,7 @@
 import path from 'path';
 import { promises as fs } from 'fs';
 import { fork } from 'child_process';
-import { broadcast } from '../utils/websocket.js';
+import { sseManager } from '../utils/sse.js';
 import config from '../config/default.js';
 
 class AnalysisProcess {
@@ -83,7 +83,7 @@ class AnalysisProcess {
       console.error(`Error writing to log file ${this.logFile}:`, error);
     }
 
-    broadcast({
+    sseManager.broadcast({
       type: 'log',
       data: {
         fileName: this.analysisName,

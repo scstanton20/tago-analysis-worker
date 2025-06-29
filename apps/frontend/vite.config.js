@@ -13,7 +13,6 @@ const isDocker = (() => {
 
 // Base URL for backend
 const backendUrl = isDocker ? 'http://backend:3000' : 'http://localhost:3000';
-const wsBackendUrl = isDocker ? 'ws://backend:3000' : 'ws://localhost:3000';
 
 export default defineConfig({
   plugins: [react()],
@@ -24,10 +23,6 @@ export default defineConfig({
       '/api': {
         target: backendUrl,
         changeOrigin: true,
-      },
-      '/ws': {
-        target: wsBackendUrl,
-        ws: true,
       },
     },
   },

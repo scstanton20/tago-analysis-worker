@@ -1,14 +1,9 @@
 // backend/src/routes/statusRoutes.js
 import express from 'express';
 import StatusController from '../controllers/statusController.js';
-import { getContainerState } from '../utils/websocket.js';
-
 export default function createStatusRoutes(analysisService) {
   const router = express.Router();
-  const statusController = new StatusController(
-    analysisService,
-    getContainerState(),
-  );
+  const statusController = new StatusController(analysisService);
 
   /**
    * @swagger
@@ -66,7 +61,7 @@ export default function createStatusRoutes(analysisService) {
    * /status:
    *   get:
    *     summary: Get system status and health information
-   *     description: Returns comprehensive status information about the analysis runner including container health, Tago SDK version, and running analyses count
+   *     description: Returns comprehensive status information about the analysis runner including container health, Tago SDK version, and running analyses count. Status updates are also streamed via SSE at /sse/events for real-time monitoring.
    *     tags: [Status]
    *     responses:
    *       200:

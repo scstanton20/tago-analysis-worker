@@ -12,9 +12,9 @@ const options = {
     openapi: '3.0.0',
     info: {
       title: 'Tago Analysis Runner API',
-      version: '1.0.0',
+      version: '2.0.0',
       description:
-        'API for managing and running Tago.io analysis scripts with real-time monitoring capabilities',
+        'API for managing and running Tago.io analysis scripts with real-time monitoring capabilities. Features Server-Sent Events (SSE) for real-time updates with simplified authentication.',
     },
     servers: [
       {
@@ -54,6 +54,26 @@ This API uses industry-standard **Argon2id** password hashing for maximum securi
 - No maximum length limit
 - All character types supported
 - Unicode support for international passwords`,
+        },
+        RealTimeInfo: {
+          type: 'object',
+          description: `**Real-time Updates:**
+            
+This API provides real-time updates via **Server-Sent Events (SSE)** for:
+- Analysis status changes and log streaming
+- System health monitoring
+- Department management updates
+- Session management notifications
+
+**Migration from WebSocket:**
+- Simplified authentication (single HTTP cookie-based auth)
+- Built-in browser reconnection support
+- Standard HTTP-based protocol
+- Same functionality as previous WebSocket implementation
+
+**SSE Endpoint:** \`GET /api/sse/events\`
+**Authentication:** HTTP-only cookies (access_token)
+**Connection:** Persistent keep-alive with automatic reconnection`,
         },
         User: {
           type: 'object',

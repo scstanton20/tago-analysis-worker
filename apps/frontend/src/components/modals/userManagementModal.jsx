@@ -28,7 +28,7 @@ import {
   IconAlertCircle,
 } from '@tabler/icons-react';
 import { useAuth } from '../../hooks/useAuth';
-import { useWebSocket } from '../../contexts/websocketContext';
+import { useSSE } from '../../contexts/sseContext';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 
 export default function UserManagementModal({ opened, onClose }) {
@@ -41,7 +41,7 @@ export default function UserManagementModal({ opened, onClose }) {
     refreshPermissions,
     user: currentUser,
   } = useAuth();
-  const { departments: wsaDepartments } = useWebSocket();
+  const { departments: wsaDepartments } = useSSE();
   const notify = useNotifications();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);

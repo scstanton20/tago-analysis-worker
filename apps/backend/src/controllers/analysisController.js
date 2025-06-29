@@ -1,6 +1,6 @@
 // backend/src/controllers/analysisController.js
 import { analysisService } from '../services/analysisService.js';
-import { broadcast, broadcastRefresh } from '../utils/websocket.js';
+import { sseManager } from '../utils/sse.js';
 import path from 'path';
 import config from '../config/default.js';
 import { promises as fs } from 'fs';
@@ -64,7 +64,7 @@ const analysisController = {
       const createdAnalysis = analysisData[result.analysisName];
 
       // Broadcast analysis creation with complete data
-      broadcast({
+      sseManager.broadcast({
         type: 'analysisCreated',
         data: {
           analysis: result.analysisName,
@@ -72,11 +72,6 @@ const analysisController = {
           analysisData: createdAnalysis,
         },
       });
-
-      // Force a complete refresh to ensure consistency
-      setTimeout(() => {
-        broadcastRefresh();
-      }, 100);
 
       res.json(result);
     } catch (error) {
@@ -104,7 +99,7 @@ const analysisController = {
 
       const result = await analysisService.runAnalysis(sanitizedFileName);
 
-      broadcast({
+      sseManager.broadcast({
         type: 'analysisStatus',
         data: {
           fileName: sanitizedFileName,
@@ -140,7 +135,7 @@ const analysisController = {
 
       const result = await analysisService.stopAnalysis(sanitizedFileName);
 
-      broadcast({
+      sseManager.broadcast({
         type: 'analysisStatus',
         data: {
           fileName: sanitizedFileName,
@@ -181,7 +176,7 @@ const analysisController = {
       await analysisService.deleteAnalysis(sanitizedFileName);
 
       // Broadcast deletion with analysis data
-      broadcast({
+      sseManager.broadcast({
         type: 'analysisDeleted',
         data: {
           fileName: sanitizedFileName,
@@ -272,7 +267,7 @@ const analysisController = {
       const updatedAnalysis = analyses[sanitizedFileName];
 
       // Broadcast update with complete analysis data
-      broadcast({
+      sseManager.broadcast({
         type: 'analysisUpdated',
         data: {
           fileName: sanitizedFileName,
@@ -336,7 +331,7 @@ const analysisController = {
       const renamedAnalysis = analyses[sanitizedNewFileName];
 
       // Broadcast update with complete analysis data
-      broadcast({
+      sseManager.broadcast({
         type: 'analysisRenamed',
         data: {
           oldFileName: sanitizedFileName,
@@ -545,10 +540,18 @@ const analysisController = {
 
       const result = await analysisService.clearLogs(sanitizedFileName);
 
-      // Broadcast logs cleared
-      broadcast({
+      // Broadcast logs cleared with the "Log file cleared" message included
+      // This avoids race conditions with separate log events
+      sseManager.broadcast({
         type: 'logsCleared',
-        data: { fileName: sanitizedFileName },
+        data: { 
+          fileName: sanitizedFileName,
+          clearMessage: {
+            timestamp: new Date().toLocaleString(),
+            message: 'Log file cleared',
+            level: 'info'
+          }
+        },
       });
 
       res.json(result);
@@ -649,7 +652,7 @@ const environmentController = {
       const updatedAnalysis = analyses[sanitizedFileName];
 
       // Broadcast update with complete analysis data
-      broadcast({
+      sseManager.broadcast({
         type: 'analysisEnvironmentUpdated',
         data: {
           fileName: sanitizedFileName,

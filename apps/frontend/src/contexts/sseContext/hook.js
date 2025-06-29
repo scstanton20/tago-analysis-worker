@@ -1,26 +1,25 @@
-// frontend/src/contexts/websocketContext/hook.jsx
+// frontend/src/contexts/sseContext/hook.js
 import { useContext } from 'react';
-import { WebSocketContext } from './context';
+import { SSEContext } from './context';
 
-export function useWebSocket() {
-  const context = useContext(WebSocketContext);
+export function useSSE() {
+  const context = useContext(SSEContext);
 
   if (!context) {
-    throw new Error('useWebSocket must be used within a WebSocketProvider');
+    throw new Error('useSSE must be used within an SSEProvider');
   }
 
   return {
     // Core state
-    analyses: context.analyses || {}, // Object: { analysisName: analysisData }
-    departments: context.departments || {}, // Object: { deptId: deptData }
+    analyses: context.analyses || {},
+    departments: context.departments || {},
 
     // Connection state
     connectionStatus: context.connectionStatus || 'connecting',
     backendStatus: context.backendStatus,
     hasInitialData: context.hasInitialData || false,
 
-    // WebSocket and loading state
-    socket: context.socket,
+    // Loading state
     loadingAnalyses: context.loadingAnalyses || new Set(),
 
     // Functions

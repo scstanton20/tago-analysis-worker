@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import Editor from '@monaco-editor/react';
 import { analysisService } from '../../services/analysisService';
-import { useWebSocket } from '../../contexts/websocketContext';
+import { useSSE } from '../../contexts/sseContext';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import {
   Modal,
@@ -28,7 +28,7 @@ export default function EditAnalysisENVModal({
   const [error, setError] = useState(null);
 
   // ADDED: Get current analysis from WebSocket context for consistency
-  const { getAnalysis } = useWebSocket();
+  const { getAnalysis } = useSSE();
   const currentAnalysis = getAnalysis(analysis.name) || analysis;
   const notify = useNotifications();
 

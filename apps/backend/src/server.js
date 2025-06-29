@@ -6,12 +6,7 @@ import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import fileUpload from 'express-fileupload';
 import config from './config/default.js';
-import {
-  setupWebSocket,
-  updateContainerState,
-  broadcastStatusUpdate,
-  broadcast,
-} from './utils/websocket.js';
+import { sseManager } from './utils/sse.js';
 import errorHandler from './middleware/errorHandler.js';
 import {
   analysisService,
@@ -24,6 +19,7 @@ import statusRoutes from './routes/statusRoutes.js';
 import departmentRoutes from './routes/departmentRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import webauthnRoutes from './routes/webauthnRoutes.js';
+import sseRoutes from './routes/sseRoutes.js';
 import { apiRateLimit } from './middleware/auth.js';
 import userService from './services/userService.js';
 import { specs, swaggerUi } from './docs/swagger.js';
@@ -37,19 +33,11 @@ const app = express();
 const server = http.createServer(app);
 
 // Initialize container state
-updateContainerState({
+sseManager.updateContainerState({
   status: 'starting',
   startTime: new Date(),
   message: 'Container is starting',
 });
-
-// Single WebSocket setup
-let wsInitialized = false;
-
-if (!wsInitialized) {
-  setupWebSocket(server);
-  wsInitialized = true;
-}
 
 // Middleware
 app.use(
@@ -57,7 +45,7 @@ app.use(
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        connectSrc: ["'self'", 'http://localhost:3000', 'ws://localhost:3000'],
+        connectSrc: ["'self'", 'http://localhost:3000'],
         styleSrc: ["'self'", "'unsafe-inline'"],
         scriptSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", 'data:', 'https:'],
@@ -88,7 +76,7 @@ const PORT = process.env.PORT || 3000;
 // Function to restart processes that were running before
 async function restartRunningProcesses() {
   try {
-    updateContainerState({
+    sseManager.updateContainerState({
       status: 'restarting_processes',
       message: 'Restarting previously running analyses',
     });
@@ -113,14 +101,14 @@ async function restartRunningProcesses() {
       }
     }
 
-    updateContainerState({
+    sseManager.updateContainerState({
       status: 'ready',
       message: 'Container is fully initialized and ready',
     });
 
     console.log('Process restart check completed');
   } catch (error) {
-    updateContainerState({
+    sseManager.updateContainerState({
       status: 'error',
       message: `Error during process restart: ${error.message}`,
     });
@@ -133,7 +121,7 @@ async function startServer() {
   try {
     console.log(`Starting server in ${config.env} mode`);
 
-    updateContainerState({
+    sseManager.updateContainerState({
       status: 'initializing',
       message: 'Initializing server components',
     });
@@ -144,7 +132,7 @@ async function startServer() {
     await userService.loadUsers();
     console.log('Services initialized successfully');
 
-    updateContainerState({
+    sseManager.updateContainerState({
       status: 'setting_up_routes',
       message: 'Setting up API routes',
     });
@@ -168,6 +156,10 @@ async function startServer() {
     app.use(`${API_PREFIX}/departments`, departmentRoutes);
     console.log(`✓ Department routes mounted at ${API_PREFIX}/departments`);
 
+    // SSE routes
+    app.use(`${API_PREFIX}/sse`, sseRoutes);
+    console.log(`✓ SSE routes mounted at ${API_PREFIX}/sse`);
+
     // Swagger API Documentation - protected by authentication
     app.use(
       `${API_PREFIX}/docs`,
@@ -180,7 +172,7 @@ async function startServer() {
     // Error handling (must be after routes)
     app.use(errorHandler);
 
-    updateContainerState({
+    sseManager.updateContainerState({
       status: 'starting_processes',
       message: 'Starting analysis processes',
     });
@@ -189,7 +181,7 @@ async function startServer() {
     server.listen(PORT, async () => {
       console.log(`Server is running on port ${PORT}`);
 
-      updateContainerState({
+      sseManager.updateContainerState({
         status: 'checking_processes',
         message: 'Checking for processes to restart',
       });
@@ -201,11 +193,11 @@ async function startServer() {
       startPeriodicCleanup();
 
       // Broadcast status update to all connected clients
-      broadcastStatusUpdate();
+      sseManager.broadcastStatusUpdate();
     });
   } catch (error) {
     console.error('Failed to start server:', error);
-    updateContainerState({
+    sseManager.updateContainerState({
       status: 'error',
       message: `Failed to start server: ${error.message}`,
     });
@@ -216,16 +208,15 @@ async function startServer() {
 // Graceful shutdown
 process.on('SIGINT', () => {
   console.log('Received SIGINT, shutting down gracefully');
-  updateContainerState({
+  sseManager.updateContainerState({
     status: 'shutting_down',
     message: 'Server is shutting down',
   });
 
   // Broadcast session invalidation to all users before shutdown
-  broadcast({
+  sseManager.broadcast({
     type: 'sessionInvalidated',
     reason: 'Server is shutting down',
-    timestamp: new Date().toISOString(),
   });
 
   setTimeout(() => {
@@ -238,16 +229,15 @@ process.on('SIGINT', () => {
 
 process.on('SIGTERM', () => {
   console.log('Received SIGTERM, shutting down gracefully');
-  updateContainerState({
+  sseManager.updateContainerState({
     status: 'shutting_down',
     message: 'Server is shutting down',
   });
 
   // Broadcast session invalidation to all users before shutdown
-  broadcast({
+  sseManager.broadcast({
     type: 'sessionInvalidated',
     reason: 'Server is shutting down',
-    timestamp: new Date().toISOString(),
   });
 
   setTimeout(() => {

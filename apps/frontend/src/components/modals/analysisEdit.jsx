@@ -21,7 +21,7 @@ import {
   IconX,
   IconAlertCircle,
 } from '@tabler/icons-react';
-import { useWebSocket } from '../../contexts/websocketContext';
+import { useSSE } from '../../contexts/sseContext';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 
 export default function EditAnalysisModal({
@@ -37,7 +37,7 @@ export default function EditAnalysisModal({
   const [newFileName, setNewFileName] = useState(initialAnalysis.name);
 
   // FIXED: Get analyses object from WebSocket context
-  const { analyses } = useWebSocket();
+  const { analyses } = useSSE();
   const notify = useNotifications();
 
   // FIXED: Use direct object lookup instead of array.find()

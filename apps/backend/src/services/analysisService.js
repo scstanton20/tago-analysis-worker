@@ -419,8 +419,7 @@ class AnalysisService {
       analysis.logSequence = 0;
       analysis.totalLogCount = 0;
 
-      // Add cleared log entry
-      await analysis.addLog('Log file cleared');
+      // Log entry is now handled by the controller's SSE broadcast
 
       return { success: true, message: 'Logs cleared successfully' };
     } catch (error) {

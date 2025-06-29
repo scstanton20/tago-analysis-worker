@@ -15,7 +15,7 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useWebSocket } from '../contexts/websocketContext/index';
+import { useSSE } from '../contexts/sseContext/index';
 import {
   Box,
   Stack,
@@ -174,7 +174,7 @@ export default function DepartmentalSidebar({
   selectedDepartment,
   onDepartmentSelect,
 }) {
-  const { departments, getDepartmentAnalysisCount } = useWebSocket();
+  const { departments, getDepartmentAnalysisCount } = useSSE();
   const { user, logout, isAdmin } = useAuth();
   const { canAccessDepartment, isAdmin: hasAdminPerms } = usePermissions();
 

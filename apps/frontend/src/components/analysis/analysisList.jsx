@@ -1,6 +1,6 @@
 // frontend/src/components/analysis/analysisList.jsx
 import { useState, useMemo } from 'react';
-import { useWebSocket } from '../../contexts/websocketContext';
+import { useSSE } from '../../contexts/sseContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import AnalysisItem from './analysisItem';
 import {
@@ -27,7 +27,7 @@ export default function AnalysisList({
     departments: allDepartments = {},
     connectionStatus,
     getDepartment,
-  } = useWebSocket();
+  } = useSSE();
 
   const { accessibleDepartments, isAdmin } = usePermissions();
 

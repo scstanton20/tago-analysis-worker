@@ -1,6 +1,6 @@
 // frontend/src/components/connectionStatus.jsx
 import { useState } from 'react';
-import { useWebSocket } from '../contexts/websocketContext';
+import { useSSE } from '../contexts/sseContext';
 import {
   ActionIcon,
   Popover,
@@ -17,7 +17,7 @@ import { IconRefresh, IconBook } from '@tabler/icons-react';
 const ConnectionStatus = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const { connectionStatus, backendStatus, requestStatusUpdate } =
-    useWebSocket();
+    useSSE();
 
   const getOverallStatusColor = () => {
     if (!backendStatus) return 'red';

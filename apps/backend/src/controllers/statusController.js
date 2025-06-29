@@ -5,13 +5,8 @@ import ms from 'ms';
 const require = createRequire(import.meta.url);
 
 class StatusController {
-  constructor(analysisService, containerState) {
+  constructor(analysisService) {
     this.analysisService = analysisService;
-    this.containerState = containerState || {
-      status: 'ready',
-      startTime: new Date(),
-      message: 'Container is ready',
-    };
     this.getSystemStatus = this.getSystemStatus.bind(this);
   }
 
@@ -37,15 +32,12 @@ class StatusController {
         tagoVersion = 'unknown';
       }
 
-      // IMPORTANT: Get current container state instead of using stale reference
-      const { getContainerState } = await import('../utils/websocket.js');
-      const currentContainerState = getContainerState();
+      // IMPORTANT: Get current container state from SSE manager
+      const { sseManager } = await import('../utils/sse.js');
+      const currentContainerState = sseManager.getContainerState();
 
       // Safely calculate uptime with proper null checks
-      const startTime =
-        currentContainerState.startTime ||
-        currentContainerState.lastStartTime ||
-        new Date();
+      const startTime = currentContainerState.startTime || new Date();
       const uptimeMs = new Date() - new Date(startTime);
       const uptimeSeconds = Math.floor(uptimeMs / 1000);
 

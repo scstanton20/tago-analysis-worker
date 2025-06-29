@@ -15,8 +15,8 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { IconSun, IconMoon } from '@tabler/icons-react';
-import { useWebSocket } from './contexts/websocketContext';
-import { WebSocketProvider } from './contexts/websocketContext/provider';
+import { useSSE } from './contexts/sseContext';
+import { SSEProvider } from './contexts/sseContext/provider';
 import { AuthProvider } from './contexts/authContext';
 import { useAuth } from './hooks/useAuth';
 import { useIdleTimeout } from './hooks/useIdleTimeout';
@@ -74,7 +74,7 @@ function AppLoadingOverlay({ message, submessage, error, showRetry }) {
 
 function AppContent() {
   const { analyses, departments, getDepartment, connectionStatus } =
-    useWebSocket();
+    useSSE();
   const { canUploadAnalyses, canAccessDepartment, canViewAnalyses, isAdmin } =
     usePermissions();
 
@@ -150,7 +150,7 @@ function AppContent() {
     return (
       <AppLoadingOverlay
         message="Connection Failed"
-        submessage="Unable to connect to the Tago Analysis Runner server. Please ensure the backend server is running and accessible at the configured WebSocket endpoint."
+        submessage="Unable to connect to the Tago Analysis Runner server. Please ensure the backend server is running and accessible."
         error={true}
         showRetry={true}
       />
@@ -290,7 +290,7 @@ function AppContent() {
                   message="Connecting to Tago Analysis Runner..."
                   submessage={
                     (connectionStatus === 'connecting' &&
-                      'Establishing WebSocket connection...') ||
+                      'Establishing server connection...') ||
                     (connectionStatus === 'disconnected' &&
                       'Connection lost, retrying...') ||
                     (connectionStatus === 'server_shutdown' &&
@@ -312,7 +312,7 @@ function AppContent() {
                 message="Connecting to Tago Analysis Runner..."
                 submessage={
                   (connectionStatus === 'connecting' &&
-                    'Establishing WebSocket connection...') ||
+                    'Establishing server connection...') ||
                   (connectionStatus === 'disconnected' &&
                     'Connection lost, retrying...') ||
                   (connectionStatus === 'server_shutdown' &&
@@ -335,12 +335,12 @@ function AppContent() {
   );
 }
 
-// Authenticated App Content with WebSocket
+// Authenticated App Content with SSE
 function AuthenticatedApp() {
   return (
-    <WebSocketProvider>
+    <SSEProvider>
       <AppContent />
-    </WebSocketProvider>
+    </SSEProvider>
   );
 }
 
@@ -375,6 +375,6 @@ function AppRouter() {
     );
   }
 
-  // Only load WebSocket and heavy components when authenticated
+  // Only load SSE and heavy components when authenticated
   return <AuthenticatedApp />;
 }

@@ -1,7 +1,7 @@
 // frontend/src/components/analysis/uploadAnalysis.jsx
 import { useState, useRef } from 'react';
 import { analysisService } from '../../services/analysisService';
-import { useWebSocket } from '../../contexts/websocketContext/index';
+import { useSSE } from '../../contexts/sseContext/index';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import Editor from '@monaco-editor/react';
 import {
@@ -53,7 +53,7 @@ export default function AnalysisCreator({
   const fileInputRef = useRef(null);
 
   // WebSocket context
-  const { loadingAnalyses, analyses } = useWebSocket();
+  const { loadingAnalyses, analyses } = useSSE();
 
   // Notifications
   const notify = useNotifications();

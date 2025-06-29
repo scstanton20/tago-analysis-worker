@@ -1,6 +1,6 @@
 // backend/src/controllers/departmentController.js
 import departmentService from '../services/departmentService.js';
-import { broadcast } from '../utils/websocket.js';
+import { sseManager } from '../utils/sse.js';
 
 const DepartmentController = {
   // Get all departments
@@ -44,7 +44,7 @@ const DepartmentController = {
       });
 
       // Broadcast to all WebSocket clients - use correct format
-      broadcast({
+      sseManager.broadcast({
         type: 'departmentCreated',
         department,
       });
@@ -69,7 +69,7 @@ const DepartmentController = {
       const department = await departmentService.updateDepartment(id, updates);
 
       // Broadcast update - use correct format
-      broadcast({
+      sseManager.broadcast({
         type: 'departmentUpdated',
         department,
       });
@@ -99,7 +99,7 @@ const DepartmentController = {
       );
 
       // Broadcast deletion - use correct format
-      broadcast({
+      sseManager.broadcast({
         type: 'departmentDeleted',
         deleted: result.deleted,
         analysesMovedTo: result.analysesMovedTo,
@@ -132,7 +132,7 @@ const DepartmentController = {
         await departmentService.reorderDepartments(orderedIds);
 
       // Broadcast reorder - use correct format
-      broadcast({
+      sseManager.broadcast({
         type: 'departmentsReordered',
         departments,
       });
@@ -176,7 +176,7 @@ const DepartmentController = {
       );
 
       // Broadcast move - use correct format
-      broadcast({
+      sseManager.broadcast({
         type: 'analysisMovedToDepartment',
         analysis: result.analysis,
         from: result.from,
@@ -211,7 +211,7 @@ const DepartmentController = {
       );
 
       // Broadcast bulk move - use correct format
-      broadcast({
+      sseManager.broadcast({
         type: 'analysesBulkMoved',
         results,
         targetDepartmentId,

@@ -7,7 +7,7 @@ A full-stack application for managing and running Tago.io analysis scripts with 
 - 🔧 **Analysis Management**: Upload, run, stop, and monitor Tago.io analysis scripts
 - 🏢 **Department Organization**: Hierarchical organization with drag-and-drop management
 - 👥 **User Management**: Role-based access control with fine-grained permissions
-- 📊 **Real-time Monitoring**: Live status updates and log streaming via WebSocket
+- 📊 **Real-time Monitoring**: Live status updates and log streaming via Server-Sent Events (SSE)
 - 🔐 **Secure Authentication**: JWT with refresh tokens and WebAuthn/passkey support
 - 📱 **Modern UI**: Built with Mantine components and responsive design
 - 🔔 **Smart Notifications**: Contextual feedback for all user operations
@@ -15,10 +15,10 @@ A full-stack application for managing and running Tago.io analysis scripts with 
 ## Tech Stack
 
 - **Frontend**: React 19 + Vite + Mantine 8.x
-- **Backend**: Node.js 22+ + Express.js 5.x + WebSocket
+- **Backend**: Node.js 22+ + Express.js 5.x + Server-Sent Events
 - **Package Manager**: pnpm workspaces
 - **Authentication**: JWT + WebAuthn (passkeys)
-- **Real-time**: WebSocket integration
+- **Real-time**: Server-Sent Events (SSE) with simplified authentication
 - **Security**: Encryption for sensitive data
 
 ## Quick Start

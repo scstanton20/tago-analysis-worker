@@ -35,7 +35,7 @@ const AnalysisEditModal = lazy(() => import('../modals/analysisEdit'));
 const AnalysisEditENVModal = lazy(() => import('../modals/analysisEditENV'));
 import LogDownloadDialog from '../modals/logDownload';
 import DepartmentSelectModal from '../modals/changeDepartmentModal';
-import { useWebSocket } from '../../contexts/websocketContext';
+import { useSSE } from '../../contexts/sseContext';
 import { usePermissions } from '../../hooks/usePermissions';
 
 export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
@@ -49,7 +49,7 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
     addLoadingAnalysis,
     removeLoadingAnalysis,
     departments,
-  } = useWebSocket();
+  } = useSSE();
   const {
     canRunAnalyses,
     canViewAnalyses,
@@ -189,10 +189,6 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
     }
 
     try {
-      if (showLogs) {
-        onToggleLogs();
-      }
-
       await notify.executeWithNotification(
         analysisService.deleteLogs(analysis.name),
         {
@@ -201,12 +197,7 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
         },
       );
 
-      // Wait for the backend to fully process the deletion
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      if (!showLogs) {
-        onToggleLogs();
-      }
+      // SSE will automatically update the logs component with empty logs
     } catch (error) {
       console.error('Failed to delete logs:', error);
     }

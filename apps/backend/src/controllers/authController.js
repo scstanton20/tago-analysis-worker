@@ -8,7 +8,7 @@ import {
   updateRefreshTokenActivity,
   rotateRefreshToken,
 } from '../utils/jwt.js';
-import { broadcastToUser } from '../utils/websocket.js';
+import { sseManager } from '../utils/sse.js';
 
 export const login = async (req, res) => {
   try {
@@ -223,7 +223,7 @@ export const changePassword = async (req, res) => {
     });
 
     // Broadcast logout to other sessions
-    broadcastToUser(updatedUser.id, {
+    sseManager.sendToUser(updatedUser.id, {
       type: 'sessionInvalidated',
       reason: 'Password changed',
       timestamp: new Date().toISOString(),
@@ -375,7 +375,7 @@ export const logout = async (req, res) => {
 
       // Broadcast logout to all sessions of the same user
       if (userId) {
-        broadcastToUser(userId, {
+        sseManager.sendToUser(userId, {
           type: 'sessionInvalidated',
           reason: 'User logged out from another session',
           timestamp: new Date().toISOString(),
@@ -402,7 +402,7 @@ export const logoutAllSessions = async (req, res) => {
     const invalidatedSessions = invalidateAllUserSessions(userId);
 
     // Broadcast logout message to all user's sessions
-    broadcastToUser(userId, {
+    sseManager.sendToUser(userId, {
       type: 'sessionInvalidated',
       reason: 'All sessions logged out',
       timestamp: new Date().toISOString(),
@@ -640,7 +640,7 @@ export const resetUserPassword = async (req, res) => {
     const invalidatedSessions = invalidateAllUserSessions(updatedUser.id);
 
     // Broadcast logout to user's sessions
-    broadcastToUser(updatedUser.id, {
+    sseManager.sendToUser(updatedUser.id, {
       type: 'sessionInvalidated',
       reason: 'Password reset by administrator',
       timestamp: new Date().toISOString(),
