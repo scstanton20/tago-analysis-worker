@@ -255,7 +255,6 @@ router.put(
 // Logs management routes
 router.get(
   '/:fileName/logs',
-  fileOperationLimiter,
   requirePermission('view_analyses'),
   asyncHandler(analysisController.getLogs),
 );
