@@ -189,6 +189,7 @@ class AnalysisService {
       fs.mkdir(basePath, { recursive: true }),
       fs.mkdir(path.join(basePath, 'env'), { recursive: true }),
       fs.mkdir(path.join(basePath, 'logs'), { recursive: true }),
+      fs.mkdir(path.join(basePath, 'versions'), { recursive: true }),
     ]);
     return basePath;
   }
@@ -221,10 +222,55 @@ class AnalysisService {
 
     await this.saveConfig();
 
+    // Initialize version management
+    await this.initializeVersionManagement(analysisName);
+
     // Ensure department tracking
     await departmentService.ensureAnalysisHasDepartment(analysisName);
 
     return { analysisName };
+  }
+
+  /**
+   * Initialize version management for a new analysis
+   * @param {string} analysisName - Name of the analysis
+   * @returns {Promise<void>}
+   */
+  async initializeVersionManagement(analysisName) {
+    const versionsDir = path.join(
+      config.paths.analysis,
+      analysisName,
+      'versions',
+    );
+    const metadataPath = path.join(versionsDir, 'metadata.json');
+    const currentFilePath = path.join(
+      config.paths.analysis,
+      analysisName,
+      'index.cjs',
+    );
+
+    // Create versions directory
+    await fs.mkdir(versionsDir, { recursive: true });
+
+    // Read the uploaded content and save it as v1
+    const uploadedContent = await fs.readFile(currentFilePath, 'utf8');
+    const v1Path = path.join(versionsDir, 'v1.cjs');
+    await fs.writeFile(v1Path, uploadedContent, 'utf8');
+
+    // Create metadata - uploaded file is version 1
+    const metadata = {
+      versions: [
+        {
+          version: 1,
+          timestamp: new Date().toISOString(),
+          size: Buffer.byteLength(uploadedContent, 'utf8'),
+        },
+      ],
+      nextVersionNumber: 2,
+      currentVersion: 1,
+    };
+
+    await fs.writeFile(metadataPath, JSON.stringify(metadata, null, 2), 'utf8');
   }
 
   /**
@@ -566,7 +612,7 @@ class AnalysisService {
   }
 
   /**
-   * Delete an analysis and all its associated files
+   * Delete an analysis and all its associated files (including all versions)
    * @param {string} analysisName - Name of the analysis to delete
    * @returns {Promise<Object>} Success message object
    * @throws {Error} If deletion fails (except ENOENT)
@@ -579,6 +625,7 @@ class AnalysisService {
 
     const analysisPath = path.join(config.paths.analysis, analysisName);
     try {
+      // This will delete the entire analysis directory including versions folder
       await fs.rm(analysisPath, { recursive: true, force: true });
     } catch (error) {
       if (error.code !== 'ENOENT') {
@@ -589,7 +636,7 @@ class AnalysisService {
     this.analyses.delete(analysisName);
     await this.saveConfig();
 
-    return { message: 'Analysis deleted successfully' };
+    return { message: 'Analysis and all versions deleted successfully' };
   }
 
   /**
@@ -650,6 +697,260 @@ class AnalysisService {
   }
 
   /**
+   * Save a version of the analysis before updating (only if content is truly new)
+   * @param {string} analysisName - Name of the analysis
+   * @returns {Promise<number|null>} Version number of the saved version, or null if no save was needed
+   */
+  async saveVersion(analysisName) {
+    const versionsDir = path.join(
+      config.paths.analysis,
+      analysisName,
+      'versions',
+    );
+    const metadataPath = path.join(versionsDir, 'metadata.json');
+    const currentFilePath = path.join(
+      config.paths.analysis,
+      analysisName,
+      'index.cjs',
+    );
+
+    // Ensure versions directory exists
+    await fs.mkdir(versionsDir, { recursive: true });
+
+    // Load or create metadata
+    let metadata = { versions: [], nextVersionNumber: 2, currentVersion: 1 };
+    try {
+      const metadataContent = await fs.readFile(metadataPath, 'utf8');
+      metadata = JSON.parse(metadataContent);
+      // Ensure currentVersion exists for backward compatibility
+      if (metadata.currentVersion === undefined) {
+        metadata.currentVersion =
+          metadata.versions.length > 0
+            ? metadata.versions[metadata.versions.length - 1].version
+            : 1;
+      }
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+
+    // Read current content
+    const currentContent = await fs.readFile(currentFilePath, 'utf8');
+
+    // Check if current content matches ANY existing saved version
+    for (const version of metadata.versions) {
+      try {
+        const versionFilePath = path.join(
+          versionsDir,
+          `v${version.version}.cjs`,
+        );
+        const versionContent = await fs.readFile(versionFilePath, 'utf8');
+        if (currentContent === versionContent) {
+          // Content already exists as a saved version, no need to save again
+          return null;
+        }
+      } catch {
+        // If we can't read a version file, continue checking others
+        continue;
+      }
+    }
+
+    // Content is truly new, save it as the next version
+    const newVersionNumber = metadata.nextVersionNumber;
+    const versionFilePath = path.join(versionsDir, `v${newVersionNumber}.cjs`);
+    await fs.writeFile(versionFilePath, currentContent, 'utf8');
+
+    // Update metadata - add the new version and increment counter
+    metadata.versions.push({
+      version: newVersionNumber,
+      timestamp: new Date().toISOString(),
+      size: Buffer.byteLength(currentContent, 'utf8'),
+    });
+
+    // Increment for next save and update current version
+    metadata.nextVersionNumber = metadata.nextVersionNumber + 1;
+    metadata.currentVersion = newVersionNumber; // Now we're at the newly saved version
+
+    await fs.writeFile(metadataPath, JSON.stringify(metadata, null, 2), 'utf8');
+
+    return newVersionNumber;
+  }
+
+  /**
+   * Get all versions for an analysis
+   * @param {string} analysisName - Name of the analysis
+   * @returns {Promise<Object>} Metadata with versions list and current version
+   */
+  async getVersions(analysisName) {
+    const metadataPath = path.join(
+      config.paths.analysis,
+      analysisName,
+      'versions',
+      'metadata.json',
+    );
+    const currentFilePath = path.join(
+      config.paths.analysis,
+      analysisName,
+      'index.cjs',
+    );
+
+    try {
+      const metadataContent = await fs.readFile(metadataPath, 'utf8');
+      const metadata = JSON.parse(metadataContent);
+      // Ensure currentVersion exists for backward compatibility
+      if (metadata.currentVersion === undefined) {
+        metadata.currentVersion = metadata.nextVersionNumber - 1;
+      }
+
+      // Check if the current index.cjs content matches any saved version
+      try {
+        const currentContent = await fs.readFile(currentFilePath, 'utf8');
+        let currentContentMatchesVersion = false;
+
+        // Check against all saved versions
+        for (const version of metadata.versions) {
+          try {
+            const versionFilePath = path.join(
+              config.paths.analysis,
+              analysisName,
+              'versions',
+              `v${version.version}.cjs`,
+            );
+            const versionContent = await fs.readFile(versionFilePath, 'utf8');
+            if (currentContent === versionContent) {
+              // Current content matches this saved version
+              metadata.currentVersion = version.version;
+              currentContentMatchesVersion = true;
+              break;
+            }
+          } catch {
+            // If we can't read a version file, continue checking others
+            continue;
+          }
+        }
+
+        // If current content doesn't match any saved version, it's the next version
+        if (!currentContentMatchesVersion) {
+          metadata.currentVersion = metadata.nextVersionNumber;
+        }
+      } catch {
+        // If we can't read the current file, fall back to metadata currentVersion
+      }
+
+      return metadata;
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        return { versions: [], nextVersionNumber: 2, currentVersion: 1 };
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Rollback analysis to a specific version
+   * @param {string} analysisName - Name of the analysis
+   * @param {number} version - Version number to rollback to
+   * @returns {Promise<Object>} Result with success status and restart info
+   */
+  async rollbackToVersion(analysisName, version) {
+    const analysis = this.analyses.get(analysisName);
+    if (!analysis) {
+      throw new Error(`Analysis ${analysisName} not found`);
+    }
+
+    const versionsDir = path.join(
+      config.paths.analysis,
+      analysisName,
+      'versions',
+    );
+    const versionFilePath = path.join(versionsDir, `v${version}.cjs`);
+    const currentFilePath = path.join(
+      config.paths.analysis,
+      analysisName,
+      'index.cjs',
+    );
+    const metadataPath = path.join(versionsDir, 'metadata.json');
+
+    // Check if version exists
+    try {
+      await fs.access(versionFilePath);
+    } catch {
+      throw new Error(`Version ${version} not found`);
+    }
+
+    const wasRunning = analysis.status === 'running';
+
+    // Stop analysis if running
+    if (wasRunning) {
+      await this.stopAnalysis(analysisName);
+      await this.addLog(
+        analysisName,
+        `Analysis stopped to rollback to version ${version}`,
+      );
+    }
+
+    // Save current content before rollback if it's different from all existing versions
+    await this.saveVersion(analysisName);
+
+    // Replace current file with the target version content
+    const versionContent = await fs.readFile(versionFilePath, 'utf8');
+    await fs.writeFile(currentFilePath, versionContent, 'utf8');
+
+    // Update metadata to track current version after rollback
+    const metadata = await this.getVersions(analysisName);
+    metadata.currentVersion = version;
+    await fs.writeFile(metadataPath, JSON.stringify(metadata, null, 2), 'utf8');
+
+    // Clear logs
+    await this.clearLogs(analysisName);
+    await this.addLog(analysisName, `Rolled back to version ${version}`);
+
+    // Restart if it was running
+    if (wasRunning) {
+      await this.runAnalysis(analysisName, analysis.type);
+      await this.addLog(analysisName, 'Analysis restarted after rollback');
+    }
+
+    return {
+      success: true,
+      restarted: wasRunning,
+      version: version,
+    };
+  }
+
+  /**
+   * Get content of a specific version
+   * @param {string} analysisName - Name of the analysis
+   * @param {number} version - Version number (0 for current)
+   * @returns {Promise<string>} Content of the version
+   */
+  async getVersionContent(analysisName, version) {
+    if (version === 0) {
+      // Return current version
+      const currentFilePath = path.join(
+        config.paths.analysis,
+        analysisName,
+        'index.cjs',
+      );
+      return fs.readFile(currentFilePath, 'utf8');
+    }
+
+    const versionFilePath = path.join(
+      config.paths.analysis,
+      analysisName,
+      'versions',
+      `v${version}.cjs`,
+    );
+    try {
+      return await fs.readFile(versionFilePath, 'utf8');
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        throw new Error(`Version ${version} not found`);
+      }
+      throw error;
+    }
+  }
+
+  /**
    * Update analysis properties and/or content
    * @param {string} analysisName - Name of the analysis to update
    * @param {Object} updates - Updates to apply
@@ -676,6 +977,7 @@ class AnalysisService {
       }
 
       const wasRunning = analysis && analysis.status === 'running';
+      let savedVersion = null;
 
       // If running and content is being updated, stop the analysis first
       if (wasRunning && updates.content) {
@@ -683,14 +985,52 @@ class AnalysisService {
         await this.addLog(analysisName, 'Analysis stopped to update content');
       }
 
-      // Update content if provided
+      // Save current version before updating content (only if current content is truly new)
       if (updates.content) {
+        savedVersion = await this.saveVersion(analysisName);
         const filePath = path.join(
           config.paths.analysis,
           analysisName,
           'index.cjs',
         );
         await fs.writeFile(filePath, updates.content, 'utf8');
+
+        // Update currentVersion based on what happened
+        if (savedVersion !== null) {
+          // We saved a new version, currentVersion is already updated by saveVersion
+        } else {
+          // No new version was saved, check if the new content matches any existing version
+          const metadata = await this.getVersions(analysisName);
+          for (const version of metadata.versions) {
+            try {
+              const versionFilePath = path.join(
+                config.paths.analysis,
+                analysisName,
+                'versions',
+                `v${version.version}.cjs`,
+              );
+              const versionContent = await fs.readFile(versionFilePath, 'utf8');
+              if (updates.content === versionContent) {
+                // New content matches existing version, update currentVersion
+                metadata.currentVersion = version.version;
+                const metadataPath = path.join(
+                  config.paths.analysis,
+                  analysisName,
+                  'versions',
+                  'metadata.json',
+                );
+                await fs.writeFile(
+                  metadataPath,
+                  JSON.stringify(metadata, null, 2),
+                  'utf8',
+                );
+                break;
+              }
+            } catch {
+              continue;
+            }
+          }
+        }
       }
 
       // Update analysis properties
@@ -701,12 +1041,17 @@ class AnalysisService {
       // If it was running before and content was updated, restart it
       if (wasRunning && updates.content) {
         await this.runAnalysis(analysisName, analysis.type);
-        await this.addLog(analysisName, 'Analysis updated successfully');
+        const logMessage =
+          savedVersion !== null
+            ? `Analysis updated successfully (previous version saved as v${savedVersion})`
+            : 'Analysis updated successfully (no version saved - content unchanged)';
+        await this.addLog(analysisName, logMessage);
       }
 
       return {
         success: true,
         restarted: wasRunning && updates.content,
+        savedVersion: savedVersion,
       };
     } catch (error) {
       console.error('Error updating analysis:', error);

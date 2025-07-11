@@ -44,3 +44,14 @@ export const deletionLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+// More generous rate limiter for version operations (mostly read operations)
+export const versionOperationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 version requests per windowMs
+  message: {
+    error: 'Too many version operations from this IP, please try again later.',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});

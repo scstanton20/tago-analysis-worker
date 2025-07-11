@@ -30,7 +30,6 @@ const AuthProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    // Make authService globally accessible for WebSocket session invalidation
     window.authService = authService;
 
     const initializeAuth = async () => {
@@ -238,14 +237,6 @@ const AuthProvider = ({ children }) => {
     return await authService.updateUserPermissions(userId, permissions);
   };
 
-  // DEPRECATED: Use WebSocket departments context instead
-  const getAvailableDepartments = async () => {
-    console.warn(
-      'getAvailableDepartments is deprecated. Use WebSocket departments context instead.',
-    );
-    return await authService.getAvailableDepartments();
-  };
-
   const getAvailableActions = async () => {
     return await authService.getAvailableActions();
   };
@@ -312,7 +303,6 @@ const AuthProvider = ({ children }) => {
     resetUserPassword,
     getUserPermissions,
     updateUserPermissions,
-    getAvailableDepartments,
     getAvailableActions,
     isAdmin: () => user?.role === 'admin',
     getToken: () => authService.getToken(),

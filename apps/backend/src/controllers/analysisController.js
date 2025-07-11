@@ -544,13 +544,13 @@ const analysisController = {
       // This avoids race conditions with separate log events
       sseManager.broadcast({
         type: 'logsCleared',
-        data: { 
+        data: {
           fileName: sanitizedFileName,
           clearMessage: {
             timestamp: new Date().toLocaleString(),
             message: 'Log file cleared',
-            level: 'info'
-          }
+            level: 'info',
+          },
         },
       });
 
@@ -572,54 +572,126 @@ const analysisController = {
   async downloadAnalysis(req, res) {
     try {
       const { fileName } = req.params;
+      const { version } = req.query;
 
       // Sanitize the fileName to prevent path traversal
       const sanitizedFileName = sanitizeAndValidateFilename(fileName);
 
-      const filePath = path.join(
-        config.paths.analysis,
-        sanitizedFileName,
-        'index.cjs',
-      );
-
-      // Validate that the file path is within the expected analysis directory
-      validatePath(filePath, config.paths.analysis);
-
-      try {
-        await fs.access(filePath);
-      } catch (error) {
-        if (error.code === 'ENOENT') {
-          return res.status(404).json({
-            error: `Analysis file ${sanitizedFileName} not found`,
-          });
+      let content;
+      if (version && version !== '0') {
+        // Download specific version
+        const versionNumber = parseInt(version, 10);
+        if (isNaN(versionNumber) || versionNumber < 1) {
+          return res.status(400).json({ error: 'Invalid version number' });
         }
-        throw error;
+        content = await analysisService.getVersionContent(
+          sanitizedFileName,
+          versionNumber,
+        );
+      } else {
+        // Download current version
+        content = await analysisService.getAnalysisContent(sanitizedFileName);
       }
 
       // Set the download filename using headers with sanitized name
-      const downloadFilename = `${sanitize(sanitizedFileName)}.cjs`;
+      const versionSuffix = version && version !== '0' ? `_v${version}` : '';
+      const downloadFilename = `${sanitize(sanitizedFileName)}${versionSuffix}.cjs`;
       res.setHeader(
         'Content-Disposition',
         `attachment; filename="${downloadFilename}"`,
       );
       res.setHeader('Content-Type', 'application/javascript');
 
-      res.sendFile(filePath, (err) => {
-        if (err) {
-          console.error('Download error:', err);
-          if (!res.headersSent) {
-            res.status(500).json({ error: 'Failed to download file' });
-          }
-        }
-      });
+      res.send(content);
     } catch (error) {
       console.error('Download analysis error:', error);
+
+      if (
+        error.message.includes('Path traversal') ||
+        error.message.includes('Invalid filename') ||
+        error.message.includes('not found')
+      ) {
+        return res.status(400).json({ error: error.message });
+      }
+
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  async getVersions(req, res) {
+    try {
+      const { fileName } = req.params;
+
+      // Sanitize the fileName to prevent path traversal
+      const sanitizedFileName = sanitizeAndValidateFilename(fileName);
+
+      const versions = await analysisService.getVersions(sanitizedFileName);
+      res.json(versions);
+    } catch (error) {
+      console.error('Get versions error:', error);
 
       if (
         error.message.includes('Path traversal') ||
         error.message.includes('Invalid filename')
       ) {
         return res.status(400).json({ error: 'Invalid file path' });
+      }
+
+      res.status(500).json({ error: error.message });
+    }
+  },
+
+  async rollbackToVersion(req, res) {
+    try {
+      const { fileName } = req.params;
+      const { version } = req.body;
+
+      // Sanitize the fileName to prevent path traversal
+      const sanitizedFileName = sanitizeAndValidateFilename(fileName);
+
+      if (!version || isNaN(parseInt(version, 10))) {
+        return res
+          .status(400)
+          .json({ error: 'Valid version number is required' });
+      }
+
+      const versionNumber = parseInt(version, 10);
+      const result = await analysisService.rollbackToVersion(
+        sanitizedFileName,
+        versionNumber,
+      );
+
+      // Get updated analysis data
+      const analyses = await analysisService.getAllAnalyses();
+      const updatedAnalysis = analyses[sanitizedFileName];
+
+      // Broadcast rollback with complete analysis data
+      sseManager.broadcast({
+        type: 'analysisRolledBack',
+        data: {
+          fileName: sanitizedFileName,
+          version: versionNumber,
+          status: 'rolled back',
+          restarted: result.restarted,
+          ...updatedAnalysis,
+        },
+      });
+
+      res.json({
+        success: true,
+        message: `Analysis rolled back to version ${versionNumber}`,
+        version: versionNumber,
+        restarted: result.restarted,
+      });
+    } catch (error) {
+      console.error('Rollback analysis error:', error);
+
+      if (
+        error.message.includes('Path traversal') ||
+        error.message.includes('Invalid filename') ||
+        error.message.includes('not found')
+      ) {
+        return res.status(400).json({ error: error.message });
       }
 
       res.status(500).json({ error: error.message });
@@ -718,6 +790,8 @@ export const {
   downloadLogs,
   clearLogs,
   downloadAnalysis,
+  getVersions,
+  rollbackToVersion,
   updateEnvironment,
   getEnvironment,
 } = {

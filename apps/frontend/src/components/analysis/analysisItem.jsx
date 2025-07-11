@@ -22,6 +22,7 @@ import {
   IconDotsVertical,
   IconFolderPlus,
   IconFolderCog,
+  IconHistory,
 } from '@tabler/icons-react';
 import { analysisService } from '../../services/analysisService';
 import { departmentService } from '../../services/departmentService';
@@ -35,6 +36,7 @@ const AnalysisEditModal = lazy(() => import('../modals/analysisEdit'));
 const AnalysisEditENVModal = lazy(() => import('../modals/analysisEditENV'));
 import LogDownloadDialog from '../modals/logDownload';
 import DepartmentSelectModal from '../modals/changeDepartmentModal';
+import VersionManagementModal from '../modals/versionManagement';
 import { useSSE } from '../../contexts/sseContext';
 import { usePermissions } from '../../hooks/usePermissions';
 
@@ -43,6 +45,7 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
   const [showEditENVModal, setShowEditENVModal] = useState(false);
   const [showLogDownloadDialog, setShowLogDownloadDialog] = useState(false);
   const [showDepartmentModal, setShowDepartmentModal] = useState(false);
+  const [showVersionModal, setShowVersionModal] = useState(false);
 
   const {
     loadingAnalyses,
@@ -232,6 +235,12 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
     }
   };
 
+  const handleVersionRollback = (version) => {
+    // The rollback operation is handled by the modal
+    // This callback can be used for additional UI updates if needed
+    console.log(`Analysis ${analysis.name} rolled back to version ${version}`);
+  };
+
   return (
     <Paper
       p="md"
@@ -378,6 +387,19 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
                     </>
                   )}
 
+                  {/* Version Management */}
+                  {canViewAnalyses() && (
+                    <>
+                      <Menu.Item
+                        onClick={() => setShowVersionModal(true)}
+                        leftSection={<IconHistory size={16} />}
+                      >
+                        Version History
+                      </Menu.Item>
+                      <Menu.Divider />
+                    </>
+                  )}
+
                   {/* Analysis File Operations - Show view or edit based on permissions */}
                   {canViewAnalyses() && (
                     <>
@@ -476,6 +498,14 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
           departments={departmentsArray}
           currentDepartment={analysis.department}
           analysisName={analysis.name}
+        />
+      )}
+      {showVersionModal && (
+        <VersionManagementModal
+          isOpen={showVersionModal}
+          onClose={() => setShowVersionModal(false)}
+          analysis={analysis}
+          onVersionRollback={handleVersionRollback}
         />
       )}
     </Paper>

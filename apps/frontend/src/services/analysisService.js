@@ -330,15 +330,16 @@ export const analysisService = {
     }
   },
 
-  async downloadAnalysis(fileName) {
+  async downloadAnalysis(fileName, version = null) {
     try {
-      console.log('Downloading analysis:', fileName);
+      console.log('Downloading analysis:', fileName, 'version:', version);
 
       // Sanitize the filename to prevent XSS
       const safeFileName = sanitize(fileName);
 
+      const versionParam = version ? `?version=${version}` : '';
       const response = await fetchWithHeaders(
-        `/analyses/${fileName}/download`,
+        `/analyses/${fileName}/download${versionParam}`,
         { method: 'GET' },
       );
 
@@ -350,7 +351,8 @@ export const analysisService = {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${safeFileName}.cjs`;
+      const versionSuffix = version ? `_v${version}` : '';
+      a.download = `${safeFileName}${versionSuffix}.cjs`;
       a.style.display = 'none';
       a.rel = 'noopener noreferrer';
 
@@ -361,6 +363,58 @@ export const analysisService = {
       document.body.removeChild(a);
     } catch (error) {
       console.error('Failed to download analysis:', error);
+      throw error;
+    }
+  },
+
+  async getVersions(fileName) {
+    try {
+      console.log('Fetching versions for:', fileName);
+      const response = await fetchWithHeaders(
+        `/analyses/${fileName}/versions`,
+        {
+          method: 'GET',
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({
+          error: 'Failed to fetch versions',
+        }));
+        throw new Error(errorData.error);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to fetch versions:', error);
+      throw error;
+    }
+  },
+
+  async rollbackToVersion(fileName, version) {
+    try {
+      console.log('Rolling back analysis:', fileName, 'to version:', version);
+      const response = await fetchWithHeaders(
+        `/analyses/${fileName}/rollback`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ version }),
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({
+          error: 'Failed to rollback analysis',
+        }));
+        throw new Error(errorData.error);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to rollback analysis:', error);
       throw error;
     }
   },

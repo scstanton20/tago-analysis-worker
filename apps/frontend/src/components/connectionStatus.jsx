@@ -16,8 +16,7 @@ import { IconRefresh, IconBook } from '@tabler/icons-react';
 
 const ConnectionStatus = () => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const { connectionStatus, backendStatus, requestStatusUpdate } =
-    useSSE();
+  const { connectionStatus, backendStatus, requestStatusUpdate } = useSSE();
 
   const getOverallStatusColor = () => {
     if (!backendStatus) return 'red';
@@ -183,7 +182,7 @@ const ConnectionStatus = () => {
               </Group>
 
               <Group justify="space-between">
-                <Text size="sm">WebSocket:</Text>
+                <Text size="sm">SSE:</Text>
                 <Group gap="xs">
                   <Indicator
                     color={connectionStatus === 'connected' ? 'teal' : 'red'}

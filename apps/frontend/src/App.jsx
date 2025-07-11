@@ -73,8 +73,7 @@ function AppLoadingOverlay({ message, submessage, error, showRetry }) {
 }
 
 function AppContent() {
-  const { analyses, departments, getDepartment, connectionStatus } =
-    useSSE();
+  const { analyses, departments, getDepartment, connectionStatus } = useSSE();
   const { canUploadAnalyses, canAccessDepartment, canViewAnalyses, isAdmin } =
     usePermissions();
 

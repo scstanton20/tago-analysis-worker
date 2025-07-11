@@ -49,8 +49,12 @@ export default function UserManagementModal({ opened, onClose }) {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [error, setError] = useState('');
   const [createdUserInfo, setCreatedUserInfo] = useState(null);
-  const [departments, setDepartments] = useState([]);
   const [actions, setActions] = useState([]);
+
+  // Convert SSE departments to array format, filtering out uncategorized
+  const departments = Object.values(wsaDepartments || {}).filter(
+    (dept) => dept.id !== 'uncategorized',
+  );
 
   const form = useForm({
     initialValues: {
@@ -89,22 +93,8 @@ export default function UserManagementModal({ opened, onClose }) {
 
   const loadRBACData = useCallback(async () => {
     try {
-      // Only load if not already loaded to reduce API calls
-      if (departments.length === 0 && actions.length === 0) {
-        // Get departments from WebSocket context (includes color data)
-        const allDepartments = Object.values(wsaDepartments || {});
-
-        // Filter out uncategorized
-        const filteredDepartments = allDepartments.filter((dept) => {
-          const id = dept.id?.toLowerCase() || '';
-          const name = dept.name?.toLowerCase() || '';
-          return (
-            !id.includes('uncategorized') && !name.includes('uncategorized')
-          );
-        });
-
-        setDepartments(filteredDepartments);
-
+      // Only load actions if not already loaded to reduce API calls
+      if (actions.length === 0) {
         // Get actions from API (still needed)
         const actionsResponse = await getAvailableActions();
 
@@ -124,7 +114,7 @@ export default function UserManagementModal({ opened, onClose }) {
     } catch (err) {
       console.error('Failed to load RBAC data:', err);
     }
-  }, [wsaDepartments, getAvailableActions, departments.length, actions.length]);
+  }, [getAvailableActions, actions.length]);
 
   useEffect(() => {
     if (opened) {
