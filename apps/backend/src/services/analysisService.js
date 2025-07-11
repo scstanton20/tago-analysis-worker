@@ -718,7 +718,8 @@ class AnalysisService {
     await fs.mkdir(versionsDir, { recursive: true });
 
     // Load or create metadata
-    let metadata = { versions: [], nextVersionNumber: 2, currentVersion: 1 };
+    let metadata = { versions: [], nextVersionNumber: 1, currentVersion: 0 };
+    let isFirstVersionSave = false;
     try {
       const metadataContent = await fs.readFile(metadataPath, 'utf8');
       metadata = JSON.parse(metadataContent);
@@ -730,7 +731,12 @@ class AnalysisService {
             : 1;
       }
     } catch (error) {
-      if (error.code !== 'ENOENT') throw error;
+      if (error.code === 'ENOENT') {
+        // This is a pre-versioning analysis being saved for the first time
+        isFirstVersionSave = true;
+      } else {
+        throw error;
+      }
     }
 
     // Read current content
@@ -755,7 +761,9 @@ class AnalysisService {
     }
 
     // Content is truly new, save it as the next version
-    const newVersionNumber = metadata.nextVersionNumber;
+    const newVersionNumber = isFirstVersionSave
+      ? 1
+      : metadata.nextVersionNumber;
     const versionFilePath = path.join(versionsDir, `v${newVersionNumber}.cjs`);
     await fs.writeFile(versionFilePath, currentContent, 'utf8');
 
@@ -766,9 +774,14 @@ class AnalysisService {
       size: Buffer.byteLength(currentContent, 'utf8'),
     });
 
-    // Increment for next save and update current version
-    metadata.nextVersionNumber = metadata.nextVersionNumber + 1;
-    metadata.currentVersion = newVersionNumber; // Now we're at the newly saved version
+    // Set proper values for next version and current version
+    if (isFirstVersionSave) {
+      metadata.nextVersionNumber = 2;
+      metadata.currentVersion = 1;
+    } else {
+      metadata.nextVersionNumber = metadata.nextVersionNumber + 1;
+      metadata.currentVersion = newVersionNumber;
+    }
 
     await fs.writeFile(metadataPath, JSON.stringify(metadata, null, 2), 'utf8');
 
@@ -907,6 +920,8 @@ class AnalysisService {
     // Restart if it was running
     if (wasRunning) {
       await this.runAnalysis(analysisName, analysis.type);
+      // Small delay to ensure the restart log is visible
+      await new Promise((resolve) => setTimeout(resolve, 100));
       await this.addLog(analysisName, 'Analysis restarted after rollback');
     }
 

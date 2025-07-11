@@ -56,10 +56,10 @@ export default function VersionManagementModal({
   }, [analysis.name]);
 
   useEffect(() => {
-    if (isOpen && analysis) {
+    if (isOpen && analysis?.name) {
       loadVersions();
     }
-  }, [isOpen, analysis, loadVersions]);
+  }, [isOpen, analysis?.name, loadVersions]);
 
   const handleRollback = async (version) => {
     if (
@@ -119,8 +119,7 @@ export default function VersionManagementModal({
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
 
-  const currentVersionNumber =
-    versionData.currentVersion || versionData.nextVersionNumber - 1;
+  const currentVersionNumber = versionData.currentVersion;
   const sortedVersions = [...versionData.versions]
     .filter((version) => version.version !== currentVersionNumber)
     .sort((a, b) => b.version - a.version);
