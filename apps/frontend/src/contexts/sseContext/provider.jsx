@@ -396,6 +396,31 @@ export function SSEProvider({ children }) {
               }));
             }
             break;
+          case 'analysisRolledBack':
+            if (data.data?.fileName) {
+              const { fileName, version, restarted, ...analysisData } =
+                data.data;
+
+              // Clear log sequences for fresh start
+              logSequences.current.set(fileName, new Set());
+
+              // Update analysis with rollback information
+              setAnalyses((prev) => ({
+                ...prev,
+                [fileName]: {
+                  ...prev[fileName],
+                  ...analysisData,
+                  logs: [], // Clear logs since they were cleared during rollback
+                  totalLogCount: 0,
+                  currentVersion: version,
+                },
+              }));
+
+              console.log(
+                `Analysis ${fileName} rolled back to version ${version}${restarted ? ' and restarted' : ''}`,
+              );
+            }
+            break;
 
           case 'sessionInvalidated':
             console.log('Session invalidated:', data.reason);
@@ -423,6 +448,7 @@ export function SSEProvider({ children }) {
         console.error('Error handling SSE message:', error);
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [removeLoadingAnalysis],
   );
 
@@ -491,6 +517,7 @@ export function SSEProvider({ children }) {
         }
       }
     }, delay);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated]);
 
   const createConnection = useCallback(async () => {
