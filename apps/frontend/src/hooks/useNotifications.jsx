@@ -218,8 +218,14 @@ export const useNotifications = () => {
     });
   };
 
+  // Main showNotification function for direct access
+  const showNotification = (options) => {
+    notifications.show(options);
+  };
+
   return {
     executeWithNotification,
+    showNotification,
     ...presets,
     success,
     error,

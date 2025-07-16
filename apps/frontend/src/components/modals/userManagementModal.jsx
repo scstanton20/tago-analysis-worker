@@ -15,9 +15,6 @@ import {
   Box,
   Paper,
   LoadingOverlay,
-  Checkbox,
-  ScrollArea,
-  ColorSwatch,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import {
@@ -27,21 +24,12 @@ import {
   IconUser,
   IconAlertCircle,
 } from '@tabler/icons-react';
-import { useAuth } from '../../hooks/useAuth';
-import { useSSE } from '../../contexts/sseContext';
+import { useAuth } from '../../contexts/AuthProvider';
+import { signUp, admin } from '../../lib/auth';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 
 export default function UserManagementModal({ opened, onClose }) {
-  const {
-    getAllUsers,
-    createUser,
-    updateUser,
-    deleteUser,
-    getAvailableActions,
-    refreshPermissions,
-    user: currentUser,
-  } = useAuth();
-  const { departments: wsaDepartments } = useSSE();
+  const { user: currentUser, isAdmin } = useAuth();
   const notify = useNotifications();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -49,32 +37,33 @@ export default function UserManagementModal({ opened, onClose }) {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [error, setError] = useState('');
   const [createdUserInfo, setCreatedUserInfo] = useState(null);
-  const [actions, setActions] = useState([]);
-
-  // Convert SSE departments to array format, filtering out uncategorized
-  const departments = Object.values(wsaDepartments || {}).filter(
-    (dept) => dept.id !== 'uncategorized',
-  );
 
   const form = useForm({
     initialValues: {
-      username: '',
+      name: '',
       email: '',
+      username: '',
       password: '',
-      role: 'user',
-      departmentPermissions: {}, // { departmentId: { enabled: boolean, permissions: string[] } }
+      role: 'viewer',
     },
     validate: {
-      username: (value) => (!value ? 'Username is required' : null),
+      name: (value) => (!value ? 'Name is required' : null),
       email: (value) =>
         !value
           ? 'Email is required'
           : !/^\S+@\S+$/.test(value)
             ? 'Invalid email format'
             : null,
+      username: (value) => {
+        if (!value) return null; // Username is optional
+        if (value.length < 3) return 'Username must be at least 3 characters';
+        if (!/^[a-zA-Z0-9_-]+$/.test(value))
+          return 'Username can only contain letters, numbers, hyphens, and underscores';
+        return null;
+      },
       password: (value) =>
-        editingUser && value && value.length < 6
-          ? 'Password must be at least 6 characters'
+        !editingUser && (!value || value.length < 8)
+          ? 'Password must be at least 8 characters'
           : null,
     },
   });
@@ -82,129 +71,98 @@ export default function UserManagementModal({ opened, onClose }) {
   const loadUsers = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await getAllUsers();
-      setUsers(response.users || []);
+      setError('');
+
+      // Use Better Auth admin client to list users with correct syntax
+      console.log('Current user admin status:', admin);
+      console.log('Attempting to list users...');
+
+      const result = await admin.listUsers({
+        query: {
+          limit: 100, // Get up to 100 users
+        },
+      });
+
+      console.log('List users result:', result);
+
+      if (result.error) {
+        throw new Error(result.error.message);
+      }
+
+      setUsers(result.data.users || result.data || []);
     } catch (err) {
+      console.error('Error loading users:', err);
       setError(err.message || 'Failed to load users');
     } finally {
       setLoading(false);
     }
-  }, [getAllUsers]);
+  }, []);
 
-  const loadRBACData = useCallback(async () => {
-    try {
-      // Only load actions if not already loaded to reduce API calls
-      if (actions.length === 0) {
-        // Get actions from API (still needed)
-        const actionsResponse = await getAvailableActions();
-
-        // Filter out manage_departments since it's admin-only
-        const userActions =
-          actionsResponse.actions?.filter(
-            (action) => action.id !== 'manage_departments',
-          ) || [];
-
-        setActions(
-          userActions.map((action) => ({
-            value: action.id,
-            label: action.name,
-          })),
-        );
-      }
-    } catch (err) {
-      console.error('Failed to load RBAC data:', err);
-    }
-  }, [getAvailableActions, actions.length]);
+  // Helper function to check if current user is the only admin
+  const isOnlyAdmin = () => {
+    const adminUsers = users.filter((user) => user.role === 'admin');
+    return (
+      adminUsers.length === 1 &&
+      currentUser?.role === 'admin' &&
+      adminUsers[0]?.id === currentUser?.id
+    );
+  };
 
   useEffect(() => {
-    if (opened) {
+    if (opened && isAdmin) {
       loadUsers();
-      loadRBACData();
       setError('');
     }
-  }, [opened, loadUsers, loadRBACData]);
+  }, [opened, isAdmin, loadUsers]);
 
   const handleSubmit = async (values) => {
     try {
       setLoading(true);
       setError('');
 
-      // Validate that users have at least one department
-      if (values.role === 'user') {
-        const enabledDepartments = Object.keys(
-          values.departmentPermissions || {},
-        ).filter((deptId) => values.departmentPermissions[deptId]?.enabled);
-
-        if (enabledDepartments.length === 0) {
-          setError('Users must be assigned to at least one department.');
-          setLoading(false);
-          return;
-        }
-      }
-
       if (editingUser) {
-        // Update user - include all data in single request
-        const userUpdateData = {
-          username: values.username,
-          email: values.email,
-          role: values.role,
-        };
-
-        // Only include password if provided
-        if (values.password) {
-          userUpdateData.password = values.password;
+        // Prevent editing other users until admin endpoints are implemented
+        if (editingUser.id !== currentUser?.id) {
+          throw new Error('User editing not yet available');
         }
 
-        // Include permissions for non-admin users
-        if (values.role === 'user') {
-          // Convert departmentPermissions to backend format
-          const enabledDepartments = Object.keys(
-            values.departmentPermissions || {},
-          ).filter((deptId) => values.departmentPermissions[deptId]?.enabled);
-
-          const allActions = new Set();
-          enabledDepartments.forEach((deptId) => {
-            const deptPerms =
-              values.departmentPermissions[deptId]?.permissions || [];
-            deptPerms.forEach((action) => allActions.add(action));
-          });
-
-          userUpdateData.departments = enabledDepartments;
-          userUpdateData.actions = Array.from(allActions);
-        }
-
-        // Single request to update everything
-        await notify.executeWithNotification(
-          updateUser(editingUser.id, userUpdateData),
-          {
-            loading: `Updating user ${editingUser.username}...`,
-            success: `User ${editingUser.username} updated successfully.`,
-          },
+        // For self-editing, redirect to profile modal
+        throw new Error(
+          'Please use the profile settings to update your own information',
         );
-
-        // Refresh permissions if updating current user
-        if (editingUser.username === currentUser?.username) {
-          await refreshPermissions();
-        }
-
-        await loadUsers();
-        handleCancel();
       } else {
-        // Create user - don't pass password, let backend generate it
-        const createData = { ...values };
-        delete createData.password;
-        const response = await notify.executeWithNotification(
-          createUser(createData),
-          {
-            loading: `Creating user ${values.username}...`,
-            success: `User ${values.username} created successfully.`,
-          },
-        );
+        // Create user using Better Auth signUp
+        const result = await signUp.email({
+          name: values.name,
+          email: values.email,
+          password: values.password,
+          username: values.username,
+        });
 
-        // Show the generated password to admin
+        if (result.error) {
+          throw new Error(result.error.message);
+        }
+
+        // Set role using Better Auth admin client if not default viewer
+        if (values.role !== 'viewer') {
+          const roleResult = await admin.setRole({
+            userId: result.data.user.id,
+            role: values.role,
+          });
+          if (roleResult.error) {
+            throw new Error(roleResult.error.message);
+          }
+        }
+
+        notify.showNotification({
+          title: 'Success',
+          message: `User ${values.name} created successfully.`,
+          color: 'green',
+        });
+
         setCreatedUserInfo({
-          username: response.user.username,
-          defaultPassword: response.defaultPassword,
+          name: values.name,
+          email: values.email,
         });
 
         await loadUsers();
@@ -219,43 +177,43 @@ export default function UserManagementModal({ opened, onClose }) {
 
   const handleEdit = (user) => {
     setEditingUser(user);
-
-    // Convert backend format to departmentPermissions structure
-    const departmentPermissions = {};
-    const userDepartments = user.permissions?.departments || [];
-    const userActions = user.permissions?.actions || [];
-
-    // Initialize all departments with default structure
-    departments.forEach((dept) => {
-      const isEnabled = userDepartments.includes(dept.id);
-      departmentPermissions[dept.id] = {
-        enabled: isEnabled,
-        permissions: isEnabled ? userActions : ['view_analyses'], // Default to view_analyses
-      };
-    });
-
     form.setValues({
-      username: user.username,
-      email: user.email,
+      name: user.name || '',
+      email: user.email || '',
+      username: user.username || '',
       password: '',
-      role: user.role,
-      departmentPermissions,
+      role: user.role || 'viewer',
     });
     setShowCreateForm(true);
   };
 
   const handleDelete = async (user) => {
-    if (!confirm(`Are you sure you want to delete user "${user.username}"?`)) {
+    if (
+      !confirm(
+        `Are you sure you want to delete user "${user.name || user.email}"?`,
+      )
+    ) {
       return;
     }
 
     try {
       setLoading(true);
       setError('');
-      await notify.executeWithNotification(deleteUser(user.id), {
-        loading: `Deleting user ${user.username}...`,
-        success: `User ${user.username} deleted successfully.`,
+
+      const result = await admin.removeUser({
+        userId: user.id,
       });
+
+      if (result.error) {
+        throw new Error(result.error.message);
+      }
+
+      notify.showNotification({
+        title: 'Success',
+        message: `User ${user.name || user.email} deleted successfully.`,
+        color: 'green',
+      });
+
       await loadUsers();
     } catch (err) {
       setError(err.message || 'Failed to delete user');
@@ -274,22 +232,12 @@ export default function UserManagementModal({ opened, onClose }) {
 
   const handleCreate = () => {
     setEditingUser(null);
-
-    // Initialize departmentPermissions structure for new user
-    const departmentPermissions = {};
-    departments.forEach((dept) => {
-      departmentPermissions[dept.id] = {
-        enabled: false,
-        permissions: [],
-      };
-    });
-
     form.setValues({
-      username: '',
+      name: '',
       email: '',
+      username: '',
       password: '',
-      role: 'user',
-      departmentPermissions,
+      role: 'viewer',
     });
     setShowCreateForm(true);
   };
@@ -299,44 +247,10 @@ export default function UserManagementModal({ opened, onClose }) {
     onClose();
   };
 
-  // Helper functions for department permissions
-  const toggleDepartment = (departmentId) => {
-    const current = form.values.departmentPermissions[departmentId] || {
-      enabled: false,
-      permissions: [],
-    };
-    const newEnabled = !current.enabled;
-
-    form.setFieldValue(`departmentPermissions.${departmentId}`, {
-      enabled: newEnabled,
-      permissions: newEnabled ? ['view_analyses'] : [], // Default to view_analyses when enabling
-    });
-  };
-
-  const toggleDepartmentPermission = (departmentId, permission) => {
-    const current = form.values.departmentPermissions[departmentId] || {
-      enabled: false,
-      permissions: [],
-    };
-    const currentPermissions = current.permissions || [];
-
-    let newPermissions;
-    if (currentPermissions.includes(permission)) {
-      // Remove permission, but keep view_analyses if it's the last one
-      newPermissions = currentPermissions.filter((p) => p !== permission);
-      if (newPermissions.length === 0) {
-        newPermissions = ['view_analyses'];
-      }
-    } else {
-      // Add permission
-      newPermissions = [...currentPermissions, permission];
-    }
-
-    form.setFieldValue(
-      `departmentPermissions.${departmentId}.permissions`,
-      newPermissions,
-    );
-  };
+  // Only show if user is admin
+  if (!isAdmin) {
+    return null;
+  }
 
   return (
     <Modal
@@ -374,13 +288,10 @@ export default function UserManagementModal({ opened, onClose }) {
 
                 <Alert color="green" variant="light">
                   <Stack gap="xs">
-                    <Text fw={500}>Username: {createdUserInfo.username}</Text>
-                    <Text fw={500}>
-                      Temporary Password: {createdUserInfo.defaultPassword}
-                    </Text>
+                    <Text fw={500}>Name: {createdUserInfo.name}</Text>
+                    <Text fw={500}>Email: {createdUserInfo.email}</Text>
                     <Text size="sm" c="dimmed">
-                      Please provide this password to the user. They will be
-                      required to change it on first login.
+                      The user can now sign in with their email and password.
                     </Text>
                   </Stack>
                 </Alert>
@@ -415,7 +326,7 @@ export default function UserManagementModal({ opened, onClose }) {
                 <Table striped highlightOnHover>
                   <Table.Thead>
                     <Table.Tr>
-                      <Table.Th>Username</Table.Th>
+                      <Table.Th>Name</Table.Th>
                       <Table.Th>Email</Table.Th>
                       <Table.Th>Role</Table.Th>
                       <Table.Th>Actions</Table.Th>
@@ -426,16 +337,10 @@ export default function UserManagementModal({ opened, onClose }) {
                       <Table.Tr key={user.id}>
                         <Table.Td>
                           <Group gap="xs">
-                            <Text
-                              fw={
-                                user.username === currentUser?.username
-                                  ? 600
-                                  : 400
-                              }
-                            >
-                              {user.username}
+                            <Text fw={user.id === currentUser?.id ? 600 : 400}>
+                              {user.name || 'Unknown'}
                             </Text>
-                            {user.username === currentUser?.username && (
+                            {user.id === currentUser?.id && (
                               <Badge size="xs" variant="light" color="brand">
                                 You
                               </Badge>
@@ -446,20 +351,18 @@ export default function UserManagementModal({ opened, onClose }) {
                         <Table.Td>
                           <Badge
                             variant="light"
-                            color={user.role === 'admin' ? 'red' : 'blue'}
+                            color={
+                              user.role === 'admin'
+                                ? 'red'
+                                : user.role === 'analyst'
+                                  ? 'orange'
+                                  : user.role === 'operator'
+                                    ? 'yellow'
+                                    : 'blue'
+                            }
                           >
-                            {user.role}
+                            {user.role || 'viewer'}
                           </Badge>
-                          {user.mustChangePassword && (
-                            <Badge
-                              size="xs"
-                              variant="light"
-                              color="orange"
-                              ml="xs"
-                            >
-                              Must change password
-                            </Badge>
-                          )}
                         </Table.Td>
                         <Table.Td>
                           <Group gap="xs">
@@ -468,10 +371,15 @@ export default function UserManagementModal({ opened, onClose }) {
                               color="blue"
                               size="sm"
                               onClick={() => handleEdit(user)}
+                              title={
+                                user.id === currentUser?.id && isOnlyAdmin()
+                                  ? 'Use Profile Settings to update your information'
+                                  : 'Edit user'
+                              }
                             >
                               <IconEdit size="1rem" />
                             </ActionIcon>
-                            {user.username !== currentUser?.username && (
+                            {user.id !== currentUser?.id && (
                               <ActionIcon
                                 variant="light"
                                 color="red"
@@ -498,177 +406,103 @@ export default function UserManagementModal({ opened, onClose }) {
                   </Text>
 
                   <TextInput
-                    label="Username"
-                    placeholder="Enter username"
+                    label="Name"
+                    placeholder="Enter full name"
                     required
-                    disabled={!!editingUser}
-                    {...form.getInputProps('username')}
+                    disabled={
+                      editingUser?.id === currentUser?.id && isOnlyAdmin()
+                    }
+                    {...form.getInputProps('name')}
                   />
 
                   <TextInput
                     label="Email"
                     placeholder="Enter email address"
                     required
+                    disabled={
+                      editingUser?.id === currentUser?.id && isOnlyAdmin()
+                    }
                     {...form.getInputProps('email')}
                   />
 
-                  {editingUser && (
-                    <PasswordInput
-                      label="New Password (leave blank to keep current)"
-                      placeholder="Enter new password"
-                      autoComplete="new-password"
-                      name="admin-new-password"
-                      id="admin-new-password"
-                      {...form.getInputProps('password')}
-                    />
-                  )}
+                  <TextInput
+                    label="Username (Optional)"
+                    placeholder="Enter username for login"
+                    description="Users can login with either email or username"
+                    disabled={
+                      editingUser?.id === currentUser?.id && isOnlyAdmin()
+                    }
+                    {...form.getInputProps('username')}
+                  />
 
-                  {!editingUser && (
-                    <Text size="sm" c="dimmed" style={{ fontStyle: 'italic' }}>
-                      A temporary password will be automatically generated for
-                      the user.
-                    </Text>
-                  )}
+                  <PasswordInput
+                    label={
+                      editingUser
+                        ? 'New Password (leave blank to keep current)'
+                        : 'Password'
+                    }
+                    placeholder="Enter password"
+                    required={!editingUser}
+                    disabled={
+                      editingUser?.id === currentUser?.id && isOnlyAdmin()
+                    }
+                    {...form.getInputProps('password')}
+                  />
 
                   <Select
-                    label="Role"
-                    placeholder="Select role"
+                    label="Global Role"
+                    placeholder="Select global role"
                     required
+                    disabled={
+                      editingUser?.id === currentUser?.id && isOnlyAdmin()
+                    }
                     data={[
-                      { value: 'user', label: 'User' },
-                      { value: 'admin', label: 'Administrator' },
+                      { value: 'viewer', label: 'Viewer - Can view analyses' },
+                      {
+                        value: 'operator',
+                        label: 'Operator - Can view and run analyses',
+                      },
+                      {
+                        value: 'analyst',
+                        label: 'Analyst - Can upload, run, and manage analyses',
+                      },
+                      {
+                        value: 'admin',
+                        label: 'Administrator - Full system access',
+                      },
                     ]}
                     {...form.getInputProps('role')}
                   />
 
-                  {form.values.role === 'user' && (
-                    <Stack gap="md">
-                      <Text size="sm" fw={500}>
-                        Department Access & Permissions
+                  {editingUser?.id === currentUser?.id && isOnlyAdmin() && (
+                    <Alert
+                      icon={<IconUser size="1rem" />}
+                      color="blue"
+                      variant="light"
+                    >
+                      <Text size="sm">
+                        Please use the profile settings to update your own
+                        information.
                       </Text>
-                      <Text size="xs" c="dimmed">
-                        Select departments and assign specific permissions for
-                        each. View analyses is automatically assigned when a
-                        department is enabled.
-                      </Text>
-
-                      <ScrollArea h={300} offsetScrollbars>
-                        <Stack gap="xs">
-                          {departments.map((department) => {
-                            const deptPerms = form.values.departmentPermissions[
-                              department.id
-                            ] || { enabled: false, permissions: [] };
-                            const isEnabled = deptPerms.enabled;
-                            const permissions = deptPerms.permissions || [];
-
-                            return (
-                              <Paper
-                                key={department.id}
-                                withBorder
-                                p="md"
-                                style={{
-                                  backgroundColor: isEnabled
-                                    ? 'var(--mantine-color-blue-light)'
-                                    : 'transparent',
-                                  borderColor: isEnabled
-                                    ? 'var(--mantine-color-blue-6)'
-                                    : 'var(--mantine-color-gray-3)',
-                                }}
-                              >
-                                <Stack gap="sm">
-                                  {/* Department Header */}
-                                  <Group
-                                    justify="space-between"
-                                    style={{ cursor: 'pointer' }}
-                                    onClick={() =>
-                                      toggleDepartment(department.id)
-                                    }
-                                  >
-                                    <Group gap="sm">
-                                      <Checkbox
-                                        checked={isEnabled}
-                                        onChange={() =>
-                                          toggleDepartment(department.id)
-                                        }
-                                        onClick={(e) => e.stopPropagation()}
-                                      />
-                                      <ColorSwatch
-                                        color={department.color}
-                                        size={16}
-                                      />
-                                      <Text fw={500} size="sm">
-                                        {department.name}
-                                      </Text>
-                                    </Group>
-                                    {isEnabled && (
-                                      <Badge
-                                        size="xs"
-                                        variant="light"
-                                        color="blue"
-                                      >
-                                        {permissions.length} permission
-                                        {permissions.length !== 1 ? 's' : ''}
-                                      </Badge>
-                                    )}
-                                  </Group>
-
-                                  {/* Permissions for this department */}
-                                  {isEnabled && (
-                                    <Box ml="xl">
-                                      <Stack gap="xs">
-                                        {actions.map((action) => (
-                                          <Group key={action.value} gap="sm">
-                                            <Checkbox
-                                              size="sm"
-                                              checked={permissions.includes(
-                                                action.value,
-                                              )}
-                                              onChange={() =>
-                                                toggleDepartmentPermission(
-                                                  department.id,
-                                                  action.value,
-                                                )
-                                              }
-                                              disabled={
-                                                action.value === 'view_analyses'
-                                              } // Always enabled as default
-                                              label={
-                                                <Text size="sm">
-                                                  {action.label}
-                                                  {action.value ===
-                                                    'view_analyses' && (
-                                                    <Text
-                                                      component="span"
-                                                      size="xs"
-                                                      c="dimmed"
-                                                      ml="xs"
-                                                    >
-                                                      (default)
-                                                    </Text>
-                                                  )}
-                                                </Text>
-                                              }
-                                            />
-                                          </Group>
-                                        ))}
-                                      </Stack>
-                                    </Box>
-                                  )}
-                                </Stack>
-                              </Paper>
-                            );
-                          })}
-                        </Stack>
-                      </ScrollArea>
-                    </Stack>
+                    </Alert>
                   )}
 
                   {form.values.role === 'admin' && (
                     <Alert color="blue" variant="light">
-                      Administrators have full access to all departments and all
-                      permissions.
+                      Administrators have full access to all features and can
+                      manage other users.
                     </Alert>
                   )}
+
+                  {editingUser &&
+                    editingUser.id === currentUser?.id &&
+                    editingUser.role === 'admin' &&
+                    form.values.role !== 'admin' && (
+                      <Alert color="orange" variant="light">
+                        Warning: There must be at least one administrator. Since
+                        you are the only admin, you cannot change your own role.
+                      </Alert>
+                    )}
 
                   <Group justify="flex-end" gap="sm">
                     <Button variant="default" onClick={handleCancel}>

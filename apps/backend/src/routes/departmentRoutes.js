@@ -1,7 +1,7 @@
 // backend/src/routes/departmentRoutes.js
 import express from 'express';
 import * as departmentController from '../controllers/departmentController.js';
-import { authMiddleware } from '../middleware/auth.js';
+import { authMiddleware } from '../middleware/betterAuthMiddleware.js';
 
 const router = express.Router();
 

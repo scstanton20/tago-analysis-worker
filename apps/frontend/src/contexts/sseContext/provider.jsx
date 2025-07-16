@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { SSEContext } from './context';
-import { useAuth } from '../../hooks/useAuth';
+import { useAuth } from '../AuthProvider';
 
 export function SSEProvider({ children }) {
   const { isAuthenticated } = useAuth();
@@ -431,14 +431,23 @@ export function SSEProvider({ children }) {
               return;
             }
 
-            // Force logout on session invalidation
-            if (window.authService) {
-              window.authService.token = null;
-              window.authService.user = null;
-              localStorage.removeItem('auth_status');
-              window.location.reload();
-            }
+            // Force logout on session invalidation - Better Auth will handle this
+            window.location.reload();
             break;
+
+          case 'userLogout': {
+            console.log('User logout event received via SSE, data:', data);
+            // Dispatch custom event for AuthProvider to handle
+            const customEvent = new CustomEvent('sse-user-logout', {
+              detail: { type: 'user-logout', userId: data.userId },
+            });
+            console.log(
+              'Dispatching sse-user-logout event:',
+              customEvent.detail,
+            );
+            window.dispatchEvent(customEvent);
+            break;
+          }
 
           default:
             console.log('Unhandled SSE message type:', data.type);
@@ -476,33 +485,6 @@ export function SSEProvider({ children }) {
 
     setTimeout(async () => {
       if (!mountedRef.current) return;
-
-      // Refresh token before reconnecting
-      if (window.authService && isAuthenticated) {
-        try {
-          const refreshResult = await window.authService.refreshToken();
-          if (!refreshResult.rateLimited) {
-            console.log('Token refreshed successfully before SSE reconnection');
-          }
-        } catch (error) {
-          console.error('Token refresh failed during reconnection:', error);
-
-          if (
-            error.message.includes('expired') ||
-            error.message.includes('invalid') ||
-            error.message.includes('Session anomaly') ||
-            error.message.includes('log in again')
-          ) {
-            if (mountedRef.current) {
-              setConnectionStatus('failed');
-              connectionStatusRef.current = 'failed';
-            }
-            return;
-          }
-
-          console.log('Continuing SSE reconnection despite refresh error');
-        }
-      }
 
       setConnectionStatus('connecting');
       connectionStatusRef.current = 'connecting';
@@ -619,36 +601,6 @@ export function SSEProvider({ children }) {
           eventSourceRef.current.readyState !== EventSource.OPEN
         ) {
           console.log('Page became visible, attempting SSE reconnection...');
-
-          if (window.authService && isAuthenticated) {
-            try {
-              const refreshResult = await window.authService.refreshToken();
-              if (!refreshResult.rateLimited) {
-                console.log(
-                  'Token refreshed successfully before SSE visibility reconnection',
-                );
-              }
-            } catch (error) {
-              console.error(
-                'Token refresh failed before SSE reconnection:',
-                error,
-              );
-
-              if (
-                error.message.includes('expired') ||
-                error.message.includes('invalid') ||
-                error.message.includes('Session anomaly') ||
-                error.message.includes('log in again')
-              ) {
-                return;
-              }
-
-              console.log(
-                'Continuing SSE visibility reconnection despite refresh error',
-              );
-            }
-          }
-
           connect();
         }
       }
@@ -662,36 +614,6 @@ export function SSEProvider({ children }) {
           eventSourceRef.current.readyState !== EventSource.OPEN
         ) {
           console.log('Window gained focus, attempting SSE reconnection...');
-
-          if (window.authService && isAuthenticated) {
-            try {
-              const refreshResult = await window.authService.refreshToken();
-              if (!refreshResult.rateLimited) {
-                console.log(
-                  'Token refreshed successfully before SSE focus reconnection',
-                );
-              }
-            } catch (error) {
-              console.error(
-                'Token refresh failed before SSE reconnection:',
-                error,
-              );
-
-              if (
-                error.message.includes('expired') ||
-                error.message.includes('invalid') ||
-                error.message.includes('Session anomaly') ||
-                error.message.includes('log in again')
-              ) {
-                return;
-              }
-
-              console.log(
-                'Continuing SSE focus reconnection despite refresh error',
-              );
-            }
-          }
-
           connect();
         }
       }

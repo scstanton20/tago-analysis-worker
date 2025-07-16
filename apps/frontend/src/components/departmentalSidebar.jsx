@@ -42,7 +42,7 @@ import DepartmentManagementModal from './modals/departmentManagementModal';
 import UserManagementModal from './modals/userManagementModal';
 import ProfileModal from './modals/profileModal';
 import { departmentService } from '../services/departmentService';
-import { useAuth } from '../hooks/useAuth';
+import { useAuth } from '../contexts/AuthProvider';
 import { usePermissions } from '../hooks/usePermissions';
 
 // Sortable Department Item
@@ -298,7 +298,7 @@ export default function DepartmentalSidebar({
               </ActionIcon>
             </Tooltip>
           )}
-          {isAdmin() && (
+          {isAdmin && (
             <Tooltip label="Manage users">
               <ActionIcon
                 variant="light"

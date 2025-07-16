@@ -14,13 +14,11 @@ import {
   Switch,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
+import { Notifications } from '@mantine/notifications';
 import { IconSun, IconMoon } from '@tabler/icons-react';
 import { useSSE } from './contexts/sseContext';
 import { SSEProvider } from './contexts/sseContext/provider';
-import { AuthProvider } from './contexts/authContext';
-import { useAuth } from './hooks/useAuth';
-import { useIdleTimeout } from './hooks/useIdleTimeout';
-import { usePermissions } from './hooks/usePermissions';
+import { AuthProvider, useAuth } from './contexts/AuthProvider';
 // Lazy load heavy components that make API calls
 const DepartmentalSidebar = lazy(
   () => import('./components/departmentalSidebar'),
@@ -31,7 +29,6 @@ const AnalysisCreator = lazy(
 );
 import ConnectionStatus from './components/connectionStatus';
 import LoginPage from './components/auth/LoginPage';
-import ForcePasswordChange from './components/auth/PasswordOnboarding';
 import Logo from './components/logo';
 
 // Reusable loading overlay component
@@ -74,11 +71,7 @@ function AppLoadingOverlay({ message, submessage, error, showRetry }) {
 
 function AppContent() {
   const { analyses, departments, getDepartment, connectionStatus } = useSSE();
-  const { canUploadAnalyses, canAccessDepartment, canViewAnalyses, isAdmin } =
-    usePermissions();
-
-  // Enable idle timeout for authenticated users
-  useIdleTimeout();
+  const { isAdmin } = useAuth();
 
   const [selectedDepartment, setSelectedDepartment] = useState(null);
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure();
@@ -102,37 +95,17 @@ function AppContent() {
       return filteredAnalyses;
     }
 
-    // For non-admin users, filter by department access and file view permission
+    // For non-admin users, show all analyses (simplified for Better Auth)
     const filteredAnalyses = {};
     Object.entries(analyses).forEach(([name, analysis]) => {
-      // First check if user has view_analyses permission
-      if (!canViewAnalyses()) {
-        return; // Skip if no view permission
-      }
-
-      // Allow access if:
-      // 1. User has access to the analysis's department, OR
-      // 2. Analysis is uncategorized (null, undefined, or 'uncategorized')
-      // 3. Analysis has no department set
-      const isUncategorized =
-        !analysis.department || analysis.department === 'uncategorized';
-      const hasDeptAccess = analysis.department
-        ? canAccessDepartment(analysis.department)
-        : false;
-
-      const canAccess = hasDeptAccess || isUncategorized;
-
-      if (canAccess) {
-        // If a specific department is selected, also filter by that
-        // Always show if no department filter is active OR matches the selected department
-        // Also show uncategorized items when showing "All Departments"
-        if (
-          !selectedDepartment ||
-          analysis.department === selectedDepartment ||
-          (selectedDepartment === 'uncategorized' && isUncategorized)
-        ) {
-          filteredAnalyses[name] = analysis;
-        }
+      // Filter by selected department if one is chosen
+      if (
+        !selectedDepartment ||
+        analysis.department === selectedDepartment ||
+        (selectedDepartment === 'uncategorized' &&
+          (!analysis.department || analysis.department === 'uncategorized'))
+      ) {
+        filteredAnalyses[name] = analysis;
       }
     });
     return filteredAnalyses;
@@ -282,7 +255,7 @@ function AppContent() {
             background: 'var(--mantine-color-body)',
           }}
         >
-          {canUploadAnalyses() && (
+          {isAdmin && (
             <Suspense
               fallback={
                 <AppLoadingOverlay
@@ -346,6 +319,7 @@ function AuthenticatedApp() {
 export default function App() {
   return (
     <AuthProvider>
+      <Notifications />
       <AppRouter />
     </AuthProvider>
   );
@@ -353,7 +327,7 @@ export default function App() {
 
 // Router component to conditionally load authenticated vs login components
 function AppRouter() {
-  const { isAuthenticated, user, isLoading } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
 
   // Show loading overlay during initial auth check
   if (isLoading) {
@@ -362,16 +336,6 @@ function AppRouter() {
 
   if (!isAuthenticated) {
     return <LoginPage />;
-  }
-
-  // Check if user must change password
-  if (user?.mustChangePassword) {
-    return (
-      <ForcePasswordChange
-        username={user.username}
-        onSuccess={() => window.location.reload()}
-      />
-    );
   }
 
   // Only load SSE and heavy components when authenticated
