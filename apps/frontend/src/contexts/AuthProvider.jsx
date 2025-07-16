@@ -53,19 +53,20 @@ export const AuthProvider = ({ children }) => {
     const validateSession = async () => {
       try {
         const freshSession = await authClient.getSession();
-        
+
         // If we had a session but now we don't, it was revoked
         if (currentSession && !freshSession?.data?.session) {
           notifications.show({
             title: 'Session Expired',
-            message: 'Your session has been revoked by an administrator. Please log in again.',
+            message:
+              'Your session has been revoked by an administrator. Please log in again.',
             color: 'orange',
             autoClose: 5000,
           });
-          
+
           // Clear manual session and redirect to login
           setManualSession(null);
-          
+
           // Force a page refresh to ensure clean state
           setTimeout(() => {
             window.location.reload();
@@ -78,7 +79,7 @@ export const AuthProvider = ({ children }) => {
 
     // Check session every 30 seconds
     const interval = setInterval(validateSession, 30000);
-    
+
     return () => clearInterval(interval);
   }, [isAuthenticated, currentSession]);
 

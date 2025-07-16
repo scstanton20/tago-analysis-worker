@@ -2,7 +2,6 @@ import { betterAuth } from 'better-auth';
 import { admin } from 'better-auth/plugins/admin';
 import { passkey } from 'better-auth/plugins/passkey';
 import { username } from 'better-auth/plugins/username';
-import { multiSession } from 'better-auth/plugins/multi-session';
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
@@ -48,9 +47,6 @@ export const auth = betterAuth({
   },
   plugins: [
     username(),
-    multiSession({
-      maximumSessions: 10, // Allow up to 10 concurrent sessions per user
-    }),
     admin({
       adminRoles: ['admin'],
       defaultRole: 'viewer',
