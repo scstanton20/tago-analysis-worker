@@ -1,6 +1,10 @@
 // backend/src/routes/sseRoutes.js
 import express from 'express';
-import { authenticateSSE, handleSSEConnection, sseManager } from '../utils/sse.js';
+import {
+  authenticateSSE,
+  handleSSEConnection,
+  sseManager,
+} from '../utils/sse.js';
 
 const router = express.Router();
 
@@ -106,14 +110,14 @@ router.get('/events', authenticateSSE, handleSSEConnection);
 router.post('/logout-notification', authenticateSSE, (req, res) => {
   try {
     const userId = req.user.id;
-    
+
     // Send SSE logout notification to all user's other sessions
     sseManager.sendToUser(userId, {
       type: 'userLogout',
       userId: userId,
       timestamp: new Date().toISOString(),
     });
-    
+
     console.log(`Sent logout notification to user ${userId}`);
     res.json({ success: true });
   } catch (error) {

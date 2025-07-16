@@ -15,6 +15,7 @@ import {
   Box,
   Paper,
   LoadingOverlay,
+  Menu,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import {
@@ -23,10 +24,17 @@ import {
   IconTrash,
   IconUser,
   IconAlertCircle,
+  IconUserCheck,
+  IconLogout,
+  IconBan,
+  IconCircleCheck,
+  IconDotsVertical,
+  IconDeviceLaptop,
 } from '@tabler/icons-react';
 import { useAuth } from '../../contexts/AuthProvider';
-import { signUp, admin } from '../../lib/auth';
+import { admin } from '../../lib/auth';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
+import UserSessionsModal from './userSessionsModal';
 
 export default function UserManagementModal({ opened, onClose }) {
   const { user: currentUser, isAdmin } = useAuth();
@@ -37,6 +45,8 @@ export default function UserManagementModal({ opened, onClose }) {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [error, setError] = useState('');
   const [createdUserInfo, setCreatedUserInfo] = useState(null);
+  const [showSessionsModal, setShowSessionsModal] = useState(false);
+  const [selectedUserForSessions, setSelectedUserForSessions] = useState(null);
 
   const form = useForm({
     initialValues: {
@@ -121,37 +131,81 @@ export default function UserManagementModal({ opened, onClose }) {
       setError('');
 
       if (editingUser) {
-        // Prevent editing other users until admin endpoints are implemented
-        if (editingUser.id !== currentUser?.id) {
-          throw new Error('User editing not yet available');
-        }
+        // Handle user editing
+        const updates = {};
+        let needsUpdate = false;
 
-        // For self-editing, redirect to profile modal
-        throw new Error(
-          'Please use the profile settings to update your own information',
-        );
-      } else {
-        // Create user using Better Auth signUp
-        const result = await signUp.email({
-          name: values.name,
-          email: values.email,
-          password: values.password,
-          username: values.username,
-        });
-
-        if (result.error) {
-          throw new Error(result.error.message);
-        }
-
-        // Set role using Better Auth admin client if not default viewer
-        if (values.role !== 'viewer') {
+        // Check if role changed
+        if (values.role !== editingUser.role) {
           const roleResult = await admin.setRole({
-            userId: result.data.user.id,
+            userId: editingUser.id,
             role: values.role,
           });
           if (roleResult.error) {
-            throw new Error(roleResult.error.message);
+            throw new Error(
+              `Failed to update role: ${roleResult.error.message}`,
+            );
           }
+          updates.role = values.role;
+          needsUpdate = true;
+        }
+
+        // Note: Better Auth admin plugin doesn't provide updateUser for basic details
+        // Only role and password changes are supported for admin user management
+
+        // Update password if provided
+        if (values.password && values.password.trim()) {
+          const passwordResult = await admin.setUserPassword({
+            userId: editingUser.id,
+            password: values.password,
+          });
+
+          if (passwordResult.error) {
+            throw new Error(
+              `Failed to update password: ${passwordResult.error.message}`,
+            );
+          }
+          needsUpdate = true;
+        }
+
+        if (needsUpdate) {
+          notify.showNotification({
+            title: 'Success',
+            message: `User ${values.name} updated successfully.`,
+            color: 'green',
+          });
+        }
+      } else {
+        // Create user using Better Auth admin createUser to avoid auto-login
+        console.log('Creating user with values:', {
+          name: values.name,
+          email: values.email,
+          username: values.username,
+          role: values.role,
+        });
+
+        // Create user with all data including username
+        const createUserData = {
+          name: values.name,
+          email: values.email,
+          password: values.password,
+          role: values.role,
+        };
+
+        // Add username to data field if provided
+        if (values.username && values.username.trim()) {
+          createUserData.data = {
+            username: values.username,
+            displayUsername: values.username, // Both fields are needed for username plugin
+          };
+        }
+
+        const result = await admin.createUser(createUserData);
+
+        console.log('Create user result:', result);
+
+        if (result.error) {
+          throw new Error(result.error.message);
         }
 
         notify.showNotification({
@@ -222,6 +276,110 @@ export default function UserManagementModal({ opened, onClose }) {
     }
   };
 
+  const handleImpersonate = async (user) => {
+    if (
+      !confirm(
+        `Are you sure you want to impersonate "${user.name || user.email}"? You will be logged in as this user.`,
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError('');
+
+      const result = await admin.impersonateUser({
+        userId: user.id,
+      });
+
+      if (result.error) {
+        throw new Error(result.error.message);
+      }
+
+      notify.showNotification({
+        title: 'Success',
+        message: `Now impersonating ${user.name || user.email}`,
+        color: 'blue',
+      });
+
+      // Refresh the page to update the auth context
+      window.location.reload();
+    } catch (err) {
+      setError(err.message || 'Failed to impersonate user');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleManageSessions = (user) => {
+    setSelectedUserForSessions(user);
+    setShowSessionsModal(true);
+  };
+
+  const handleBanUser = async (user) => {
+    if (
+      !confirm(
+        `Are you sure you want to ban "${user.name || user.email}"? This will prevent them from signing in.`,
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError('');
+
+      const result = await admin.banUser({
+        userId: user.id,
+        banReason: 'Banned by administrator',
+      });
+
+      if (result.error) {
+        throw new Error(result.error.message);
+      }
+
+      notify.showNotification({
+        title: 'Success',
+        message: `User ${user.name || user.email} has been banned`,
+        color: 'orange',
+      });
+
+      await loadUsers();
+    } catch (err) {
+      setError(err.message || 'Failed to ban user');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUnbanUser = async (user) => {
+    try {
+      setLoading(true);
+      setError('');
+
+      const result = await admin.unbanUser({
+        userId: user.id,
+      });
+
+      if (result.error) {
+        throw new Error(result.error.message);
+      }
+
+      notify.showNotification({
+        title: 'Success',
+        message: `User ${user.name || user.email} has been unbanned`,
+        color: 'green',
+      });
+
+      await loadUsers();
+    } catch (err) {
+      setError(err.message || 'Failed to unban user');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCancel = () => {
     setEditingUser(null);
     setShowCreateForm(false);
@@ -245,6 +403,11 @@ export default function UserManagementModal({ opened, onClose }) {
   const handleModalClose = () => {
     handleCancel();
     onClose();
+  };
+
+  const handleSessionsModalClose = () => {
+    setShowSessionsModal(false);
+    setSelectedUserForSessions(null);
   };
 
   // Only show if user is admin
@@ -328,6 +491,7 @@ export default function UserManagementModal({ opened, onClose }) {
                     <Table.Tr>
                       <Table.Th>Name</Table.Th>
                       <Table.Th>Email</Table.Th>
+                      <Table.Th>Username</Table.Th>
                       <Table.Th>Role</Table.Th>
                       <Table.Th>Actions</Table.Th>
                     </Table.Tr>
@@ -349,47 +513,114 @@ export default function UserManagementModal({ opened, onClose }) {
                         </Table.Td>
                         <Table.Td>{user.email}</Table.Td>
                         <Table.Td>
-                          <Badge
-                            variant="light"
-                            color={
-                              user.role === 'admin'
-                                ? 'red'
-                                : user.role === 'analyst'
-                                  ? 'orange'
-                                  : user.role === 'operator'
-                                    ? 'yellow'
-                                    : 'blue'
-                            }
+                          <Text
+                            size="sm"
+                            c={user.username ? undefined : 'dimmed'}
                           >
-                            {user.role || 'viewer'}
-                          </Badge>
+                            {user.username || 'Not set'}
+                          </Text>
                         </Table.Td>
                         <Table.Td>
                           <Group gap="xs">
-                            <ActionIcon
+                            <Badge
                               variant="light"
-                              color="blue"
-                              size="sm"
-                              onClick={() => handleEdit(user)}
-                              title={
-                                user.id === currentUser?.id && isOnlyAdmin()
-                                  ? 'Use Profile Settings to update your information'
-                                  : 'Edit user'
+                              color={
+                                user.role === 'admin'
+                                  ? 'red'
+                                  : user.role === 'analyst'
+                                    ? 'orange'
+                                    : user.role === 'operator'
+                                      ? 'yellow'
+                                      : 'blue'
                               }
                             >
-                              <IconEdit size="1rem" />
-                            </ActionIcon>
-                            {user.id !== currentUser?.id && (
-                              <ActionIcon
-                                variant="light"
-                                color="red"
-                                size="sm"
-                                onClick={() => handleDelete(user)}
-                              >
-                                <IconTrash size="1rem" />
-                              </ActionIcon>
+                              {user.role || 'viewer'}
+                            </Badge>
+                            {user.banned && (
+                              <Badge variant="light" color="red" size="xs">
+                                Banned
+                              </Badge>
                             )}
                           </Group>
+                        </Table.Td>
+                        <Table.Td>
+                          <Menu shadow="md" width={200} closeOnItemClick={true}>
+                            <Menu.Target>
+                              <ActionIcon
+                                variant="subtle"
+                                size="lg"
+                                color="brand"
+                              >
+                                <IconDotsVertical size={20} />
+                              </ActionIcon>
+                            </Menu.Target>
+
+                            <Menu.Dropdown>
+                              {/* Edit User */}
+                              <Menu.Item
+                                onClick={() => handleEdit(user)}
+                                leftSection={<IconEdit size={16} />}
+                              >
+                                Edit User
+                              </Menu.Item>
+
+                              {user.id !== currentUser?.id && (
+                                <>
+                                  <Menu.Divider />
+
+                                  {/* Impersonate User */}
+                                  <Menu.Item
+                                    onClick={() => handleImpersonate(user)}
+                                    leftSection={<IconUserCheck size={16} />}
+                                    color="violet"
+                                  >
+                                    Impersonate User
+                                  </Menu.Item>
+
+                                  {/* Manage Sessions */}
+                                  <Menu.Item
+                                    onClick={() => handleManageSessions(user)}
+                                    leftSection={<IconDeviceLaptop size={16} />}
+                                    color="blue"
+                                  >
+                                    Manage Sessions
+                                  </Menu.Item>
+
+                                  <Menu.Divider />
+
+                                  {/* Ban/Unban User */}
+                                  {user.banned ? (
+                                    <Menu.Item
+                                      onClick={() => handleUnbanUser(user)}
+                                      leftSection={
+                                        <IconCircleCheck size={16} />
+                                      }
+                                      color="green"
+                                    >
+                                      Unban User
+                                    </Menu.Item>
+                                  ) : (
+                                    <Menu.Item
+                                      onClick={() => handleBanUser(user)}
+                                      leftSection={<IconBan size={16} />}
+                                      color="red"
+                                    >
+                                      Ban User
+                                    </Menu.Item>
+                                  )}
+
+                                  {/* Delete User */}
+                                  <Menu.Item
+                                    onClick={() => handleDelete(user)}
+                                    leftSection={<IconTrash size={16} />}
+                                    color="red"
+                                  >
+                                    Delete User
+                                  </Menu.Item>
+                                </>
+                              )}
+                            </Menu.Dropdown>
+                          </Menu>
                         </Table.Td>
                       </Table.Tr>
                     ))}
@@ -405,12 +636,25 @@ export default function UserManagementModal({ opened, onClose }) {
                     {editingUser ? 'Edit User' : 'Create New User'}
                   </Text>
 
+                  {editingUser && editingUser.id !== currentUser?.id && (
+                    <Alert color="blue" variant="light">
+                      <Text size="sm">
+                        As an admin, you can change this user's role and reset
+                        their password. The user must update their own name,
+                        email, and username through their profile settings.
+                      </Text>
+                    </Alert>
+                  )}
+
                   <TextInput
                     label="Name"
                     placeholder="Enter full name"
                     required
-                    disabled={
-                      editingUser?.id === currentUser?.id && isOnlyAdmin()
+                    disabled={!!editingUser}
+                    description={
+                      editingUser
+                        ? 'User must update their own name through profile settings'
+                        : undefined
                     }
                     {...form.getInputProps('name')}
                   />
@@ -419,8 +663,11 @@ export default function UserManagementModal({ opened, onClose }) {
                     label="Email"
                     placeholder="Enter email address"
                     required
-                    disabled={
-                      editingUser?.id === currentUser?.id && isOnlyAdmin()
+                    disabled={!!editingUser}
+                    description={
+                      editingUser
+                        ? 'User must update their own email through profile settings'
+                        : undefined
                     }
                     {...form.getInputProps('email')}
                   />
@@ -428,10 +675,12 @@ export default function UserManagementModal({ opened, onClose }) {
                   <TextInput
                     label="Username (Optional)"
                     placeholder="Enter username for login"
-                    description="Users can login with either email or username"
-                    disabled={
-                      editingUser?.id === currentUser?.id && isOnlyAdmin()
+                    description={
+                      editingUser
+                        ? 'User must update their own username through profile settings'
+                        : 'Users can login with either email or username'
                     }
+                    disabled={!!editingUser}
                     {...form.getInputProps('username')}
                   />
 
@@ -443,9 +692,6 @@ export default function UserManagementModal({ opened, onClose }) {
                     }
                     placeholder="Enter password"
                     required={!editingUser}
-                    disabled={
-                      editingUser?.id === currentUser?.id && isOnlyAdmin()
-                    }
                     {...form.getInputProps('password')}
                   />
 
@@ -454,7 +700,9 @@ export default function UserManagementModal({ opened, onClose }) {
                     placeholder="Select global role"
                     required
                     disabled={
-                      editingUser?.id === currentUser?.id && isOnlyAdmin()
+                      editingUser?.id === currentUser?.id &&
+                      editingUser?.role === 'admin' &&
+                      isOnlyAdmin()
                     }
                     data={[
                       { value: 'viewer', label: 'Viewer - Can view analyses' },
@@ -473,19 +721,6 @@ export default function UserManagementModal({ opened, onClose }) {
                     ]}
                     {...form.getInputProps('role')}
                   />
-
-                  {editingUser?.id === currentUser?.id && isOnlyAdmin() && (
-                    <Alert
-                      icon={<IconUser size="1rem" />}
-                      color="blue"
-                      variant="light"
-                    >
-                      <Text size="sm">
-                        Please use the profile settings to update your own
-                        information.
-                      </Text>
-                    </Alert>
-                  )}
 
                   {form.values.role === 'admin' && (
                     <Alert color="blue" variant="light">
@@ -522,6 +757,13 @@ export default function UserManagementModal({ opened, onClose }) {
           )}
         </Stack>
       </Box>
+
+      {/* Sessions Management Modal */}
+      <UserSessionsModal
+        opened={showSessionsModal}
+        onClose={handleSessionsModalClose}
+        user={selectedUserForSessions}
+      />
     </Modal>
   );
 }

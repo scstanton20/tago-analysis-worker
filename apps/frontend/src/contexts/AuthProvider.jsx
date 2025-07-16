@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { useSession, signOut, authClient } from '../lib/auth.js';
+import { notifications } from '@mantine/notifications';
 
 const AuthContext = createContext();
 
@@ -45,6 +46,42 @@ export const AuthProvider = ({ children }) => {
     return () => window.removeEventListener('auth-change', handleAuthChange);
   }, []);
 
+  // Periodic session validation to detect revoked sessions
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const validateSession = async () => {
+      try {
+        const freshSession = await authClient.getSession();
+        
+        // If we had a session but now we don't, it was revoked
+        if (currentSession && !freshSession?.data?.session) {
+          notifications.show({
+            title: 'Session Expired',
+            message: 'Your session has been revoked by an administrator. Please log in again.',
+            color: 'orange',
+            autoClose: 5000,
+          });
+          
+          // Clear manual session and redirect to login
+          setManualSession(null);
+          
+          // Force a page refresh to ensure clean state
+          setTimeout(() => {
+            window.location.reload();
+          }, 2000);
+        }
+      } catch (error) {
+        console.error('Session validation error:', error);
+      }
+    };
+
+    // Check session every 30 seconds
+    const interval = setInterval(validateSession, 30000);
+    
+    return () => clearInterval(interval);
+  }, [isAuthenticated, currentSession]);
+
   // Profile and authentication functions
   const logout = async () => {
     await signOut();
@@ -58,8 +95,25 @@ export const AuthProvider = ({ children }) => {
     isAuthenticated,
     isLoading,
     isAdmin: user?.role === 'admin',
+    isImpersonating: !!sessionData?.impersonatedBy,
+    impersonatedBy: sessionData?.impersonatedBy || null,
     logout,
     signOut: logout,
+    exitImpersonation: async () => {
+      try {
+        const result = await authClient.admin.stopImpersonating();
+        if (result.error) {
+          throw new Error(
+            result.error.message || 'Failed to exit impersonation',
+          );
+        }
+        // Refresh the page to update the auth context
+        window.location.reload();
+      } catch (error) {
+        console.error('Error exiting impersonation:', error);
+        throw error;
+      }
+    },
     // Profile and password management using Better Auth
     updateProfile: async (profileData) => {
       try {
@@ -103,9 +157,26 @@ export const AuthProvider = ({ children }) => {
         newPassword,
         revokeOtherSessions: true,
       });
+
       if (result.error) {
         throw new Error(result.error.message || 'Failed to change password');
       }
+
+      // Show notification that user must log back in
+      notifications.show({
+        title: 'Password Changed Successfully',
+        message: 'Your password has been changed. You must log back in.',
+        color: 'blue',
+        autoClose: 3000,
+      });
+
+      await signOut();
+
+      // Automatically refresh the window after a short delay
+      setTimeout(() => {
+        window.location.reload();
+      }, 3000);
+
       return result.data;
     },
   };

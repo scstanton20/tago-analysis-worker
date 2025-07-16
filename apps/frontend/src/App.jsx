@@ -30,6 +30,7 @@ const AnalysisCreator = lazy(
 import ConnectionStatus from './components/connectionStatus';
 import LoginPage from './components/auth/LoginPage';
 import Logo from './components/logo';
+import ImpersonationBanner from './components/ImpersonationBanner';
 
 // Reusable loading overlay component
 function AppLoadingOverlay({ message, submessage, error, showRetry }) {
@@ -131,6 +132,7 @@ function AppContent() {
 
   return (
     <>
+      <ImpersonationBanner />
       <AppShell
         header={{ height: 60 }}
         navbar={{

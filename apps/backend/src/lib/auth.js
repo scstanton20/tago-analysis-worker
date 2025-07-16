@@ -35,12 +35,12 @@ export const auth = betterAuth({
     enabled: true,
     requireEmailVerification: false,
   },
-  session: {
-    cookieCache: {
-      enabled: true,
-      maxAge: 5 * 60, // 5 minutes
-    },
-  },
+  // session: {
+  //   cookieCache: {
+  //     enabled: true,
+  //     maxAge: 60, // 1 minute cache for balance between performance and security
+  //   },
+  // },
   advanced: {
     crossSubDomainCookies: {
       enabled: false, // Enable if using subdomains
