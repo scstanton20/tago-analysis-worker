@@ -57,8 +57,5 @@ export const auth = betterAuth({
     }),
   ],
   secret: process.env.SECRET_KEY || 'default-dev-secret-change-in-production',
-  trustedOrigins: ['http://localhost:5173', 'http://localhost:3000'],
+  trustedOrigins: ['http://localhost:5173'],
 });
-
-// TODO: Better Auth admin initialization
-// The admin role is manually set in the database for now

@@ -11,8 +11,7 @@
   },
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon --config nodemon.json src/server.js",
-    "create-admin": "node scripts/create-admin.js"
+    "dev": "nodemon --config nodemon.json src/server.js"
   },
   "dependencies": {
     "@simplewebauthn/server": "^13.1.1",

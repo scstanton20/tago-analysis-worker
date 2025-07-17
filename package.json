@@ -16,10 +16,7 @@
     "format": "npx prettier --write .",
     "format:check": "npx prettier --check .",
     "lint": "npx eslint .",
-    "lint:fix": "npx eslint . --fix",
-    "backend:auth-generate": "cd apps/backend && npx @better-auth/cli@latest generate --config src/lib/auth.js",
-    "backend:auth-migrate": "cd apps/backend && npx @better-auth/cli@latest migrate --config src/lib/auth.js",
-    "backend:auth-generate-admin": "cd apps/backend && node scripts/create-admin.js"
+    "lint:fix": "npx eslint . --fix"
   },
   "devDependencies": {
     "@better-auth/cli": "^1.2.12",

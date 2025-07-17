@@ -21,6 +21,9 @@ import sseRoutes from './routes/sseRoutes.js';
 import { specs, swaggerUi } from './docs/swagger.js';
 import { toNodeHandler } from 'better-auth/node';
 import { auth } from './lib/auth.js';
+import { execSync } from 'child_process';
+import Database from 'better-sqlite3';
+import path from 'path';
 
 // Api prefix
 const API_PREFIX = '/api';
@@ -65,6 +68,98 @@ app.use(fileUpload());
 app.set('trust proxy', 1);
 
 const PORT = process.env.PORT || 3000;
+
+// Function to run database migrations
+async function runMigrations() {
+  try {
+    console.log('Running database migrations...');
+    sseManager.updateContainerState({
+      status: 'running_migrations',
+      message: 'Running database migrations',
+    });
+
+    execSync(
+      'npx @better-auth/cli@latest migrate --config src/lib/auth.js -y',
+      {
+        stdio: 'inherit',
+        cwd: process.cwd(),
+      },
+    );
+
+    console.log('✅ Database migrations completed');
+  } catch (error) {
+    console.error('❌ Migration failed:', error.message);
+    throw error;
+  }
+}
+
+// Function to create admin user if it doesn't exist
+async function createAdminUserIfNeeded() {
+  try {
+    sseManager.updateContainerState({
+      status: 'checking_admin',
+      message: 'Checking for admin user',
+    });
+
+    const dbPath = path.join(config.storage.base, 'auth.db');
+    const db = new Database(dbPath);
+
+    const existingAdmin = db
+      .prepare('SELECT id FROM user WHERE email = ? OR role = ?')
+      .get('admin@example.com', 'admin');
+
+    if (existingAdmin) {
+      console.log('✅ Admin user already exists');
+      db.close();
+      return;
+    }
+
+    db.close();
+
+    console.log('Creating admin user...');
+    sseManager.updateContainerState({
+      status: 'creating_admin',
+      message: 'Creating admin user',
+    });
+
+    const result = await auth.api.signUpEmail({
+      body: {
+        name: 'Administrator',
+        email: 'admin@example.com',
+        password: 'admin123',
+        username: 'admin',
+      },
+      headers: {},
+    });
+
+    if (result.user) {
+      const db2 = new Database(dbPath);
+      const updateResult = db2
+        .prepare('UPDATE user SET role = ? WHERE id = ?')
+        .run('admin', result.user.id);
+      db2.close();
+
+      if (updateResult.changes > 0) {
+        console.log('✅ Admin user created successfully');
+        console.log('');
+        console.log('🔑 Admin user credentials:');
+        console.log('   Email: admin@example.com');
+        console.log('   Username: admin');
+        console.log('   Password: admin123');
+        console.log('');
+        console.log('You can now sign in with these credentials.');
+      } else {
+        console.log(
+          '⚠️ Admin user created but role assignment may have failed',
+        );
+      }
+    } else {
+      console.log('❌ Failed to create admin user');
+    }
+  } catch (error) {
+    console.error('Error with admin user setup:', error.message);
+  }
+}
 
 // Function to restart processes that were running before
 async function restartRunningProcesses() {
@@ -118,6 +213,12 @@ async function startServer() {
       status: 'initializing',
       message: 'Initializing server components',
     });
+
+    // Run database migrations first
+    await runMigrations();
+
+    // Create admin user if needed
+    await createAdminUserIfNeeded();
 
     // IMPORTANT: Initialize services BEFORE setting up routes
     console.log('Initializing services...');
