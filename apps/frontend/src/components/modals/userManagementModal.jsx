@@ -16,6 +16,12 @@ import {
   Paper,
   LoadingOverlay,
   Menu,
+  MultiSelect,
+  Divider,
+  ScrollArea,
+  Loader,
+  Center,
+  Checkbox,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import {
@@ -32,12 +38,12 @@ import {
   IconDeviceLaptop,
 } from '@tabler/icons-react';
 import { useAuth } from '../../contexts/AuthProvider';
-import { admin } from '../../lib/auth';
+import { admin, organization } from '../../lib/auth';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import UserSessionsModal from './userSessionsModal';
 
 export default function UserManagementModal({ opened, onClose }) {
-  const { user: currentUser, isAdmin } = useAuth();
+  const { user: currentUser, isAdmin, organizationId } = useAuth();
   const notify = useNotifications();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -47,6 +53,9 @@ export default function UserManagementModal({ opened, onClose }) {
   const [createdUserInfo, setCreatedUserInfo] = useState(null);
   const [showSessionsModal, setShowSessionsModal] = useState(false);
   const [selectedUserForSessions, setSelectedUserForSessions] = useState(null);
+  const [availableTeams, setAvailableTeams] = useState([]);
+  const [teamsLoading, setTeamsLoading] = useState(false);
+  const [actions, setActions] = useState([]);
 
   const form = useForm({
     initialValues: {
@@ -54,7 +63,8 @@ export default function UserManagementModal({ opened, onClose }) {
       email: '',
       username: '',
       password: '',
-      role: 'viewer',
+      role: 'user',
+      departmentPermissions: {}, // { departmentId: { enabled: boolean, permissions: string[] } }
     },
     validate: {
       name: (value) => (!value ? 'Name is required' : null),
@@ -108,6 +118,101 @@ export default function UserManagementModal({ opened, onClose }) {
     }
   }, []);
 
+  // Load available teams for assignment
+  const loadTeams = useCallback(async () => {
+    if (!organizationId) {
+      console.warn('No organization ID available for loading teams');
+      setAvailableTeams([]);
+      return;
+    }
+
+    try {
+      setTeamsLoading(true);
+
+      // Use better-auth organization client to get teams
+      const result = await organization.listTeams({
+        query: {
+          organizationId: organizationId,
+        },
+      });
+
+      if (!result.error && result.data) {
+        setAvailableTeams(
+          result.data.map((team) => ({
+            value: team.id,
+            label: team.name,
+          })),
+        );
+      } else {
+        console.error('Failed to load teams:', result.error);
+        setAvailableTeams([]);
+      }
+    } catch (error) {
+      console.error('Error loading teams:', error);
+      setAvailableTeams([]);
+    } finally {
+      setTeamsLoading(false);
+    }
+  }, [organizationId]);
+
+  // Load available actions for permissions
+  const loadActions = useCallback(async () => {
+    try {
+      // Mock actions for now - you can replace with your actual API
+      const mockActions = [
+        { value: 'view_analyses', label: 'View Analyses' },
+        { value: 'run_analyses', label: 'Run Analyses' },
+        { value: 'upload_analyses', label: 'Upload Analyses' },
+        { value: 'download_analyses', label: 'Download Analyses' },
+        { value: 'delete_analyses', label: 'Delete Analyses' },
+      ];
+
+      setActions(mockActions);
+    } catch (error) {
+      console.error('Error loading actions:', error);
+      setActions([]);
+    }
+  }, []);
+
+  // Helper functions for department permissions
+  const toggleDepartment = (departmentId) => {
+    const current = form.values.departmentPermissions[departmentId] || {
+      enabled: false,
+      permissions: [],
+    };
+    const newEnabled = !current.enabled;
+
+    form.setFieldValue(`departmentPermissions.${departmentId}`, {
+      enabled: newEnabled,
+      permissions: newEnabled ? ['view_analyses'] : [], // Default to view_analyses when enabling
+    });
+  };
+
+  const toggleDepartmentPermission = (departmentId, permission) => {
+    const current = form.values.departmentPermissions[departmentId] || {
+      enabled: false,
+      permissions: [],
+    };
+    const currentPermissions = current.permissions || [];
+
+    let newPermissions;
+    if (currentPermissions.includes(permission)) {
+      // Remove permission, but keep view_analyses if it's the last one
+      newPermissions = currentPermissions.filter((p) => p !== permission);
+      if (newPermissions.length === 0) {
+        newPermissions = ['view_analyses'];
+      }
+    } else {
+      // Add permission
+      newPermissions = [...currentPermissions, permission];
+    }
+
+    form.setFieldValue(
+      `departmentPermissions.${departmentId}.permissions`,
+      newPermissions,
+    );
+  };
+
   // Helper function to check if current user is the only admin
   const isOnlyAdmin = () => {
     const adminUsers = users.filter((user) => user.role === 'admin');
@@ -121,9 +226,11 @@ export default function UserManagementModal({ opened, onClose }) {
   useEffect(() => {
     if (opened && isAdmin) {
       loadUsers();
+      loadTeams();
+      loadActions();
       setError('');
     }
-  }, [opened, isAdmin, loadUsers]);
+  }, [opened, isAdmin, loadUsers, loadTeams, loadActions]);
 
   const handleSubmit = async (values) => {
     try {
@@ -236,7 +343,7 @@ export default function UserManagementModal({ opened, onClose }) {
       email: user.email || '',
       username: user.username || '',
       password: '',
-      role: user.role || 'viewer',
+      role: user.role || 'user',
     });
     setShowCreateForm(true);
   };
@@ -395,7 +502,7 @@ export default function UserManagementModal({ opened, onClose }) {
       email: '',
       username: '',
       password: '',
-      role: 'viewer',
+      role: 'user',
     });
     setShowCreateForm(true);
   };
@@ -534,7 +641,7 @@ export default function UserManagementModal({ opened, onClose }) {
                                       : 'blue'
                               }
                             >
-                              {user.role || 'viewer'}
+                              {user.role || 'user'}
                             </Badge>
                             {user.banned && (
                               <Badge variant="light" color="red" size="xs">
@@ -696,8 +803,8 @@ export default function UserManagementModal({ opened, onClose }) {
                   />
 
                   <Select
-                    label="Global Role"
-                    placeholder="Select global role"
+                    label="Role"
+                    placeholder="Select role"
                     required
                     disabled={
                       editingUser?.id === currentUser?.id &&
@@ -705,14 +812,9 @@ export default function UserManagementModal({ opened, onClose }) {
                       isOnlyAdmin()
                     }
                     data={[
-                      { value: 'viewer', label: 'Viewer - Can view analyses' },
                       {
-                        value: 'operator',
-                        label: 'Operator - Can view and run analyses',
-                      },
-                      {
-                        value: 'analyst',
-                        label: 'Analyst - Can upload, run, and manage analyses',
+                        value: 'user',
+                        label: 'User - Specific department assignments',
                       },
                       {
                         value: 'admin',
@@ -727,6 +829,140 @@ export default function UserManagementModal({ opened, onClose }) {
                       Administrators have full access to all features and can
                       manage other users.
                     </Alert>
+                  )}
+
+                  {form.values.role !== 'admin' && (
+                    <Stack gap="md">
+                      <Divider />
+
+                      <Text size="sm" fw={600} c="dimmed">
+                        Department Access & Permissions
+                      </Text>
+                      <Text size="xs" c="dimmed">
+                        Select departments and assign specific permissions for
+                        each. View analyses is automatically assigned when a
+                        department is enabled.
+                      </Text>
+
+                      <ScrollArea h={300} offsetScrollbars>
+                        <Stack gap="xs">
+                          {teamsLoading ? (
+                            <Center py="md">
+                              <Group>
+                                <Loader size="sm" />
+                                <Text size="sm" c="dimmed">
+                                  Loading teams...
+                                </Text>
+                              </Group>
+                            </Center>
+                          ) : (
+                            availableTeams.map((team) => {
+                              const teamPerms = form.values
+                                .departmentPermissions[team.value] || {
+                                enabled: false,
+                                permissions: [],
+                              };
+                              const isEnabled = teamPerms.enabled;
+                              const permissions = teamPerms.permissions || [];
+
+                              return (
+                                <Paper
+                                  key={team.value}
+                                  withBorder
+                                  p="md"
+                                  style={{
+                                    backgroundColor: isEnabled
+                                      ? 'var(--mantine-color-blue-light)'
+                                      : 'transparent',
+                                    borderColor: isEnabled
+                                      ? 'var(--mantine-color-blue-6)'
+                                      : 'var(--mantine-color-gray-3)',
+                                  }}
+                                >
+                                  <Stack gap="sm">
+                                    {/* Department Header */}
+                                    <Group
+                                      justify="space-between"
+                                      style={{ cursor: 'pointer' }}
+                                      onClick={() =>
+                                        toggleDepartment(team.value)
+                                      }
+                                    >
+                                      <Group gap="sm">
+                                        <Checkbox
+                                          checked={isEnabled}
+                                          onChange={() =>
+                                            toggleDepartment(team.value)
+                                          }
+                                          onClick={(e) => e.stopPropagation()}
+                                        />
+                                        <Text fw={500} size="sm">
+                                          {team.label}
+                                        </Text>
+                                      </Group>
+                                      {isEnabled && (
+                                        <Badge
+                                          size="xs"
+                                          variant="light"
+                                          color="blue"
+                                        >
+                                          {permissions.length} permission
+                                          {permissions.length !== 1 ? 's' : ''}
+                                        </Badge>
+                                      )}
+                                    </Group>
+
+                                    {/* Permissions for this department */}
+                                    {isEnabled && (
+                                      <Box ml="xl">
+                                        <Stack gap="xs">
+                                          {actions.map((action) => (
+                                            <Group key={action.value} gap="sm">
+                                              <Checkbox
+                                                size="sm"
+                                                checked={permissions.includes(
+                                                  action.value,
+                                                )}
+                                                onChange={() =>
+                                                  toggleDepartmentPermission(
+                                                    team.value,
+                                                    action.value,
+                                                  )
+                                                }
+                                                disabled={
+                                                  action.value ===
+                                                  'view_analyses'
+                                                } // Always enabled as default
+                                                label={
+                                                  <Text size="sm">
+                                                    {action.label}
+                                                    {action.value ===
+                                                      'view_analyses' && (
+                                                      <Text
+                                                        component="span"
+                                                        size="xs"
+                                                        c="dimmed"
+                                                        ml="xs"
+                                                      >
+                                                        (default)
+                                                      </Text>
+                                                    )}
+                                                  </Text>
+                                                }
+                                              />
+                                            </Group>
+                                          ))}
+                                        </Stack>
+                                      </Box>
+                                    )}
+                                  </Stack>
+                                </Paper>
+                              );
+                            })
+                          )}
+                        </Stack>
+                      </ScrollArea>
+                    </Stack>
                   )}
 
                   {editingUser &&

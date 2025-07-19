@@ -20,9 +20,7 @@ import { useSSE } from './contexts/sseContext';
 import { SSEProvider } from './contexts/sseContext/provider';
 import { AuthProvider, useAuth } from './contexts/AuthProvider';
 // Lazy load heavy components that make API calls
-const DepartmentalSidebar = lazy(
-  () => import('./components/departmentalSidebar'),
-);
+const TeamSidebar = lazy(() => import('./components/teamSidebar'));
 const AnalysisList = lazy(() => import('./components/analysis/analysisList'));
 const AnalysisCreator = lazy(
   () => import('./components/analysis/uploadAnalysis'),
@@ -71,10 +69,10 @@ function AppLoadingOverlay({ message, submessage, error, showRetry }) {
 }
 
 function AppContent() {
-  const { analyses, departments, getDepartment, connectionStatus } = useSSE();
+  const { analyses, getTeam, connectionStatus } = useSSE();
   const { isAdmin } = useAuth();
 
-  const [selectedDepartment, setSelectedDepartment] = useState(null);
+  const [selectedTeam, setSelectedTeam] = useState(null);
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure();
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
   const { setColorScheme } = useMantineColorScheme();
@@ -83,13 +81,13 @@ function AppContent() {
   const getFilteredAnalyses = () => {
     // For admins, show all analyses
     if (isAdmin) {
-      if (!selectedDepartment) {
+      if (!selectedTeam) {
         return analyses;
       }
       // Filter by selected department only
       const filteredAnalyses = {};
       Object.entries(analyses).forEach(([name, analysis]) => {
-        if (analysis.department === selectedDepartment) {
+        if (analysis.teamId === selectedTeam) {
           filteredAnalyses[name] = analysis;
         }
       });
@@ -101,10 +99,10 @@ function AppContent() {
     Object.entries(analyses).forEach(([name, analysis]) => {
       // Filter by selected department if one is chosen
       if (
-        !selectedDepartment ||
-        analysis.department === selectedDepartment ||
-        (selectedDepartment === 'uncategorized' &&
-          (!analysis.department || analysis.department === 'uncategorized'))
+        !selectedTeam ||
+        analysis.teamId === selectedTeam ||
+        (selectedTeam === 'uncategorized' &&
+          (!analysis.teamId || analysis.teamId === 'uncategorized'))
       ) {
         filteredAnalyses[name] = analysis;
       }
@@ -112,10 +110,8 @@ function AppContent() {
     return filteredAnalyses;
   };
 
-  // Get current department using object lookup
-  const currentDepartment = selectedDepartment
-    ? getDepartment(selectedDepartment)
-    : null;
+  // Get current team using object lookup
+  const currentTeam = selectedTeam ? getTeam(selectedTeam) : null;
 
   const connectionFailed = connectionStatus === 'failed';
 
@@ -244,9 +240,9 @@ function AppContent() {
         </AppShell.Header>
 
         <AppShell.Navbar>
-          <DepartmentalSidebar
-            selectedDepartment={selectedDepartment}
-            onDepartmentSelect={setSelectedDepartment}
+          <TeamSidebar
+            selectedTeam={selectedTeam}
+            onTeamSelect={setSelectedTeam}
             opened={desktopOpened}
             onToggle={toggleDesktop}
           />
@@ -275,8 +271,8 @@ function AppContent() {
               }
             >
               <AnalysisCreator
-                targetDepartment={selectedDepartment}
-                departmentName={currentDepartment?.name || 'All Departments'}
+                targetTeam={selectedTeam}
+                teamName={currentTeam?.name || 'All Teams'}
               />
             </Suspense>
           )}
@@ -298,9 +294,8 @@ function AppContent() {
           >
             <AnalysisList
               analyses={getFilteredAnalyses()}
-              showDepartmentLabels={!selectedDepartment}
-              departments={departments}
-              selectedDepartment={selectedDepartment}
+              showTeamLabels={!selectedTeam}
+              selectedTeam={selectedTeam}
             />
           </Suspense>
         </AppShell.Main>

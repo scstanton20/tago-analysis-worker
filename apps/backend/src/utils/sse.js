@@ -152,20 +152,18 @@ class SSEManager {
       const { analysisService } = await import(
         '../services/analysisService.js'
       );
-      const departmentService = (
-        await import('../services/departmentService.js')
-      ).default;
+      const teamService = (await import('../services/teamService.js')).default;
 
-      const [analyses, departments] = await Promise.all([
+      const [analyses, teams] = await Promise.all([
         analysisService.getAllAnalyses(),
-        departmentService.getAllDepartments(),
+        teamService.getAllTeams(),
       ]);
 
       const initData = {
         type: 'init',
         analyses,
-        departments,
-        version: '2.0',
+        teams,
+        version: '3.0',
       };
 
       const message = this.formatSSEMessage(initData);
@@ -278,20 +276,20 @@ class SSEManager {
     this.broadcast({ type: 'refresh' });
   }
 
-  broadcastDepartmentUpdate(department, action) {
+  broadcastTeamUpdate(team, action) {
     this.broadcast({
-      type: 'departmentUpdate',
+      type: 'teamUpdate',
       action,
-      department,
+      team,
     });
   }
 
-  broadcastAnalysisMove(analysisName, fromDept, toDept) {
+  broadcastAnalysisMove(analysisName, fromTeam, toTeam) {
     this.broadcast({
-      type: 'analysisMovedToDepartment',
+      type: 'analysisMovedToTeam',
       analysis: analysisName,
-      from: fromDept,
-      to: toDept,
+      from: fromTeam,
+      to: toTeam,
     });
   }
 

@@ -4,6 +4,7 @@ import http from 'http';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
+import crypto from 'crypto';
 import fileUpload from 'express-fileupload';
 import config from './config/default.js';
 import { sseManager } from './utils/sse.js';
@@ -16,7 +17,7 @@ import {
 // Route modules
 import analysisRoutes from './routes/analysisRoutes.js';
 import statusRoutes from './routes/statusRoutes.js';
-import departmentRoutes from './routes/departmentRoutes.js';
+import teamRoutes from './routes/teamRoutes.js';
 import sseRoutes from './routes/sseRoutes.js';
 import { specs, swaggerUi } from './docs/swagger.js';
 import { toNodeHandler } from 'better-auth/node';
@@ -86,9 +87,86 @@ async function runMigrations() {
       },
     );
 
-    console.log('✅ Database migrations completed');
+    console.log('✓ Database migrations completed');
+
+    // Check if team table has color column, add if missing
+    console.log('Checking team table schema...');
+    const dbPath = path.join(config.storage.base, 'auth.db');
+    const db = new Database(dbPath);
+
+    try {
+      // Check if color column exists
+      const tableInfo = db.prepare('PRAGMA table_info(team)').all();
+      const hasColorColumn = tableInfo.some(
+        (column) => column.name === 'color',
+      );
+      const hasOrderColumn = tableInfo.some(
+        (column) => column.name === 'order_index',
+      );
+      const hasIsSystemColumn = tableInfo.some(
+        (column) => column.name === 'is_system',
+      );
+
+      if (!hasColorColumn) {
+        console.log('Adding color column to team table...');
+        db.prepare(
+          "ALTER TABLE team ADD COLUMN color TEXT DEFAULT '#3B82F6'",
+        ).run();
+        console.log('✓ Color column added to team table');
+      } else {
+        console.log('✓ Color column already exists in team table');
+      }
+
+      if (!hasOrderColumn) {
+        console.log('Adding order_index column to team table...');
+        db.prepare(
+          'ALTER TABLE team ADD COLUMN order_index INTEGER DEFAULT 0',
+        ).run();
+        console.log('✓ Order_index column added to team table');
+      } else {
+        console.log('✓ Order_index column already exists in team table');
+      }
+
+      if (!hasIsSystemColumn) {
+        console.log('Adding is_system column to team table...');
+        db.prepare(
+          'ALTER TABLE team ADD COLUMN is_system INTEGER DEFAULT 0',
+        ).run();
+        console.log('✓ Is_system column added to team table');
+      } else {
+        console.log('✓ Is_system column already exists in team table');
+      }
+
+      // Rename any existing "Default Team" to "Uncategorized"
+      const defaultTeamExists = db
+        .prepare('SELECT id FROM team WHERE name = ?')
+        .get('Default Team');
+
+      if (defaultTeamExists) {
+        console.log('Renaming "Default Team" to "Uncategorized"...');
+        db.prepare(
+          'UPDATE team SET name = ?, color = ?, is_system = 1 WHERE name = ?',
+        ).run('Uncategorized', '#9ca3af', 'Default Team');
+        console.log('✓ "Default Team" renamed to "Uncategorized"');
+      }
+
+      // Mark uncategorized teams as system teams
+      const uncategorizedTeams = db
+        .prepare('SELECT id FROM team WHERE name = ?')
+        .all('Uncategorized');
+
+      if (uncategorizedTeams.length > 0) {
+        console.log('Marking uncategorized teams as system teams...');
+        db.prepare('UPDATE team SET is_system = 1 WHERE name = ?').run(
+          'Uncategorized',
+        );
+        console.log('✓ Uncategorized teams marked as system teams');
+      }
+    } finally {
+      db.close();
+    }
   } catch (error) {
-    console.error('❌ Migration failed:', error.message);
+    console.error('Migration failed:', error.message);
     throw error;
   }
 }
@@ -109,7 +187,7 @@ async function createAdminUserIfNeeded() {
       .get('admin@example.com', 'admin');
 
     if (existingAdmin) {
-      console.log('✅ Admin user already exists');
+      console.log('✓ Admin user already exists');
       db.close();
       return;
     }
@@ -140,21 +218,121 @@ async function createAdminUserIfNeeded() {
       db2.close();
 
       if (updateResult.changes > 0) {
-        console.log('✅ Admin user created successfully');
+        console.log('✓ Admin user created successfully');
+
+        // Create main organization and add admin to it
+        console.log('Creating main organization...');
+        sseManager.updateContainerState({
+          status: 'creating_organization',
+          message: 'Creating main organization',
+        });
+
+        try {
+          // Create organization and team directly in database during setup
+          const dbPath = path.join(config.storage.base, 'auth.db');
+          const db3 = new Database(dbPath);
+
+          // Check if organization already exists
+          const existingOrg = db3
+            .prepare('SELECT id FROM organization WHERE slug = ?')
+            .get('main');
+
+          let orgId = existingOrg?.id;
+
+          if (!existingOrg) {
+            // Insert organization directly
+            const orgUuid = crypto.randomUUID();
+            db3
+              .prepare(
+                'INSERT INTO organization (id, name, slug, createdAt) VALUES (?, ?, ?, ?)',
+              )
+              .run(
+                orgUuid,
+                'Tago Analysis Runner',
+                'main',
+                new Date().toISOString(),
+              );
+            orgId = orgUuid;
+            console.log('✓ Main organization created');
+          } else {
+            console.log('✓ Main organization already exists');
+          }
+
+          if (orgId) {
+            // Create uncategorized team first
+            const existingTeam = db3
+              .prepare(
+                'SELECT id FROM team WHERE organizationId = ? AND name = ?',
+              )
+              .get(orgId, 'Uncategorized');
+
+            let teamId = existingTeam?.id;
+
+            if (!existingTeam) {
+              const teamUuid = crypto.randomUUID();
+              db3
+                .prepare(
+                  'INSERT INTO team (id, name, organizationId, createdAt, color, order_index, is_system) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                )
+                .run(
+                  teamUuid,
+                  'Uncategorized',
+                  orgId,
+                  new Date().toISOString(),
+                  '#9ca3af',
+                  0,
+                  1,
+                );
+              teamId = teamUuid;
+              console.log('✓ Uncategorized team created');
+            }
+
+            // Add admin as organization member with team assignment
+            const existingMember = db3
+              .prepare(
+                'SELECT id FROM member WHERE userId = ? AND organizationId = ?',
+              )
+              .get(result.user.id, orgId);
+
+            if (!existingMember) {
+              db3
+                .prepare(
+                  'INSERT INTO member (id, organizationId, userId, role, teamId, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
+                )
+                .run(
+                  crypto.randomUUID(),
+                  orgId,
+                  result.user.id,
+                  'owner',
+                  teamId,
+                  new Date().toISOString(),
+                );
+              console.log(
+                '✓ Admin added to organization and uncategorized team as owner',
+              );
+            }
+          }
+
+          db3.close();
+        } catch (orgError) {
+          console.warn(
+            '⚠ Organization setup encountered issues:',
+            orgError.message,
+          );
+        }
+
         console.log('');
-        console.log('🔑 Admin user credentials:');
+        console.log(' Admin user credentials:');
         console.log('   Email: admin@example.com');
         console.log('   Username: admin');
         console.log('   Password: admin123');
         console.log('');
         console.log('You can now sign in with these credentials.');
       } else {
-        console.log(
-          '⚠️ Admin user created but role assignment may have failed',
-        );
+        console.warn(' Admin user created but role assignment may have failed');
       }
     } else {
-      console.log('❌ Failed to create admin user');
+      console.error(' Failed to create admin user');
     }
   } catch (error) {
     console.error('Error with admin user setup:', error.message);
@@ -245,8 +423,8 @@ async function startServer() {
     app.use(`${API_PREFIX}/analyses`, analysisRoutes);
     console.log(`✓ Analysis routes mounted at ${API_PREFIX}/analyses`);
 
-    app.use(`${API_PREFIX}/departments`, departmentRoutes);
-    console.log(`✓ Department routes mounted at ${API_PREFIX}/departments`);
+    app.use(`${API_PREFIX}/teams`, teamRoutes);
+    console.log(`✓ Team routes mounted at ${API_PREFIX}/teams`);
 
     // SSE routes
     app.use(`${API_PREFIX}/sse`, sseRoutes);

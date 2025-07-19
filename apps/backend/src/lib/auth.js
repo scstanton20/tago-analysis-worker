@@ -2,6 +2,7 @@ import { betterAuth } from 'better-auth';
 import { admin } from 'better-auth/plugins/admin';
 import { passkey } from 'better-auth/plugins/passkey';
 import { username } from 'better-auth/plugins/username';
+import { organization } from 'better-auth/plugins/organization';
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
@@ -26,7 +27,7 @@ export const auth = betterAuth({
     additionalFields: {
       role: {
         type: 'string',
-        defaultValue: 'viewer',
+        defaultValue: 'user',
       },
     },
   },
@@ -47,9 +48,20 @@ export const auth = betterAuth({
   },
   plugins: [
     username(),
+    organization({
+      allowUserToCreateOrganization: false, // Only admins can create organizations
+      organizationLimit: 1, // Single organization for the app
+      membershipLimit: 1000, // Max members per organization
+      creatorRole: 'owner', // Default role for organization creator
+      teams: {
+        enabled: true,
+        maximumTeams: 50, // Allow many departments/teams
+        allowRemovingAllTeams: false, // Keep at least one team
+      },
+    }),
     admin({
       adminRoles: ['admin'],
-      defaultRole: 'viewer',
+      defaultRole: 'user',
     }),
     passkey({
       rpName: 'Tago Analysis Runner',

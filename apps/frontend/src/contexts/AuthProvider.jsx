@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { useSession, signOut, authClient } from '../lib/auth.js';
+import { useSession, signOut, authClient, organization } from '../lib/auth.js';
 import { notifications } from '@mantine/notifications';
 
 const AuthContext = createContext();
@@ -15,6 +15,10 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
   const { data: session, isPending: sessionLoading } = useSession();
   const [manualSession, setManualSession] = useState(null);
+  const [organizationMembership, setOrganizationMembership] = useState(null);
+  const [organizationId, setOrganizationId] = useState(null);
+  const [userTeams, setUserTeams] = useState([]);
+  const [membershipLoading, setMembershipLoading] = useState(false);
 
   // Use manual session if available, otherwise fall back to useSession hook
   const currentSession = manualSession || session;
@@ -36,15 +40,85 @@ export const AuthProvider = ({ children }) => {
         const freshSession = await authClient.getSession();
         console.log('Fresh session data:', freshSession);
         setManualSession(freshSession);
+
+        // Clear organization data when session changes
+        setOrganizationMembership(null);
+        setUserTeams([]);
       } catch (error) {
         console.error('Error fetching fresh session:', error);
         setManualSession(null);
+        setOrganizationMembership(null);
+        setUserTeams([]);
       }
     };
 
     window.addEventListener('auth-change', handleAuthChange);
     return () => window.removeEventListener('auth-change', handleAuthChange);
   }, []);
+
+  // Load user organization membership and teams when authenticated
+  useEffect(() => {
+    const loadUserMembership = async () => {
+      if (!isAuthenticated || !user) {
+        setOrganizationMembership(null);
+        setUserTeams([]);
+        return;
+      }
+
+      try {
+        setMembershipLoading(true);
+
+        // Use better-auth organization client to get user organizations
+        const result = await organization.list();
+
+        if (!result.error && result.data) {
+          // Find the main organization
+          const mainOrg = result.data.find((org) => org.slug === 'main');
+
+          if (mainOrg) {
+            // Get user's role in the organization
+            setOrganizationMembership(mainOrg.role);
+            setOrganizationId(mainOrg.id);
+
+            // Get teams for this organization
+            const teamsResult = await organization.listTeams({
+              query: {
+                organizationId: mainOrg.id,
+              },
+            });
+
+            if (!teamsResult.error && teamsResult.data) {
+              // Filter teams where user is a member
+              const userTeams = teamsResult.data.filter((team) =>
+                team.members?.some((member) => member.userId === user.id),
+              );
+              setUserTeams(userTeams);
+            } else {
+              setUserTeams([]);
+            }
+          } else {
+            setOrganizationMembership(null);
+            setOrganizationId(null);
+            setUserTeams([]);
+          }
+        } else {
+          console.error('Failed to load user membership:', result.error);
+          setOrganizationMembership(null);
+          setOrganizationId(null);
+          setUserTeams([]);
+        }
+      } catch (error) {
+        console.error('Error loading user membership:', error);
+        setOrganizationMembership(null);
+        setOrganizationId(null);
+        setUserTeams([]);
+      } finally {
+        setMembershipLoading(false);
+      }
+    };
+
+    loadUserMembership();
+  }, [isAuthenticated, user]);
 
   // Periodic session validation to detect revoked sessions
   useEffect(() => {
@@ -83,11 +157,96 @@ export const AuthProvider = ({ children }) => {
     return () => clearInterval(interval);
   }, [isAuthenticated, currentSession]);
 
+  // Team helper functions
+  const isTeamMember = (teamId) => {
+    // Global admins have access to all teams
+    if (user?.role === 'admin') return true;
+
+    // Check if user is a member of this team
+    return userTeams.some((team) => team.id === teamId);
+  };
+
+  const canAccessTeam = (teamId) => {
+    // Global admins can access any team
+    if (user?.role === 'admin') return true;
+
+    // Check if user is a member of the corresponding team
+    return isTeamMember(teamId);
+  };
+
+  const hasOrganizationRole = (allowedRoles) => {
+    // Global admins have access to everything
+    if (user?.role === 'admin') return true;
+
+    // Check organization role
+    return (
+      organizationMembership && allowedRoles.includes(organizationMembership)
+    );
+  };
+
+  const getUserAccessibleTeams = () => {
+    // Global admins can see all teams (would need separate API call)
+    if (user?.role === 'admin') {
+      return {
+        userTeams,
+        isGlobalAdmin: true,
+        hasFullAccess: true,
+      };
+    }
+
+    return {
+      userTeams,
+      isGlobalAdmin: false,
+      hasFullAccess: false,
+    };
+  };
+
+  const refreshMembership = async () => {
+    if (!isAuthenticated || !user) return;
+
+    try {
+      setMembershipLoading(true);
+
+      // Use better-auth organization client to refresh memberships
+      const result = await organization.listUserMemberships();
+
+      if (!result.error && result.data) {
+        const mainOrgMembership = result.data.find(
+          (membership) => membership.organizationSlug === 'main',
+        );
+
+        if (mainOrgMembership) {
+          setOrganizationMembership(mainOrgMembership.role);
+
+          const teamsResult = await organization.listTeams({
+            query: {
+              organizationId: mainOrgMembership.organizationId,
+            },
+          });
+
+          if (!teamsResult.error && teamsResult.data) {
+            const userTeams = teamsResult.data.filter((team) =>
+              team.members?.some((member) => member.userId === user.id),
+            );
+            setUserTeams(userTeams);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error refreshing membership:', error);
+    } finally {
+      setMembershipLoading(false);
+    }
+  };
+
   // Profile and authentication functions
   const logout = async () => {
     await signOut();
-    // Clear manual session state
+    // Clear manual session state and organization data
     setManualSession(null);
+    setOrganizationMembership(null);
+    setOrganizationId(null);
+    setUserTeams([]);
   };
 
   const value = {
@@ -98,6 +257,21 @@ export const AuthProvider = ({ children }) => {
     isAdmin: user?.role === 'admin',
     isImpersonating: !!sessionData?.impersonatedBy,
     impersonatedBy: sessionData?.impersonatedBy || null,
+
+    // Organization/team data and state
+    organizationMembership,
+    organizationId,
+    userTeams,
+    membershipLoading,
+
+    // Team helper functions
+    isTeamMember,
+    canAccessTeam,
+    hasOrganizationRole,
+    getUserAccessibleTeams,
+    refreshMembership,
+
+    // Auth functions
     logout,
     signOut: logout,
     exitImpersonation: async () => {
