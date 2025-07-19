@@ -1,12 +1,16 @@
 // backend/src/routes/teamRoutes.js
-import express from 'express';
+import { Router } from 'express';
 import * as teamController from '../controllers/teamController.js';
-import { authMiddleware } from '../middleware/betterAuthMiddleware.js';
+import {
+  authMiddleware,
+  requireAdmin,
+} from '../middleware/betterAuthMiddleware.js';
 
-const router = express.Router();
+const router = Router();
 
 // Apply authentication to all team routes
 router.use(authMiddleware);
+router.use(requireAdmin);
 
 // Custom team endpoints that handle Better Auth team table with custom properties
 // We use custom endpoints because Better Auth's client methods don't support our custom fields

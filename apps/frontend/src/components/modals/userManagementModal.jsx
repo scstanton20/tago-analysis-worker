@@ -249,6 +249,42 @@ export default function UserManagementModal({ opened, onClose }) {
               `Failed to update role: ${roleResult.error.message}`,
             );
           }
+
+          // If the user is being promoted to admin, add them to the organization
+          if (values.role === 'admin' && organizationId) {
+            try {
+              console.log('Adding promoted admin user to organization...');
+              const memberResult = await fetch(
+                '/api/users/add-to-organization',
+                {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  credentials: 'include',
+                  body: JSON.stringify({
+                    userId: editingUser.id,
+                    organizationId: organizationId,
+                    role: 'admin',
+                  }),
+                },
+              ).then((res) => res.json());
+
+              if (memberResult.error) {
+                console.warn(
+                  'Failed to add user to organization:',
+                  memberResult.error,
+                );
+                // Don't throw error here as role update was successful
+              } else {
+                console.log('✓ Promoted admin user added to organization');
+              }
+            } catch (orgError) {
+              console.warn('Error adding user to organization:', orgError);
+              // Don't throw error here as role update was successful
+            }
+          }
+
           updates.role = values.role;
           needsUpdate = true;
         }
@@ -311,6 +347,42 @@ export default function UserManagementModal({ opened, onClose }) {
           throw new Error(result.error.message);
         }
 
+        // If the user is an admin, add them to the organization
+        if (
+          values.role === 'admin' &&
+          organizationId &&
+          result.data?.user?.id
+        ) {
+          try {
+            console.log('Adding admin user to organization...');
+            const memberResult = await fetch('/api/users/add-to-organization', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              credentials: 'include',
+              body: JSON.stringify({
+                userId: result.data.user.id,
+                organizationId: organizationId,
+                role: 'admin',
+              }),
+            }).then((res) => res.json());
+
+            if (memberResult.error) {
+              console.warn(
+                'Failed to add user to organization:',
+                memberResult.error,
+              );
+              // Don't throw error here as user creation was successful
+            } else {
+              console.log('✓ Admin user added to organization successfully');
+            }
+          } catch (orgError) {
+            console.warn('Error adding user to organization:', orgError);
+            // Don't throw error here as user creation was successful
+          }
+        }
+
         notify.showNotification({
           title: 'Success',
           message: `User ${values.name} created successfully.`,
@@ -357,9 +429,13 @@ export default function UserManagementModal({ opened, onClose }) {
       setLoading(true);
       setError('');
 
-      const result = await admin.removeUser({
-        userId: user.id,
-      });
+      const result = await fetch(`/api/users/${user.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      }).then((res) => res.json());
 
       if (result.error) {
         throw new Error(result.error.message);

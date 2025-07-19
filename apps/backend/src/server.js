@@ -18,6 +18,7 @@ import {
 import analysisRoutes from './routes/analysisRoutes.js';
 import statusRoutes from './routes/statusRoutes.js';
 import teamRoutes from './routes/teamRoutes.js';
+import userRoutes from './routes/userRoutes.js';
 import sseRoutes from './routes/sseRoutes.js';
 import { specs, swaggerUi } from './docs/swagger.js';
 import { toNodeHandler } from 'better-auth/node';
@@ -425,6 +426,9 @@ async function startServer() {
 
     app.use(`${API_PREFIX}/teams`, teamRoutes);
     console.log(`✓ Team routes mounted at ${API_PREFIX}/teams`);
+
+    app.use(`${API_PREFIX}/users`, userRoutes);
+    console.log(`✓ User routes mounted at ${API_PREFIX}/users`);
 
     // SSE routes
     app.use(`${API_PREFIX}/sse`, sseRoutes);

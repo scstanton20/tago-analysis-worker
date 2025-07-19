@@ -1,12 +1,12 @@
 // backend/src/routes/sseRoutes.js
-import express from 'express';
+import { Router } from 'express';
 import {
   authenticateSSE,
   handleSSEConnection,
   sseManager,
 } from '../utils/sse.js';
 
-const router = express.Router();
+const router = Router();
 
 /**
  * @swagger

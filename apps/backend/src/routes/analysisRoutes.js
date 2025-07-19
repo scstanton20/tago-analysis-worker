@@ -1,5 +1,5 @@
 // backend/src/routes/analysisRoutes.js
-import express from 'express';
+import { Router } from 'express';
 import * as analysisController from '../controllers/analysisController.js';
 import {
   authMiddleware,
@@ -13,7 +13,7 @@ import {
   versionOperationLimiter,
 } from '../middleware/rateLimiter.js';
 
-const router = express.Router();
+const router = Router();
 
 // Apply authentication to all analysis routes
 router.use(authMiddleware);

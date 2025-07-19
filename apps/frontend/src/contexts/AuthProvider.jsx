@@ -1,5 +1,11 @@
-import { createContext, useContext, useEffect, useState } from 'react';
-import { useSession, signOut, authClient, organization } from '../lib/auth.js';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+} from 'react';
+import { useSession, signOut, authClient } from '../lib/auth.js';
 import { notifications } from '@mantine/notifications';
 
 const AuthContext = createContext();
@@ -43,11 +49,13 @@ export const AuthProvider = ({ children }) => {
 
         // Clear organization data when session changes
         setOrganizationMembership(null);
+        setOrganizationId(null);
         setUserTeams([]);
       } catch (error) {
         console.error('Error fetching fresh session:', error);
         setManualSession(null);
         setOrganizationMembership(null);
+        setOrganizationId(null);
         setUserTeams([]);
       }
     };
@@ -56,69 +64,55 @@ export const AuthProvider = ({ children }) => {
     return () => window.removeEventListener('auth-change', handleAuthChange);
   }, []);
 
+  // Helper function to set active organization
+  const loadOrganizationData = useCallback(async () => {
+    if (!isAuthenticated || !user) {
+      setOrganizationMembership(null);
+      setOrganizationId(null);
+      setUserTeams([]);
+      return;
+    }
+
+    try {
+      setMembershipLoading(true);
+
+      // Set the main organization as active and get its data
+      const activeOrgResult = await authClient.organization.setActive({
+        organizationSlug: 'main',
+      });
+
+      if (activeOrgResult.data) {
+        setOrganizationId(activeOrgResult.data.id);
+        console.log(
+          '✓ Set active organization and ID:',
+          activeOrgResult.data.id,
+        );
+      } else {
+        console.warn('Could not set active organization or get its data');
+        setOrganizationId(null);
+      }
+
+      // Assume admin users have 'owner' role in organization
+      // and regular users have 'member' role
+      const orgRole = user.role === 'admin' ? 'owner' : 'member';
+      setOrganizationMembership(orgRole);
+
+      // For now, just set empty teams - can add team fetching later if needed
+      setUserTeams([]);
+    } catch (error) {
+      console.error('Error setting active organization:', error);
+      setOrganizationMembership(null);
+      setOrganizationId(null);
+      setUserTeams([]);
+    } finally {
+      setMembershipLoading(false);
+    }
+  }, [isAuthenticated, user]);
+
   // Load user organization membership and teams when authenticated
   useEffect(() => {
-    const loadUserMembership = async () => {
-      if (!isAuthenticated || !user) {
-        setOrganizationMembership(null);
-        setUserTeams([]);
-        return;
-      }
-
-      try {
-        setMembershipLoading(true);
-
-        // Use better-auth organization client to get user organizations
-        const result = await organization.list();
-
-        if (!result.error && result.data) {
-          // Find the main organization
-          const mainOrg = result.data.find((org) => org.slug === 'main');
-
-          if (mainOrg) {
-            // Get user's role in the organization
-            setOrganizationMembership(mainOrg.role);
-            setOrganizationId(mainOrg.id);
-
-            // Get teams for this organization
-            const teamsResult = await organization.listTeams({
-              query: {
-                organizationId: mainOrg.id,
-              },
-            });
-
-            if (!teamsResult.error && teamsResult.data) {
-              // Filter teams where user is a member
-              const userTeams = teamsResult.data.filter((team) =>
-                team.members?.some((member) => member.userId === user.id),
-              );
-              setUserTeams(userTeams);
-            } else {
-              setUserTeams([]);
-            }
-          } else {
-            setOrganizationMembership(null);
-            setOrganizationId(null);
-            setUserTeams([]);
-          }
-        } else {
-          console.error('Failed to load user membership:', result.error);
-          setOrganizationMembership(null);
-          setOrganizationId(null);
-          setUserTeams([]);
-        }
-      } catch (error) {
-        console.error('Error loading user membership:', error);
-        setOrganizationMembership(null);
-        setOrganizationId(null);
-        setUserTeams([]);
-      } finally {
-        setMembershipLoading(false);
-      }
-    };
-
-    loadUserMembership();
-  }, [isAuthenticated, user]);
+    loadOrganizationData();
+  }, [loadOrganizationData]);
 
   // Periodic session validation to detect revoked sessions
   useEffect(() => {
@@ -201,43 +195,9 @@ export const AuthProvider = ({ children }) => {
     };
   };
 
-  const refreshMembership = async () => {
-    if (!isAuthenticated || !user) return;
-
-    try {
-      setMembershipLoading(true);
-
-      // Use better-auth organization client to refresh memberships
-      const result = await organization.listUserMemberships();
-
-      if (!result.error && result.data) {
-        const mainOrgMembership = result.data.find(
-          (membership) => membership.organizationSlug === 'main',
-        );
-
-        if (mainOrgMembership) {
-          setOrganizationMembership(mainOrgMembership.role);
-
-          const teamsResult = await organization.listTeams({
-            query: {
-              organizationId: mainOrgMembership.organizationId,
-            },
-          });
-
-          if (!teamsResult.error && teamsResult.data) {
-            const userTeams = teamsResult.data.filter((team) =>
-              team.members?.some((member) => member.userId === user.id),
-            );
-            setUserTeams(userTeams);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error refreshing membership:', error);
-    } finally {
-      setMembershipLoading(false);
-    }
-  };
+  const refreshMembership = useCallback(async () => {
+    await loadOrganizationData();
+  }, [loadOrganizationData]);
 
   // Profile and authentication functions
   const logout = async () => {
