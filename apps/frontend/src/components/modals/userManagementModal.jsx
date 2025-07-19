@@ -16,9 +16,7 @@ import {
   Paper,
   LoadingOverlay,
   Menu,
-  MultiSelect,
   Divider,
-  ScrollArea,
   Loader,
   Center,
   Checkbox,
@@ -31,7 +29,6 @@ import {
   IconUser,
   IconAlertCircle,
   IconUserCheck,
-  IconLogout,
   IconBan,
   IconCircleCheck,
   IconDotsVertical,
@@ -94,7 +91,6 @@ export default function UserManagementModal({ opened, onClose }) {
       setError('');
 
       // Use Better Auth admin client to list users with correct syntax
-      console.log('Current user admin status:', admin);
       console.log('Attempting to list users...');
 
       const result = await admin.listUsers({
@@ -508,8 +504,14 @@ export default function UserManagementModal({ opened, onClose }) {
   };
 
   const handleModalClose = () => {
-    handleCancel();
-    onClose();
+    // If we're in a form, just cancel the form instead of closing the modal
+    if (showCreateForm) {
+      handleCancel();
+    } else {
+      // If we're in the main view, close the entire modal
+      handleCancel();
+      onClose();
+    }
   };
 
   const handleSessionsModalClose = () => {
@@ -527,9 +529,16 @@ export default function UserManagementModal({ opened, onClose }) {
       opened={opened}
       onClose={handleModalClose}
       title={
-        <Group gap="xs">
-          <IconUser size={20} />
-          <Text fw={600}>User Management</Text>
+        <Group gap="xs" justify="space-between" style={{ width: '100%' }}>
+          <Group gap="xs">
+            <IconUser size={20} />
+            <Text fw={600}>User Management</Text>
+          </Group>
+          {showCreateForm && (
+            <Text size="sm" c="dimmed">
+              Press ESC or click × to close form
+            </Text>
+          )}
         </Group>
       }
       size="lg"
@@ -596,19 +605,28 @@ export default function UserManagementModal({ opened, onClose }) {
                 <Table striped highlightOnHover>
                   <Table.Thead>
                     <Table.Tr>
-                      <Table.Th>Name</Table.Th>
-                      <Table.Th>Email</Table.Th>
-                      <Table.Th>Username</Table.Th>
-                      <Table.Th>Role</Table.Th>
-                      <Table.Th>Actions</Table.Th>
+                      <Table.Th style={{ width: '25%' }}>Name</Table.Th>
+                      <Table.Th style={{ width: '30%' }}>Email</Table.Th>
+                      <Table.Th style={{ width: '15%' }}>Username</Table.Th>
+                      <Table.Th style={{ width: '20%' }}>Role</Table.Th>
+                      <Table.Th style={{ width: '10%' }}>Actions</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
                     {users.map((user) => (
                       <Table.Tr key={user.id}>
                         <Table.Td>
-                          <Group gap="xs">
-                            <Text fw={user.id === currentUser?.id ? 600 : 400}>
+                          <Stack gap={2}>
+                            <Text
+                              fw={user.id === currentUser?.id ? 600 : 400}
+                              size="sm"
+                              style={{
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                              title={user.name || 'Unknown'}
+                            >
                               {user.name || 'Unknown'}
                             </Text>
                             {user.id === currentUser?.id && (
@@ -616,19 +634,37 @@ export default function UserManagementModal({ opened, onClose }) {
                                 You
                               </Badge>
                             )}
-                          </Group>
+                          </Stack>
                         </Table.Td>
-                        <Table.Td>{user.email}</Table.Td>
+                        <Table.Td>
+                          <Text
+                            size="sm"
+                            style={{
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                            title={user.email}
+                          >
+                            {user.email}
+                          </Text>
+                        </Table.Td>
                         <Table.Td>
                           <Text
                             size="sm"
                             c={user.username ? undefined : 'dimmed'}
+                            style={{
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                            title={user.username || 'Not set'}
                           >
                             {user.username || 'Not set'}
                           </Text>
                         </Table.Td>
                         <Table.Td>
-                          <Group gap="xs">
+                          <Stack gap="xs">
                             <Badge
                               variant="light"
                               color={
@@ -640,6 +676,7 @@ export default function UserManagementModal({ opened, onClose }) {
                                       ? 'yellow'
                                       : 'blue'
                               }
+                              style={{ textTransform: 'capitalize' }}
                             >
                               {user.role || 'user'}
                             </Badge>
@@ -648,7 +685,7 @@ export default function UserManagementModal({ opened, onClose }) {
                                 Banned
                               </Badge>
                             )}
-                          </Group>
+                          </Stack>
                         </Table.Td>
                         <Table.Td>
                           <Menu shadow="md" width={200} closeOnItemClick={true}>
@@ -739,9 +776,11 @@ export default function UserManagementModal({ opened, onClose }) {
             <Paper withBorder p="md">
               <form onSubmit={form.onSubmit(handleSubmit)}>
                 <Stack gap="md">
-                  <Text fw={600} size="lg">
-                    {editingUser ? 'Edit User' : 'Create New User'}
-                  </Text>
+                  <Group justify="space-between" align="center">
+                    <Text fw={600} size="lg">
+                      {editingUser ? 'Edit User' : 'Create New User'}
+                    </Text>
+                  </Group>
 
                   {editingUser && editingUser.id !== currentUser?.id && (
                     <Alert color="blue" variant="light">
@@ -844,124 +883,120 @@ export default function UserManagementModal({ opened, onClose }) {
                         department is enabled.
                       </Text>
 
-                      <ScrollArea h={300} offsetScrollbars>
-                        <Stack gap="xs">
-                          {teamsLoading ? (
-                            <Center py="md">
-                              <Group>
-                                <Loader size="sm" />
-                                <Text size="sm" c="dimmed">
-                                  Loading teams...
-                                </Text>
-                              </Group>
-                            </Center>
-                          ) : (
-                            availableTeams.map((team) => {
-                              const teamPerms = form.values
-                                .departmentPermissions[team.value] || {
-                                enabled: false,
-                                permissions: [],
-                              };
-                              const isEnabled = teamPerms.enabled;
-                              const permissions = teamPerms.permissions || [];
+                      <Stack gap="xs" mah="40vh" style={{ overflow: 'auto' }}>
+                        {teamsLoading ? (
+                          <Center py="md">
+                            <Group>
+                              <Loader size="sm" />
+                              <Text size="sm" c="dimmed">
+                                Loading teams...
+                              </Text>
+                            </Group>
+                          </Center>
+                        ) : (
+                          availableTeams.map((team) => {
+                            const teamPerms = form.values.departmentPermissions[
+                              team.value
+                            ] || {
+                              enabled: false,
+                              permissions: [],
+                            };
+                            const isEnabled = teamPerms.enabled;
+                            const permissions = teamPerms.permissions || [];
 
-                              return (
-                                <Paper
-                                  key={team.value}
-                                  withBorder
-                                  p="md"
-                                  style={{
-                                    backgroundColor: isEnabled
-                                      ? 'var(--mantine-color-blue-light)'
-                                      : 'transparent',
-                                    borderColor: isEnabled
-                                      ? 'var(--mantine-color-blue-6)'
-                                      : 'var(--mantine-color-gray-3)',
-                                  }}
-                                >
-                                  <Stack gap="sm">
-                                    {/* Department Header */}
-                                    <Group
-                                      justify="space-between"
-                                      style={{ cursor: 'pointer' }}
-                                      onClick={() =>
-                                        toggleDepartment(team.value)
-                                      }
-                                    >
-                                      <Group gap="sm">
-                                        <Checkbox
-                                          checked={isEnabled}
-                                          onChange={() =>
-                                            toggleDepartment(team.value)
-                                          }
-                                          onClick={(e) => e.stopPropagation()}
-                                        />
-                                        <Text fw={500} size="sm">
-                                          {team.label}
-                                        </Text>
-                                      </Group>
-                                      {isEnabled && (
-                                        <Badge
-                                          size="xs"
-                                          variant="light"
-                                          color="blue"
-                                        >
-                                          {permissions.length} permission
-                                          {permissions.length !== 1 ? 's' : ''}
-                                        </Badge>
-                                      )}
+                            return (
+                              <Paper
+                                key={team.value}
+                                withBorder
+                                p="md"
+                                style={{
+                                  backgroundColor: isEnabled
+                                    ? 'var(--mantine-color-blue-light)'
+                                    : 'transparent',
+                                  borderColor: isEnabled
+                                    ? 'var(--mantine-color-blue-6)'
+                                    : 'var(--mantine-color-gray-3)',
+                                }}
+                              >
+                                <Stack gap="sm">
+                                  {/* Department Header */}
+                                  <Group
+                                    justify="space-between"
+                                    style={{ cursor: 'pointer' }}
+                                    onClick={() => toggleDepartment(team.value)}
+                                  >
+                                    <Group gap="sm">
+                                      <Checkbox
+                                        checked={isEnabled}
+                                        onChange={() =>
+                                          toggleDepartment(team.value)
+                                        }
+                                        onClick={(e) => e.stopPropagation()}
+                                      />
+                                      <Text fw={500} size="sm">
+                                        {team.label}
+                                      </Text>
                                     </Group>
-
-                                    {/* Permissions for this department */}
                                     {isEnabled && (
-                                      <Box ml="xl">
-                                        <Stack gap="xs">
-                                          {actions.map((action) => (
-                                            <Group key={action.value} gap="sm">
-                                              <Checkbox
-                                                size="sm"
-                                                checked={permissions.includes(
-                                                  action.value,
-                                                )}
-                                                onChange={() =>
-                                                  toggleDepartmentPermission(
-                                                    team.value,
-                                                    action.value,
-                                                  )
-                                                }
-                                                disabled={
-                                                  action.value ===
-                                                  'view_analyses'
-                                                } // Always enabled as default
-                                                label={
-                                                  <Text size="sm">
-                                                    {action.label}
-                                                    {action.value ===
-                                                      'view_analyses' && (
-                                                      <Text
-                                                        component="span"
-                                                        size="xs"
-                                                        c="dimmed"
-                                                        ml="xs"
-                                                      >
-                                                        (default)
-                                                      </Text>
-                                                    )}
-                                                  </Text>
-                                                }
-                                              />
-                                            </Group>
-                                          ))}
-                                        </Stack>
-                                      </Box>
+                                      <Badge
+                                        size="xs"
+                                        variant="light"
+                                        color="blue"
+                                      >
+                                        {permissions.length} permission
+                                        {permissions.length !== 1 ? 's' : ''}
+                                      </Badge>
                                     )}
-                                  </Stack>
-                                </Paper>
-                              );
-                            })
-                          )}
-                        </Stack>
-                      </ScrollArea>
+                                  </Group>
+
+                                  {/* Permissions for this department */}
+                                  {isEnabled && (
+                                    <Box ml="xl">
+                                      <Stack gap="xs">
+                                        {actions.map((action) => (
+                                          <Group key={action.value} gap="sm">
+                                            <Checkbox
+                                              size="sm"
+                                              checked={permissions.includes(
+                                                action.value,
+                                              )}
+                                              onChange={() =>
+                                                toggleDepartmentPermission(
+                                                  team.value,
+                                                  action.value,
+                                                )
+                                              }
+                                              disabled={
+                                                action.value === 'view_analyses'
+                                              } // Always enabled as default
+                                              label={
+                                                <Text size="sm">
+                                                  {action.label}
+                                                  {action.value ===
+                                                    'view_analyses' && (
+                                                    <Text
+                                                      component="span"
+                                                      size="xs"
+                                                      c="dimmed"
+                                                      ml="xs"
+                                                    >
+                                                      (default)
+                                                    </Text>
+                                                  )}
+                                                </Text>
+                                              }
+                                            />
+                                          </Group>
+                                        ))}
+                                      </Stack>
+                                    </Box>
+                                  )}
+                                </Stack>
+                              </Paper>
+                            );
+                          })
+                        )}
+                      </Stack>
                     </Stack>
                   )}
 

@@ -309,23 +309,31 @@ export function SSEProvider({ children }) {
 
           case 'teamDeleted':
             if (data.deleted) {
+              console.log('SSE: Team deleted:', data);
               setTeams((prev) => {
                 const newTeams = { ...prev };
                 delete newTeams[data.deleted];
                 return newTeams;
               });
-              if (data.analysesMovedTo) {
-                setAnalyses((prev) => {
-                  const newAnalyses = {};
-                  Object.entries(prev).forEach(([name, analysis]) => {
-                    newAnalyses[name] =
-                      analysis.teamId === data.deleted
-                        ? { ...analysis, teamId: data.analysesMovedTo }
-                        : analysis;
-                  });
-                  return newAnalyses;
+
+              // Always update analyses when a team is deleted
+              setAnalyses((prev) => {
+                const newAnalyses = {};
+                Object.entries(prev).forEach(([name, analysis]) => {
+                  if (analysis.teamId === data.deleted) {
+                    // Move analyses from deleted team to target team
+                    const targetTeamId =
+                      data.analysesMovedTo || 'uncategorized';
+                    console.log(
+                      `SSE: Moving analysis ${name} from deleted team ${data.deleted} to ${targetTeamId}`,
+                    );
+                    newAnalyses[name] = { ...analysis, teamId: targetTeamId };
+                  } else {
+                    newAnalyses[name] = analysis;
+                  }
                 });
-              }
+                return newAnalyses;
+              });
             }
             break;
 

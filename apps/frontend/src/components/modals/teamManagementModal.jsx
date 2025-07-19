@@ -1,5 +1,5 @@
 // frontend/src/components/modals/teamManagementModal.jsx
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -91,9 +91,29 @@ export default function TeamManagementModal({ opened, onClose, teams }) {
   const [editingId, setEditingId] = useState(null);
   const [editingName, setEditingName] = useState('');
   const [editingColor, setEditingColor] = useState('');
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const notify = useNotifications();
+
+  // Refs for click outside functionality
+  const editingRef = useRef();
+  const deletingRef = useRef();
+
+  // Escape key handler for deleting mode
+  useEffect(() => {
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') {
+        if (deletingId) {
+          setDeletingId(null);
+        }
+      }
+    };
+
+    if (deletingId) {
+      document.addEventListener('keydown', handleEscape);
+      return () => document.removeEventListener('keydown', handleEscape);
+    }
+  }, [deletingId]);
 
   // Convert teams object to sorted array for display
   const teamsArray = useMemo(
@@ -184,7 +204,7 @@ export default function TeamManagementModal({ opened, onClose, teams }) {
     }
   };
 
-  const handleColorClick = (teamId, color) => {
+  const handleColorClick = (color) => {
     // Just update the local editing color state, don't make API call yet
     setEditingColor(color);
   };
@@ -225,7 +245,7 @@ export default function TeamManagementModal({ opened, onClose, teams }) {
         teamService.deleteTeam(id, 'uncategorized'),
         currentTeam?.name || 'team',
       );
-      setShowDeleteConfirm(null);
+      setDeletingId(null);
     } catch (error) {
       console.error('Error deleting team:', error);
     } finally {
@@ -277,7 +297,7 @@ export default function TeamManagementModal({ opened, onClose, teams }) {
     setEditingId(null);
     setEditingName('');
     setEditingColor('');
-    setShowDeleteConfirm(null);
+    setDeletingId(null);
     onClose();
   };
 
@@ -389,11 +409,11 @@ export default function TeamManagementModal({ opened, onClose, teams }) {
                   <Paper key={team.id} p="sm" withBorder>
                     {editingId === team.id ? (
                       // Editing mode
-                      <Stack gap="sm">
+                      <Stack gap="sm" ref={editingRef}>
                         <TextInput
                           value={editingName}
                           onChange={(e) => setEditingName(e.target.value)}
-                          onKeyPress={(e) => {
+                          onKeyDown={(e) => {
                             if (e.key === 'Enter') {
                               handleUpdateName(team.id);
                             } else if (e.key === 'Escape') {
@@ -429,7 +449,7 @@ export default function TeamManagementModal({ opened, onClose, teams }) {
                                   usedColors.has(color) && color !== team.color
                                 }
                                 isSelected={editingColor === color}
-                                onClick={() => handleColorClick(team.id, color)}
+                                onClick={() => handleColorClick(color)}
                                 size={28}
                               />
                             ))}
@@ -488,6 +508,41 @@ export default function TeamManagementModal({ opened, onClose, teams }) {
                           </Group>
                         </Group>
                       </Stack>
+                    ) : deletingId === team.id ? (
+                      // Delete confirmation mode
+                      <Stack gap="sm" ref={deletingRef}>
+                        <Group gap="sm" align="center">
+                          <ColorSwatch color={team.color} size={20} />
+                          <Text size="sm" style={{ flex: 1 }}>
+                            {team.name}
+                          </Text>
+                        </Group>
+                        <Paper p="sm" withBorder>
+                          <Text size="sm" c="red.8" mb="sm">
+                            Are you sure you want to delete this team? All
+                            analyses will be moved to Uncategorized.
+                          </Text>
+                          <Group gap="xs">
+                            <Button
+                              size="xs"
+                              color="red"
+                              onClick={() => handleDelete(team.id)}
+                              loading={isLoading}
+                              disabled={isLoading}
+                            >
+                              Delete
+                            </Button>
+                            <Button
+                              size="xs"
+                              variant="default"
+                              onClick={() => setDeletingId(null)}
+                              disabled={isLoading}
+                            >
+                              Cancel
+                            </Button>
+                          </Group>
+                        </Paper>
+                      </Stack>
                     ) : (
                       // Display mode
                       <Group gap="sm">
@@ -509,7 +564,7 @@ export default function TeamManagementModal({ opened, onClose, teams }) {
                               variant="subtle"
                               size="sm"
                               color="red"
-                              onClick={() => setShowDeleteConfirm(team.id)}
+                              onClick={() => setDeletingId(team.id)}
                               disabled={isLoading}
                             >
                               <IconTrash size={16} />
@@ -524,35 +579,6 @@ export default function TeamManagementModal({ opened, onClose, teams }) {
             </SortableContext>
           </DndContext>
         </Box>
-
-        {/* Delete Confirmation */}
-        {showDeleteConfirm && (
-          <Paper p="md" withBorder bg="red.0">
-            <Text size="sm" c="red.8" mb="sm">
-              Are you sure you want to delete this team? All analyses will be
-              moved to Uncategorized.
-            </Text>
-            <Group gap="xs">
-              <Button
-                size="xs"
-                color="red"
-                onClick={() => handleDelete(showDeleteConfirm)}
-                loading={isLoading}
-                disabled={isLoading}
-              >
-                Delete
-              </Button>
-              <Button
-                size="xs"
-                variant="default"
-                onClick={() => setShowDeleteConfirm(null)}
-                disabled={isLoading}
-              >
-                Cancel
-              </Button>
-            </Group>
-          </Paper>
-        )}
       </Stack>
     </Modal>
   );

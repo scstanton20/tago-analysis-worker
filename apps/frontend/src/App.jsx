@@ -14,7 +14,6 @@ import {
   Switch,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { Notifications } from '@mantine/notifications';
 import { IconSun, IconMoon } from '@tabler/icons-react';
 import { useSSE } from './contexts/sseContext';
 import { SSEProvider } from './contexts/sseContext/provider';
@@ -316,7 +315,6 @@ function AuthenticatedApp() {
 export default function App() {
   return (
     <AuthProvider>
-      <Notifications />
       <AppRouter />
     </AuthProvider>
   );

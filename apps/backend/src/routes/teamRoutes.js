@@ -33,26 +33,6 @@ router.post('/', teamController.createTeam);
 
 /**
  * @swagger
- * /teams/{id}:
- *   put:
- *     summary: Update team with custom properties
- *     description: Update team in Better Auth table with custom properties
- *     tags: [Team Management]
- */
-router.put('/:id', teamController.updateTeam);
-
-/**
- * @swagger
- * /teams/{id}/delete:
- *   post:
- *     summary: Delete team with analysis migration
- *     description: Handle analysis migration before team deletion
- *     tags: [Team Management]
- */
-router.post('/:id/delete', teamController.deleteTeam);
-
-/**
- * @swagger
  * /teams/reorder:
  *   put:
  *     summary: Reorder teams
@@ -82,6 +62,37 @@ router.post('/:id/delete', teamController.deleteTeam);
  *                   type: string
  */
 router.put('/reorder', teamController.reorderTeams);
+
+/**
+ * @swagger
+ * /teams/{id}:
+ *   put:
+ *     summary: Update team with custom properties
+ *     description: Update team in Better Auth table with custom properties
+ *     tags: [Team Management]
+ */
+router.put('/:id', teamController.updateTeam);
+
+/**
+ * @swagger
+ * /teams/{id}:
+ *   delete:
+ *     summary: Delete team with analysis migration
+ *     description: Handle analysis migration before team deletion
+ *     tags: [Team Management]
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               moveAnalysesTo:
+ *                 type: string
+ *                 description: Team ID to move analyses to, or 'uncategorized'
+ *                 default: 'uncategorized'
+ */
+router.delete('/:id', teamController.deleteTeam);
 
 /**
  * @swagger
