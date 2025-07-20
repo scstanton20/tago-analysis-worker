@@ -66,27 +66,6 @@ const globalRolePermissions = {
   viewer: ['view_analyses'],
 };
 
-// Department-specific permission mapping
-const departmentRolePermissions = {
-  department_admin: [
-    'upload_analyses',
-    'view_analyses',
-    'run_analyses',
-    'edit_analyses',
-    'delete_analyses',
-    'download_analyses',
-  ],
-  department_analyst: [
-    'upload_analyses',
-    'view_analyses',
-    'run_analyses',
-    'edit_analyses',
-    'download_analyses',
-  ],
-  department_operator: ['view_analyses', 'run_analyses'],
-  department_viewer: ['view_analyses'],
-};
-
 // Generic permission check middleware with department support
 export const requirePermission = (permission, departmentId = null) => {
   return async (req, res, next) => {
@@ -103,27 +82,42 @@ export const requirePermission = (permission, departmentId = null) => {
         return next(); // Global permission granted
       }
 
-      // If department-specific check is requested
-      if (departmentId) {
-        // Get user's organization memberships using Better Auth
-        // For now, we'll implement a simplified version until we set up organizations
-        // TODO: Implement proper organization/department membership check
-        const userOrganizations = [];
+      // Check team-specific permissions from database
+      try {
+        const Database = (await import('better-sqlite3')).default;
+        const path = (await import('path')).default;
+        const config = (await import('../config/default.js')).default;
 
-        // Check if user has permission in the specific department
-        const departmentMembership = userOrganizations.find(
-          (org) => org.organization.id === departmentId,
-        );
+        const dbPath = path.join(config.storage.base, 'auth.db');
+        const db = new Database(dbPath, { readonly: true });
 
-        if (departmentMembership) {
-          const departmentRole = departmentMembership.role;
-          const departmentPermissions =
-            departmentRolePermissions[departmentRole] || [];
+        try {
+          // Get user's team memberships with permissions
+          const memberships = db
+            .prepare(
+              `
+              SELECT m.permissions
+              FROM member m
+              WHERE m.userId = ?
+            `,
+            )
+            .all(req.user.id);
 
-          if (departmentPermissions.includes(permission)) {
-            return next(); // Department permission granted
+          // Check if user has the required permission in any of their teams
+          for (const membership of memberships) {
+            if (membership.permissions) {
+              const permissions = JSON.parse(membership.permissions);
+              if (permissions.includes(permission)) {
+                return next(); // Team permission granted
+              }
+            }
           }
+        } finally {
+          db.close();
         }
+      } catch (dbError) {
+        console.error('Error checking team permissions:', dbError);
+        // Continue to deny access if database check fails
       }
 
       return res.status(403).json({

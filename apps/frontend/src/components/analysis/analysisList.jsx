@@ -23,7 +23,7 @@ export default function AnalysisList({
 }) {
   const { analyses: allAnalyses = {}, connectionStatus, getTeam } = useSSE();
 
-  const { accessibleDepartments, isAdmin } = usePermissions();
+  const { accessibleTeams, isAdmin } = usePermissions();
 
   const [openLogIds, setOpenLogIds] = useState(new Set());
 
@@ -40,10 +40,7 @@ export default function AnalysisList({
     if (selectedTeam) {
       const filtered = {};
       Object.entries(allAnalyses).forEach(([name, analysis]) => {
-        if (
-          analysis.teamId === selectedTeam ||
-          analysis.department === selectedTeam
-        ) {
+        if (analysis.teamId === selectedTeam) {
           filtered[name] = analysis;
         }
       });
@@ -140,9 +137,9 @@ export default function AnalysisList({
   const hasAnalyses = analysesArray.length > 0;
   const totalAnalyses = Object.keys(allAnalyses).length;
 
-  // Check if user has no department access (non-admin users only)
-  const hasNoDepartmentAccess =
-    !isAdmin && (!accessibleDepartments || accessibleDepartments.length === 0);
+  // Check if user has no team access (non-admin users only)
+  const hasNoTeamAccess =
+    !isAdmin && (!accessibleTeams || accessibleTeams.length === 0);
 
   // Get current team info for display
   const currentTeamInfo = selectedTeam ? getTeam?.(selectedTeam) : null;
@@ -204,8 +201,8 @@ export default function AnalysisList({
 
         {/* Content */}
         <Stack gap="md">
-          {hasNoDepartmentAccess ? (
-            /* No Department Access State */
+          {hasNoTeamAccess ? (
+            /* No Team Access State */
             <Center py="xl">
               <Stack align="center" gap="md">
                 <Alert
@@ -226,9 +223,7 @@ export default function AnalysisList({
             </Center>
           ) : hasAnalyses ? (
             analysesArray.map((analysis) => {
-              const teamInfo = getTeamInfo(
-                analysis.teamId || analysis.department,
-              );
+              const teamInfo = getTeamInfo(analysis.teamId);
 
               return (
                 <Stack key={`analysis-${analysis.name}`} gap="xs">

@@ -151,14 +151,14 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
   };
 
   const handleEditAnalysis = async () => {
-    if (!canViewAnalyses()) {
+    if (!canViewAnalyses(analysis)) {
       return; // No permission to view analysis files
     }
     setShowEditAnalysisModal(true);
   };
 
   const handleEditENV = async () => {
-    if (!canViewAnalyses()) {
+    if (!canViewAnalyses(analysis)) {
       return; // No permission to view analysis files
     }
     setShowEditENVModal(true);
@@ -288,7 +288,7 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
 
           <Group gap="xs">
             {/* Primary Actions */}
-            {canRunAnalyses() &&
+            {canRunAnalyses(analysis) &&
               (analysis.status === 'running' ? (
                 <Button
                   onClick={handleStop}
@@ -325,10 +325,10 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
 
             {/* Show menu if user has any permissions */}
             {(isAdmin ||
-              canViewAnalyses() ||
-              canDownloadAnalyses() ||
-              canEditAnalyses() ||
-              canDeleteAnalyses()) && (
+              canViewAnalyses(analysis) ||
+              canDownloadAnalyses(analysis) ||
+              canEditAnalyses(analysis) ||
+              canDeleteAnalyses(analysis)) && (
               <Menu
                 shadow="md"
                 width={200}
@@ -363,7 +363,7 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
                   )}
 
                   {/* File Operations */}
-                  {canDownloadAnalyses() && (
+                  {canDownloadAnalyses(analysis) && (
                     <>
                       <Menu.Item
                         onClick={handleDownloadAnalysis}
@@ -382,7 +382,7 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
                   )}
 
                   {/* Version Management */}
-                  {canViewAnalyses() && (
+                  {canViewAnalyses(analysis) && (
                     <>
                       <Menu.Item
                         onClick={() => setShowVersionModal(true)}
@@ -395,33 +395,33 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
                   )}
 
                   {/* Analysis File Operations - Show view or edit based on permissions */}
-                  {canViewAnalyses() && (
+                  {canViewAnalyses(analysis) && (
                     <>
                       <Menu.Item
                         onClick={handleEditAnalysis}
                         leftSection={
-                          canEditAnalyses() ? (
+                          canEditAnalyses(analysis) ? (
                             <IconEdit size={16} />
                           ) : (
                             <IconFileText size={16} />
                           )
                         }
                       >
-                        {canEditAnalyses()
+                        {canEditAnalyses(analysis)
                           ? 'Edit Analysis'
                           : 'View Analysis File'}
                       </Menu.Item>
                       <Menu.Item
                         onClick={handleEditENV}
                         leftSection={
-                          canEditAnalyses() ? (
+                          canEditAnalyses(analysis) ? (
                             <IconEdit size={16} />
                           ) : (
                             <IconFileText size={16} />
                           )
                         }
                       >
-                        {canEditAnalyses()
+                        {canEditAnalyses(analysis)
                           ? 'Edit Environment'
                           : 'View Environment'}
                       </Menu.Item>
@@ -430,7 +430,7 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
                   )}
 
                   {/* Destructive Operations */}
-                  {canDeleteAnalyses() && (
+                  {canDeleteAnalyses(analysis) && (
                     <>
                       <Menu.Item
                         onClick={handleDeleteLogs}
@@ -459,23 +459,23 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
       </Stack>
 
       {/* Modals - Render if user can view analyses */}
-      {showEditAnalysisModal && canViewAnalyses() && (
+      {showEditAnalysisModal && canViewAnalyses(analysis) && (
         <Suspense fallback={<div>Loading editor...</div>}>
           <AnalysisEditModal
             analysis={analysis}
             onClose={() => setShowEditAnalysisModal(false)}
             onSave={handleSaveAnalysis}
-            readOnly={!canEditAnalyses()}
+            readOnly={!canEditAnalyses(analysis)}
           />
         </Suspense>
       )}
-      {showEditENVModal && canViewAnalyses() && (
+      {showEditENVModal && canViewAnalyses(analysis) && (
         <Suspense fallback={<div>Loading editor...</div>}>
           <AnalysisEditENVModal
             analysis={analysis}
             onClose={() => setShowEditENVModal(false)}
             onSave={handleSaveENV}
-            readOnly={!canEditAnalyses()}
+            readOnly={!canEditAnalyses(analysis)}
           />
         </Suspense>
       )}

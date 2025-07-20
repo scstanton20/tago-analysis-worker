@@ -166,7 +166,7 @@ const SortableTeamItem = ({ team, isSelected, onClick, analysisCount }) => {
 
 // Main Team Sidebar Component
 export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
-  const { teams, getTeamAnalysisCount } = useSSE();
+  const { teams, getTeamAnalysisCount, hasInitialData } = useSSE();
   const { user, logout, isAdmin } = useAuth();
   const { canAccessTeam, isAdmin: hasAdminPerms } = usePermissions();
 
@@ -198,11 +198,7 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
 
     // For non-admin users, filter teams based on permissions
     return allTeams.filter((team) => {
-      // Always show system teams if they have analyses (they are shown regardless of permissions)
-      if (team.isSystem) {
-        return true; // System team visibility is handled elsewhere
-      }
-      // For custom teams, check if user has access
+      // For both system and custom teams, check if user has access
       return canAccessTeam(team.id);
     });
   }, [teams, hasAdminPerms, canAccessTeam]);
@@ -315,9 +311,13 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
       {/* Team List */}
       <ScrollArea style={{ flex: 1 }} p="md">
         <Stack gap="xs">
-          {teamsArray.length === 0 ? (
+          {!hasInitialData ? (
             <Text c="dimmed" size="sm" ta="center" py="md">
               Loading teams...
+            </Text>
+          ) : teamsArray.length === 0 ? (
+            <Text c="dimmed" size="sm" ta="center" py="md">
+              No teams assigned
             </Text>
           ) : (
             <DndContext
@@ -330,35 +330,27 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
                 items={teamsArray.map((t) => t.id)}
                 strategy={verticalListSortingStrategy}
               >
-                {teamsArray
-                  .filter((team) => {
-                    // Hide system teams if they have no analyses
-                    if (team.isSystem) {
-                      return getAnalysisCount(team.id) > 0;
-                    }
-                    return true; // Show all non-system teams regardless of count
-                  })
-                  .map((team) => (
-                    <div
-                      key={team.id}
-                      onDrop={(e) => handleAnalysisDrop(e, team.id)}
-                      onDragOver={(e) => e.preventDefault()}
-                      style={{
-                        borderRadius: 'var(--mantine-radius-md)',
-                        outline: draggedAnalysis
-                          ? '2px solid var(--mantine-color-brand-filled)'
-                          : 'none',
-                        outlineOffset: '2px',
-                      }}
-                    >
-                      <SortableTeamItem
-                        team={team}
-                        isSelected={selectedTeam === team.id}
-                        onClick={() => handleTeamClick(team.id)}
-                        analysisCount={getAnalysisCount(team.id)}
-                      />
-                    </div>
-                  ))}
+                {teamsArray.map((team) => (
+                  <div
+                    key={team.id}
+                    onDrop={(e) => handleAnalysisDrop(e, team.id)}
+                    onDragOver={(e) => e.preventDefault()}
+                    style={{
+                      borderRadius: 'var(--mantine-radius-md)',
+                      outline: draggedAnalysis
+                        ? '2px solid var(--mantine-color-brand-filled)'
+                        : 'none',
+                      outlineOffset: '2px',
+                    }}
+                  >
+                    <SortableTeamItem
+                      team={team}
+                      isSelected={selectedTeam === team.id}
+                      onClick={() => handleTeamClick(team.id)}
+                      analysisCount={getAnalysisCount(team.id)}
+                    />
+                  </div>
+                ))}
               </SortableContext>
               <DragOverlay>
                 {activeTeamId ? (

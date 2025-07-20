@@ -97,8 +97,66 @@ export const AuthProvider = ({ children }) => {
       const orgRole = user.role === 'admin' ? 'owner' : 'member';
       setOrganizationMembership(orgRole);
 
-      // For now, just set empty teams - can add team fetching later if needed
-      setUserTeams([]);
+      // Load user team memberships
+      try {
+        if (user.role === 'admin') {
+          // Admins have access to all teams, but we still need to load team list
+          const teamsResult = await authClient.organization.listTeams({
+            query: {
+              organizationId: activeOrgResult.data?.id,
+            },
+          });
+
+          if (teamsResult.data && Array.isArray(teamsResult.data)) {
+            setUserTeams(
+              teamsResult.data.map((team) => ({
+                id: team.id,
+                name: team.name,
+                role: 'owner', // Admins are considered owners of all teams
+              })),
+            );
+            console.log(
+              `✓ Loaded ${teamsResult.data.length} teams for admin user`,
+            );
+          } else {
+            setUserTeams([]);
+          }
+        } else {
+          // For regular users, fetch their specific team memberships via API
+          try {
+            const teamMembershipsResponse = await fetch(
+              `/api/users/${user.id}/team-memberships`,
+              {
+                credentials: 'include',
+              },
+            );
+
+            if (teamMembershipsResponse.ok) {
+              const teamMembershipsData = await teamMembershipsResponse.json();
+              if (
+                teamMembershipsData.success &&
+                teamMembershipsData.data?.teams
+              ) {
+                setUserTeams(teamMembershipsData.data.teams);
+                console.log(
+                  `✓ Loaded ${teamMembershipsData.data.teams.length} team memberships for user`,
+                );
+              } else {
+                setUserTeams([]);
+              }
+            } else {
+              console.warn('Failed to fetch user team memberships');
+              setUserTeams([]);
+            }
+          } catch (fetchError) {
+            console.warn('Error fetching user team memberships:', fetchError);
+            setUserTeams([]);
+          }
+        }
+      } catch (teamsError) {
+        console.warn('Error loading team memberships:', teamsError);
+        setUserTeams([]);
+      }
     } catch (error) {
       console.error('Error setting active organization:', error);
       setOrganizationMembership(null);
@@ -199,6 +257,26 @@ export const AuthProvider = ({ children }) => {
     await loadOrganizationData();
   }, [loadOrganizationData]);
 
+  // Force refresh all user data (session + team memberships)
+  const refreshUserData = useCallback(async () => {
+    try {
+      // Manually fetch the current session
+      const freshSession = await authClient.getSession();
+      console.log('Refreshing user data and session');
+      setManualSession(freshSession);
+
+      // Clear and reload organization data
+      setOrganizationMembership(null);
+      setOrganizationId(null);
+      setUserTeams([]);
+
+      // Reload organization data with fresh session
+      await loadOrganizationData();
+    } catch (error) {
+      console.error('Error refreshing user data:', error);
+    }
+  }, [loadOrganizationData]);
+
   // Profile and authentication functions
   const logout = async () => {
     await signOut();
@@ -230,6 +308,7 @@ export const AuthProvider = ({ children }) => {
     hasOrganizationRole,
     getUserAccessibleTeams,
     refreshMembership,
+    refreshUserData,
 
     // Auth functions
     logout,

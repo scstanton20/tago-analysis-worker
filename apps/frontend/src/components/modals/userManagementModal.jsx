@@ -40,7 +40,12 @@ import { useNotifications } from '../../hooks/useNotifications.jsx';
 import UserSessionsModal from './userSessionsModal';
 
 export default function UserManagementModal({ opened, onClose }) {
-  const { user: currentUser, isAdmin, organizationId } = useAuth();
+  const {
+    user: currentUser,
+    isAdmin,
+    organizationId,
+    refreshUserData,
+  } = useAuth();
   const notify = useNotifications();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -133,8 +138,18 @@ export default function UserManagementModal({ opened, onClose }) {
       });
 
       if (!result.error && result.data) {
+        // Filter out system teams (like uncategorized) for non-admin users
+        const filteredTeams = result.data.filter((team) => {
+          // Always include non-system teams
+          if (!team.isSystem && !team.is_system) {
+            return true;
+          }
+          // Only include system teams for admin users
+          return isAdmin;
+        });
+
         setAvailableTeams(
-          result.data.map((team) => ({
+          filteredTeams.map((team) => ({
             value: team.id,
             label: team.name,
           })),
@@ -250,7 +265,7 @@ export default function UserManagementModal({ opened, onClose }) {
             );
           }
 
-          // If the user is being promoted to admin, add them to the organization
+          // If the user is being promoted to admin, add them to the organization and clear team assignments
           if (values.role === 'admin' && organizationId) {
             try {
               console.log('Adding promoted admin user to organization...');
@@ -283,6 +298,25 @@ export default function UserManagementModal({ opened, onClose }) {
               console.warn('Error adding user to organization:', orgError);
               // Don't throw error here as role update was successful
             }
+
+            // Clear team assignments for new admin (admins have access to everything)
+            try {
+              console.log('Clearing team assignments for new admin...');
+              await fetch(`/api/users/${editingUser.id}/team-assignments`, {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                  teamAssignments: [], // Empty array clears all assignments
+                }),
+              });
+              console.log('✓ Team assignments cleared for new admin');
+            } catch (teamError) {
+              console.warn('Error clearing team assignments:', teamError);
+              // Don't throw error here as role update was successful
+            }
           }
 
           updates.role = values.role;
@@ -307,12 +341,74 @@ export default function UserManagementModal({ opened, onClose }) {
           needsUpdate = true;
         }
 
+        // Update team assignments if department permissions changed for non-admin users
+        if (
+          values.role !== 'admin' &&
+          editingUser.id &&
+          values.departmentPermissions
+        ) {
+          try {
+            const teamAssignments = Object.entries(values.departmentPermissions)
+              .filter(([, config]) => config.enabled)
+              .map(([teamId, config]) => ({
+                teamId,
+                permissions: config.permissions || ['view_analyses'],
+              }));
+
+            console.log(
+              `Updating team assignments for user ${editingUser.id}...`,
+            );
+            const teamResult = await fetch(
+              `/api/users/${editingUser.id}/team-assignments`,
+              {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                  teamAssignments,
+                }),
+              },
+            ).then((res) => res.json());
+
+            if (teamResult.error) {
+              console.warn(
+                'Failed to update team assignments:',
+                teamResult.error,
+              );
+              // Don't throw error here as other updates were successful
+            } else {
+              console.log('✓ Team assignments updated successfully');
+
+              // Show notification for permission updates
+              const assignedTeams = teamAssignments.length;
+              if (assignedTeams > 0) {
+                notify.showNotification({
+                  title: 'Permissions Updated',
+                  message: `User permissions updated successfully for ${assignedTeams} team${assignedTeams !== 1 ? 's' : ''}.`,
+                  color: 'blue',
+                });
+              }
+            }
+          } catch (teamError) {
+            console.warn('Error updating team assignments:', teamError);
+            // Don't throw error here as other updates were successful
+          }
+        }
+
         if (needsUpdate) {
           notify.showNotification({
             title: 'Success',
             message: `User ${values.name} updated successfully.`,
             color: 'green',
           });
+
+          // If the current user was updated, refresh their data
+          if (editingUser.id === currentUser?.id) {
+            console.log('Refreshing current user data after update');
+            await refreshUserData();
+          }
         }
       } else {
         // Create user using Better Auth admin createUser to avoid auto-login
@@ -347,14 +443,10 @@ export default function UserManagementModal({ opened, onClose }) {
           throw new Error(result.error.message);
         }
 
-        // If the user is an admin, add them to the organization
-        if (
-          values.role === 'admin' &&
-          organizationId &&
-          result.data?.user?.id
-        ) {
+        // Add user to the main organization (required for all users)
+        if (organizationId && result.data?.user?.id) {
           try {
-            console.log('Adding admin user to organization...');
+            console.log('Adding user to main organization...');
             const memberResult = await fetch('/api/users/add-to-organization', {
               method: 'POST',
               headers: {
@@ -364,7 +456,7 @@ export default function UserManagementModal({ opened, onClose }) {
               body: JSON.stringify({
                 userId: result.data.user.id,
                 organizationId: organizationId,
-                role: 'admin',
+                role: values.role === 'admin' ? 'admin' : 'member',
               }),
             }).then((res) => res.json());
 
@@ -375,10 +467,56 @@ export default function UserManagementModal({ opened, onClose }) {
               );
               // Don't throw error here as user creation was successful
             } else {
-              console.log('✓ Admin user added to organization successfully');
+              console.log('✓ User added to organization successfully');
             }
           } catch (orgError) {
             console.warn('Error adding user to organization:', orgError);
+            // Don't throw error here as user creation was successful
+          }
+        }
+
+        // Assign user to teams based on department permissions (for non-admin users)
+        if (
+          values.role !== 'admin' &&
+          result.data?.user?.id &&
+          values.departmentPermissions
+        ) {
+          try {
+            const teamAssignments = Object.entries(values.departmentPermissions)
+              .filter(([, config]) => config.enabled)
+              .map(([teamId, config]) => ({
+                teamId,
+                permissions: config.permissions || ['view_analyses'],
+              }));
+
+            if (teamAssignments.length > 0) {
+              console.log(
+                `Assigning user to ${teamAssignments.length} teams...`,
+              );
+              const teamResult = await fetch('/api/users/assign-teams', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                  userId: result.data.user.id,
+                  teamAssignments,
+                }),
+              }).then((res) => res.json());
+
+              if (teamResult.error) {
+                console.warn(
+                  'Failed to assign user to teams:',
+                  teamResult.error,
+                );
+                // Don't throw error here as user creation was successful
+              } else {
+                console.log('✓ User assigned to teams successfully');
+              }
+            }
+          } catch (teamError) {
+            console.warn('Error assigning user to teams:', teamError);
             // Don't throw error here as user creation was successful
           }
         }
@@ -404,16 +542,63 @@ export default function UserManagementModal({ opened, onClose }) {
     }
   };
 
-  const handleEdit = (user) => {
+  const handleEdit = async (user) => {
     setEditingUser(user);
-    form.setValues({
-      name: user.name || '',
-      email: user.email || '',
-      username: user.username || '',
-      password: '',
-      role: user.role || 'user',
-    });
-    setShowCreateForm(true);
+    setLoading(true);
+
+    try {
+      // Load user's current team memberships
+      const departmentPermissions = {};
+
+      if (user.role !== 'admin') {
+        try {
+          const teamMembershipsResponse = await fetch(
+            `/api/users/${user.id}/team-memberships`,
+            {
+              credentials: 'include',
+            },
+          );
+
+          if (teamMembershipsResponse.ok) {
+            const teamMembershipsData = await teamMembershipsResponse.json();
+            if (
+              teamMembershipsData.success &&
+              teamMembershipsData.data?.teams
+            ) {
+              // Convert team memberships to departmentPermissions format
+              teamMembershipsData.data.teams.forEach((team) => {
+                departmentPermissions[team.id] = {
+                  enabled: true,
+                  permissions: team.permissions || ['view_analyses'], // Use actual permissions from database
+                };
+              });
+              console.log(
+                `✓ Loaded ${teamMembershipsData.data.teams.length} team assignments for user ${user.id}`,
+              );
+            }
+          } else {
+            console.warn('Failed to fetch user team memberships for editing');
+          }
+        } catch (error) {
+          console.warn('Error fetching user team memberships:', error);
+        }
+      }
+
+      form.setValues({
+        name: user.name || '',
+        email: user.email || '',
+        username: user.username || '',
+        password: '',
+        role: user.role || 'user',
+        departmentPermissions,
+      });
+      setShowCreateForm(true);
+    } catch (error) {
+      console.error('Error loading user data for editing:', error);
+      setError('Failed to load user data for editing');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDelete = async (user) => {

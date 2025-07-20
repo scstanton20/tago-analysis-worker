@@ -1,4 +1,5 @@
 import { useAuth } from '../contexts/AuthProvider.jsx';
+import { authClient } from '../lib/auth.js';
 
 export const usePermissions = () => {
   const {
@@ -10,42 +11,54 @@ export const usePermissions = () => {
     isTeamMember,
   } = useAuth();
 
-  const hasPermission = (permission) => {
+  const hasPermission = async (permission, teamId = null) => {
     if (!isAuthenticated || !user) return false;
 
     // Admin has all permissions
     if (user.role === 'admin') return true;
 
-    // For now, basic user permissions
-    const userPermissions = [
-      'analysis.view',
-      'analysis.run',
-      'analysis.upload',
-      'analysis.download',
-    ];
+    // If a specific team is requested, check if user has access to that team
+    if (teamId && !isTeamMember(teamId)) {
+      return false;
+    }
 
-    return userPermissions.includes(permission);
+    try {
+      // Use Better Auth's hasPermission API to check analysis permissions
+      const result = await authClient.organization.hasPermission({
+        permissions: {
+          analysis: [permission.replace('analysis.', '')], // Remove prefix for API call
+        },
+      });
+      return result.success && result.data;
+    } catch (error) {
+      console.warn('Error checking permission:', error);
+      return false;
+    }
+  };
+
+  // Check if user has a specific permission based on their actual team memberships
+  const checkUserPermission = (permission, teamId = null) => {
+    if (!isAuthenticated || !user) return false;
+
+    // Admin has all permissions
+    if (user.role === 'admin') return true;
+
+    // Use permission as-is (should already be in format like 'view_analyses')
+    const cleanPermission = permission;
+
+    // If checking for a specific team, check only that team's permissions
+    if (teamId) {
+      const team = userTeams.find((t) => t.id === teamId);
+      return team?.permissions?.includes(cleanPermission) || false;
+    }
+
+    // If no specific team, check if user has this permission in ANY of their teams
+    return userTeams.some((team) =>
+      team.permissions?.includes(cleanPermission),
+    );
   };
 
   const isAdmin = user?.role === 'admin';
-
-  const canAccessTeamOld = () => {
-    // This is the old implementation - kept for compatibility
-    // Admin can access all teams
-    if (isAdmin) return true;
-
-    // For authenticated users, use team-based access
-    return isAuthenticated && organizationMembership;
-  };
-
-  // New team-specific access control
-  const canAccessSpecificTeam = (teamId) => {
-    // Admin can access all teams
-    if (isAdmin) return true;
-
-    // Check if user can access this specific team
-    return canAccessTeam(teamId);
-  };
 
   // Get list of teams user can access
   const getAccessibleTeams = (allTeams = []) => {
@@ -64,98 +77,164 @@ export const usePermissions = () => {
     return accessibleTeams;
   };
 
-  // Analysis permissions - can be team-specific
-  const canRunAnalysis = (analysis = null) => {
+  // Get accessible teams
+  const accessibleTeams = userTeams || [];
+
+  // Analysis permissions - can be team-specific (plural names to match component usage)
+  const canRunAnalyses = (analysis = null) => {
     // Admin can run all analyses
     if (isAdmin) return true;
 
-    // Check base permission
-    if (!hasPermission('analysis.run')) return false;
+    // Check base permission using user permission checking
+    if (!checkUserPermission('run_analyses')) return false;
 
     // If no analysis provided or no team, use base permission
     if (!analysis?.teamId) return true;
 
     // Check team access
-    return canAccessSpecificTeam(analysis.teamId);
+    return canAccessTeam(analysis.teamId);
   };
 
-  const canDownloadAnalysis = (analysis = null) => {
+  const canDownloadAnalyses = (analysis = null) => {
     // Admin can download all analyses
     if (isAdmin) return true;
 
-    // Check base permission
-    if (!hasPermission('analysis.download')) return false;
+    // Check base permission using user permission checking
+    if (!checkUserPermission('download_analyses')) return false;
 
     // If no analysis provided or no team, use base permission
     if (!analysis?.teamId) return true;
 
     // Check team access
-    return canAccessSpecificTeam(analysis.teamId);
+    return canAccessTeam(analysis.teamId);
   };
 
-  const canViewAnalysis = (analysis = null) => {
+  const canViewAnalyses = (analysis = null) => {
     // Admin can view all analyses
     if (isAdmin) return true;
 
-    // Check base permission
-    if (!hasPermission('analysis.view')) return false;
+    // Check base permission using user permission checking
+    if (!checkUserPermission('view_analyses')) return false;
 
     // If no analysis provided or no team, use base permission
     if (!analysis?.teamId) return true;
 
     // Check team access
-    return canAccessSpecificTeam(analysis.teamId);
+    return canAccessTeam(analysis.teamId);
   };
 
-  const canEditAnalysis = (analysis = null) => {
+  const canEditAnalyses = (analysis = null) => {
     // Admin can edit all analyses
     if (isAdmin) return true;
 
-    // Check base permission (edit requires upload capability)
-    if (!hasPermission('analysis.upload')) return false;
+    // Check base permission (edit requires edit capability)
+    if (!checkUserPermission('edit_analyses')) return false;
 
     // If no analysis provided or no team, use base permission
     if (!analysis?.teamId) return true;
 
     // Check team access
-    return canAccessSpecificTeam(analysis.teamId);
+    return canAccessTeam(analysis.teamId);
   };
 
-  const canDeleteAnalysis = () => {
-    // For now, only allow admins to delete analyses
-    // TODO: Implement more granular delete permissions based on team role
-    return isAdmin;
+  const canUploadAnalyses = (analysis = null) => {
+    // Admin can upload analyses
+    if (isAdmin) return true;
+
+    // Check base permission using user permission checking
+    if (!checkUserPermission('upload_analyses')) return false;
+
+    // If no analysis provided or no team, use base permission
+    if (!analysis?.teamId) return true;
+
+    // Check team access
+    return canAccessTeam(analysis.teamId);
   };
 
-  // Legacy functions for backward compatibility
-  const canRunAnalyses = () => canRunAnalysis();
-  const canDownloadAnalyses = () => canDownloadAnalysis();
-  const canViewAnalyses = () => canViewAnalysis();
-  const canEditAnalyses = () => canEditAnalysis();
-  const canDeleteAnalyses = () => canDeleteAnalysis();
+  const canDeleteAnalyses = (analysis = null) => {
+    // Admin can delete all analyses
+    if (isAdmin) return true;
+
+    // Check base permission using user permission checking
+    if (!checkUserPermission('delete_analyses')) return false;
+
+    // If no analysis provided or no team, use base permission
+    if (!analysis?.teamId) return true;
+
+    // Check team access
+    return canAccessTeam(analysis.teamId);
+  };
+
+  // Check if user can upload analyses to any team they have access to
+  const canUploadToAnyTeam = () => {
+    // Admin can always upload
+    if (isAdmin) return true;
+
+    // Check if user has upload permission in any of their teams
+    return userTeams.some((team) =>
+      team.permissions?.includes('upload_analyses'),
+    );
+  };
+
+  // General permission checking functions for component visibility (no analysis object needed)
+  const hasAnyRunPermission = () => {
+    if (isAdmin) return true;
+    return userTeams.some((team) => team.permissions?.includes('run_analyses'));
+  };
+
+  const hasAnyViewPermission = () => {
+    if (isAdmin) return true;
+    return userTeams.some((team) =>
+      team.permissions?.includes('view_analyses'),
+    );
+  };
+
+  const hasAnyEditPermission = () => {
+    if (isAdmin) return true;
+    return userTeams.some((team) =>
+      team.permissions?.includes('edit_analyses'),
+    );
+  };
+
+  const hasAnyDeletePermission = () => {
+    if (isAdmin) return true;
+    return userTeams.some((team) =>
+      team.permissions?.includes('delete_analyses'),
+    );
+  };
+
+  const hasAnyDownloadPermission = () => {
+    if (isAdmin) return true;
+    return userTeams.some((team) =>
+      team.permissions?.includes('download_analyses'),
+    );
+  };
 
   return {
-    hasPermission,
+    hasPermission, // Async permission checking
+    checkUserPermission, // Permission checking using actual stored permissions
     isAdmin,
 
     // Team access
-    canAccessTeam: canAccessTeamOld, // Legacy compatibility
-    canAccessSpecificTeam,
+    canAccessTeam,
     getAccessibleTeams,
+    accessibleTeams, // Current team-based approach
 
-    // New analysis permissions (team-aware)
-    canRunAnalysis,
-    canDownloadAnalysis,
-    canViewAnalysis,
-    canEditAnalysis,
-    canDeleteAnalysis,
-
-    // Legacy analysis permissions (for backward compatibility)
+    // Analysis permissions (team-aware) - plural names to match component usage
     canRunAnalyses,
     canDownloadAnalyses,
     canViewAnalyses,
     canEditAnalyses,
+    canUploadAnalyses,
     canDeleteAnalyses,
+    canUploadToAnyTeam,
+
+    // General permission functions for component visibility
+    hasAnyRunPermission,
+    hasAnyViewPermission,
+    hasAnyEditPermission,
+    hasAnyDeletePermission,
+    hasAnyDownloadPermission,
 
     // Team/organization data
     userTeams,

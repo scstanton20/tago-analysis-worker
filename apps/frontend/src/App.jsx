@@ -18,8 +18,10 @@ import { IconSun, IconMoon } from '@tabler/icons-react';
 import { useSSE } from './contexts/sseContext';
 import { SSEProvider } from './contexts/sseContext/provider';
 import { AuthProvider, useAuth } from './contexts/AuthProvider';
+import { usePermissions } from './hooks/usePermissions';
+// Import core components directly to avoid context timing issues
+import TeamSidebar from './components/teamSidebar';
 // Lazy load heavy components that make API calls
-const TeamSidebar = lazy(() => import('./components/teamSidebar'));
 const AnalysisList = lazy(() => import('./components/analysis/analysisList'));
 const AnalysisCreator = lazy(
   () => import('./components/analysis/uploadAnalysis'),
@@ -69,7 +71,8 @@ function AppLoadingOverlay({ message, submessage, error, showRetry }) {
 
 function AppContent() {
   const { analyses, getTeam, connectionStatus } = useSSE();
-  const { isAdmin } = useAuth();
+  const { isAdmin, isTeamMember } = useAuth();
+  const { canUploadToAnyTeam } = usePermissions();
 
   const [selectedTeam, setSelectedTeam] = useState(null);
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure();
@@ -93,17 +96,28 @@ function AppContent() {
       return filteredAnalyses;
     }
 
-    // For non-admin users, show all analyses (simplified for Better Auth)
+    // For non-admin users, only show analyses from teams they have access to
     const filteredAnalyses = {};
     Object.entries(analyses).forEach(([name, analysis]) => {
-      // Filter by selected department if one is chosen
-      if (
-        !selectedTeam ||
-        analysis.teamId === selectedTeam ||
-        (selectedTeam === 'uncategorized' &&
-          (!analysis.teamId || analysis.teamId === 'uncategorized'))
-      ) {
-        filteredAnalyses[name] = analysis;
+      // If a specific team is selected, filter by that team
+      if (selectedTeam) {
+        if (
+          analysis.teamId === selectedTeam ||
+          (selectedTeam === 'uncategorized' &&
+            (!analysis.teamId || analysis.teamId === 'uncategorized'))
+        ) {
+          filteredAnalyses[name] = analysis;
+        }
+      } else {
+        // For "All Analyses", only show analyses from teams user has access to
+        if (
+          // Analysis has no team (uncategorized) and user has access to uncategorized
+          (!analysis.teamId && isTeamMember('uncategorized')) ||
+          // Analysis has team and user is member of that team
+          (analysis.teamId && isTeamMember(analysis.teamId))
+        ) {
+          filteredAnalyses[name] = analysis;
+        }
       }
     });
     return filteredAnalyses;
@@ -198,11 +212,12 @@ function AppContent() {
                       track: {
                         cursor: 'pointer',
                         backgroundColor: 'transparent',
+                        borderWidth: '1px',
+                        borderStyle: 'solid',
                         borderColor:
                           computedColorScheme === 'dark'
                             ? 'var(--mantine-color-brand-4)'
                             : 'var(--mantine-color-gray-4)',
-                        border: '1px solid',
                         '&[dataChecked]': {
                           backgroundColor: 'var(--mantine-color-brand-1)',
                           borderColor: 'var(--mantine-color-brand-6)',
@@ -242,8 +257,6 @@ function AppContent() {
           <TeamSidebar
             selectedTeam={selectedTeam}
             onTeamSelect={setSelectedTeam}
-            opened={desktopOpened}
-            onToggle={toggleDesktop}
           />
         </AppShell.Navbar>
 
@@ -252,7 +265,7 @@ function AppContent() {
             background: 'var(--mantine-color-body)',
           }}
         >
-          {isAdmin && (
+          {canUploadToAnyTeam() && (
             <Suspense
               fallback={
                 <AppLoadingOverlay

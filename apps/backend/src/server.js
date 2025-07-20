@@ -138,6 +138,23 @@ async function runMigrations() {
         console.log('✓ Is_system column already exists in team table');
       }
 
+      // Check if member table has permissions column, add if missing
+      console.log('Checking member table schema...');
+      const memberTableInfo = db.prepare('PRAGMA table_info(member)').all();
+      const hasPermissionsColumn = memberTableInfo.some(
+        (column) => column.name === 'permissions',
+      );
+
+      if (!hasPermissionsColumn) {
+        console.log('Adding permissions column to member table...');
+        db.prepare(
+          "ALTER TABLE member ADD COLUMN permissions TEXT DEFAULT '[]'",
+        ).run();
+        console.log('✓ Permissions column added to member table');
+      } else {
+        console.log('✓ Permissions column already exists in member table');
+      }
+
       // Rename any existing "Default Team" to "Uncategorized"
       const defaultTeamExists = db
         .prepare('SELECT id FROM team WHERE name = ?')
