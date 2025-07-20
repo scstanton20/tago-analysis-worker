@@ -1,4 +1,5 @@
 import { useAuth } from '../contexts/AuthProvider.jsx';
+import { useSSE } from '../contexts/sseContext/index.js';
 import { authClient } from '../lib/auth.js';
 
 export const usePermissions = () => {
@@ -10,6 +11,8 @@ export const usePermissions = () => {
     canAccessTeam,
     isTeamMember,
   } = useAuth();
+
+  const { teams: sseTeams } = useSSE();
 
   const hasPermission = async (permission, teamId = null) => {
     if (!isAuthenticated || !user) return false;
@@ -85,84 +88,78 @@ export const usePermissions = () => {
     // Admin can run all analyses
     if (isAdmin) return true;
 
-    // Check base permission using user permission checking
-    if (!checkUserPermission('run_analyses')) return false;
+    // If analysis is provided, check team-specific permission
+    if (analysis?.teamId) {
+      return checkUserPermission('run_analyses', analysis.teamId);
+    }
 
-    // If no analysis provided or no team, use base permission
-    if (!analysis?.teamId) return true;
-
-    // Check team access
-    return canAccessTeam(analysis.teamId);
+    // If no analysis provided, check if user has permission in ANY team
+    return checkUserPermission('run_analyses');
   };
 
   const canDownloadAnalyses = (analysis = null) => {
     // Admin can download all analyses
     if (isAdmin) return true;
 
-    // Check base permission using user permission checking
-    if (!checkUserPermission('download_analyses')) return false;
+    // If analysis is provided, check team-specific permission
+    if (analysis?.teamId) {
+      return checkUserPermission('download_analyses', analysis.teamId);
+    }
 
-    // If no analysis provided or no team, use base permission
-    if (!analysis?.teamId) return true;
-
-    // Check team access
-    return canAccessTeam(analysis.teamId);
+    // If no analysis provided, check if user has permission in ANY team
+    return checkUserPermission('download_analyses');
   };
 
   const canViewAnalyses = (analysis = null) => {
     // Admin can view all analyses
     if (isAdmin) return true;
 
-    // Check base permission using user permission checking
-    if (!checkUserPermission('view_analyses')) return false;
+    // If analysis is provided, check team-specific permission
+    if (analysis?.teamId) {
+      return checkUserPermission('view_analyses', analysis.teamId);
+    }
 
-    // If no analysis provided or no team, use base permission
-    if (!analysis?.teamId) return true;
-
-    // Check team access
-    return canAccessTeam(analysis.teamId);
+    // If no analysis provided, check if user has permission in ANY team
+    return checkUserPermission('view_analyses');
   };
 
   const canEditAnalyses = (analysis = null) => {
     // Admin can edit all analyses
     if (isAdmin) return true;
 
-    // Check base permission (edit requires edit capability)
-    if (!checkUserPermission('edit_analyses')) return false;
+    // If analysis is provided, check team-specific permission
+    if (analysis?.teamId) {
+      return checkUserPermission('edit_analyses', analysis.teamId);
+    }
 
-    // If no analysis provided or no team, use base permission
-    if (!analysis?.teamId) return true;
-
-    // Check team access
-    return canAccessTeam(analysis.teamId);
+    // If no analysis provided, check if user has permission in ANY team
+    return checkUserPermission('edit_analyses');
   };
 
   const canUploadAnalyses = (analysis = null) => {
     // Admin can upload analyses
     if (isAdmin) return true;
 
-    // Check base permission using user permission checking
-    if (!checkUserPermission('upload_analyses')) return false;
+    // If analysis is provided, check team-specific permission
+    if (analysis?.teamId) {
+      return checkUserPermission('upload_analyses', analysis.teamId);
+    }
 
-    // If no analysis provided or no team, use base permission
-    if (!analysis?.teamId) return true;
-
-    // Check team access
-    return canAccessTeam(analysis.teamId);
+    // If no analysis provided, check if user has permission in ANY team
+    return checkUserPermission('upload_analyses');
   };
 
   const canDeleteAnalyses = (analysis = null) => {
     // Admin can delete all analyses
     if (isAdmin) return true;
 
-    // Check base permission using user permission checking
-    if (!checkUserPermission('delete_analyses')) return false;
+    // If analysis is provided, check team-specific permission
+    if (analysis?.teamId) {
+      return checkUserPermission('delete_analyses', analysis.teamId);
+    }
 
-    // If no analysis provided or no team, use base permission
-    if (!analysis?.teamId) return true;
-
-    // Check team access
-    return canAccessTeam(analysis.teamId);
+    // If no analysis provided, check if user has permission in ANY team
+    return checkUserPermission('delete_analyses');
   };
 
   // Check if user can upload analyses to any team they have access to
@@ -210,6 +207,53 @@ export const usePermissions = () => {
     );
   };
 
+  // Consolidated team permission getters (to avoid duplicate API calls in components)
+  const getTeamsWithPermission = (permission) => {
+    if (isAdmin) {
+      // Admin has access to all teams from SSE context
+      // Convert SSE teams object to array format with admin permissions
+      const allTeams = Object.values(sseTeams || {}).map((team) => ({
+        ...team,
+        permissions: [
+          'view_analyses',
+          'run_analyses',
+          'upload_analyses',
+          'download_analyses',
+          'edit_analyses',
+          'delete_analyses',
+        ],
+      }));
+      return allTeams;
+    }
+
+    return userTeams.filter((team) => team.permissions?.includes(permission));
+  };
+
+  const getUploadableTeams = () => getTeamsWithPermission('upload_analyses');
+  const getEditableTeams = () => getTeamsWithPermission('edit_analyses');
+  const getViewableTeams = () => getTeamsWithPermission('view_analyses');
+  const getRunableTeams = () => getTeamsWithPermission('run_analyses');
+  const getDeletableTeams = () => getTeamsWithPermission('delete_analyses');
+  const getDownloadableTeams = () =>
+    getTeamsWithPermission('download_analyses');
+
+  // Team permission checking with consolidated data
+  const getTeamPermissions = (teamId) => {
+    if (isAdmin) {
+      return [
+        'view_analyses',
+        'run_analyses',
+        'upload_analyses',
+        'download_analyses',
+        'edit_analyses',
+        'delete_analyses',
+      ];
+    }
+
+    const team = userTeams.find((t) => t.id === teamId);
+    return team?.permissions || [];
+  };
+
   return {
     hasPermission, // Async permission checking
     checkUserPermission, // Permission checking using actual stored permissions
@@ -235,6 +279,16 @@ export const usePermissions = () => {
     hasAnyEditPermission,
     hasAnyDeletePermission,
     hasAnyDownloadPermission,
+
+    // Consolidated team permission getters (avoid duplicate API calls)
+    getTeamsWithPermission,
+    getUploadableTeams,
+    getEditableTeams,
+    getViewableTeams,
+    getRunableTeams,
+    getDeletableTeams,
+    getDownloadableTeams,
+    getTeamPermissions,
 
     // Team/organization data
     userTeams,

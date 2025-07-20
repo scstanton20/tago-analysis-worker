@@ -44,6 +44,7 @@ export const requireAdmin = async (req, res, next) => {
 };
 
 // Global permission mapping based on roles
+// Only admin role has global permissions, regular users get team-specific permissions
 const globalRolePermissions = {
   admin: [
     'upload_analyses',
@@ -55,19 +56,10 @@ const globalRolePermissions = {
     'manage_users',
     'manage_departments',
   ],
-  analyst: [
-    'upload_analyses',
-    'view_analyses',
-    'run_analyses',
-    'edit_analyses',
-    'download_analyses',
-  ],
-  operator: ['view_analyses', 'run_analyses'],
-  viewer: ['view_analyses'],
 };
 
-// Generic permission check middleware with department support
-export const requirePermission = (permission, departmentId = null) => {
+// Generic permission check middleware with team-specific validation
+export const requirePermission = (permission, options = {}) => {
   return async (req, res, next) => {
     try {
       if (!req.user) {
@@ -75,14 +67,139 @@ export const requirePermission = (permission, departmentId = null) => {
       }
 
       // Check global admin permissions first
-      const globalRole = req.user.role || 'viewer';
+      const globalRole = req.user.role || 'user';
       const globalPermissions = globalRolePermissions[globalRole] || [];
 
       if (globalPermissions.includes(permission)) {
         return next(); // Global permission granted
       }
 
+      // Extract team ID from various sources
+      let teamId = options.teamId;
+
+      // If no team ID provided in options, try to get it from request
+      if (!teamId) {
+        // Try getting from request body, params, or query
+        teamId = req.body?.teamId || req.params?.teamId || req.query?.teamId;
+
+        // For analysis-specific operations, get team from analysis
+        // Note: Team extraction is handled by extractAnalysisTeam middleware
+        // which sets req.analysisTeamId
+      }
+
+      // If no team context and not admin, deny access
+      if (!teamId) {
+        return res.status(403).json({
+          error: `Team-specific permission required. Permission: ${permission}`,
+        });
+      }
+
       // Check team-specific permissions from database
+      try {
+        const Database = (await import('better-sqlite3')).default;
+        const path = (await import('path')).default;
+        const config = (await import('../config/default.js')).default;
+
+        const dbPath = path.join(config.storage.base, 'auth.db');
+        const db = new Database(dbPath, { readonly: true });
+
+        try {
+          // Get user's permissions for the specific team
+          const membership = db
+            .prepare(
+              `
+              SELECT m.permissions
+              FROM member m
+              WHERE m.userId = ? AND m.teamId = ?
+            `,
+            )
+            .get(req.user.id, teamId);
+
+          if (membership && membership.permissions) {
+            const permissions = JSON.parse(membership.permissions);
+            if (permissions.includes(permission)) {
+              return next(); // Team-specific permission granted
+            }
+          }
+        } finally {
+          db.close();
+        }
+      } catch (dbError) {
+        console.error('Error checking team permissions:', dbError);
+        // Continue to deny access if database check fails
+      }
+
+      return res.status(403).json({
+        error: `Insufficient permissions for team ${teamId}. Required: ${permission}`,
+      });
+    } catch (error) {
+      console.error('Permission middleware error:', error);
+      return res.status(403).json({ error: 'Access denied' });
+    }
+  };
+};
+
+// Middleware to extract team information from analysis and add to request
+export const extractAnalysisTeam = async (req, res, next) => {
+  try {
+    const fileName = req.params?.fileName;
+
+    if (fileName) {
+      // Import analysis service to get analysis metadata
+      const { analysisService } = await import(
+        '../services/analysisService.js'
+      );
+
+      try {
+        const analyses = await analysisService.getAllAnalyses();
+        const analysis = analyses[fileName];
+
+        if (analysis) {
+          // eslint-disable-next-line require-atomic-updates
+          req.analysisTeamId = analysis.teamId || 'uncategorized';
+        }
+      } catch (error) {
+        console.warn('Error extracting analysis team:', error);
+        // Continue without team info - let permission middleware handle it
+      }
+    }
+
+    next();
+  } catch (error) {
+    console.error('Error in extractAnalysisTeam middleware:', error);
+    next(); // Continue without team info
+  }
+};
+
+// Helper function to create team-aware permission middleware
+export const requireTeamPermission = (permission) => {
+  return async (req, res, next) => {
+    // Extract team ID from various sources
+    const teamId = req.body?.teamId || req.query?.teamId || req.analysisTeamId;
+
+    // Use the updated requirePermission with team context
+    const permissionMiddleware = requirePermission(permission, { teamId });
+    return permissionMiddleware(req, res, next);
+  };
+};
+
+// Permission middleware that allows if user has permission in ANY team (for general operations)
+export const requireAnyTeamPermission = (permission) => {
+  return async (req, res, next) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      // Check global admin permissions first
+      const globalRole = req.user.role || 'user';
+      const globalPermissions = globalRolePermissions[globalRole] || [];
+
+      if (globalPermissions.includes(permission)) {
+        return next(); // Global permission granted
+      }
+
+      // Check if user has the permission in ANY of their teams
       try {
         const Database = (await import('better-sqlite3')).default;
         const path = (await import('path')).default;
@@ -108,7 +225,7 @@ export const requirePermission = (permission, departmentId = null) => {
             if (membership.permissions) {
               const permissions = JSON.parse(membership.permissions);
               if (permissions.includes(permission)) {
-                return next(); // Team permission granted
+                return next(); // Permission found in at least one team
               }
             }
           }
@@ -121,46 +238,10 @@ export const requirePermission = (permission, departmentId = null) => {
       }
 
       return res.status(403).json({
-        error: `Insufficient permissions. Required: ${permission}${departmentId ? ` in department ${departmentId}` : ''}`,
+        error: `Insufficient permissions. Required: ${permission} in at least one team`,
       });
     } catch (error) {
       console.error('Permission middleware error:', error);
-      return res.status(403).json({ error: 'Access denied' });
-    }
-  };
-};
-
-// Department access check middleware
-export const requireDepartmentAccess = (departmentId) => {
-  return async (req, res, next) => {
-    try {
-      if (!req.user) {
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
-
-      // Global admins have access to all departments
-      if (req.user.role === 'admin') {
-        return next();
-      }
-
-      // Check if user is a member of the department
-      // For now, we'll implement a simplified version until we set up organizations
-      // TODO: Implement proper organization/department membership check
-      const userOrganizations = [];
-
-      const hasAccess = userOrganizations.some(
-        (org) => org.organization.id === departmentId,
-      );
-
-      if (!hasAccess) {
-        return res.status(403).json({
-          error: 'Access denied to this department',
-        });
-      }
-
-      next();
-    } catch (error) {
-      console.error('Department access middleware error:', error);
       return res.status(403).json({ error: 'Access denied' });
     }
   };

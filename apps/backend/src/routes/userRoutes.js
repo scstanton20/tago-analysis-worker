@@ -28,6 +28,18 @@ router.put(
   UserController.updateUserTeamAssignments,
 );
 
+// Update user organization role
+router.put(
+  '/:userId/organization-role',
+  UserController.updateUserOrganizationRole,
+);
+
+// Remove user from organization
+router.delete(
+  '/:userId/organization',
+  UserController.removeUserFromOrganization,
+);
+
 // Delete user with proper cleanup
 router.delete('/:userId', UserController.deleteUser);
 

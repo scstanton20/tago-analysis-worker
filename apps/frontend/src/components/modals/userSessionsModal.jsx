@@ -22,6 +22,7 @@ import {
 } from '@tabler/icons-react';
 import { admin } from '../../lib/auth';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
+import { userService } from '../../services/userService';
 
 export default function UserSessionsModal({ opened, onClose, user }) {
   const [sessions, setSessions] = useState([]);
@@ -113,11 +114,7 @@ export default function UserSessionsModal({ opened, onClose, user }) {
       // Test if the session is actually invalid by checking with the server
       console.log('Testing session validity...');
       try {
-        const validationResponse = await fetch('/api/auth/get-session', {
-          method: 'GET',
-          credentials: 'include',
-        });
-        const sessionCheck = await validationResponse.json();
+        const sessionCheck = await userService.getCurrentSession();
         console.log('Current session check after revocation:', sessionCheck);
       } catch (error) {
         console.log('Session validation error (expected):', error);

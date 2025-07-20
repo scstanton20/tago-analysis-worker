@@ -27,9 +27,13 @@ class UserController {
       });
 
       if (result.error) {
+        console.error('Better Auth addMember error:', result.error);
         return res.status(400).json({ error: result.error.message });
       }
 
+      console.log(
+        `✓ Added user ${userId} to organization ${organizationId} with role ${role}`,
+      );
       res.json({ success: true, data: result.data });
     } catch (error) {
       console.error('Error adding user to organization:', error);
@@ -47,6 +51,18 @@ class UserController {
       if (!userId || !Array.isArray(teamAssignments)) {
         return res.status(400).json({
           error: 'userId and teamAssignments array are required',
+        });
+      }
+
+      // Don't create member entries if no teams are being assigned
+      if (teamAssignments.length === 0) {
+        console.log(`No teams to assign for user ${userId} - skipping`);
+        return res.json({
+          success: true,
+          data: {
+            assignments: [],
+            message: 'No teams to assign',
+          },
         });
       }
 
@@ -438,6 +454,89 @@ class UserController {
       };
     } finally {
       cleanupDb.close();
+    }
+  }
+
+  /**
+   * Update user's organization role
+   */
+  static async updateUserOrganizationRole(req, res) {
+    try {
+      const { userId } = req.params;
+      const { organizationId, role } = req.body;
+
+      if (!userId || !organizationId || !role) {
+        return res.status(400).json({
+          error: 'userId, organizationId, and role are required',
+        });
+      }
+
+      console.log(
+        `Updating organization role for user ${userId} to ${role} in organization ${organizationId}`,
+      );
+
+      // Use better-auth API to update member role
+      const result = await auth.api.updateMemberRole({
+        headers: req.headers, // Pass request headers for authentication
+        body: {
+          memberId: userId, // Better Auth expects 'memberId' not 'userId'
+          organizationId,
+          role,
+        },
+      });
+
+      if (result.error) {
+        console.error('Better Auth updateMemberRole error:', result.error);
+        const statusCode = result.error.status === 'UNAUTHORIZED' ? 401 : 400;
+        return res.status(statusCode).json({ error: result.error.message });
+      }
+
+      console.log(`✓ Updated user ${userId} organization role to ${role}`);
+      res.json({ success: true, data: result.data });
+    } catch (error) {
+      console.error('Error updating user organization role:', error);
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Remove user from organization
+   */
+  static async removeUserFromOrganization(req, res) {
+    try {
+      const { userId } = req.params;
+      const { organizationId } = req.body;
+
+      if (!userId || !organizationId) {
+        return res.status(400).json({
+          error: 'userId and organizationId are required',
+        });
+      }
+
+      console.log(
+        `Removing user ${userId} from organization ${organizationId}`,
+      );
+
+      // Use better-auth API to remove member
+      const result = await auth.api.removeMember({
+        headers: req.headers, // Pass request headers for authentication
+        body: {
+          memberIdOrEmail: userId, // Better Auth expects 'memberIdOrEmail' not 'userId'
+          organizationId,
+        },
+      });
+
+      if (result.error) {
+        console.error('Better Auth removeMember error:', result.error);
+        const statusCode = result.error.status === 'UNAUTHORIZED' ? 401 : 400;
+        return res.status(statusCode).json({ error: result.error.message });
+      }
+
+      console.log(`✓ Removed user ${userId} from organization`);
+      res.json({ success: true, message: 'User removed from organization' });
+    } catch (error) {
+      console.error('Error removing user from organization:', error);
+      res.status(500).json({ error: error.message });
     }
   }
 

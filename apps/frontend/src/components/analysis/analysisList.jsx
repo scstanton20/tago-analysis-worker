@@ -58,6 +58,21 @@ export default function AnalysisList({
     return array;
   }, [analysesToShow]);
 
+  // Calculate total accessible analyses (not all analyses in system)
+  const totalAccessibleAnalyses = useMemo(() => {
+    if (isAdmin) {
+      // Admin can see all analyses
+      return Object.keys(allAnalyses).length;
+    }
+
+    // Non-admin: count only analyses in accessible teams (uncategorized is just a regular team)
+    const accessibleTeamIds = accessibleTeams?.map((team) => team.id) || [];
+
+    return Object.values(allAnalyses).filter(
+      (analysis) => analysis && accessibleTeamIds.includes(analysis.teamId),
+    ).length;
+  }, [allAnalyses, isAdmin, accessibleTeams]);
+
   // Helper function to get team info
   const getTeamInfo = (teamId) => {
     if (!teamId || teamId === 'uncategorized') {
@@ -135,7 +150,6 @@ export default function AnalysisList({
   }
 
   const hasAnalyses = analysesArray.length > 0;
-  const totalAnalyses = Object.keys(allAnalyses).length;
 
   // Check if user has no team access (non-admin users only)
   const hasNoTeamAccess =
@@ -175,7 +189,7 @@ export default function AnalysisList({
             <Text size="sm" c="dimmed" mt={4}>
               {hasAnalyses
                 ? selectedTeam
-                  ? `Showing ${analysesArray.length} of ${totalAnalyses} analyses`
+                  ? `Showing ${analysesArray.length} of ${totalAccessibleAnalyses} analyses`
                   : `${analysesArray.length} ${analysesArray.length === 1 ? 'analysis' : ''}${analysesArray.length !== 1 ? 'analyses' : ''} available`
                 : selectedTeam
                   ? 'No analyses in this team'
@@ -262,7 +276,7 @@ export default function AnalysisList({
                   <Text c="dimmed" size="md" mb="xs">
                     {selectedTeam
                       ? 'No analyses found in this team'
-                      : totalAnalyses === 0
+                      : totalAccessibleAnalyses === 0
                         ? 'No analyses available'
                         : 'Loading analyses...'}
                   </Text>
@@ -270,7 +284,7 @@ export default function AnalysisList({
                   <Text c="dimmed" size="sm">
                     {selectedTeam
                       ? 'Try selecting a different team or create a new analysis here.'
-                      : totalAnalyses === 0
+                      : totalAccessibleAnalyses === 0
                         ? 'Upload an analysis file to get started.'
                         : 'Please wait while analyses load from the server.'}
                   </Text>

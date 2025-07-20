@@ -70,7 +70,7 @@ function AppLoadingOverlay({ message, submessage, error, showRetry }) {
 }
 
 function AppContent() {
-  const { analyses, getTeam, connectionStatus } = useSSE();
+  const { analyses, connectionStatus } = useSSE();
   const { isAdmin, isTeamMember } = useAuth();
   const { canUploadToAnyTeam } = usePermissions();
 
@@ -122,9 +122,6 @@ function AppContent() {
     });
     return filteredAnalyses;
   };
-
-  // Get current team using object lookup
-  const currentTeam = selectedTeam ? getTeam(selectedTeam) : null;
 
   const connectionFailed = connectionStatus === 'failed';
 
@@ -282,10 +279,7 @@ function AppContent() {
                 />
               }
             >
-              <AnalysisCreator
-                targetTeam={selectedTeam}
-                teamName={currentTeam?.name || 'All Teams'}
-              />
+              <AnalysisCreator targetTeam={selectedTeam} />
             </Suspense>
           )}
           <Suspense

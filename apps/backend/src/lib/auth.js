@@ -7,14 +7,6 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import config from '../config/default.js';
-import {
-  ac,
-  member,
-  contributor,
-  teamLeader,
-  admin as adminRole,
-  owner,
-} from './permissions.js';
 
 // Ensure the storage directory exists
 const dbPath = path.join(config.storage.base, 'auth.db');
@@ -65,14 +57,6 @@ export const auth = betterAuth({
         enabled: true,
         maximumTeams: 50, // Allow many departments/teams
         allowRemovingAllTeams: false, // Keep at least one team
-      },
-      ac, // Access control with custom permissions
-      roles: {
-        member,
-        contributor,
-        teamLeader,
-        admin: adminRole,
-        owner,
       },
     }),
     admin({

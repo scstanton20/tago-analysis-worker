@@ -3,7 +3,9 @@ import { Router } from 'express';
 import * as analysisController from '../controllers/analysisController.js';
 import {
   authMiddleware,
-  requirePermission,
+  extractAnalysisTeam,
+  requireTeamPermission,
+  requireAnyTeamPermission,
 } from '../middleware/betterAuthMiddleware.js';
 import {
   fileOperationLimiter,
@@ -73,7 +75,7 @@ const asyncHandler = (fn) => (req, res, next) => {
 router.post(
   '/upload',
   uploadLimiter,
-  requirePermission('upload_analyses'),
+  requireTeamPermission('upload_analyses'),
   asyncHandler(analysisController.uploadAnalysis),
 );
 /**
@@ -108,7 +110,9 @@ router.post(
 router.get(
   '/',
   fileOperationLimiter,
-  requirePermission('view_analyses'),
+  // For listing all analyses, allow if user has view permission in ANY team
+  // The controller will filter analyses based on user's team memberships
+  requireAnyTeamPermission('view_analyses'),
   asyncHandler(analysisController.getAnalyses),
 );
 /**
@@ -164,7 +168,8 @@ router.get(
 router.post(
   '/:fileName/run',
   analysisRunLimiter,
-  requirePermission('run_analyses'),
+  extractAnalysisTeam,
+  requireTeamPermission('run_analyses'),
   asyncHandler(analysisController.runAnalysis),
 );
 /**
@@ -207,31 +212,36 @@ router.post(
 router.post(
   '/:fileName/stop',
   analysisRunLimiter,
-  requirePermission('view_analyses'),
+  extractAnalysisTeam,
+  requireTeamPermission('run_analyses'),
   asyncHandler(analysisController.stopAnalysis),
 );
 router.delete(
   '/:fileName',
   deletionLimiter,
-  requirePermission('view_analyses'),
+  extractAnalysisTeam,
+  requireTeamPermission('delete_analyses'),
   asyncHandler(analysisController.deleteAnalysis),
 );
 router.get(
   '/:fileName/content',
   fileOperationLimiter,
-  requirePermission('view_analyses'),
+  extractAnalysisTeam,
+  requireTeamPermission('view_analyses'),
   asyncHandler(analysisController.getAnalysisContent),
 );
 router.put(
   '/:fileName',
   fileOperationLimiter,
-  requirePermission('view_analyses'),
+  extractAnalysisTeam,
+  requireTeamPermission('edit_analyses'),
   asyncHandler(analysisController.updateAnalysis),
 );
 router.put(
   '/:fileName/rename',
   fileOperationLimiter,
-  requirePermission('view_analyses'),
+  extractAnalysisTeam,
+  requireTeamPermission('edit_analyses'),
   asyncHandler(analysisController.renameAnalysis),
 );
 /**
@@ -291,7 +301,8 @@ router.put(
 router.get(
   '/:fileName/download',
   fileOperationLimiter,
-  requirePermission('view_analyses'),
+  extractAnalysisTeam,
+  requireTeamPermission('download_analyses'),
   asyncHandler(analysisController.downloadAnalysis),
 );
 
@@ -299,32 +310,37 @@ router.get(
 router.get(
   '/:fileName/environment',
   fileOperationLimiter,
-  requirePermission('view_analyses'),
+  extractAnalysisTeam,
+  requireTeamPermission('view_analyses'),
   asyncHandler(analysisController.getEnvironment),
 );
 router.put(
   '/:fileName/environment',
   fileOperationLimiter,
-  requirePermission('view_analyses'),
+  extractAnalysisTeam,
+  requireTeamPermission('edit_analyses'),
   asyncHandler(analysisController.updateEnvironment),
 );
 
 // Logs management routes
 router.get(
   '/:fileName/logs',
-  requirePermission('view_analyses'),
+  extractAnalysisTeam,
+  requireTeamPermission('view_analyses'),
   asyncHandler(analysisController.getLogs),
 );
 router.get(
   '/:fileName/logs/download',
   fileOperationLimiter,
-  requirePermission('view_analyses'),
+  extractAnalysisTeam,
+  requireTeamPermission('view_analyses'),
   asyncHandler(analysisController.downloadLogs),
 );
 router.delete(
   '/:fileName/logs',
   deletionLimiter,
-  requirePermission('view_analyses'),
+  extractAnalysisTeam,
+  requireTeamPermission('edit_analyses'),
   asyncHandler(analysisController.clearLogs),
 );
 
@@ -385,7 +401,8 @@ router.delete(
 router.get(
   '/:fileName/versions',
   versionOperationLimiter,
-  requirePermission('view_analyses'),
+  extractAnalysisTeam,
+  requireTeamPermission('view_analyses'),
   asyncHandler(analysisController.getVersions),
 );
 
@@ -458,7 +475,8 @@ router.get(
 router.post(
   '/:fileName/rollback',
   versionOperationLimiter,
-  requirePermission('view_analyses'),
+  extractAnalysisTeam,
+  requireTeamPermission('edit_analyses'),
   asyncHandler(analysisController.rollbackToVersion),
 );
 
