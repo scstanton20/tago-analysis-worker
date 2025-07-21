@@ -20,6 +20,7 @@ import {
 import { signIn, signInPasskey } from '../../lib/auth.js';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import Logo from '../logo';
+import PasswordOnboarding from './passwordOnboarding';
 
 export default function LoginPage() {
   const notify = useNotifications();
@@ -31,6 +32,8 @@ export default function LoginPage() {
   const [passkeyLoading, setPasskeyLoading] = useState(false);
   const [error, setError] = useState('');
   const [isWebAuthnSupported, setIsWebAuthnSupported] = useState(false);
+  const [showPasswordOnboarding, setShowPasswordOnboarding] = useState(false);
+  const [passwordOnboardingUser, setPasswordOnboardingUser] = useState('');
 
   // Handle password manager autofill
   useEffect(() => {
@@ -100,12 +103,24 @@ export default function LoginPage() {
       }
 
       if (result.error) {
+        if (result.error.message === 'REQUIRES_PASSWORD_CHANGE') {
+          // Handle 428 - show password onboarding
+          setShowPasswordOnboarding(true);
+          setPasswordOnboardingUser(formData.username);
+          return;
+        }
         throw new Error(result.error.message);
       }
 
       // Show success notification - Better Auth will handle the redirect automatically
       notify.success('Welcome back! You have been signed in successfully.');
     } catch (err) {
+      if (err.message === 'REQUIRES_PASSWORD_CHANGE') {
+        // Handle 428 - show password onboarding
+        setShowPasswordOnboarding(true);
+        setPasswordOnboardingUser(formData.username);
+        return;
+      }
       setError(err.message || 'Login failed');
     } finally {
       setLoading(false);
@@ -115,6 +130,16 @@ export default function LoginPage() {
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
     if (error) setError('');
+  };
+
+  const handlePasswordOnboardingSuccess = () => {
+    setShowPasswordOnboarding(false);
+    setPasswordOnboardingUser('');
+    notify.success(
+      'Password changed successfully! Welcome to the application.',
+    );
+    // Trigger auth refresh to update session
+    window.dispatchEvent(new Event('auth-change'));
   };
 
   // Check WebAuthn support on component mount
@@ -158,6 +183,16 @@ export default function LoginPage() {
       setPasskeyLoading(false);
     }
   };
+
+  // Show password onboarding if required
+  if (showPasswordOnboarding) {
+    return (
+      <PasswordOnboarding
+        username={passwordOnboardingUser}
+        onSuccess={handlePasswordOnboardingSuccess}
+      />
+    );
+  }
 
   return (
     <Container size="xs" style={{ minHeight: '100vh' }}>

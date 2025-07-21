@@ -42,7 +42,7 @@ import TeamManagementModal from './modals/teamManagementModal';
 import UserManagementModal from './modals/userManagementModal';
 import ProfileModal from './modals/profileModal';
 import { teamService } from '../services/teamService';
-import { useAuth } from '../contexts/AuthProvider';
+import { useAuth } from '../hooks/useAuth';
 import { usePermissions } from '../hooks/usePermissions';
 
 // Sortable Team Item
@@ -198,10 +198,21 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
 
     // For non-admin users, filter teams based on permissions
     return allTeams.filter((team) => {
-      // For both system and custom teams, check if user has access
-      return canAccessTeam(team.id);
+      // Check if user has access to this team
+      if (!canAccessTeam(team.id)) {
+        return false;
+      }
+
+      // Additional check for Uncategorized team: only show if it has analyses
+      if (team.isSystem && team.name === 'Uncategorized') {
+        const analysisCount = getTeamAnalysisCount(team.id);
+        return analysisCount > 0;
+      }
+
+      // For all other teams, show if user has access
+      return true;
     });
-  }, [teams, hasAdminPerms, canAccessTeam]);
+  }, [teams, hasAdminPerms, canAccessTeam, getTeamAnalysisCount]);
 
   // Use the efficient count function from WebSocket hook
   const getAnalysisCount = (teamId) => {

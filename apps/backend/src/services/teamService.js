@@ -128,16 +128,35 @@ class TeamService {
             .get(deptId, this.organizationId);
 
           if (!existingTeam) {
-            // Create team with same ID as department
+            // Create team with same ID as department and migrate properties
             db.prepare(
-              'INSERT INTO team (id, name, organizationId, createdAt) VALUES (?, ?, ?, ?)',
+              'INSERT INTO team (id, name, organizationId, createdAt, color, order_index, is_system) VALUES (?, ?, ?, ?, ?, ?, ?)',
             ).run(
               deptId,
               dept.name,
               this.organizationId,
               new Date().toISOString(),
+              dept.color || '#3B82F6', // Default blue color if not specified
+              dept.order || 0, // Default order if not specified
+              dept.isSystem ? 1 : 0, // Convert boolean to integer
             );
-            console.log(`Created team "${dept.name}" with ID: ${deptId}`);
+            console.log(
+              `Created team "${dept.name}" with ID: ${deptId}, color: ${dept.color}, order: ${dept.order}, isSystem: ${dept.isSystem}`,
+            );
+          } else {
+            // Update existing team with migrated properties if they are missing
+            db.prepare(
+              'UPDATE team SET color = ?, order_index = ?, is_system = ? WHERE id = ? AND organizationId = ?',
+            ).run(
+              dept.color || '#3B82F6', // Default blue color if not specified
+              dept.order || 0, // Default order if not specified
+              dept.isSystem ? 1 : 0, // Convert boolean to integer
+              deptId,
+              this.organizationId,
+            );
+            console.log(
+              `Updated existing team "${dept.name}" with migrated properties`,
+            );
           }
 
           departmentToTeamMap[deptId] = deptId;

@@ -1,4 +1,4 @@
-import { useAuth } from '../contexts/AuthProvider.jsx';
+import { useAuth } from './useAuth';
 import { useSSE } from '../contexts/sseContext/index.js';
 import { authClient } from '../lib/auth.js';
 

@@ -3,6 +3,7 @@ import {
   Modal,
   Stack,
   Group,
+  CopyButton,
   Button,
   Text,
   Table,
@@ -19,6 +20,7 @@ import {
   Divider,
   Center,
   Checkbox,
+  Tooltip,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import {
@@ -32,12 +34,39 @@ import {
   IconCircleCheck,
   IconDotsVertical,
   IconDeviceLaptop,
+  IconCopy,
+  IconCheck,
 } from '@tabler/icons-react';
-import { useAuth } from '../../contexts/AuthProvider';
+import { useAuth } from '../../hooks/useAuth';
 import { admin, organization } from '../../lib/auth';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import { userService } from '../../services/userService';
 import UserSessionsModal from './userSessionsModal';
+
+// Generate a secure random password for new users
+function generateSecurePassword() {
+  const length = 12;
+  const charset =
+    'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+  let password = '';
+
+  // Ensure at least one of each type
+  password += 'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random() * 26)]; // lowercase
+  password += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)]; // uppercase
+  password += '0123456789'[Math.floor(Math.random() * 10)]; // number
+  password += '!@#$%^&*'[Math.floor(Math.random() * 8)]; // special char
+
+  // Fill remaining length
+  for (let i = 4; i < length; i++) {
+    password += charset[Math.floor(Math.random() * charset.length)];
+  }
+
+  // Shuffle the password
+  return password
+    .split('')
+    .sort(() => Math.random() - 0.5)
+    .join('');
+}
 
 export default function UserManagementModal({ opened, onClose }) {
   const {
@@ -100,10 +129,6 @@ export default function UserManagementModal({ opened, onClose }) {
           return 'Username can only contain letters, numbers, hyphens, and underscores';
         return null;
       },
-      password: (value) =>
-        !editingUser && (!value || value.length < 8)
-          ? 'Password must be at least 8 characters'
-          : null,
     },
   });
 
@@ -447,6 +472,9 @@ export default function UserManagementModal({ opened, onClose }) {
           }
         }
       } else {
+        // Generate auto password for new user
+        const autoPassword = generateSecurePassword();
+
         // Create user using Better Auth admin createUser to avoid auto-login
         console.log('Creating user with values:', {
           name: values.name,
@@ -455,25 +483,27 @@ export default function UserManagementModal({ opened, onClose }) {
           role: values.role,
         });
 
-        // Create user with all data including username
+        // Create user with basic data first
         const createUserData = {
           name: values.name,
           email: values.email,
-          password: values.password,
+          password: autoPassword,
           role: values.role,
         };
 
         // Add username to data field if provided
         if (values.username && values.username.trim()) {
           createUserData.data = {
-            username: values.username,
-            displayUsername: values.username, // Both fields are needed for username plugin
+            username: values.username.trim(),
+            displayUsername: values.username.trim(), // Both fields are needed for username plugin
           };
         }
 
+        console.log('Creating user with data:', createUserData);
+        console.log('Username provided:', values.username);
         const result = await admin.createUser(createUserData);
-
         console.log('Create user result:', result);
+        console.log('Created user data:', result.data?.user);
 
         if (result.error) {
           // Handle specific duplicate errors with user-friendly messages
@@ -498,6 +528,40 @@ export default function UserManagementModal({ opened, onClose }) {
           }
 
           throw new Error(errorMessage);
+        }
+
+        // Set password change requirement for the new user
+        if (result.data?.user?.id) {
+          try {
+            console.log('Setting password change requirement for new user...');
+            const updateResponse = await fetch(
+              `/api/users/${result.data.user.id}/require-password-change`,
+              {
+                method: 'PATCH',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                credentials: 'include',
+              },
+            );
+
+            if (updateResponse.ok) {
+              console.log(
+                '✓ Successfully set password change requirement for new user',
+              );
+            } else {
+              console.warn(
+                'Could not set password change requirement via API:',
+                await updateResponse.text(),
+              );
+            }
+          } catch (updateError) {
+            console.warn(
+              'Could not set password change requirement:',
+              updateError,
+            );
+            // Continue anyway - user was created successfully
+          }
         }
 
         // Handle organization membership and team assignments based on role and team selection
@@ -581,6 +645,7 @@ export default function UserManagementModal({ opened, onClose }) {
         setCreatedUserInfo({
           name: values.name,
           email: values.email,
+          tempPassword: autoPassword,
         });
 
         await loadUsers();
@@ -872,8 +937,36 @@ export default function UserManagementModal({ opened, onClose }) {
                   <Stack gap="xs">
                     <Text fw={500}>Name: {createdUserInfo.name}</Text>
                     <Text fw={500}>Email: {createdUserInfo.email}</Text>
+                    <Text fw={500}>
+                      Temporary Password: {createdUserInfo.tempPassword}
+                      <CopyButton
+                        value={createdUserInfo.tempPassword}
+                        timeout={2000}
+                      >
+                        {({ copied, copy }) => (
+                          <Tooltip
+                            label={copied ? 'Copied' : 'Copy'}
+                            withArrow
+                            position="right"
+                          >
+                            <ActionIcon
+                              color={copied ? 'teal' : 'gray'}
+                              variant="subtle"
+                              onClick={copy}
+                            >
+                              {copied ? (
+                                <IconCheck size={16} />
+                              ) : (
+                                <IconCopy size={16} />
+                              )}
+                            </ActionIcon>
+                          </Tooltip>
+                        )}
+                      </CopyButton>
+                    </Text>
                     <Text size="sm" c="dimmed">
-                      The user can now sign in with their email and password.
+                      The user must sign in with this temporary password and
+                      will be required to change it on first login.
                     </Text>
                   </Stack>
                 </Alert>
@@ -908,10 +1001,11 @@ export default function UserManagementModal({ opened, onClose }) {
                 <Table striped highlightOnHover>
                   <Table.Thead>
                     <Table.Tr>
-                      <Table.Th style={{ width: '25%' }}>Name</Table.Th>
-                      <Table.Th style={{ width: '30%' }}>Email</Table.Th>
+                      <Table.Th style={{ width: '20%' }}>Name</Table.Th>
+                      <Table.Th style={{ width: '25%' }}>Email</Table.Th>
                       <Table.Th style={{ width: '15%' }}>Username</Table.Th>
-                      <Table.Th style={{ width: '20%' }}>Role</Table.Th>
+                      <Table.Th style={{ width: '15%' }}>Role</Table.Th>
+                      <Table.Th style={{ width: '15%' }}>Status</Table.Th>
                       <Table.Th style={{ width: '10%' }}>Actions</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
@@ -989,6 +1083,23 @@ export default function UserManagementModal({ opened, onClose }) {
                               </Badge>
                             )}
                           </Stack>
+                        </Table.Td>
+                        <Table.Td>
+                          <Badge
+                            variant="light"
+                            color={
+                              user.requiresPasswordChange === false ||
+                              user.requiresPasswordChange === 0
+                                ? 'green'
+                                : 'orange'
+                            }
+                            size="sm"
+                          >
+                            {user.requiresPasswordChange === false ||
+                            user.requiresPasswordChange === 0
+                              ? 'Active'
+                              : 'Pending'}
+                          </Badge>
                         </Table.Td>
                         <Table.Td>
                           <Menu shadow="md" width={200} closeOnItemClick={true}>
@@ -1141,16 +1252,13 @@ export default function UserManagementModal({ opened, onClose }) {
                     error={form.errors.username}
                   />
 
-                  <PasswordInput
-                    label={
-                      editingUser
-                        ? 'New Password (leave blank to keep current)'
-                        : 'Password'
-                    }
-                    placeholder="Enter password"
-                    required={!editingUser}
-                    {...form.getInputProps('password')}
-                  />
+                  {editingUser && (
+                    <PasswordInput
+                      label="New Password (leave blank to keep current)"
+                      placeholder="Enter password"
+                      {...form.getInputProps('password')}
+                    />
+                  )}
 
                   <Select
                     label="Role"

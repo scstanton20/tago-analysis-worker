@@ -3,7 +3,6 @@ import express from 'express';
 import http from 'http';
 import cors from 'cors';
 import helmet from 'helmet';
-import cookieParser from 'cookie-parser';
 import crypto from 'crypto';
 import fileUpload from 'express-fileupload';
 import config from './config/default.js';
@@ -21,7 +20,7 @@ import teamRoutes from './routes/teamRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import sseRoutes from './routes/sseRoutes.js';
 import { specs, swaggerUi } from './docs/swagger.js';
-import { toNodeHandler } from 'better-auth/node';
+import { toNodeHandler, fromNodeHeaders } from 'better-auth/node';
 import { auth } from './lib/auth.js';
 import { execSync } from 'child_process';
 import Database from 'better-sqlite3';
@@ -65,7 +64,6 @@ if (process.env.NODE_ENV === 'development') {
   );
 }
 
-app.use(cookieParser());
 app.use(fileUpload());
 app.set('trust proxy', 1);
 
@@ -155,6 +153,25 @@ async function runMigrations() {
         console.log('✓ Permissions column already exists in member table');
       }
 
+      // Check if member table has permissions column, add if missing
+      console.log('Checking user table schema...');
+      const userTableInfo = db.prepare('PRAGMA table_info(user)').all();
+      const hasPasswordChangeColumn = userTableInfo.some(
+        (column) => column.name === 'requiresPasswordChange',
+      );
+
+      if (!hasPasswordChangeColumn) {
+        console.log('Adding requiresPasswordChange column to user table...');
+        db.prepare(
+          'ALTER TABLE user ADD COLUMN requiresPasswordChange INTEGER DEFAULT 0',
+        ).run();
+        console.log('✓ RequiresPasswordChange column added to user table');
+      } else {
+        console.log(
+          '✓ RequiresPasswordChange column already exists in user table',
+        );
+      }
+
       // Rename any existing "Default Team" to "Uncategorized"
       const defaultTeamExists = db
         .prepare('SELECT id FROM team WHERE name = ?')
@@ -179,6 +196,28 @@ async function runMigrations() {
           'Uncategorized',
         );
         console.log('✓ Uncategorized teams marked as system teams');
+      }
+
+      // Update existing users to have requiresPasswordChange = false (they've already set their passwords)
+      try {
+        console.log('Updating existing users requiresPasswordChange field...');
+        const updateResult = db
+          .prepare(
+            'UPDATE user SET requiresPasswordChange = 0 WHERE requiresPasswordChange IS NULL',
+          )
+          .run();
+        if (updateResult.changes > 0) {
+          console.log(`✓ Updated ${updateResult.changes} existing users`);
+        } else {
+          console.log(
+            '✓ All existing users already have requiresPasswordChange field set',
+          );
+        }
+      } catch (updateError) {
+        console.warn(
+          '⚠ Could not update existing users:',
+          updateError.message,
+        );
       }
     } finally {
       db.close();
@@ -450,6 +489,89 @@ async function startServer() {
     // SSE routes
     app.use(`${API_PREFIX}/sse`, sseRoutes);
     console.log(`✓ SSE routes mounted at ${API_PREFIX}/sse`);
+
+    // Debug endpoint to check user data
+    app.get(`${API_PREFIX}/debug/user`, async (req, res) => {
+      try {
+        const session = await auth.api.getSession({
+          headers: fromNodeHeaders(req.headers),
+        });
+
+        if (!session?.user) {
+          return res.status(401).json({ error: 'Not authenticated' });
+        }
+
+        // Also check raw database data
+        let rawUserData = null;
+        try {
+          const Database = (await import('better-sqlite3')).default;
+          const path = (await import('path')).default;
+          const config = (await import('./config/default.js')).default;
+
+          const dbPath = path.join(config.storage.base, 'auth.db');
+          const db = new Database(dbPath, { readonly: true });
+
+          rawUserData = db
+            .prepare('SELECT * FROM user WHERE id = ?')
+            .get(session.user.id);
+          db.close();
+        } catch (dbError) {
+          console.warn('Could not fetch raw user data:', dbError);
+        }
+
+        console.log('🔍 Debug user data:', {
+          betterAuthUser: session.user,
+          rawDatabaseUser: rawUserData,
+          session: session.session,
+        });
+
+        res.json({
+          betterAuthUser: session.user,
+          rawDatabaseUser: rawUserData,
+          session: session.session,
+        });
+      } catch (error) {
+        console.error('Debug endpoint error:', error);
+        res.status(500).json({ error: error.message });
+      }
+    });
+
+    // Test endpoint to manually set password change requirement
+    app.post(
+      `${API_PREFIX}/debug/set-password-change/:userId`,
+      async (req, res) => {
+        try {
+          const { userId } = req.params;
+          const { requiresPasswordChange = true } = req.body;
+
+          const Database = (await import('better-sqlite3')).default;
+          const path = (await import('path')).default;
+          const config = (await import('./config/default.js')).default;
+
+          const dbPath = path.join(config.storage.base, 'auth.db');
+          const db = new Database(dbPath);
+
+          const updateResult = db
+            .prepare('UPDATE user SET requiresPasswordChange = ? WHERE id = ?')
+            .run(requiresPasswordChange ? 1 : 0, userId);
+
+          db.close();
+
+          if (updateResult.changes === 0) {
+            return res.status(404).json({ error: 'User not found' });
+          }
+
+          res.json({
+            success: true,
+            message: `Set requiresPasswordChange=${requiresPasswordChange} for user ${userId}`,
+            changedRows: updateResult.changes,
+          });
+        } catch (error) {
+          console.error('Debug set password change error:', error);
+          res.status(500).json({ error: error.message });
+        }
+      },
+    );
 
     // Swagger API Documentation
     app.use(`${API_PREFIX}/docs`, swaggerUi.serve, swaggerUi.setup(specs));

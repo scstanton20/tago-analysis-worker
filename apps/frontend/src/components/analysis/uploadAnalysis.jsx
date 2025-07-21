@@ -56,7 +56,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
   const { loadingAnalyses, analyses } = useSSE();
 
   // Permissions and team data
-  const { getUploadableTeams, isAdmin, checkUserPermission } = usePermissions();
+  const { getUploadableTeams, isAdmin } = usePermissions();
 
   // Notifications
   const notify = useNotifications();

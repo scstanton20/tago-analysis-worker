@@ -28,7 +28,7 @@ import {
   IconTrash,
   IconFingerprint,
 } from '@tabler/icons-react';
-import { useAuth } from '../../contexts/AuthProvider';
+import { useAuth } from '../../hooks/useAuth';
 import { addPasskey, passkey } from '../../lib/auth';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 

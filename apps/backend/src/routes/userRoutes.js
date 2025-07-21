@@ -13,8 +13,23 @@ router.use(authMiddleware);
 // Get user team memberships (users can get their own, admins can get any)
 router.get('/:userId/team-memberships', UserController.getUserTeamMemberships);
 
+// Clear password change requirement (used after password onboarding) - allows users to clear their own
+router.patch(
+  '/:userId/clear-password-change',
+  UserController.clearRequirePasswordChange,
+);
+
+// Set initial password for first-time users (password onboarding)
+router.post('/set-initial-password', UserController.setInitialPassword);
+
 // Admin-only routes
 router.use(requireAdmin);
+
+// Set user to require password change
+router.patch(
+  '/:userId/require-password-change',
+  UserController.setRequirePasswordChange,
+);
 
 // Add user to organization endpoint
 router.post('/add-to-organization', UserController.addToOrganization);

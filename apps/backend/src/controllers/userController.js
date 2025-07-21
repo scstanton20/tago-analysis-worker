@@ -578,6 +578,149 @@ class UserController {
       res.status(500).json({ error: error.message });
     }
   }
+
+  /**
+   * Set requiresPasswordChange flag for a user
+   */
+  static async setRequirePasswordChange(req, res) {
+    try {
+      const { userId } = req.params;
+
+      if (!userId) {
+        return res.status(400).json({ error: 'userId is required' });
+      }
+
+      // Direct database update to set requiresPasswordChange = true
+      const dbPath = path.join(config.storage.base, 'auth.db');
+      const db = new Database(dbPath);
+
+      try {
+        const updateResult = db
+          .prepare('UPDATE user SET requiresPasswordChange = true WHERE id = ?')
+          .run(userId);
+
+        if (updateResult.changes === 0) {
+          return res.status(404).json({ error: 'User not found' });
+        }
+
+        console.log(`✓ Set requiresPasswordChange=true for user ${userId}`);
+        res.json({ success: true, message: 'Password change requirement set' });
+      } finally {
+        db.close();
+      }
+    } catch (error) {
+      console.error('Error setting password change requirement:', error);
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Clear requiresPasswordChange flag for a user (after they change password)
+   */
+  static async clearRequirePasswordChange(req, res) {
+    try {
+      const { userId } = req.params;
+
+      if (!userId) {
+        return res.status(400).json({ error: 'userId is required' });
+      }
+
+      // Direct database update to set requiresPasswordChange = false
+      const dbPath = path.join(config.storage.base, 'auth.db');
+      const db = new Database(dbPath);
+
+      try {
+        const updateResult = db
+          .prepare('UPDATE user SET requiresPasswordChange = 0 WHERE id = ?')
+          .run(userId);
+
+        if (updateResult.changes === 0) {
+          return res.status(404).json({ error: 'User not found' });
+        }
+
+        console.log(`✓ Cleared requiresPasswordChange for user ${userId}`);
+        res.json({
+          success: true,
+          message: 'Password change requirement cleared',
+        });
+      } finally {
+        db.close();
+      }
+    } catch (error) {
+      console.error('Error clearing password change requirement:', error);
+      res.status(500).json({ error: error.message });
+    }
+  }
+
+  /**
+   * Set new password for first-time users (password onboarding)
+   */
+  static async setInitialPassword(req, res) {
+    try {
+      const { newPassword } = req.body;
+
+      if (!newPassword) {
+        return res.status(400).json({ error: 'newPassword is required' });
+      }
+
+      if (newPassword.length < 6) {
+        return res
+          .status(400)
+          .json({ error: 'Password must be at least 6 characters long' });
+      }
+
+      // Get current user from session
+      if (!req.user?.id) {
+        return res.status(401).json({ error: 'User not authenticated' });
+      }
+
+      console.log(`🔐 Setting initial password for user ${req.user.id}`);
+
+      // Use better-auth's internal adapter to update password
+      try {
+        const ctx = await auth.$context;
+        const hashedPassword = await ctx.password.hash(newPassword);
+        await ctx.internalAdapter.updatePassword(req.user.id, hashedPassword);
+        console.log(`✓ Password updated successfully for user ${req.user.id}`);
+      } catch (passwordError) {
+        console.error('Error updating password:', passwordError);
+        return res.status(500).json({
+          error: 'Failed to update password',
+        });
+      }
+
+      // Clear the requiresPasswordChange flag in database
+      const dbPath = path.join(config.storage.base, 'auth.db');
+      const db = new Database(dbPath);
+
+      try {
+        const updateResult = db
+          .prepare('UPDATE user SET requiresPasswordChange = 0 WHERE id = ?')
+          .run(req.user.id);
+
+        if (updateResult.changes === 0) {
+          console.warn(
+            `No user found with ID ${req.user.id} to clear password flag`,
+          );
+        } else {
+          console.log(
+            `✓ Cleared requiresPasswordChange flag for user ${req.user.id}`,
+          );
+        }
+      } finally {
+        db.close();
+      }
+
+      console.log(`✓ Password onboarding completed for user ${req.user.id}`);
+      res.json({
+        success: true,
+        message: 'Password set successfully',
+      });
+    } catch (error) {
+      console.error('Error setting initial password:', error);
+      res.status(500).json({ error: error.message });
+    }
+  }
 }
 
 export default UserController;

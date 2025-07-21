@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { SSEContext } from './context';
-import { useAuth } from '../AuthProvider';
+import { useAuth } from '../../hooks/useAuth';
 
 export function SSEProvider({ children }) {
   const { isAuthenticated } = useAuth();

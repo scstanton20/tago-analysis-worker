@@ -1,22 +1,12 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  useCallback,
-} from 'react';
+import { createContext, useEffect, useState, useCallback } from 'react';
 import { useSession, signOut, authClient } from '../lib/auth.js';
 import { notifications } from '@mantine/notifications';
+import PasswordOnboarding from '../components/auth/passwordOnboarding.jsx';
+import { fetchWithHeaders, handleResponse } from '../utils/apiUtils.js';
 
 const AuthContext = createContext();
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};
+export { AuthContext };
 
 export const AuthProvider = ({ children }) => {
   const { data: session, isPending: sessionLoading } = useSession();
@@ -25,6 +15,8 @@ export const AuthProvider = ({ children }) => {
   const [organizationId, setOrganizationId] = useState(null);
   const [userTeams, setUserTeams] = useState([]);
   const [membershipLoading, setMembershipLoading] = useState(false);
+  const [showPasswordOnboarding, setShowPasswordOnboarding] = useState(false);
+  const [passwordOnboardingUser, setPasswordOnboardingUser] = useState('');
 
   // Use manual session if available, otherwise fall back to useSession hook
   const currentSession = manualSession || session;
@@ -60,8 +52,28 @@ export const AuthProvider = ({ children }) => {
       }
     };
 
+    const handlePasswordChangeRequired = (event) => {
+      console.log(
+        '🚨 AuthProvider: Password change required event received:',
+        event.detail,
+      );
+      setShowPasswordOnboarding(true);
+      setPasswordOnboardingUser(event.detail.username);
+    };
+
     window.addEventListener('auth-change', handleAuthChange);
-    return () => window.removeEventListener('auth-change', handleAuthChange);
+    window.addEventListener(
+      'requiresPasswordChange',
+      handlePasswordChangeRequired,
+    );
+
+    return () => {
+      window.removeEventListener('auth-change', handleAuthChange);
+      window.removeEventListener(
+        'requiresPasswordChange',
+        handlePasswordChangeRequired,
+      );
+    };
   }, []);
 
   // Helper function to set active organization
@@ -124,33 +136,35 @@ export const AuthProvider = ({ children }) => {
         } else {
           // For regular users, fetch their specific team memberships via API
           try {
-            const teamMembershipsResponse = await fetch(
-              `/api/users/${user.id}/team-memberships`,
-              {
-                credentials: 'include',
-              },
+            console.log(user.id);
+            const teamMembershipsResponse = await fetchWithHeaders(
+              `/users/${user.id}/team-memberships`,
             );
 
-            if (teamMembershipsResponse.ok) {
-              const teamMembershipsData = await teamMembershipsResponse.json();
-              if (
-                teamMembershipsData.success &&
-                teamMembershipsData.data?.teams
-              ) {
-                setUserTeams(teamMembershipsData.data.teams);
-                console.log(
-                  `✓ Loaded ${teamMembershipsData.data.teams.length} team memberships for user`,
-                );
-              } else {
-                setUserTeams([]);
-              }
+            console.log(teamMembershipsResponse.status);
+            const teamMembershipsData = await handleResponse(
+              teamMembershipsResponse,
+              `/users/${user.id}/team-memberships`,
+              { credentials: 'include' },
+            );
+
+            if (
+              teamMembershipsData.success &&
+              teamMembershipsData.data?.teams
+            ) {
+              setUserTeams(teamMembershipsData.data.teams);
+              console.log(
+                `✓ Loaded ${teamMembershipsData.data.teams.length} team memberships for user`,
+              );
             } else {
-              console.warn('Failed to fetch user team memberships');
               setUserTeams([]);
             }
           } catch (fetchError) {
             console.warn('Error fetching user team memberships:', fetchError);
             setUserTeams([]);
+
+            // If this is a password change error, it will be handled by the global event
+            // that was dispatched by handleResponse
           }
         }
       } catch (teamsError) {
@@ -393,7 +407,49 @@ export const AuthProvider = ({ children }) => {
 
       return result.data;
     },
+    passwordOnboarding: async (newPassword) => {
+      try {
+        console.log('🔐 Setting initial password via server-side API');
+
+        // Use our server-side endpoint that handles both password setting and flag clearing
+        const response = await fetchWithHeaders('/users/set-initial-password', {
+          method: 'POST',
+          body: JSON.stringify({
+            newPassword: newPassword,
+          }),
+        });
+
+        const result = await handleResponse(
+          response,
+          '/users/set-initial-password',
+          { method: 'POST', body: JSON.stringify({ newPassword }) },
+        );
+
+        console.log('🔐 Password onboarding completed successfully:', result);
+        return result;
+      } catch (error) {
+        console.error('Password onboarding error:', error);
+        throw error;
+      }
+    },
   };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+      {showPasswordOnboarding && (
+        <>
+          <PasswordOnboarding
+            username={passwordOnboardingUser}
+            passwordOnboarding={value.passwordOnboarding}
+            onSuccess={() => {
+              console.log('🚨 AuthProvider: PasswordOnboarding completed');
+              setShowPasswordOnboarding(false);
+              setPasswordOnboardingUser('');
+            }}
+          />
+        </>
+      )}
+    </AuthContext.Provider>
+  );
 };

@@ -17,7 +17,8 @@ import { useDisclosure } from '@mantine/hooks';
 import { IconSun, IconMoon } from '@tabler/icons-react';
 import { useSSE } from './contexts/sseContext';
 import { SSEProvider } from './contexts/sseContext/provider';
-import { AuthProvider, useAuth } from './contexts/AuthProvider';
+import { AuthProvider } from './contexts/AuthProvider';
+import { useAuth } from './hooks/useAuth';
 import { usePermissions } from './hooks/usePermissions';
 // Import core components directly to avoid context timing issues
 import TeamSidebar from './components/teamSidebar';

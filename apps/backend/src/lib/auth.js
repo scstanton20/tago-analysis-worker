@@ -29,18 +29,22 @@ export const auth = betterAuth({
         type: 'string',
         defaultValue: 'user',
       },
+      requiresPasswordChange: {
+        type: 'boolean',
+        required: false,
+        defaultValue: false,
+      },
     },
   },
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: false,
   },
-  // session: {
-  //   cookieCache: {
-  //     enabled: true,
-  //     maxAge: 60, // 1 minute cache for balance between performance and security
-  //   },
-  // },
+  session: {
+    updateAge: 24 * 60 * 60, // 24 hours
+    expiresIn: 60 * 60 * 24 * 7, // 7 days
+  },
+  // Removed hooks - using Express middleware instead
   advanced: {
     crossSubDomainCookies: {
       enabled: false, // Enable if using subdomains
