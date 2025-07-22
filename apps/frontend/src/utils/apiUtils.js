@@ -57,28 +57,9 @@ export async function handleResponse(response, originalUrl, originalOptions) {
 
     // Handle 428 Precondition Required - Password change required
     if (response.status === 428 && errorData.requiresPasswordChange) {
-      console.log('🚨 apiUtils: 428 response detected, dispatching requiresPasswordChange event');
-      // Trigger password onboarding globally
-      const event = new CustomEvent('requiresPasswordChange', {
-        detail: {
-          username: errorData.username,
-          error: errorData.error,
-        },
-      });
-      window.dispatchEvent(event);
-      console.log('🚨 apiUtils: requiresPasswordChange event dispatched');
-
       const error = new Error(errorData.error || 'Password change required');
       error.requiresPasswordChange = true;
       error.username = errorData.username;
-      throw error;
-    }
-
-    // Handle special cases (legacy)
-    if (errorData.mustChangePassword) {
-      const error = new Error(errorData.error || 'Password change required');
-      error.mustChangePassword = true;
-      error.user = errorData.user;
       throw error;
     }
 

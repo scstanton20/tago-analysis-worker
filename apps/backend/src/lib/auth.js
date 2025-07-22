@@ -44,7 +44,26 @@ export const auth = betterAuth({
     updateAge: 24 * 60 * 60, // 24 hours
     expiresIn: 60 * 60 * 24 * 7, // 7 days
   },
-  // Removed hooks - using Express middleware instead
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user) => {
+          // Set requiresPasswordChange = 1 for all newly created users
+          return {
+            data: {
+              ...user,
+              requiresPasswordChange: 1,
+            },
+          };
+        },
+        after: async (user) => {
+          console.log(
+            `✓ User created with requiresPasswordChange=1: ${user.email}`,
+          );
+        },
+      },
+    },
+  },
   advanced: {
     crossSubDomainCookies: {
       enabled: false, // Enable if using subdomains

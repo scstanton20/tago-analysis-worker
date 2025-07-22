@@ -9,8 +9,11 @@ const AuthContext = createContext();
 export { AuthContext };
 
 export const AuthProvider = ({ children }) => {
-  const { data: session, isPending: sessionLoading } = useSession();
-  const [manualSession, setManualSession] = useState(null);
+  const {
+    data: session,
+    isPending: sessionLoading,
+    refetch: refetchSession,
+  } = useSession();
   const [organizationMembership, setOrganizationMembership] = useState(null);
   const [organizationId, setOrganizationId] = useState(null);
   const [userTeams, setUserTeams] = useState([]);
@@ -18,63 +21,57 @@ export const AuthProvider = ({ children }) => {
   const [showPasswordOnboarding, setShowPasswordOnboarding] = useState(false);
   const [passwordOnboardingUser, setPasswordOnboardingUser] = useState('');
 
-  // Use manual session if available, otherwise fall back to useSession hook
-  const currentSession = manualSession || session;
   // Better Auth returns session data in nested structure
-  const user = currentSession?.data?.user || currentSession?.user || null;
-  const sessionData =
-    currentSession?.data?.session || currentSession?.session || null;
+  const user = session?.data?.user || session?.user || null;
+  const sessionData = session?.data?.session || session?.session || null;
 
-  const isAuthenticated = !!(currentSession && user && sessionData);
-  const isLoading = sessionLoading && !manualSession;
+  const isAuthenticated = !!(session && user && sessionData);
+  const isLoading = sessionLoading;
 
-  // Listen for auth changes and manually fetch session
+  // Check if user requires password change from Better Auth session
+  useEffect(() => {
+    if (isAuthenticated && user?.requiresPasswordChange) {
+      console.log(
+        'AuthProvider: User requires password change:',
+        user?.email || user?.username,
+      );
+      setShowPasswordOnboarding(true);
+      setPasswordOnboardingUser(user?.username || user?.email || '');
+    }
+  }, [
+    isAuthenticated,
+    user?.requiresPasswordChange,
+    user?.email,
+    user?.username,
+  ]);
+
+  // Listen for auth changes and refetch session
   useEffect(() => {
     const handleAuthChange = async () => {
-      console.log('Auth change event detected, manually fetching session');
+      console.log('Auth change event detected, refetching session');
 
       try {
-        // Manually fetch the current session
-        const freshSession = await authClient.getSession();
-        console.log('Fresh session data:', freshSession);
-        setManualSession(freshSession);
+        // Use Better Auth's refetch function to update session
+        refetchSession();
 
         // Clear organization data when session changes
         setOrganizationMembership(null);
         setOrganizationId(null);
         setUserTeams([]);
       } catch (error) {
-        console.error('Error fetching fresh session:', error);
-        setManualSession(null);
+        console.error('Error refetching session:', error);
         setOrganizationMembership(null);
         setOrganizationId(null);
         setUserTeams([]);
       }
     };
 
-    const handlePasswordChangeRequired = (event) => {
-      console.log(
-        '🚨 AuthProvider: Password change required event received:',
-        event.detail,
-      );
-      setShowPasswordOnboarding(true);
-      setPasswordOnboardingUser(event.detail.username);
-    };
-
     window.addEventListener('auth-change', handleAuthChange);
-    window.addEventListener(
-      'requiresPasswordChange',
-      handlePasswordChangeRequired,
-    );
 
     return () => {
       window.removeEventListener('auth-change', handleAuthChange);
-      window.removeEventListener(
-        'requiresPasswordChange',
-        handlePasswordChangeRequired,
-      );
     };
-  }, []);
+  }, [refetchSession]);
 
   // Helper function to set active organization
   const loadOrganizationData = useCallback(async () => {
@@ -136,12 +133,10 @@ export const AuthProvider = ({ children }) => {
         } else {
           // For regular users, fetch their specific team memberships via API
           try {
-            console.log(user.id);
             const teamMembershipsResponse = await fetchWithHeaders(
               `/users/${user.id}/team-memberships`,
             );
 
-            console.log(teamMembershipsResponse.status);
             const teamMembershipsData = await handleResponse(
               teamMembershipsResponse,
               `/users/${user.id}/team-memberships`,
@@ -162,9 +157,6 @@ export const AuthProvider = ({ children }) => {
           } catch (fetchError) {
             console.warn('Error fetching user team memberships:', fetchError);
             setUserTeams([]);
-
-            // If this is a password change error, it will be handled by the global event
-            // that was dispatched by handleResponse
           }
         }
       } catch (teamsError) {
@@ -195,7 +187,7 @@ export const AuthProvider = ({ children }) => {
         const freshSession = await authClient.getSession();
 
         // If we had a session but now we don't, it was revoked
-        if (currentSession && !freshSession?.data?.session) {
+        if (session && !freshSession?.data?.session) {
           notifications.show({
             title: 'Session Expired',
             message:
@@ -203,9 +195,6 @@ export const AuthProvider = ({ children }) => {
             color: 'orange',
             autoClose: 5000,
           });
-
-          // Clear manual session and redirect to login
-          setManualSession(null);
 
           // Force a page refresh to ensure clean state
           setTimeout(() => {
@@ -221,7 +210,7 @@ export const AuthProvider = ({ children }) => {
     const interval = setInterval(validateSession, 30000);
 
     return () => clearInterval(interval);
-  }, [isAuthenticated, currentSession]);
+  }, [isAuthenticated, session]);
 
   // Team helper functions
   const isTeamMember = (teamId) => {
@@ -274,10 +263,9 @@ export const AuthProvider = ({ children }) => {
   // Force refresh all user data (session + team memberships)
   const refreshUserData = useCallback(async () => {
     try {
-      // Manually fetch the current session
-      const freshSession = await authClient.getSession();
+      // Use Better Auth's refetch function to update session
       console.log('Refreshing user data and session');
-      setManualSession(freshSession);
+      refetchSession();
 
       // Clear and reload organization data
       setOrganizationMembership(null);
@@ -289,13 +277,12 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('Error refreshing user data:', error);
     }
-  }, [loadOrganizationData]);
+  }, [loadOrganizationData, refetchSession]);
 
   // Profile and authentication functions
   const logout = async () => {
     await signOut();
-    // Clear manual session state and organization data
-    setManualSession(null);
+    // Clear organization data
     setOrganizationMembership(null);
     setOrganizationId(null);
     setUserTeams([]);
@@ -303,7 +290,7 @@ export const AuthProvider = ({ children }) => {
 
   const value = {
     user,
-    session: currentSession,
+    session: session,
     isAuthenticated,
     isLoading,
     isAdmin: user?.role === 'admin',
@@ -442,10 +429,21 @@ export const AuthProvider = ({ children }) => {
           <PasswordOnboarding
             username={passwordOnboardingUser}
             passwordOnboarding={value.passwordOnboarding}
-            onSuccess={() => {
+            onSuccess={async () => {
               console.log('🚨 AuthProvider: PasswordOnboarding completed');
               setShowPasswordOnboarding(false);
               setPasswordOnboardingUser('');
+
+              // Refresh session to remove requiresPasswordChange flag
+              try {
+                refetchSession();
+                console.log('✓ Session refreshed after password change');
+              } catch (error) {
+                console.error(
+                  'Error refreshing session after password change:',
+                  error,
+                );
+              }
             }}
           />
         </>

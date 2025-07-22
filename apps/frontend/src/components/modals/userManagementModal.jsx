@@ -530,39 +530,7 @@ export default function UserManagementModal({ opened, onClose }) {
           throw new Error(errorMessage);
         }
 
-        // Set password change requirement for the new user
-        if (result.data?.user?.id) {
-          try {
-            console.log('Setting password change requirement for new user...');
-            const updateResponse = await fetch(
-              `/api/users/${result.data.user.id}/require-password-change`,
-              {
-                method: 'PATCH',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                credentials: 'include',
-              },
-            );
-
-            if (updateResponse.ok) {
-              console.log(
-                '✓ Successfully set password change requirement for new user',
-              );
-            } else {
-              console.warn(
-                'Could not set password change requirement via API:',
-                await updateResponse.text(),
-              );
-            }
-          } catch (updateError) {
-            console.warn(
-              'Could not set password change requirement:',
-              updateError,
-            );
-            // Continue anyway - user was created successfully
-          }
-        }
+        // New users automatically require password change via Better Auth hook
 
         // Handle organization membership and team assignments based on role and team selection
         if (organizationId && result.data?.user?.id) {
@@ -909,7 +877,7 @@ export default function UserManagementModal({ opened, onClose }) {
           )}
         </Group>
       }
-      size="lg"
+      size="xl"
       centered
     >
       <Box pos="relative">

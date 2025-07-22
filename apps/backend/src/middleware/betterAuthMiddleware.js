@@ -1,50 +1,6 @@
 import { auth } from '../lib/auth.js';
 import { fromNodeHeaders } from 'better-auth/node';
 
-// Password change requirement check for better-auth hooks
-export const checkPasswordChangeRequired = async (ctx) => {
-  console.log(`🔍 Hook triggered for path: ${ctx.path}`);
-
-  // Skip auth endpoints
-  if (ctx.path?.includes('/auth/')) {
-    console.log(`⏭️ Skipping auth endpoint: ${ctx.path}`);
-    return;
-  }
-
-  // Get user from session context - check multiple possible locations
-  const user = ctx.context?.user || ctx.user || ctx.context?.session?.user;
-
-  console.log(`👤 User in hook:`, {
-    hasUser: !!user,
-    email: user?.email,
-    requiresPasswordChange: user?.requiresPasswordChange,
-    userKeys: user ? Object.keys(user) : [],
-    contextKeys: ctx.context ? Object.keys(ctx.context) : [],
-  });
-
-  // Check if user requires password change before any non-auth operation
-  if (user && user.requiresPasswordChange === true) {
-    console.log(
-      `🚨 User ${user.email} requires password change - returning 428`,
-    );
-
-    // Return a Response directly since we need custom status 428
-    return new Response(
-      JSON.stringify({
-        error: 'Password change required',
-        requiresPasswordChange: true,
-        username: user.username || user.email,
-      }),
-      {
-        status: 428,
-        headers: { 'Content-Type': 'application/json' },
-      },
-    );
-  }
-
-  console.log(`✅ No password change required, continuing...`);
-};
-
 // Authentication middleware using Better Auth
 export const authMiddleware = async (req, res, next) => {
   try {
@@ -55,59 +11,6 @@ export const authMiddleware = async (req, res, next) => {
     if (!session?.session || !session?.user) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
-
-    // Skip password change check for endpoints that handle password changes
-    const passwordChangeEndpoints = [
-      '/set-initial-password',
-      '/clear-password-change',
-    ];
-
-    const isPasswordChangeEndpoint = passwordChangeEndpoints.some((endpoint) =>
-      req.path.includes(endpoint),
-    );
-
-    if (!isPasswordChangeEndpoint) {
-      // Always check database for password change requirement since better-auth doesn't provide custom fields reliably
-      let requiresPasswordChange = false;
-      try {
-        const Database = (await import('better-sqlite3')).default;
-        const path = (await import('path')).default;
-        const config = (await import('../config/default.js')).default;
-
-        const dbPath = path.join(config.storage.base, 'auth.db');
-        const db = new Database(dbPath, { readonly: true });
-
-        const userData = db
-          .prepare('SELECT requiresPasswordChange FROM user WHERE id = ?')
-          .get(session.user.id);
-        db.close();
-
-        requiresPasswordChange = userData?.requiresPasswordChange === 1;
-      } catch (dbError) {
-        console.warn(
-          'Could not check database for password change requirement:',
-          dbError,
-        );
-        requiresPasswordChange = false; // Default to false if we can't check
-      }
-
-      if (requiresPasswordChange) {
-        console.log(
-          `🚨 Express middleware: User ${session.user.email} requires password change - returning 428`,
-        );
-
-        return res.status(428).json({
-          error: 'Password change required',
-          requiresPasswordChange: true,
-          username: session.user.username || session.user.email,
-        });
-      }
-    } else {
-      console.log(
-        `⏭️ Allowing password change endpoint: ${req.path} for user ${session.user.email}`,
-      );
-    }
-
     // Attach user and session to request
     // eslint-disable-next-line require-atomic-updates
     req.user = session.user;
