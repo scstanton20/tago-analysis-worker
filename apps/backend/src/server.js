@@ -160,7 +160,20 @@ async function startServer() {
     console.log(`✓ SSE routes mounted at ${API_PREFIX}/sse`);
 
     // Swagger API Documentation
-    app.use(`${API_PREFIX}/docs`, swaggerUi.serve, swaggerUi.setup(specs));
+    app.use(
+      `${API_PREFIX}/docs`,
+      swaggerUi.serve,
+      swaggerUi.setup(specs, {
+        swaggerOptions: {
+          withCredentials: true,
+          requestInterceptor: (request) => {
+            // Ensure cookies are sent with all requests
+            request.credentials = 'include';
+            return request;
+          },
+        },
+      }),
+    );
     console.log(`✓ Swagger API docs mounted at ${API_PREFIX}/docs`);
 
     // Error handling (must be after routes)

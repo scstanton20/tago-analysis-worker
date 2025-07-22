@@ -191,26 +191,21 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
       return a.name.localeCompare(b.name);
     });
 
-    // If user is admin, return all teams
-    if (hasAdminPerms) {
-      return allTeams;
-    }
-
-    // For non-admin users, filter teams based on permissions
+    // Filter teams based on user permissions and business rules
     return allTeams.filter((team) => {
-      // Check if user has access to this team
-      if (!canAccessTeam(team.id)) {
-        return false;
-      }
-
-      // Additional check for Uncategorized team: only show if it has analyses
+      // Check for Uncategorized team: only show if it has analyses (applies to all users)
       if (team.isSystem && team.name === 'Uncategorized') {
         const analysisCount = getTeamAnalysisCount(team.id);
         return analysisCount > 0;
       }
 
-      // For all other teams, show if user has access
-      return true;
+      // If user is admin, show all other teams
+      if (hasAdminPerms) {
+        return true;
+      }
+
+      // For non-admin users, check if they have access to this team
+      return canAccessTeam(team.id);
     });
   }, [teams, hasAdminPerms, canAccessTeam, getTeamAnalysisCount]);
 

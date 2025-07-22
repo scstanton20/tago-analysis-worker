@@ -33,7 +33,7 @@ const router = Router();
  */
 
 /**
- * @swagger
+//  * @swagger
  * /sse/events:
  *   get:
  *     summary: Server-Sent Events stream for real-time updates
@@ -60,30 +60,10 @@ const router = Router();
  *     responses:
  *       200:
  *         description: SSE connection established successfully
- *         headers:
- *           Content-Type:
- *             schema:
- *               type: string
- *               example: "text/event-stream"
- *           Cache-Control:
- *             schema:
- *               type: string
- *               example: "no-cache"
- *           Connection:
- *             schema:
- *               type: string
- *               example: "keep-alive"
  *         content:
  *           text/event-stream:
  *             schema:
- *               type: string
- *               description: Server-Sent Events stream
- *               example: |
- *                 data: {"type":"connection","status":"connected"}
- *
- *                 data: {"type":"init","analyses":{},"departments":{},"version":"2.0","timestamp":"2024-06-29T10:30:00.000Z"}
- *
- *                 data: {"type":"heartbeat","timestamp":"2024-06-29T10:30:30.000Z"}
+ *               $ref: "..."
  *       401:
  *         description: Authentication required or failed
  *         content:
@@ -106,7 +86,37 @@ const router = Router();
  */
 router.get('/events', authenticateSSE, handleSSEConnection);
 
-// Logout notification endpoint - notifies other sessions about logout
+/**
+//  * @swagger
+ * /sse/logout-notification:
+ *   post:
+ *     summary: Send logout notification to other sessions
+ *     description: Notify all other active sessions of the same user about logout event via SSE
+ *     tags: [Real-time Events]
+ *     responses:
+ *       200:
+ *         description: Logout notification sent successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *       401:
+ *         description: Authentication required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Failed to send logout notification
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 router.post('/logout-notification', authenticateSSE, (req, res) => {
   try {
     const userId = req.user.id;

@@ -20,6 +20,10 @@ const db = new Database(dbPath);
 
 export const auth = betterAuth({
   database: db,
+  rateLimit: {
+    window: 10,
+    max: 100,
+  },
   user: {
     changeEmail: {
       enabled: true,

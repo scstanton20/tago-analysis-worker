@@ -14,7 +14,11 @@ import { IconAlertCircle, IconKey } from '@tabler/icons-react';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import Logo from '../logo';
 
-export default function PasswordOnboarding({ username, onSuccess, passwordOnboarding }) {
+export default function PasswordOnboarding({
+  username,
+  onSuccess,
+  passwordOnboarding,
+}) {
   const notify = useNotifications();
   const [formData, setFormData] = useState({
     newPassword: '',
