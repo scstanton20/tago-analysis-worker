@@ -5,7 +5,6 @@ import { adminClient } from 'better-auth/client/plugins';
 import { organizationClient } from 'better-auth/client/plugins';
 
 export const authClient = createAuthClient({
-  baseURL: 'http://localhost:3000', // Backend URL
   plugins: [
     usernameClient(),
     passkeyClient(),

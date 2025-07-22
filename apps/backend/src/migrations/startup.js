@@ -17,13 +17,23 @@ export async function runMigrations() {
       message: 'Running database migrations',
     });
 
-    execSync(
-      'npx @better-auth/cli@latest migrate --config src/lib/auth.js -y',
-      {
-        stdio: 'inherit',
-        cwd: process.cwd(),
-      },
-    );
+    if (process.env.NODE_ENV === 'development') {
+      execSync(
+        'npx @better-auth/cli@latest migrate --config src/lib/auth.js -y',
+        {
+          stdio: 'inherit',
+          cwd: process.cwd(),
+        },
+      );
+    } else {
+      execSync(
+        'npx @better-auth/cli@latest migrate --config apps/backend/src/lib/auth.js -y',
+        {
+          stdio: 'inherit',
+          cwd: process.cwd(),
+        },
+      );
+    }
 
     // Check if team table has color column, add if missing
     console.log('Checking team table schema...');
