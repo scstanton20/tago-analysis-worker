@@ -1,8 +1,9 @@
 // frontend/src/components/analysis/uploadAnalysis.jsx
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { analysisService } from '../../services/analysisService';
 import { useSSE } from '../../contexts/sseContext/index';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
+import { usePermissions } from '../../hooks/usePermissions.js';
 import Editor from '@monaco-editor/react';
 import {
   Paper,
@@ -17,6 +18,7 @@ import {
   Collapse,
   ActionIcon,
   Box,
+  Select,
 } from '@mantine/core';
 import {
   IconChevronDown,
@@ -25,16 +27,13 @@ import {
   IconFile,
   IconAlertCircle,
   IconX,
+  IconFolderPlus,
 } from '@tabler/icons-react';
 import sanitize from 'sanitize-filename';
 
 const DEFAULT_EDITOR_CONTENT = '// Write your analysis code here';
 
-export default function AnalysisCreator({
-  targetDepartment = null,
-  departmentName = null,
-  onClose = null,
-}) {
+export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
   // Form state
   const [mode, setMode] = useState('upload');
   const [selectedFile, setSelectedFile] = useState(null);
@@ -43,6 +42,7 @@ export default function AnalysisCreator({
   const [editableFileName, setEditableFileName] = useState('');
   const [editorContent, setEditorContent] = useState(DEFAULT_EDITOR_CONTENT);
   const [formTouched, setFormTouched] = useState(false);
+  const [selectedTeamId, setSelectedTeamId] = useState(null);
 
   // UI state
   const [isExpanded, setIsExpanded] = useState(false);
@@ -55,6 +55,9 @@ export default function AnalysisCreator({
   // WebSocket context
   const { loadingAnalyses, analyses } = useSSE();
 
+  // Permissions and team data
+  const { getUploadableTeams, isAdmin } = usePermissions();
+
   // Notifications
   const notify = useNotifications();
 
@@ -65,6 +68,50 @@ export default function AnalysisCreator({
   const isCurrentAnalysisLoading =
     currentAnalysisName &&
     (loadingAnalyses.has(currentAnalysisName) || isUploading);
+
+  // Get teams where user can upload
+  const uploadableTeams = getUploadableTeams();
+
+  const teamSelectData = uploadableTeams.map((team) => ({
+    value: team.id,
+    label: team.name,
+  }));
+
+  // Determine initial team selection
+  const getInitialTeam = () => {
+    // If a target team is specified and user has access, use it
+    if (targetTeam && uploadableTeams.some((team) => team.id === targetTeam)) {
+      return targetTeam;
+    }
+
+    // Otherwise, pick the first available team (uncategorized is just a regular team now)
+    return uploadableTeams.length > 0 ? uploadableTeams[0].id : null;
+  };
+
+  // Set initial team selection when component mounts or permissions change
+  useEffect(() => {
+    if (!selectedTeamId) {
+      const initialTeam = getInitialTeam();
+      if (initialTeam) {
+        setSelectedTeamId(initialTeam);
+      }
+    }
+  }, [uploadableTeams, targetTeam, selectedTeamId]);
+
+  // If user has no upload permissions anywhere, don't show the component
+  if (!isAdmin && uploadableTeams.length === 0) {
+    return (
+      <Paper withBorder radius="md" mb="lg" p="md">
+        <Alert color="yellow" icon={<IconAlertCircle size={16} />}>
+          <Text fw={500}>No Upload Permissions</Text>
+          <Text size="sm" mt="xs">
+            You don't have upload permissions for any teams. Contact an
+            administrator to grant you upload access.
+          </Text>
+        </Alert>
+      </Paper>
+    );
+  }
 
   // Form validation and state checks
   const isInputDisabled = isCurrentAnalysisLoading;
@@ -78,6 +125,7 @@ export default function AnalysisCreator({
     isCurrentAnalysisLoading ||
     (mode === 'create' && !analysisName) ||
     (mode === 'upload' && (!selectedFile || !editableFileName)) ||
+    !selectedTeamId ||
     error;
   const isTabDisabled = hasFormContent && !isCurrentAnalysisLoading;
 
@@ -186,6 +234,11 @@ export default function AnalysisCreator({
     }
   };
 
+  const handleTeamChange = (teamId) => {
+    setSelectedTeamId(teamId);
+    setFormTouched(true);
+  };
+
   const handleUpload = async () => {
     if (mode === 'create' && !analysisName) {
       setError('Please provide a name for the analysis');
@@ -215,7 +268,7 @@ export default function AnalysisCreator({
       }
 
       await notify.uploadAnalysis(
-        analysisService.uploadAnalysis(file, analysisType, targetDepartment),
+        analysisService.uploadAnalysis(file, analysisType, selectedTeamId),
         finalFileName,
       );
 
@@ -246,6 +299,7 @@ export default function AnalysisCreator({
     setError(null);
     setFormTouched(false);
     setIsExpanded(false);
+    setSelectedTeamId(getInitialTeam());
   };
 
   const resetFileSelection = () => {
@@ -273,9 +327,12 @@ export default function AnalysisCreator({
           <Box>
             <Text size="lg" fw={600}>
               Analysis Creator
-              {departmentName && departmentName !== 'All Departments' && (
+              {selectedTeamId && selectedTeamId !== 'uncategorized' && (
                 <Text span size="sm" fw={400} c="dimmed" ml="xs">
-                  - '{departmentName}' group
+                  - '
+                  {teamSelectData.find((t) => t.value === selectedTeamId)
+                    ?.label || selectedTeamId}
+                  ' team
                 </Text>
               )}
             </Text>
@@ -327,6 +384,20 @@ export default function AnalysisCreator({
                   Create New Analysis
                 </Tabs.Tab>
               </Tabs.List>
+
+              {/* Team Selector - shown for all modes */}
+              <Box pt="md">
+                <Select
+                  label="Target Team"
+                  placeholder="Select a team"
+                  value={selectedTeamId}
+                  onChange={handleTeamChange}
+                  data={teamSelectData}
+                  disabled={isInputDisabled}
+                  leftSection={<IconFolderPlus size={16} />}
+                  description="Choose which team this analysis will belong to"
+                />
+              </Box>
 
               <Tabs.Panel value="upload" pt="md">
                 <Stack>

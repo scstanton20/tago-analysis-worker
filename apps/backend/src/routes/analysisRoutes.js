@@ -1,8 +1,12 @@
 // backend/src/routes/analysisRoutes.js
-import express from 'express';
+import { Router } from 'express';
 import * as analysisController from '../controllers/analysisController.js';
-import { authMiddleware } from '../middleware/auth.js';
-import { requirePermission } from '../middleware/rbac.js';
+import {
+  authMiddleware,
+  extractAnalysisTeam,
+  requireTeamPermission,
+  requireAnyTeamPermission,
+} from '../middleware/betterAuthMiddleware.js';
 import {
   fileOperationLimiter,
   uploadLimiter,
@@ -11,7 +15,7 @@ import {
   versionOperationLimiter,
 } from '../middleware/rateLimiter.js';
 
-const router = express.Router();
+const router = Router();
 
 // Apply authentication to all analysis routes
 router.use(authMiddleware);
@@ -71,7 +75,7 @@ const asyncHandler = (fn) => (req, res, next) => {
 router.post(
   '/upload',
   uploadLimiter,
-  requirePermission('upload_analyses'),
+  requireTeamPermission('upload_analyses'),
   asyncHandler(analysisController.uploadAnalysis),
 );
 /**
@@ -106,7 +110,9 @@ router.post(
 router.get(
   '/',
   fileOperationLimiter,
-  requirePermission('view_analyses'),
+  // For listing all analyses, allow if user has view permission in ANY team
+  // The controller will filter analyses based on user's team memberships
+  requireAnyTeamPermission('view_analyses'),
   asyncHandler(analysisController.getAnalyses),
 );
 /**
@@ -162,7 +168,8 @@ router.get(
 router.post(
   '/:fileName/run',
   analysisRunLimiter,
-  requirePermission('run_analyses'),
+  extractAnalysisTeam,
+  requireTeamPermission('run_analyses'),
   asyncHandler(analysisController.runAnalysis),
 );
 /**
@@ -205,31 +212,229 @@ router.post(
 router.post(
   '/:fileName/stop',
   analysisRunLimiter,
-  requirePermission('run_analyses'),
+  extractAnalysisTeam,
+  requireTeamPermission('run_analyses'),
   asyncHandler(analysisController.stopAnalysis),
 );
+/**
+ * @swagger
+ * /analyses/{fileName}:
+ *   delete:
+ *     summary: Delete analysis
+ *     description: Delete an analysis file and all its associated data
+ *     tags: [Analysis Management]
+ *     parameters:
+ *       - in: path
+ *         name: fileName
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Name of the analysis file to delete
+ *     responses:
+ *       200:
+ *         description: Analysis deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       404:
+ *         description: Analysis not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       403:
+ *         description: Insufficient permissions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 router.delete(
   '/:fileName',
   deletionLimiter,
-  requirePermission('delete_analyses'),
+  extractAnalysisTeam,
+  requireTeamPermission('delete_analyses'),
   asyncHandler(analysisController.deleteAnalysis),
 );
+/**
+ * @swagger
+ * /analyses/{fileName}/content:
+ *   get:
+ *     summary: Get analysis file content
+ *     description: Retrieve the source code content of an analysis file
+ *     tags: [Analysis Management]
+ *     parameters:
+ *       - in: path
+ *         name: fileName
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Name of the analysis file
+ *     responses:
+ *       200:
+ *         description: Analysis content retrieved successfully
+ *         content:
+ *           text/plain:
+ *             schema:
+ *               type: string
+ *               description: The analysis file source code
+ *       404:
+ *         description: Analysis file not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       403:
+ *         description: Insufficient permissions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 router.get(
   '/:fileName/content',
   fileOperationLimiter,
-  requirePermission('view_analyses'),
+  extractAnalysisTeam,
+  requireTeamPermission('view_analyses'),
   asyncHandler(analysisController.getAnalysisContent),
 );
+/**
+ * @swagger
+ * /analyses/{fileName}:
+ *   put:
+ *     summary: Update analysis content
+ *     description: Update the source code content of an analysis file
+ *     tags: [Analysis Management]
+ *     parameters:
+ *       - in: path
+ *         name: fileName
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Name of the analysis file to update
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               content:
+ *                 type: string
+ *                 description: New analysis source code content
+ *             required:
+ *               - content
+ *     responses:
+ *       200:
+ *         description: Analysis updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Analysis updated successfully"
+ *                 restarted:
+ *                   type: boolean
+ *                   description: Whether the analysis was restarted after update
+ *       400:
+ *         description: Invalid content provided
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: Analysis not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       403:
+ *         description: Insufficient permissions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 router.put(
   '/:fileName',
   fileOperationLimiter,
-  requirePermission('edit_analyses'),
+  extractAnalysisTeam,
+  requireTeamPermission('edit_analyses'),
   asyncHandler(analysisController.updateAnalysis),
 );
+/**
+ * @swagger
+ * /analyses/{fileName}/rename:
+ *   put:
+ *     summary: Rename analysis file
+ *     description: Rename an analysis file to a new name
+ *     tags: [Analysis Management]
+ *     parameters:
+ *       - in: path
+ *         name: fileName
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Current name of the analysis file
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               newFileName:
+ *                 type: string
+ *                 description: New name for the analysis file
+ *             required:
+ *               - newFileName
+ *     responses:
+ *       200:
+ *         description: Analysis renamed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Analysis renamed successfully"
+ *                 restarted:
+ *                   type: boolean
+ *                   description: Whether the analysis was restarted after rename
+ *       400:
+ *         description: Invalid new filename provided
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: Analysis not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       403:
+ *         description: Insufficient permissions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 router.put(
   '/:fileName/rename',
   fileOperationLimiter,
-  requirePermission('edit_analyses'),
+  extractAnalysisTeam,
+  requireTeamPermission('edit_analyses'),
   asyncHandler(analysisController.renameAnalysis),
 );
 /**
@@ -289,40 +494,278 @@ router.put(
 router.get(
   '/:fileName/download',
   fileOperationLimiter,
-  requirePermission('download_analyses'),
+  extractAnalysisTeam,
+  requireTeamPermission('download_analyses'),
   asyncHandler(analysisController.downloadAnalysis),
 );
 
 // Environment management routes
+/**
+ * @swagger
+ * /analyses/{fileName}/environment:
+ *   get:
+ *     summary: Get analysis environment variables
+ *     description: Retrieve environment variables for an analysis
+ *     tags: [Analysis Management]
+ *     parameters:
+ *       - in: path
+ *         name: fileName
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Name of the analysis file
+ *     responses:
+ *       200:
+ *         description: Environment variables retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AnalysisEnvironment'
+ *       404:
+ *         description: Analysis not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       403:
+ *         description: Insufficient permissions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 router.get(
   '/:fileName/environment',
   fileOperationLimiter,
-  requirePermission('view_analyses'),
+  extractAnalysisTeam,
+  requireTeamPermission('view_analyses'),
   asyncHandler(analysisController.getEnvironment),
 );
+/**
+ * @swagger
+ * /analyses/{fileName}/environment:
+ *   put:
+ *     summary: Update analysis environment variables
+ *     description: Update environment variables for an analysis
+ *     tags: [Analysis Management]
+ *     parameters:
+ *       - in: path
+ *         name: fileName
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Name of the analysis file
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               env:
+ *                 $ref: '#/components/schemas/AnalysisEnvironment'
+ *             required:
+ *               - env
+ *     responses:
+ *       200:
+ *         description: Environment variables updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Environment updated successfully"
+ *                 restarted:
+ *                   type: boolean
+ *                   description: Whether the analysis was restarted after update
+ *       400:
+ *         description: Invalid environment variables provided
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: Analysis not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       403:
+ *         description: Insufficient permissions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 router.put(
   '/:fileName/environment',
   fileOperationLimiter,
-  requirePermission('edit_analyses'),
+  extractAnalysisTeam,
+  requireTeamPermission('edit_analyses'),
   asyncHandler(analysisController.updateEnvironment),
 );
 
 // Logs management routes
+/**
+ * @swagger
+ * /analyses/{fileName}/logs:
+ *   get:
+ *     summary: Get analysis logs
+ *     description: Retrieve paginated logs for an analysis
+ *     tags: [Analysis Logs]
+ *     parameters:
+ *       - in: path
+ *         name: fileName
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Name of the analysis file
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Page number for pagination
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 1000
+ *           default: 100
+ *         description: Number of log entries per page
+ *     responses:
+ *       200:
+ *         description: Logs retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AnalysisLogs'
+ *       404:
+ *         description: Analysis not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       403:
+ *         description: Insufficient permissions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 router.get(
   '/:fileName/logs',
-  requirePermission('view_analyses'),
+  extractAnalysisTeam,
+  requireTeamPermission('view_analyses'),
   asyncHandler(analysisController.getLogs),
 );
+/**
+ * @swagger
+ * /analyses/{fileName}/logs/download:
+ *   get:
+ *     summary: Download analysis logs
+ *     description: Download logs for a specific time range as a file
+ *     tags: [Analysis Logs]
+ *     parameters:
+ *       - in: path
+ *         name: fileName
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Name of the analysis file
+ *       - in: query
+ *         name: timeRange
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: ['1h', '24h', '7d', '30d', 'all']
+ *         description: Time range for logs to download
+ *     responses:
+ *       200:
+ *         description: Log file downloaded successfully
+ *         content:
+ *           text/plain:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *         headers:
+ *           Content-Disposition:
+ *             description: Attachment filename
+ *             schema:
+ *               type: string
+ *               example: analysis.log
+ *       400:
+ *         description: Invalid time range or missing fileName
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: Analysis or log file not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       403:
+ *         description: Insufficient permissions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 router.get(
   '/:fileName/logs/download',
   fileOperationLimiter,
-  requirePermission('download_analyses'),
+  extractAnalysisTeam,
+  requireTeamPermission('view_analyses'),
   asyncHandler(analysisController.downloadLogs),
 );
+/**
+ * @swagger
+ * /analyses/{fileName}/logs:
+ *   delete:
+ *     summary: Clear analysis logs
+ *     description: Clear all log entries for an analysis
+ *     tags: [Analysis Logs]
+ *     parameters:
+ *       - in: path
+ *         name: fileName
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Name of the analysis file
+ *     responses:
+ *       200:
+ *         description: Logs cleared successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       404:
+ *         description: Analysis not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       403:
+ *         description: Insufficient permissions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 router.delete(
   '/:fileName/logs',
   deletionLimiter,
-  requirePermission('edit_analyses'),
+  extractAnalysisTeam,
+  requireTeamPermission('edit_analyses'),
   asyncHandler(analysisController.clearLogs),
 );
 
@@ -383,7 +826,8 @@ router.delete(
 router.get(
   '/:fileName/versions',
   versionOperationLimiter,
-  requirePermission('view_analyses'),
+  extractAnalysisTeam,
+  requireTeamPermission('view_analyses'),
   asyncHandler(analysisController.getVersions),
 );
 
@@ -456,7 +900,8 @@ router.get(
 router.post(
   '/:fileName/rollback',
   versionOperationLimiter,
-  requirePermission('edit_analyses'),
+  extractAnalysisTeam,
+  requireTeamPermission('edit_analyses'),
   asyncHandler(analysisController.rollbackToVersion),
 );
 

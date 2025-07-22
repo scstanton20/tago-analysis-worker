@@ -3,7 +3,6 @@ import express from 'express';
 import http from 'http';
 import cors from 'cors';
 import helmet from 'helmet';
-import cookieParser from 'cookie-parser';
 import fileUpload from 'express-fileupload';
 import config from './config/default.js';
 import { sseManager } from './utils/sse.js';
@@ -14,17 +13,14 @@ import {
 } from './services/analysisService.js';
 
 // Route modules
-import analysisRoutes from './routes/analysisRoutes.js';
-import statusRoutes from './routes/statusRoutes.js';
-import departmentRoutes from './routes/departmentRoutes.js';
-import authRoutes from './routes/authRoutes.js';
-import webauthnRoutes from './routes/webauthnRoutes.js';
-import sseRoutes from './routes/sseRoutes.js';
-import { apiRateLimit } from './middleware/auth.js';
-import userService from './services/userService.js';
+import * as routes from './routes/index.js';
 import { specs, swaggerUi } from './docs/swagger.js';
-import { swaggerAuthMiddleware, swaggerUiOptions } from './docs/swaggerAuth.js';
-import { startPeriodicCleanup } from './utils/jwt.js';
+import { toNodeHandler } from 'better-auth/node';
+import { auth } from './lib/auth.js';
+import {
+  runMigrations,
+  createAdminUserIfNeeded,
+} from './migrations/startup.js';
 
 // Api prefix
 const API_PREFIX = '/api';
@@ -64,12 +60,8 @@ if (process.env.NODE_ENV === 'development') {
   );
 }
 
-app.use(cookieParser());
-app.use(express.json());
 app.use(fileUpload());
 app.set('trust proxy', 1);
-
-app.use(apiRateLimit);
 
 const PORT = process.env.PORT || 3000;
 
@@ -126,10 +118,15 @@ async function startServer() {
       message: 'Initializing server components',
     });
 
+    // Run database migrations first
+    await runMigrations();
+
+    // Create admin user if needed
+    await createAdminUserIfNeeded();
+
     // IMPORTANT: Initialize services BEFORE setting up routes
     console.log('Initializing services...');
     await initializeAnalyses();
-    await userService.loadUsers();
     console.log('Services initialized successfully');
 
     sseManager.updateContainerState({
@@ -138,34 +135,44 @@ async function startServer() {
     });
     console.log('Setting up routes...');
 
-    // Public auth routes
-    app.use(`${API_PREFIX}/auth`, authRoutes);
-    console.log(`✓ Auth routes mounted at ${API_PREFIX}/auth`);
+    // Better Auth routes using toNodeHandler approach
+    app.all('/api/auth/*splat', toNodeHandler(auth));
+    console.log(`✓ Better Auth routes mounted at ${API_PREFIX}/auth/*`);
 
-    // WebAuthn routes under auth (session-free)
-    app.use(`${API_PREFIX}/auth/webauthn`, webauthnRoutes);
-    console.log(`✓ WebAuthn routes mounted at ${API_PREFIX}/auth/webauthn`);
+    // Apply express.json() middleware before auth routes
+    app.use(express.json());
 
-    app.use(`${API_PREFIX}/status`, statusRoutes(analysisService));
+    app.use(`${API_PREFIX}/status`, routes.statusRoutes(analysisService));
     console.log(`✓ Status routes mounted at ${API_PREFIX}/status`);
 
     // Protected routes
-    app.use(`${API_PREFIX}/analyses`, analysisRoutes);
+    app.use(`${API_PREFIX}/analyses`, routes.analysisRoutes);
     console.log(`✓ Analysis routes mounted at ${API_PREFIX}/analyses`);
 
-    app.use(`${API_PREFIX}/departments`, departmentRoutes);
-    console.log(`✓ Department routes mounted at ${API_PREFIX}/departments`);
+    app.use(`${API_PREFIX}/teams`, routes.teamRoutes);
+    console.log(`✓ Team routes mounted at ${API_PREFIX}/teams`);
+
+    app.use(`${API_PREFIX}/users`, routes.userRoutes);
+    console.log(`✓ User routes mounted at ${API_PREFIX}/users`);
 
     // SSE routes
-    app.use(`${API_PREFIX}/sse`, sseRoutes);
+    app.use(`${API_PREFIX}/sse`, routes.sseRoutes);
     console.log(`✓ SSE routes mounted at ${API_PREFIX}/sse`);
 
-    // Swagger API Documentation - protected by authentication
+    // Swagger API Documentation
     app.use(
       `${API_PREFIX}/docs`,
-      swaggerAuthMiddleware,
       swaggerUi.serve,
-      swaggerUi.setup(specs, swaggerUiOptions),
+      swaggerUi.setup(specs, {
+        swaggerOptions: {
+          withCredentials: true,
+          requestInterceptor: (request) => {
+            // Ensure cookies are sent with all requests
+            request.credentials = 'include';
+            return request;
+          },
+        },
+      }),
     );
     console.log(`✓ Swagger API docs mounted at ${API_PREFIX}/docs`);
 
@@ -189,9 +196,6 @@ async function startServer() {
       // Check for processes to restart
       await restartRunningProcesses();
 
-      // Start periodic JWT cleanup
-      startPeriodicCleanup();
-
       // Broadcast status update to all connected clients
       sseManager.broadcastStatusUpdate();
     });
@@ -213,9 +217,9 @@ process.on('SIGINT', () => {
     message: 'Server is shutting down',
   });
 
-  // Broadcast session invalidation to all users before shutdown
+  // Broadcast shutdown notification to all users
   sseManager.broadcast({
-    type: 'sessionInvalidated',
+    type: 'serverShutdown',
     reason: 'Server is shutting down',
   });
 
@@ -234,9 +238,9 @@ process.on('SIGTERM', () => {
     message: 'Server is shutting down',
   });
 
-  // Broadcast session invalidation to all users before shutdown
+  // Broadcast shutdown notification to all users
   sseManager.broadcast({
-    type: 'sessionInvalidated',
+    type: 'serverShutdown',
     reason: 'Server is shutting down',
   });
 

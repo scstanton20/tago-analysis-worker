@@ -11,12 +11,14 @@ import {
   Card,
 } from '@mantine/core';
 import { IconAlertCircle, IconKey } from '@tabler/icons-react';
-import { useAuth } from '../../hooks/useAuth';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import Logo from '../logo';
 
-export default function PasswordOnboarding({ username, onSuccess }) {
-  const { passwordOnboarding } = useAuth();
+export default function PasswordOnboarding({
+  username,
+  onSuccess,
+  passwordOnboarding,
+}) {
   const notify = useNotifications();
   const [formData, setFormData] = useState({
     newPassword: '',
@@ -47,7 +49,8 @@ export default function PasswordOnboarding({ username, onSuccess }) {
     setError('');
 
     try {
-      await notify.passwordChange(passwordOnboarding(formData.newPassword));
+      await passwordOnboarding(formData.newPassword);
+      notify.success('Password changed successfully!');
       onSuccess();
     } catch (err) {
       setError(err.message || 'Password change failed');
@@ -62,16 +65,22 @@ export default function PasswordOnboarding({ username, onSuccess }) {
   };
 
   return (
-    <Container size="xs" style={{ minHeight: '100vh' }}>
-      <Box
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          minHeight: '100vh',
-          padding: '2rem 0',
-        }}
-      >
+    <Box
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        backgroundColor: 'rgba(0, 0, 0, 0.75)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 9999,
+        padding: '2rem',
+      }}
+    >
+      <Container size="xs" style={{ width: '100%', maxWidth: 450 }}>
         <Card
           shadow="xl"
           padding="xl"
@@ -180,7 +189,7 @@ export default function PasswordOnboarding({ username, onSuccess }) {
             </Stack>
           </form>
         </Card>
-      </Box>
-    </Container>
+      </Container>
+    </Box>
   );
 }

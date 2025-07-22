@@ -55,11 +55,11 @@ export async function handleResponse(response, originalUrl, originalOptions) {
       throw new Error(response.statusText);
     }
 
-    // Handle special cases
-    if (errorData.mustChangePassword) {
+    // Handle 428 Precondition Required - Password change required
+    if (response.status === 428 && errorData.requiresPasswordChange) {
       const error = new Error(errorData.error || 'Password change required');
-      error.mustChangePassword = true;
-      error.user = errorData.user;
+      error.requiresPasswordChange = true;
+      error.username = errorData.username;
       throw error;
     }
 

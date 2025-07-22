@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Modal,
   Stack,
   Group,
+  CopyButton,
   Button,
   Text,
   Table,
@@ -15,9 +16,11 @@ import {
   Box,
   Paper,
   LoadingOverlay,
+  Menu,
+  Divider,
+  Center,
   Checkbox,
-  ScrollArea,
-  ColorSwatch,
+  Tooltip,
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import {
@@ -26,22 +29,52 @@ import {
   IconTrash,
   IconUser,
   IconAlertCircle,
+  IconUserCheck,
+  IconBan,
+  IconCircleCheck,
+  IconDotsVertical,
+  IconDeviceLaptop,
+  IconCopy,
+  IconCheck,
 } from '@tabler/icons-react';
 import { useAuth } from '../../hooks/useAuth';
-import { useSSE } from '../../contexts/sseContext';
+import { admin, organization } from '../../lib/auth';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
+import { userService } from '../../services/userService';
+import UserSessionsModal from './userSessionsModal';
+
+// Generate a secure random password for new users
+function generateSecurePassword() {
+  const length = 12;
+  const charset =
+    'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+  let password = '';
+
+  // Ensure at least one of each type
+  password += 'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random() * 26)]; // lowercase
+  password += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)]; // uppercase
+  password += '0123456789'[Math.floor(Math.random() * 10)]; // number
+  password += '!@#$%^&*'[Math.floor(Math.random() * 8)]; // special char
+
+  // Fill remaining length
+  for (let i = 4; i < length; i++) {
+    password += charset[Math.floor(Math.random() * charset.length)];
+  }
+
+  // Shuffle the password
+  return password
+    .split('')
+    .sort(() => Math.random() - 0.5)
+    .join('');
+}
 
 export default function UserManagementModal({ opened, onClose }) {
   const {
-    getAllUsers,
-    createUser,
-    updateUser,
-    deleteUser,
-    getAvailableActions,
-    refreshPermissions,
     user: currentUser,
+    isAdmin,
+    organizationId,
+    refreshUserData,
   } = useAuth();
-  const { departments: wsaDepartments } = useSSE();
   const notify = useNotifications();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -49,255 +82,211 @@ export default function UserManagementModal({ opened, onClose }) {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [error, setError] = useState('');
   const [createdUserInfo, setCreatedUserInfo] = useState(null);
+  const [showSessionsModal, setShowSessionsModal] = useState(false);
+  const [selectedUserForSessions, setSelectedUserForSessions] = useState(null);
+  const [availableTeams, setAvailableTeams] = useState([]);
+  const [teamsLoading, setTeamsLoading] = useState(false);
   const [actions, setActions] = useState([]);
 
-  // Convert SSE departments to array format, filtering out uncategorized
-  const departments = Object.values(wsaDepartments || {}).filter(
-    (dept) => dept.id !== 'uncategorized',
-  );
+  // Extract usernames and emails from existing users data (no extra API call needed)
+  const existingUserData = useMemo(() => {
+    const usernames = [];
+    const emails = [];
+
+    users.forEach((user) => {
+      if (user.name) usernames.push(user.name.toLowerCase());
+      if (user.email) emails.push(user.email.toLowerCase());
+    });
+
+    return {
+      usernames: [...new Set(usernames)], // Remove duplicates
+      emails: [...new Set(emails)], // Remove duplicates
+    };
+  }, [users]);
 
   const form = useForm({
     initialValues: {
-      username: '',
+      name: '',
       email: '',
+      username: '',
       password: '',
       role: 'user',
       departmentPermissions: {}, // { departmentId: { enabled: boolean, permissions: string[] } }
     },
     validate: {
-      username: (value) => (!value ? 'Username is required' : null),
-      email: (value) =>
-        !value
-          ? 'Email is required'
-          : !/^\S+@\S+$/.test(value)
-            ? 'Invalid email format'
-            : null,
-      password: (value) =>
-        editingUser && value && value.length < 6
-          ? 'Password must be at least 6 characters'
-          : null,
+      name: (value) => (!value ? 'Name is required' : null),
+      email: (value) => {
+        // Basic validation only - live validation handles duplicates
+        if (!value) return 'Email is required';
+        if (!/^\S+@\S+$/.test(value)) return 'Invalid email format';
+        return null;
+      },
+      username: (value) => {
+        // Basic validation only - live validation handles duplicates
+        if (!value) return null; // Username is optional
+        if (value.length < 3) return 'Username must be at least 3 characters';
+        if (!/^[a-zA-Z0-9_-]+$/.test(value))
+          return 'Username can only contain letters, numbers, hyphens, and underscores';
+        return null;
+      },
     },
   });
 
   const loadUsers = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await getAllUsers();
-      setUsers(response.users || []);
+      setError('');
+
+      const result = await admin.listUsers({
+        query: {
+          limit: 100, // Get up to 100 users
+        },
+      });
+
+      if (result.error) {
+        throw new Error(result.error.message);
+      }
+
+      setUsers(result.data.users || result.data || []);
     } catch (err) {
+      console.error('Error loading users:', err);
       setError(err.message || 'Failed to load users');
     } finally {
       setLoading(false);
     }
-  }, [getAllUsers]);
+  }, []);
 
-  const loadRBACData = useCallback(async () => {
-    try {
-      // Only load actions if not already loaded to reduce API calls
-      if (actions.length === 0) {
-        // Get actions from API (still needed)
-        const actionsResponse = await getAvailableActions();
-
-        // Filter out manage_departments since it's admin-only
-        const userActions =
-          actionsResponse.actions?.filter(
-            (action) => action.id !== 'manage_departments',
-          ) || [];
-
-        setActions(
-          userActions.map((action) => ({
-            value: action.id,
-            label: action.name,
-          })),
-        );
-      }
-    } catch (err) {
-      console.error('Failed to load RBAC data:', err);
-    }
-  }, [getAvailableActions, actions.length]);
-
-  useEffect(() => {
-    if (opened) {
-      loadUsers();
-      loadRBACData();
-      setError('');
-    }
-  }, [opened, loadUsers, loadRBACData]);
-
-  const handleSubmit = async (values) => {
-    try {
-      setLoading(true);
-      setError('');
-
-      // Validate that users have at least one department
-      if (values.role === 'user') {
-        const enabledDepartments = Object.keys(
-          values.departmentPermissions || {},
-        ).filter((deptId) => values.departmentPermissions[deptId]?.enabled);
-
-        if (enabledDepartments.length === 0) {
-          setError('Users must be assigned to at least one department.');
-          setLoading(false);
-          return;
-        }
-      }
-
-      if (editingUser) {
-        // Update user - include all data in single request
-        const userUpdateData = {
-          username: values.username,
-          email: values.email,
-          role: values.role,
-        };
-
-        // Only include password if provided
-        if (values.password) {
-          userUpdateData.password = values.password;
-        }
-
-        // Include permissions for non-admin users
-        if (values.role === 'user') {
-          // Convert departmentPermissions to backend format
-          const enabledDepartments = Object.keys(
-            values.departmentPermissions || {},
-          ).filter((deptId) => values.departmentPermissions[deptId]?.enabled);
-
-          const allActions = new Set();
-          enabledDepartments.forEach((deptId) => {
-            const deptPerms =
-              values.departmentPermissions[deptId]?.permissions || [];
-            deptPerms.forEach((action) => allActions.add(action));
-          });
-
-          userUpdateData.departments = enabledDepartments;
-          userUpdateData.actions = Array.from(allActions);
-        }
-
-        // Single request to update everything
-        await notify.executeWithNotification(
-          updateUser(editingUser.id, userUpdateData),
-          {
-            loading: `Updating user ${editingUser.username}...`,
-            success: `User ${editingUser.username} updated successfully.`,
-          },
-        );
-
-        // Refresh permissions if updating current user
-        if (editingUser.username === currentUser?.username) {
-          await refreshPermissions();
-        }
-
-        await loadUsers();
-        handleCancel();
-      } else {
-        // Create user - don't pass password, let backend generate it
-        const createData = { ...values };
-        delete createData.password;
-        const response = await notify.executeWithNotification(
-          createUser(createData),
-          {
-            loading: `Creating user ${values.username}...`,
-            success: `User ${values.username} created successfully.`,
-          },
-        );
-
-        // Show the generated password to admin
-        setCreatedUserInfo({
-          username: response.user.username,
-          defaultPassword: response.defaultPassword,
-        });
-
-        await loadUsers();
-        setShowCreateForm(false);
-      }
-    } catch (err) {
-      setError(err.message || 'Operation failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleEdit = (user) => {
-    setEditingUser(user);
-
-    // Convert backend format to departmentPermissions structure
-    const departmentPermissions = {};
-    const userDepartments = user.permissions?.departments || [];
-    const userActions = user.permissions?.actions || [];
-
-    // Initialize all departments with default structure
-    departments.forEach((dept) => {
-      const isEnabled = userDepartments.includes(dept.id);
-      departmentPermissions[dept.id] = {
-        enabled: isEnabled,
-        permissions: isEnabled ? userActions : ['view_analyses'], // Default to view_analyses
-      };
-    });
-
-    form.setValues({
-      username: user.username,
-      email: user.email,
-      password: '',
-      role: user.role,
-      departmentPermissions,
-    });
-    setShowCreateForm(true);
-  };
-
-  const handleDelete = async (user) => {
-    if (!confirm(`Are you sure you want to delete user "${user.username}"?`)) {
+  // Load available teams for assignment
+  const loadTeams = useCallback(async () => {
+    if (!organizationId) {
+      console.warn('No organization ID available for loading teams');
+      setAvailableTeams([]);
       return;
     }
 
     try {
-      setLoading(true);
-      setError('');
-      await notify.executeWithNotification(deleteUser(user.id), {
-        loading: `Deleting user ${user.username}...`,
-        success: `User ${user.username} deleted successfully.`,
+      setTeamsLoading(true);
+
+      // Use better-auth organization client to get teams
+      const result = await organization.listTeams({
+        query: {
+          organizationId: organizationId,
+        },
       });
-      await loadUsers();
-    } catch (err) {
-      setError(err.message || 'Failed to delete user');
+
+      if (!result.error && result.data) {
+        // Filter out system teams (like uncategorized) for non-admin users
+        const filteredTeams = result.data.filter((team) => {
+          // Always include non-system teams
+          if (!team.isSystem && !team.is_system) {
+            return true;
+          }
+          // Only include system teams for admin users
+          return isAdmin;
+        });
+
+        setAvailableTeams(
+          filteredTeams.map((team) => ({
+            value: team.id,
+            label: team.name,
+          })),
+        );
+      } else {
+        console.error('Failed to load teams:', result.error);
+        setAvailableTeams([]);
+      }
+    } catch (error) {
+      console.error('Error loading teams:', error);
+      setAvailableTeams([]);
     } finally {
-      setLoading(false);
+      setTeamsLoading(false);
     }
-  };
+  }, [organizationId, isAdmin]);
 
-  const handleCancel = () => {
-    setEditingUser(null);
-    setShowCreateForm(false);
-    setCreatedUserInfo(null);
-    form.reset();
-    setError('');
-  };
+  // Load available actions for permissions
+  const loadActions = useCallback(async () => {
+    try {
+      const result = await userService.getAvailablePermissions();
 
-  const handleCreate = () => {
-    setEditingUser(null);
+      if (result.success && result.data) {
+        setActions(result.data);
+      } else {
+        console.error('Failed to load permissions:', result.error);
+        setActions([]);
+      }
+    } catch (error) {
+      console.error('Error loading actions:', error);
+      setActions([]);
+    }
+  }, []);
 
-    // Initialize departmentPermissions structure for new user
-    const departmentPermissions = {};
-    departments.forEach((dept) => {
-      departmentPermissions[dept.id] = {
-        enabled: false,
-        permissions: [],
-      };
-    });
+  // Local validation functions (like analysis component)
+  const validateUsername = useCallback(
+    (username) => {
+      if (!username) return null; // Username is optional
+      if (username.length < 3) return 'Username must be at least 3 characters';
+      if (!/^[a-zA-Z0-9_-]+$/.test(username))
+        return 'Username can only contain letters, numbers, hyphens, and underscores';
 
-    form.setValues({
-      username: '',
-      email: '',
-      password: '',
-      role: 'user',
-      departmentPermissions,
-    });
-    setShowCreateForm(true);
-  };
+      // Check against existing usernames (case-insensitive, like analysis component)
+      if (
+        !editingUser &&
+        existingUserData.usernames.includes(username.toLowerCase())
+      ) {
+        return 'This username is already taken';
+      }
 
-  const handleModalClose = () => {
-    handleCancel();
-    onClose();
-  };
+      return null;
+    },
+    [editingUser, existingUserData.usernames],
+  );
+
+  const validateEmail = useCallback(
+    (email) => {
+      if (!email) return 'Email is required';
+      if (!/^\S+@\S+$/.test(email)) return 'Invalid email format';
+
+      // Check against existing emails (case-insensitive, like analysis component)
+      if (
+        !editingUser &&
+        existingUserData.emails.includes(email.toLowerCase())
+      ) {
+        return 'This email address is already registered';
+      }
+
+      return null;
+    },
+    [editingUser, existingUserData.emails],
+  );
+
+  // Simple input change handlers (no debouncing needed for local validation)
+  const handleUsernameChange = useCallback(
+    (value) => {
+      form.setFieldValue('username', value);
+      // Instant validation with local data
+      const error = validateUsername(value);
+      if (error) {
+        form.setFieldError('username', error);
+      } else {
+        form.clearFieldError('username');
+      }
+    },
+    [form, validateUsername],
+  );
+
+  const handleEmailChange = useCallback(
+    (value) => {
+      form.setFieldValue('email', value);
+      // Instant validation with local data
+      const error = validateEmail(value);
+      if (error) {
+        form.setFieldError('email', error);
+      } else {
+        form.clearFieldError('email');
+      }
+    },
+    [form, validateEmail],
+  );
 
   // Helper functions for department permissions
   const toggleDepartment = (departmentId) => {
@@ -338,17 +327,557 @@ export default function UserManagementModal({ opened, onClose }) {
     );
   };
 
+  // Helper function to check if current user is the only admin
+  const isOnlyAdmin = () => {
+    const adminUsers = users.filter((user) => user.role === 'admin');
+    return (
+      adminUsers.length === 1 &&
+      currentUser?.role === 'admin' &&
+      adminUsers[0]?.id === currentUser?.id
+    );
+  };
+
+  useEffect(() => {
+    if (opened && isAdmin) {
+      loadUsers();
+      loadTeams();
+      loadActions();
+      setError('');
+    }
+  }, [opened, isAdmin, loadUsers, loadTeams, loadActions]);
+
+  const handleSubmit = async (values) => {
+    try {
+      setLoading(true);
+      setError('');
+
+      if (editingUser) {
+        // Handle user editing
+        const updates = {};
+        let needsUpdate = false;
+
+        // Check if role changed
+        if (values.role !== editingUser.role) {
+          const roleResult = await admin.setRole({
+            userId: editingUser.id,
+            role: values.role,
+          });
+          if (roleResult.error) {
+            throw new Error(
+              `Failed to update role: ${roleResult.error.message}`,
+            );
+          }
+
+          // Handle role changes between admin and user manually
+          console.log(`Role change from ${editingUser.role} to ${values.role}`);
+
+          // Update the editingUser state to reflect the new role
+          setEditingUser((prev) => ({
+            ...prev,
+            role: values.role,
+          }));
+
+          // Handle role-specific team management (organization role is handled by Better Auth automatically)
+          if (values.role === 'admin' && editingUser.role !== 'admin') {
+            // Promoting to admin - clear team assignments (admins have global access)
+            try {
+              console.log('Clearing team assignments for new admin...');
+              await userService.updateUserTeamAssignments(editingUser.id, []);
+              console.log('✓ Team assignments cleared for new admin');
+            } catch (teamError) {
+              console.warn('Error clearing team assignments:', teamError);
+              // Don't throw error here as role update was successful
+            }
+          }
+          // Note: When demoting from admin, team assignments will be handled
+          // in the team assignment section below
+
+          updates.role = values.role;
+          needsUpdate = true;
+        }
+
+        // Note: Better Auth admin plugin doesn't provide updateUser for basic details
+        // Only role and password changes are supported for admin user management
+
+        // Update password if provided
+        if (values.password && values.password.trim()) {
+          const passwordResult = await admin.setUserPassword({
+            userId: editingUser.id,
+            password: values.password,
+          });
+
+          if (passwordResult.error) {
+            throw new Error(
+              `Failed to update password: ${passwordResult.error.message}`,
+            );
+          }
+          needsUpdate = true;
+        }
+
+        // Update team assignments if department permissions changed for non-admin users
+        if (
+          values.role !== 'admin' &&
+          editingUser.id &&
+          values.departmentPermissions
+        ) {
+          try {
+            const teamAssignments = Object.entries(values.departmentPermissions)
+              .filter(([, config]) => config.enabled)
+              .map(([teamId, config]) => ({
+                teamId,
+                permissions: config.permissions || ['view_analyses'],
+              }));
+
+            console.log(
+              `Updating team assignments for user ${editingUser.id}...`,
+            );
+
+            try {
+              await userService.updateUserTeamAssignments(
+                editingUser.id,
+                teamAssignments,
+              );
+              console.log('✓ Team assignments updated successfully');
+
+              // Show notification for permission updates
+              const assignedTeams = teamAssignments.length;
+              if (assignedTeams > 0) {
+                notify.showNotification({
+                  title: 'Permissions Updated',
+                  message: `User permissions updated successfully for ${assignedTeams} team${assignedTeams !== 1 ? 's' : ''}.`,
+                  color: 'blue',
+                });
+              }
+            } catch (teamError) {
+              console.warn('Failed to update team assignments:', teamError);
+              // Don't throw error here as other updates were successful
+            }
+          } catch (teamError) {
+            console.warn('Error updating team assignments:', teamError);
+            // Don't throw error here as other updates were successful
+          }
+        }
+
+        if (needsUpdate) {
+          notify.showNotification({
+            title: 'Success',
+            message: `User ${values.name} updated successfully.`,
+            color: 'green',
+          });
+
+          // If the current user was updated, refresh their data
+          if (editingUser.id === currentUser?.id) {
+            console.log('Refreshing current user data after update');
+            await refreshUserData();
+          }
+        }
+      } else {
+        // Generate auto password for new user
+        const autoPassword = generateSecurePassword();
+
+        // Create user using Better Auth admin createUser to avoid auto-login
+        console.log('Creating user with values:', {
+          name: values.name,
+          email: values.email,
+          username: values.username,
+          role: values.role,
+        });
+
+        // Create user with basic data first
+        const createUserData = {
+          name: values.name,
+          email: values.email,
+          password: autoPassword,
+          role: values.role,
+        };
+
+        // Add username to data field if provided
+        if (values.username && values.username.trim()) {
+          createUserData.data = {
+            username: values.username.trim(),
+            displayUsername: values.username.trim(), // Both fields are needed for username plugin
+          };
+        }
+
+        console.log('Creating user with data:', createUserData);
+        console.log('Username provided:', values.username);
+        const result = await admin.createUser(createUserData);
+        console.log('Create user result:', result);
+        console.log('Created user data:', result.data?.user);
+
+        if (result.error) {
+          // Handle specific duplicate errors with user-friendly messages
+          let errorMessage = result.error.message;
+
+          if (
+            errorMessage.includes('email') &&
+            errorMessage.includes('exists')
+          ) {
+            errorMessage = `Email address "${values.email}" is already registered. Please use a different email.`;
+          } else if (
+            errorMessage.includes('username') &&
+            errorMessage.includes('exists')
+          ) {
+            errorMessage = `Username "${values.username}" is already taken. Please choose a different username.`;
+          } else if (errorMessage.includes('UNIQUE constraint failed')) {
+            if (errorMessage.includes('email')) {
+              errorMessage = `Email address "${values.email}" is already registered. Please use a different email.`;
+            } else if (errorMessage.includes('username')) {
+              errorMessage = `Username "${values.username}" is already taken. Please choose a different username.`;
+            }
+          }
+
+          throw new Error(errorMessage);
+        }
+
+        // New users automatically require password change via Better Auth hook
+
+        // Handle organization membership and team assignments based on role and team selection
+        if (organizationId && result.data?.user?.id) {
+          if (values.role === 'admin') {
+            // Admin users need organization membership for admin privileges
+            try {
+              console.log('Adding admin user to main organization...');
+              const memberResult = await userService.addUserToOrganization(
+                result.data.user.id,
+                organizationId,
+                'admin',
+              );
+
+              if (memberResult.error) {
+                console.warn(
+                  'Failed to add admin to organization:',
+                  memberResult.error,
+                );
+              } else {
+                console.log('✓ Admin user added to organization successfully');
+              }
+            } catch (orgError) {
+              console.warn('Error adding admin to organization:', orgError);
+            }
+          } else {
+            // Non-admin users: only add to organization if they have teams
+            const teamAssignments = Object.entries(
+              values.departmentPermissions || {},
+            )
+              .filter(([, config]) => config.enabled)
+              .map(([teamId, config]) => ({
+                teamId,
+                permissions: config.permissions || ['view_analyses'],
+              }));
+
+            if (teamAssignments.length > 0) {
+              try {
+                console.log('Adding user to organization with teams...');
+                const memberResult = await userService.addUserToOrganization(
+                  result.data.user.id,
+                  organizationId,
+                  'member',
+                );
+
+                if (memberResult.error) {
+                  console.warn(
+                    'Failed to add user to organization:',
+                    memberResult.error,
+                  );
+                } else {
+                  console.log('✓ User added to organization successfully');
+                }
+
+                // Now assign teams
+                console.log(
+                  `Assigning user to ${teamAssignments.length} teams...`,
+                );
+                await userService.assignUserToTeams(
+                  result.data.user.id,
+                  teamAssignments,
+                );
+                console.log('✓ User assigned to teams successfully');
+              } catch (error) {
+                console.warn('Error in team assignment process:', error);
+              }
+            } else {
+              console.log(
+                'No teams selected for non-admin user - no organization membership needed',
+              );
+            }
+          }
+        }
+
+        notify.showNotification({
+          title: 'Success',
+          message: `User ${values.name} created successfully.`,
+          color: 'green',
+        });
+
+        setCreatedUserInfo({
+          name: values.name,
+          email: values.email,
+          tempPassword: autoPassword,
+        });
+
+        await loadUsers();
+        setShowCreateForm(false);
+      }
+    } catch (err) {
+      setError(err.message || 'Operation failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEdit = async (user) => {
+    setEditingUser(user);
+    setLoading(true);
+
+    try {
+      // Load user's current team memberships
+      const departmentPermissions = {};
+
+      if (user.role !== 'admin') {
+        try {
+          const teamMembershipsData = await userService.getUserTeamMemberships(
+            user.id,
+          );
+
+          if (teamMembershipsData.success && teamMembershipsData.data?.teams) {
+            // Convert team memberships to departmentPermissions format
+            teamMembershipsData.data.teams.forEach((team) => {
+              departmentPermissions[team.id] = {
+                enabled: true,
+                permissions: team.permissions || ['view_analyses'], // Use actual permissions from database
+              };
+            });
+            console.log(
+              `✓ Loaded ${teamMembershipsData.data.teams.length} team assignments for user ${user.id}`,
+            );
+          } else {
+            console.warn('Failed to fetch user team memberships for editing');
+          }
+        } catch (error) {
+          console.warn('Error fetching user team memberships:', error);
+        }
+      }
+
+      form.setValues({
+        name: user.name || '',
+        email: user.email || '',
+        username: user.username || '',
+        password: '',
+        role: user.role || 'user',
+        departmentPermissions,
+      });
+      setShowCreateForm(true);
+    } catch (error) {
+      console.error('Error loading user data for editing:', error);
+      setError('Failed to load user data for editing');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (user) => {
+    if (
+      !confirm(
+        `Are you sure you want to delete user "${user.name || user.email}"?`,
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError('');
+
+      const result = await userService.deleteUser(user.id);
+
+      if (result.error) {
+        throw new Error(result.error.message);
+      }
+
+      notify.showNotification({
+        title: 'Success',
+        message: `User ${user.name || user.email} deleted successfully.`,
+        color: 'green',
+      });
+
+      await loadUsers();
+    } catch (err) {
+      setError(err.message || 'Failed to delete user');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleImpersonate = async (user) => {
+    if (
+      !confirm(
+        `Are you sure you want to impersonate "${user.name || user.email}"? You will be logged in as this user.`,
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError('');
+
+      const result = await admin.impersonateUser({
+        userId: user.id,
+      });
+
+      if (result.error) {
+        throw new Error(result.error.message);
+      }
+
+      notify.showNotification({
+        title: 'Success',
+        message: `Now impersonating ${user.name || user.email}`,
+        color: 'blue',
+      });
+
+      // Refresh the page to update the auth context
+      window.location.reload();
+    } catch (err) {
+      setError(err.message || 'Failed to impersonate user');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleManageSessions = (user) => {
+    setSelectedUserForSessions(user);
+    setShowSessionsModal(true);
+  };
+
+  const handleBanUser = async (user) => {
+    if (
+      !confirm(
+        `Are you sure you want to ban "${user.name || user.email}"? This will prevent them from signing in.`,
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError('');
+
+      const result = await admin.banUser({
+        userId: user.id,
+        banReason: 'Banned by administrator',
+      });
+
+      if (result.error) {
+        throw new Error(result.error.message);
+      }
+
+      notify.showNotification({
+        title: 'Success',
+        message: `User ${user.name || user.email} has been banned`,
+        color: 'orange',
+      });
+
+      await loadUsers();
+    } catch (err) {
+      setError(err.message || 'Failed to ban user');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUnbanUser = async (user) => {
+    try {
+      setLoading(true);
+      setError('');
+
+      const result = await admin.unbanUser({
+        userId: user.id,
+      });
+
+      if (result.error) {
+        throw new Error(result.error.message);
+      }
+
+      notify.showNotification({
+        title: 'Success',
+        message: `User ${user.name || user.email} has been unbanned`,
+        color: 'green',
+      });
+
+      await loadUsers();
+    } catch (err) {
+      setError(err.message || 'Failed to unban user');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setEditingUser(null);
+    setShowCreateForm(false);
+    setCreatedUserInfo(null);
+    form.reset();
+    setError('');
+    // Clear any field errors
+    form.clearFieldError('username');
+    form.clearFieldError('email');
+  };
+
+  const handleCreate = () => {
+    setEditingUser(null);
+    form.setValues({
+      name: '',
+      email: '',
+      username: '',
+      password: '',
+      role: 'user',
+    });
+    setShowCreateForm(true);
+    // Clear any field errors
+    form.clearFieldError('username');
+    form.clearFieldError('email');
+  };
+
+  const handleModalClose = () => {
+    // If we're in a form, just cancel the form instead of closing the modal
+    if (showCreateForm) {
+      handleCancel();
+    } else {
+      // If we're in the main view, close the entire modal
+      handleCancel();
+      onClose();
+    }
+  };
+
+  const handleSessionsModalClose = () => {
+    setShowSessionsModal(false);
+    setSelectedUserForSessions(null);
+  };
+
+  // Only show if user is admin
+  if (!isAdmin) {
+    return null;
+  }
+
   return (
     <Modal
       opened={opened}
       onClose={handleModalClose}
       title={
-        <Group gap="xs">
-          <IconUser size={20} />
-          <Text fw={600}>User Management</Text>
+        <Group gap="xs" justify="space-between" style={{ width: '100%' }}>
+          <Group gap="xs">
+            <IconUser size={20} />
+            <Text fw={600}>User Management</Text>
+          </Group>
+          {showCreateForm && (
+            <Text size="sm" c="dimmed">
+              Press ESC or click × to close form
+            </Text>
+          )}
         </Group>
       }
-      size="lg"
+      size="xl"
       centered
     >
       <Box pos="relative">
@@ -374,13 +903,38 @@ export default function UserManagementModal({ opened, onClose }) {
 
                 <Alert color="green" variant="light">
                   <Stack gap="xs">
-                    <Text fw={500}>Username: {createdUserInfo.username}</Text>
+                    <Text fw={500}>Name: {createdUserInfo.name}</Text>
+                    <Text fw={500}>Email: {createdUserInfo.email}</Text>
                     <Text fw={500}>
-                      Temporary Password: {createdUserInfo.defaultPassword}
+                      Temporary Password: {createdUserInfo.tempPassword}
+                      <CopyButton
+                        value={createdUserInfo.tempPassword}
+                        timeout={2000}
+                      >
+                        {({ copied, copy }) => (
+                          <Tooltip
+                            label={copied ? 'Copied' : 'Copy'}
+                            withArrow
+                            position="right"
+                          >
+                            <ActionIcon
+                              color={copied ? 'teal' : 'gray'}
+                              variant="subtle"
+                              onClick={copy}
+                            >
+                              {copied ? (
+                                <IconCheck size={16} />
+                              ) : (
+                                <IconCopy size={16} />
+                              )}
+                            </ActionIcon>
+                          </Tooltip>
+                        )}
+                      </CopyButton>
                     </Text>
                     <Text size="sm" c="dimmed">
-                      Please provide this password to the user. They will be
-                      required to change it on first login.
+                      The user must sign in with this temporary password and
+                      will be required to change it on first login.
                     </Text>
                   </Stack>
                 </Alert>
@@ -415,73 +969,184 @@ export default function UserManagementModal({ opened, onClose }) {
                 <Table striped highlightOnHover>
                   <Table.Thead>
                     <Table.Tr>
-                      <Table.Th>Username</Table.Th>
-                      <Table.Th>Email</Table.Th>
-                      <Table.Th>Role</Table.Th>
-                      <Table.Th>Actions</Table.Th>
+                      <Table.Th style={{ width: '20%' }}>Name</Table.Th>
+                      <Table.Th style={{ width: '25%' }}>Email</Table.Th>
+                      <Table.Th style={{ width: '15%' }}>Username</Table.Th>
+                      <Table.Th style={{ width: '15%' }}>Role</Table.Th>
+                      <Table.Th style={{ width: '15%' }}>Status</Table.Th>
+                      <Table.Th style={{ width: '10%' }}>Actions</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
                     {users.map((user) => (
                       <Table.Tr key={user.id}>
                         <Table.Td>
-                          <Group gap="xs">
+                          <Stack gap={2}>
                             <Text
-                              fw={
-                                user.username === currentUser?.username
-                                  ? 600
-                                  : 400
-                              }
+                              fw={user.id === currentUser?.id ? 600 : 400}
+                              size="sm"
+                              style={{
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                              title={user.name || 'Unknown'}
                             >
-                              {user.username}
+                              {user.name || 'Unknown'}
                             </Text>
-                            {user.username === currentUser?.username && (
+                            {user.id === currentUser?.id && (
                               <Badge size="xs" variant="light" color="brand">
                                 You
                               </Badge>
                             )}
-                          </Group>
+                          </Stack>
                         </Table.Td>
-                        <Table.Td>{user.email}</Table.Td>
+                        <Table.Td>
+                          <Text
+                            size="sm"
+                            style={{
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                            title={user.email}
+                          >
+                            {user.email}
+                          </Text>
+                        </Table.Td>
+                        <Table.Td>
+                          <Text
+                            size="sm"
+                            c={user.username ? undefined : 'dimmed'}
+                            style={{
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                            title={user.username || 'Not set'}
+                          >
+                            {user.username || 'Not set'}
+                          </Text>
+                        </Table.Td>
+                        <Table.Td>
+                          <Stack gap="xs">
+                            <Badge
+                              variant="light"
+                              color={
+                                user.role === 'admin'
+                                  ? 'red'
+                                  : user.role === 'analyst'
+                                    ? 'orange'
+                                    : user.role === 'operator'
+                                      ? 'yellow'
+                                      : 'blue'
+                              }
+                              style={{ textTransform: 'capitalize' }}
+                            >
+                              {user.role || 'user'}
+                            </Badge>
+                            {user.banned && (
+                              <Badge variant="light" color="red" size="xs">
+                                Banned
+                              </Badge>
+                            )}
+                          </Stack>
+                        </Table.Td>
                         <Table.Td>
                           <Badge
                             variant="light"
-                            color={user.role === 'admin' ? 'red' : 'blue'}
+                            color={
+                              user.requiresPasswordChange === false ||
+                              user.requiresPasswordChange === 0
+                                ? 'green'
+                                : 'orange'
+                            }
+                            size="sm"
                           >
-                            {user.role}
+                            {user.requiresPasswordChange === false ||
+                            user.requiresPasswordChange === 0
+                              ? 'Active'
+                              : 'Pending'}
                           </Badge>
-                          {user.mustChangePassword && (
-                            <Badge
-                              size="xs"
-                              variant="light"
-                              color="orange"
-                              ml="xs"
-                            >
-                              Must change password
-                            </Badge>
-                          )}
                         </Table.Td>
                         <Table.Td>
-                          <Group gap="xs">
-                            <ActionIcon
-                              variant="light"
-                              color="blue"
-                              size="sm"
-                              onClick={() => handleEdit(user)}
-                            >
-                              <IconEdit size="1rem" />
-                            </ActionIcon>
-                            {user.username !== currentUser?.username && (
+                          <Menu shadow="md" width={200} closeOnItemClick={true}>
+                            <Menu.Target>
                               <ActionIcon
-                                variant="light"
-                                color="red"
-                                size="sm"
-                                onClick={() => handleDelete(user)}
+                                variant="subtle"
+                                size="lg"
+                                color="brand"
                               >
-                                <IconTrash size="1rem" />
+                                <IconDotsVertical size={20} />
                               </ActionIcon>
-                            )}
-                          </Group>
+                            </Menu.Target>
+
+                            <Menu.Dropdown>
+                              {/* Edit User */}
+                              <Menu.Item
+                                onClick={() => handleEdit(user)}
+                                leftSection={<IconEdit size={16} />}
+                              >
+                                Edit User
+                              </Menu.Item>
+
+                              {user.id !== currentUser?.id && (
+                                <>
+                                  <Menu.Divider />
+
+                                  {/* Impersonate User */}
+                                  <Menu.Item
+                                    onClick={() => handleImpersonate(user)}
+                                    leftSection={<IconUserCheck size={16} />}
+                                    color="violet"
+                                  >
+                                    Impersonate User
+                                  </Menu.Item>
+
+                                  {/* Manage Sessions */}
+                                  <Menu.Item
+                                    onClick={() => handleManageSessions(user)}
+                                    leftSection={<IconDeviceLaptop size={16} />}
+                                    color="blue"
+                                  >
+                                    Manage Sessions
+                                  </Menu.Item>
+
+                                  <Menu.Divider />
+
+                                  {/* Ban/Unban User */}
+                                  {user.banned ? (
+                                    <Menu.Item
+                                      onClick={() => handleUnbanUser(user)}
+                                      leftSection={
+                                        <IconCircleCheck size={16} />
+                                      }
+                                      color="green"
+                                    >
+                                      Unban User
+                                    </Menu.Item>
+                                  ) : (
+                                    <Menu.Item
+                                      onClick={() => handleBanUser(user)}
+                                      leftSection={<IconBan size={16} />}
+                                      color="red"
+                                    >
+                                      Ban User
+                                    </Menu.Item>
+                                  )}
+
+                                  {/* Delete User */}
+                                  <Menu.Item
+                                    onClick={() => handleDelete(user)}
+                                    leftSection={<IconTrash size={16} />}
+                                    color="red"
+                                  >
+                                    Delete User
+                                  </Menu.Item>
+                                </>
+                              )}
+                            </Menu.Dropdown>
+                          </Menu>
                         </Table.Td>
                       </Table.Tr>
                     ))}
@@ -493,57 +1158,110 @@ export default function UserManagementModal({ opened, onClose }) {
             <Paper withBorder p="md">
               <form onSubmit={form.onSubmit(handleSubmit)}>
                 <Stack gap="md">
-                  <Text fw={600} size="lg">
-                    {editingUser ? 'Edit User' : 'Create New User'}
-                  </Text>
+                  <Group justify="space-between" align="center">
+                    <Text fw={600} size="lg">
+                      {editingUser ? 'Edit User' : 'Create New User'}
+                    </Text>
+                  </Group>
+
+                  {editingUser && editingUser.id !== currentUser?.id && (
+                    <Alert color="blue" variant="light">
+                      <Text size="sm">
+                        As an admin, you can change this user's role and reset
+                        their password. The user must update their own name,
+                        email, and username through their profile settings.
+                      </Text>
+                    </Alert>
+                  )}
 
                   <TextInput
-                    label="Username"
-                    placeholder="Enter username"
+                    label="Name"
+                    placeholder="Enter full name"
                     required
                     disabled={!!editingUser}
-                    {...form.getInputProps('username')}
+                    description={
+                      editingUser
+                        ? 'User must update their own name through profile settings'
+                        : undefined
+                    }
+                    {...form.getInputProps('name')}
                   />
 
                   <TextInput
                     label="Email"
                     placeholder="Enter email address"
                     required
-                    {...form.getInputProps('email')}
+                    disabled={!!editingUser}
+                    description={
+                      editingUser
+                        ? 'User must update their own email through profile settings'
+                        : undefined
+                    }
+                    onChange={(event) =>
+                      handleEmailChange(event.currentTarget.value)
+                    }
+                    value={form.values.email}
+                    error={form.errors.email}
+                  />
+
+                  <TextInput
+                    label="Username (Optional)"
+                    placeholder="Enter username for login"
+                    description={
+                      editingUser
+                        ? 'User must update their own username through profile settings'
+                        : 'Users can login with either email or username'
+                    }
+                    disabled={!!editingUser}
+                    onChange={(event) =>
+                      handleUsernameChange(event.currentTarget.value)
+                    }
+                    value={form.values.username}
+                    error={form.errors.username}
                   />
 
                   {editingUser && (
                     <PasswordInput
                       label="New Password (leave blank to keep current)"
-                      placeholder="Enter new password"
-                      autoComplete="new-password"
-                      name="admin-new-password"
-                      id="admin-new-password"
+                      placeholder="Enter password"
                       {...form.getInputProps('password')}
                     />
-                  )}
-
-                  {!editingUser && (
-                    <Text size="sm" c="dimmed" style={{ fontStyle: 'italic' }}>
-                      A temporary password will be automatically generated for
-                      the user.
-                    </Text>
                   )}
 
                   <Select
                     label="Role"
                     placeholder="Select role"
                     required
+                    disabled={
+                      editingUser?.id === currentUser?.id &&
+                      editingUser?.role === 'admin' &&
+                      isOnlyAdmin()
+                    }
                     data={[
-                      { value: 'user', label: 'User' },
-                      { value: 'admin', label: 'Administrator' },
+                      {
+                        value: 'user',
+                        label: 'User - Specific department assignments',
+                      },
+                      {
+                        value: 'admin',
+                        label: 'Administrator - Full system access',
+                      },
                     ]}
                     {...form.getInputProps('role')}
                   />
 
-                  {form.values.role === 'user' && (
+                  {form.values.role === 'admin' && (
+                    <Alert color="blue" variant="light">
+                      Administrators have full access to all features and can
+                      manage other users.
+                    </Alert>
+                  )}
+
+                  {form.values.role !== 'admin' && (
                     <Stack gap="md">
-                      <Text size="sm" fw={500}>
+                      <Divider />
+
+                      <Text size="sm" fw={600} c="dimmed">
                         Department Access & Permissions
                       </Text>
                       <Text size="xs" c="dimmed">
@@ -552,18 +1270,30 @@ export default function UserManagementModal({ opened, onClose }) {
                         department is enabled.
                       </Text>
 
-                      <ScrollArea h={300} offsetScrollbars>
-                        <Stack gap="xs">
-                          {departments.map((department) => {
-                            const deptPerms = form.values.departmentPermissions[
-                              department.id
-                            ] || { enabled: false, permissions: [] };
-                            const isEnabled = deptPerms.enabled;
-                            const permissions = deptPerms.permissions || [];
+                      <Stack gap="xs" mah="40vh" style={{ overflow: 'auto' }}>
+                        {teamsLoading ? (
+                          <Center py="md">
+                            <Group>
+                              <Loader size="sm" />
+                              <Text size="sm" c="dimmed">
+                                Loading teams...
+                              </Text>
+                            </Group>
+                          </Center>
+                        ) : (
+                          availableTeams.map((team) => {
+                            const teamPerms = form.values.departmentPermissions[
+                              team.value
+                            ] || {
+                              enabled: false,
+                              permissions: [],
+                            };
+                            const isEnabled = teamPerms.enabled;
+                            const permissions = teamPerms.permissions || [];
 
                             return (
                               <Paper
-                                key={department.id}
+                                key={team.value}
                                 withBorder
                                 p="md"
                                 style={{
@@ -580,24 +1310,18 @@ export default function UserManagementModal({ opened, onClose }) {
                                   <Group
                                     justify="space-between"
                                     style={{ cursor: 'pointer' }}
-                                    onClick={() =>
-                                      toggleDepartment(department.id)
-                                    }
+                                    onClick={() => toggleDepartment(team.value)}
                                   >
                                     <Group gap="sm">
                                       <Checkbox
                                         checked={isEnabled}
                                         onChange={() =>
-                                          toggleDepartment(department.id)
+                                          toggleDepartment(team.value)
                                         }
                                         onClick={(e) => e.stopPropagation()}
                                       />
-                                      <ColorSwatch
-                                        color={department.color}
-                                        size={16}
-                                      />
                                       <Text fw={500} size="sm">
-                                        {department.name}
+                                        {team.label}
                                       </Text>
                                     </Group>
                                     {isEnabled && (
@@ -625,7 +1349,7 @@ export default function UserManagementModal({ opened, onClose }) {
                                               )}
                                               onChange={() =>
                                                 toggleDepartmentPermission(
-                                                  department.id,
+                                                  team.value,
                                                   action.value,
                                                 )
                                               }
@@ -657,18 +1381,21 @@ export default function UserManagementModal({ opened, onClose }) {
                                 </Stack>
                               </Paper>
                             );
-                          })}
-                        </Stack>
-                      </ScrollArea>
+                          })
+                        )}
+                      </Stack>
                     </Stack>
                   )}
 
-                  {form.values.role === 'admin' && (
-                    <Alert color="blue" variant="light">
-                      Administrators have full access to all departments and all
-                      permissions.
-                    </Alert>
-                  )}
+                  {editingUser &&
+                    editingUser.id === currentUser?.id &&
+                    editingUser.role === 'admin' &&
+                    form.values.role !== 'admin' && (
+                      <Alert color="orange" variant="light">
+                        Warning: There must be at least one administrator. Since
+                        you are the only admin, you cannot change your own role.
+                      </Alert>
+                    )}
 
                   <Group justify="flex-end" gap="sm">
                     <Button variant="default" onClick={handleCancel}>
@@ -688,6 +1415,13 @@ export default function UserManagementModal({ opened, onClose }) {
           )}
         </Stack>
       </Box>
+
+      {/* Sessions Management Modal */}
+      <UserSessionsModal
+        opened={showSessionsModal}
+        onClose={handleSessionsModalClose}
+        user={selectedUserForSessions}
+      />
     </Modal>
   );
 }

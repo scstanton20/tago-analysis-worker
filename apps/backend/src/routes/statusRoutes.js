@@ -1,8 +1,8 @@
 // backend/src/routes/statusRoutes.js
-import express from 'express';
+import { Router } from 'express';
 import StatusController from '../controllers/statusController.js';
 export default function createStatusRoutes(analysisService) {
-  const router = express.Router();
+  const router = Router();
   const statusController = new StatusController(analysisService);
 
   /**
