@@ -86,10 +86,11 @@ export const AuthProvider = ({ children }) => {
       setMembershipLoading(true);
 
       // Set the main organization as active and get its data
+      // This is not working with slug lookup - issue in Better auth 1.3.2
       const activeOrgResult = await authClient.organization.setActive({
-        organizationSlug: 'main',
+        organizationId: '27aa3625-1570-41b4-bd61-ef99322f249f',
       });
-
+      console.log(activeOrgResult);
       if (activeOrgResult.data) {
         setOrganizationId(activeOrgResult.data.id);
         console.log(
