@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import {
   Modal,
   Stack,
@@ -38,6 +38,7 @@ import {
   IconCheck,
 } from '@tabler/icons-react';
 import { useAuth } from '../../hooks/useAuth';
+import { usePermissions } from '../../hooks/usePermissions';
 import { admin, organization, authClient } from '../../lib/auth';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import { userService } from '../../services/userService';
@@ -69,12 +70,9 @@ function generateSecurePassword() {
 }
 
 export default function UserManagementModal({ opened, onClose }) {
-  const {
-    user: currentUser,
-    isAdmin,
-    organizationId,
-    refreshUserData,
-  } = useAuth();
+  const { user: currentUser, isAdmin } = useAuth();
+
+  const { organizationId, refreshUserData } = usePermissions();
   const notify = useNotifications();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -344,14 +342,21 @@ export default function UserManagementModal({ opened, onClose }) {
     );
   };
 
-  useEffect(() => {
-    if (opened && isAdmin) {
-      loadUsers();
-      loadTeams();
-      loadActions();
-      setError('');
-    }
-  }, [opened, isAdmin, loadUsers, loadTeams, loadActions]);
+  // Load data when modal opens (derived state)
+  const [hasLoadedModalData, setHasLoadedModalData] = useState(false);
+
+  if (opened && isAdmin && !hasLoadedModalData) {
+    setHasLoadedModalData(true);
+    loadUsers();
+    loadTeams();
+    loadActions();
+    setError('');
+  }
+
+  // Reset loaded flag when modal closes
+  if (!opened && hasLoadedModalData) {
+    setHasLoadedModalData(false);
+  }
 
   const handleSubmit = async (values) => {
     try {
