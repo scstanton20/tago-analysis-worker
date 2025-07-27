@@ -31,7 +31,7 @@ class TeamController {
         order,
       });
 
-      // Broadcast to all WebSocket clients
+      // Broadcast to all SSE clients
       sseManager.broadcast({
         type: 'teamCreated',
         team: team,

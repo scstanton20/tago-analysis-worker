@@ -1,6 +1,6 @@
 // frontend/src/components/analysis/analysisLogs.jsx
 import PropTypes from 'prop-types';
-import { useState, useRef, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useMountedRef } from '../../hooks/useMountedRef';
 import { analysisService } from '../../services/analysisService';
 import {
@@ -30,32 +30,34 @@ const AnalysisLogs = ({ analysis }) => {
   const isLoadingMore = useRef(false);
   const hasLoadedInitial = useRef(false);
   const lastScrollTop = useRef(0);
-  const shouldAutoScroll = useRef(true);
+  const shouldAutoScroll = useRef(false);
   const isMountedRef = useMountedRef();
 
-  // Memoize websocketLogs to prevent unnecessary re-renders
-  const websocketLogs = useMemo(() => analysis.logs || [], [analysis.logs]);
+  // Memoize sseLogs to prevent unnecessary re-renders
+  const sseLogs = useMemo(() => analysis.logs || [], [analysis.logs]);
   const totalLogCount = useMemo(
-    () => analysis.totalLogCount || websocketLogs.length,
-    [analysis.totalLogCount, websocketLogs.length],
+    () => analysis.totalLogCount || sseLogs.length,
+    [analysis.totalLogCount, sseLogs.length],
   );
 
-  // Auto-scroll when new logs arrive (conditional side effect)
-  const shouldPerformAutoScroll =
-    shouldAutoScroll.current &&
-    scrollRef.current &&
-    websocketLogs.length > 0 &&
-    isMountedRef.current;
-
-  if (shouldPerformAutoScroll) {
-    const element = scrollRef.current;
-    // Use requestAnimationFrame for better performance
-    requestAnimationFrame(() => {
-      if (element && isMountedRef.current) {
-        element.scrollTop = element.scrollHeight;
-      }
-    });
-  }
+  // Auto-scroll when new logs arrive (only for live logs, not initial load)
+  useEffect(() => {
+    if (
+      shouldAutoScroll.current &&
+      scrollRef.current &&
+      sseLogs.length > 0 &&
+      hasLoadedInitial.current &&
+      isMountedRef.current
+    ) {
+      const element = scrollRef.current;
+      // Use requestAnimationFrame for better performance
+      requestAnimationFrame(() => {
+        if (element && isMountedRef.current) {
+          element.scrollTop = element.scrollHeight;
+        }
+      });
+    }
+  }, [sseLogs, isMountedRef]);
 
   const loadInitialLogs = useCallback(async () => {
     if (hasLoadedInitial.current || !isMountedRef.current) return;
@@ -82,7 +84,18 @@ const AnalysisLogs = ({ analysis }) => {
         setIsLoading(false);
       }
     }
-  }, [analysis.name]);
+  }, [analysis.name, isMountedRef]);
+
+  // Load initial logs on mount or analysis change
+  useEffect(() => {
+    hasLoadedInitial.current = false;
+    setInitialLogs([]);
+    setAdditionalLogs([]);
+    setPage(1);
+    setHasMore(false);
+    shouldAutoScroll.current = false; // Start with auto-scroll disabled
+    loadInitialLogs();
+  }, [analysis.name, loadInitialLogs]);
 
   const loadMoreLogs = useCallback(async () => {
     if (isLoadingMore.current || !hasMore || !isMountedRef.current) return;
@@ -101,7 +114,7 @@ const AnalysisLogs = ({ analysis }) => {
       // Filter out logs we already have
       const existingSequences = new Set(
         [
-          ...websocketLogs.map((log) => log.sequence),
+          ...sseLogs.map((log) => log.sequence),
           ...initialLogs.map((log) => log.sequence),
           ...additionalLogs.map((log) => log.sequence),
         ].filter(Boolean),
@@ -128,12 +141,13 @@ const AnalysisLogs = ({ analysis }) => {
     analysis.name,
     page,
     hasMore,
-    websocketLogs,
+    sseLogs,
     initialLogs,
     additionalLogs,
+    isMountedRef,
   ]);
 
-  const handleScroll = useCallback(() => {
+  const handleScrollPositionChange = useCallback(() => {
     if (!scrollRef.current || !isMountedRef.current) return;
 
     const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
@@ -143,22 +157,21 @@ const AnalysisLogs = ({ analysis }) => {
       shouldAutoScroll.current = false;
     }
 
-    // Re-enable auto-scroll if user scrolls to bottom
-    if (scrollHeight - (scrollTop + clientHeight) < 50) {
+    // Only re-enable auto-scroll if user scrolls to the very bottom
+    if (scrollHeight - (scrollTop + clientHeight) < 10) {
       shouldAutoScroll.current = true;
     }
 
     lastScrollTop.current = scrollTop;
+  }, [isMountedRef]);
 
-    // Load more when scrolled near bottom
-    if (
-      !isLoadingMore.current &&
-      hasMore &&
-      scrollHeight - (scrollTop + clientHeight) < 200
-    ) {
+  const handleBottomReached = useCallback(() => {
+    // Only load more if we're not already loading and there are more logs
+    if (!isLoadingMore.current && hasMore && isMountedRef.current) {
+      console.log('Bottom reached - triggering loadMoreLogs');
       loadMoreLogs();
     }
-  }, [hasMore, loadMoreLogs]);
+  }, [hasMore, loadMoreLogs, isMountedRef]);
 
   // Reset and load logs when analysis changes
   const [currentAnalysisName, setCurrentAnalysisName] = useState(analysis.name);
@@ -170,39 +183,40 @@ const AnalysisLogs = ({ analysis }) => {
     setAdditionalLogs([]);
     setPage(1);
     setHasMore(false);
-    shouldAutoScroll.current = true;
+    shouldAutoScroll.current = false; // Don't auto-scroll on reset
     loadInitialLogs();
   }
 
   // Reset state when logs are cleared
-  const [previousLogCount, setPreviousLogCount] = useState(
-    websocketLogs.length,
-  );
+  const [previousLogCount, setPreviousLogCount] = useState(sseLogs.length);
 
-  if (
+  // Detect when logs are cleared (sse logs go to 0 or contain only a clear message)
+  const logsWereCleared =
     isMountedRef.current &&
-    websocketLogs.length === 0 &&
+    hasLoadedInitial.current &&
     previousLogCount > 0 &&
-    hasLoadedInitial.current
-  ) {
-    console.log('Logs cleared, resetting state');
+    (sseLogs.length === 0 ||
+      (sseLogs.length === 1 && sseLogs[0]?.message?.includes('cleared')));
+
+  if (logsWereCleared) {
+    console.log('Logs cleared, resetting all state and reloading');
     setInitialLogs([]);
     setAdditionalLogs([]);
     setPage(1);
     setHasMore(false);
-    shouldAutoScroll.current = true;
+    shouldAutoScroll.current = false;
+    hasLoadedInitial.current = false; // Force reload of initial logs
+    loadInitialLogs();
   }
 
   // Update previous count for next render
-  if (websocketLogs.length !== previousLogCount) {
-    setPreviousLogCount(websocketLogs.length);
+  if (sseLogs.length !== previousLogCount) {
+    setPreviousLogCount(sseLogs.length);
   }
-
-  // Cleanup handled by useMountedRef hook
 
   // Memoize combined logs to prevent unnecessary recalculations
   const allLogs = useCallback(() => {
-    return [...websocketLogs, ...initialLogs, ...additionalLogs]
+    return [...sseLogs, ...initialLogs, ...additionalLogs]
       .filter(
         (log, index, self) =>
           index ===
@@ -216,7 +230,7 @@ const AnalysisLogs = ({ analysis }) => {
         if (a.sequence && b.sequence) return b.sequence - a.sequence;
         return new Date(b.timestamp) - new Date(a.timestamp);
       });
-  }, [websocketLogs, initialLogs, additionalLogs]);
+  }, [sseLogs, initialLogs, additionalLogs]);
 
   const logs = allLogs();
 
@@ -266,17 +280,17 @@ const AnalysisLogs = ({ analysis }) => {
       <Box p="sm">
         <Group justify="space-between">
           <Text size="sm" fw={600}>
-            Logs {websocketLogs.length > 0 && '(Live)'}
+            Logs {sseLogs.length > 0 && '(Live)'}
           </Text>
           <Group gap="xs">
             {(isLoading || isLoadingMore.current) && <Loader size="xs" />}
             <Group gap="xs" align="center">
               <Text size="xs" c="dimmed" component="span">
-                {websocketLogs.length > 0
+                {sseLogs.length > 0
                   ? `${logs.length} of ${totalLogCount} entries`
                   : `${logs.length} entries`}
               </Text>
-              {websocketLogs.length > 0 &&
+              {sseLogs.length > 0 &&
                 (analysis.status === 'running' ? (
                   <Badge color="green" size="xs" variant="dot">
                     Live
@@ -295,8 +309,9 @@ const AnalysisLogs = ({ analysis }) => {
       <ScrollArea
         h={height}
         p="sm"
-        ref={scrollRef}
-        onScrollPositionChange={handleScroll}
+        viewportRef={scrollRef}
+        onScrollPositionChange={handleScrollPositionChange}
+        onBottomReached={handleBottomReached}
         type="scroll"
         scrollbarSize={8}
       >

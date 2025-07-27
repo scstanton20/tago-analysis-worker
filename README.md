@@ -86,13 +86,13 @@ apps/
 │   │   ├── controllers/        # Route handlers
 │   │   ├── services/          # Business logic
 │   │   ├── models/            # Data models
-│   │   ├── utils/             # Utilities (crypto, WebSocket, etc.)
+│   │   ├── utils/             # Utilities (crypto, SSE, etc.)
 │   │   └── server.js          # Application entry point
 │   └── analyses-storage/       # File storage for analyses
 └── frontend/                   # React SPA
     ├── src/
     │   ├── components/         # UI components
-    │   ├── contexts/          # React contexts (auth, WebSocket)
+    │   ├── contexts/          # React contexts (auth, SSE)
     │   ├── hooks/             # Custom React hooks
     │   └── services/          # API layer
     └── public/
@@ -125,7 +125,7 @@ apps/
 
 - Live analysis status updates
 - Real-time log streaming
-- WebSocket-based communication
+- SSE-based communication
 - Automatic UI synchronization
 
 ## Security

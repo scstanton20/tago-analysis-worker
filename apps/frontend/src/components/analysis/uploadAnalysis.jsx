@@ -52,7 +52,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
   // Refs
   const fileInputRef = useRef(null);
 
-  // WebSocket context
+  // SSE context
   const { loadingAnalyses, analyses } = useSSE();
 
   // Permissions and team data
@@ -61,7 +61,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
   // Notifications
   const notify = useNotifications();
 
-  // Use WebSocket analyses data directly
+  // Use SSE analyses data directly
   const existingAnalyses = analyses ? Object.keys(analyses) : [];
   const currentAnalysisName =
     mode === 'upload' ? editableFileName : analysisName;
@@ -128,9 +128,6 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
     !selectedTeamId ||
     error;
   const isTabDisabled = hasFormContent && !isCurrentAnalysisLoading;
-
-  // No longer needed - using WebSocket data directly
-  // Removed redundant API call that duplicated WebSocket data
 
   // Validation
   const validateFilename = (filename) => {

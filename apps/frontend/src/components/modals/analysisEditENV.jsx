@@ -1,9 +1,8 @@
 // frontend/src/components/analysis/analysisEditENV.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import Editor from '@monaco-editor/react';
 import { analysisService } from '../../services/analysisService';
-import { useSSE } from '../../contexts/sseContext';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import {
   Modal,
@@ -19,7 +18,7 @@ import { IconAlertCircle } from '@tabler/icons-react';
 
 export default function EditAnalysisENVModal({
   onClose,
-  analysis,
+  analysis: currentAnalysis,
   readOnly = false,
 }) {
   const [content, setContent] = useState('');
@@ -27,20 +26,15 @@ export default function EditAnalysisENVModal({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // ADDED: Get current analysis from WebSocket context for consistency
-  const { getAnalysis } = useSSE();
-  const currentAnalysis = getAnalysis(analysis.name) || analysis;
   const notify = useNotifications();
 
-  // Load content when analysis name changes (derived state)
-  const [currentAnalysisName, setCurrentAnalysisName] = useState(
-    currentAnalysis.name,
-  );
-
-  if (currentAnalysis.name !== currentAnalysisName) {
-    setCurrentAnalysisName(currentAnalysis.name);
+  // Load content when component mounts or analysis changes
+  useEffect(() => {
+    let isCancelled = false;
 
     async function loadContent() {
+      if (!currentAnalysis.name) return;
+
       try {
         setIsLoading(true);
         setError(null);
@@ -50,19 +44,28 @@ export default function EditAnalysisENVModal({
           currentAnalysis.name,
         );
 
-        setContent(fileContent);
+        if (!isCancelled) {
+          setContent(fileContent);
+          setHasChanges(false);
+        }
       } catch (error) {
         console.error('Failed to load analysis ENV content:', error);
-        setError(error.message);
+        if (!isCancelled) {
+          setError(error.message);
+        }
       } finally {
-        setIsLoading(false);
+        if (!isCancelled) {
+          setIsLoading(false);
+        }
       }
     }
 
-    if (currentAnalysis.name) {
-      loadContent();
-    }
-  }
+    loadContent();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [currentAnalysis.name]);
 
   const handleEditorChange = (value) => {
     // Ensure value is a string
