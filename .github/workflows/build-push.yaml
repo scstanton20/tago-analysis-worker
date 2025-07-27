@@ -18,6 +18,23 @@ jobs:
       - name: Check out
         uses: actions/checkout@v4
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Extract Node.js version from package.json
+        id: node-version
+        run: |
+          echo "NODE_VERSION=$(node -p "require('./package.json').engines.node.replace('>=', '')")" >> $GITHUB_OUTPUT
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ steps.node-version.outputs.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Extract versions from package.json files
         id: version
         run: |

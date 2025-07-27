@@ -10,8 +10,8 @@ WORKDIR /app
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/backend/package.json ./apps/backend/
 
-# Install dependencies
-RUN pnpm install --filter backend --frozen-lockfile --prod
+# Install dependencies with cache mount
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --filter backend --frozen-lockfile --prod
 
 FROM node:23-alpine AS run
 

@@ -10,8 +10,8 @@ WORKDIR /app
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/frontend/package.json ./apps/frontend/
 
-# Install dependencies
-RUN pnpm install --filter frontend --frozen-lockfile
+# Install dependencies with cache mount
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --filter frontend --frozen-lockfile
 
 FROM node:23-alpine AS build
 # Set up pnpm in the runtime container
