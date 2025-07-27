@@ -387,9 +387,9 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
             <IconUser size={16} color="var(--mantine-color-brand-6)" />
             <Box style={{ flex: 1, minWidth: 0 }}>
               <Text size="sm" fw={500} truncate>
-                Hi, {user?.username || 'User'}
+                Hi, {user.username || user.name}
               </Text>
-              {user?.role && (
+              {user.role && (
                 <Text size="xs" c="dimmed" truncate>
                   {user.role}
                 </Text>

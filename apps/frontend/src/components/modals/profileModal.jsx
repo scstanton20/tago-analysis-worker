@@ -88,8 +88,9 @@ export default function ProfileModal({ opened, onClose }) {
 
   const profileForm = useForm({
     initialValues: {
-      name: user?.name || '',
-      email: user?.email || '',
+      name: user.name || '',
+      email: user.email || '',
+      username: user.username || '',
     },
     validate: {
       name: (value) => (!value ? 'Name is required' : null),
@@ -98,6 +99,12 @@ export default function ProfileModal({ opened, onClose }) {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         return !emailRegex.test(value) ? 'Invalid email format' : null;
       },
+      username: (value) =>
+        !value
+          ? 'Username is required'
+          : value.length < 3
+            ? 'Username must be at least 3 characters'
+            : null,
     },
   });
 
@@ -105,10 +112,11 @@ export default function ProfileModal({ opened, onClose }) {
   useFormSync(
     profileForm,
     {
-      name: user?.name || '',
-      email: user?.email || '',
+      name: user.name || '',
+      email: user.email || '',
+      username: user.username || '',
     },
-    [user?.name, user?.email],
+    [user.name, user.email, user.username],
   );
 
   // Load WebAuthn support and passkeys when modal opens
@@ -204,6 +212,7 @@ export default function ProfileModal({ opened, onClose }) {
         updateProfile({
           name: values.name,
           email: values.email,
+          username: values.username,
         }),
       );
 
@@ -226,8 +235,9 @@ export default function ProfileModal({ opened, onClose }) {
     setProfileError('');
     setProfileSuccess(false);
     profileForm.setValues({
-      name: user?.name || '',
-      email: user?.email || '',
+      name: user.name || '',
+      email: user.email || '',
+      username: user.username || '',
     });
   };
 
@@ -374,20 +384,26 @@ export default function ProfileModal({ opened, onClose }) {
                     <Text size="sm" fw={500}>
                       Name:
                     </Text>
-                    <Text size="sm">{user?.name}</Text>
+                    <Text size="sm">{user.name}</Text>
+                  </Group>
+                  <Group justify="space-between">
+                    <Text size="sm" fw={500}>
+                      Username:
+                    </Text>
+                    <Text size="sm">{user.username}</Text>
                   </Group>
                   <Group justify="space-between">
                     <Text size="sm" fw={500}>
                       Email:
                     </Text>
-                    <Text size="sm">{user?.email}</Text>
+                    <Text size="sm">{user.email}</Text>
                   </Group>
                   <Group justify="space-between">
                     <Text size="sm" fw={500}>
                       Role:
                     </Text>
                     <Text size="sm" transform="capitalize">
-                      {user?.role}
+                      {user.role}
                     </Text>
                   </Group>
                 </Stack>
@@ -413,6 +429,14 @@ export default function ProfileModal({ opened, onClose }) {
                   />
 
                   <TextInput
+                    label="Username"
+                    placeholder="Enter your username"
+                    required
+                    autoComplete="username"
+                    {...profileForm.getInputProps('username')}
+                  />
+
+                  <TextInput
                     label="Email"
                     placeholder="Enter your email"
                     type="email"
@@ -432,7 +456,7 @@ export default function ProfileModal({ opened, onClose }) {
                         Role:
                       </Text>
                       <Text size="sm" transform="capitalize">
-                        {user?.role}
+                        {user.role}
                       </Text>
                     </Group>
                   </Box>

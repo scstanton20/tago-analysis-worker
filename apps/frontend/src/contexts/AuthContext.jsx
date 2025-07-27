@@ -151,7 +151,22 @@ export const AuthProvider = ({ children }) => {
               );
             }
           }
-
+          // Handle username change separately using Better Auth's updateUser method
+          if (
+            profileData.username &&
+            profileData.username !== authData.user?.username
+          ) {
+            console.log('Changing username to:', profileData.username);
+            const usernameResult = await authClient.updateUser({
+              username: profileData.username,
+            });
+            console.log('Username change result:', usernameResult);
+            if (usernameResult.error) {
+              throw new Error(
+                usernameResult.error.message || 'Failed to change username',
+              );
+            }
+          }
           return { success: true };
         } catch (error) {
           console.error('Profile update error:', error);
