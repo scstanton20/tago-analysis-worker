@@ -1,6 +1,6 @@
 // backend/src/routes/teamRoutes.js
 import { Router } from 'express';
-import * as teamController from '../controllers/teamController.js';
+import TeamController from '../controllers/teamController.js';
 import {
   authMiddleware,
   requireAdmin,
@@ -44,7 +44,7 @@ router.use(requireAdmin);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/', teamController.getAllTeams);
+router.get('/', TeamController.getAllTeams);
 
 /**
  * @swagger
@@ -91,7 +91,7 @@ router.get('/', teamController.getAllTeams);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post('/', teamController.createTeam);
+router.post('/', TeamController.createTeam);
 
 /**
  * @swagger
@@ -123,7 +123,7 @@ router.post('/', teamController.createTeam);
  *                 message:
  *                   type: string
  */
-router.put('/reorder', teamController.reorderTeams);
+router.put('/reorder', TeamController.reorderTeams);
 
 /**
  * @swagger
@@ -177,7 +177,7 @@ router.put('/reorder', teamController.reorderTeams);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.put('/:id', teamController.updateTeam);
+router.put('/:id', TeamController.updateTeam);
 
 /**
  * @swagger
@@ -240,7 +240,7 @@ router.put('/:id', teamController.updateTeam);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.delete('/:id', teamController.deleteTeam);
+router.delete('/:id', TeamController.deleteTeam);
 
 /**
  * @swagger
@@ -268,7 +268,7 @@ router.delete('/:id', teamController.deleteTeam);
  *                   type: number
  *                   description: Number of analyses in the team
  */
-router.get('/:id/count', teamController.getTeamAnalysisCount);
+router.get('/:id/count', TeamController.getTeamAnalysisCount);
 
 // Analysis-team routes
 /**
@@ -342,6 +342,6 @@ router.get('/:id/count', teamController.getTeamAnalysisCount);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.put('/analyses/:name/team', teamController.moveAnalysisToTeam);
+router.put('/analyses/:name/team', TeamController.moveAnalysisToTeam);
 
 export default router;

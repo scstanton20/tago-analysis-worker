@@ -2,11 +2,11 @@
 import teamService from '../services/teamService.js';
 import { sseManager } from '../utils/sse.js';
 
-const TeamController = {
+class TeamController {
   // Custom team operations that handle Better Auth team table with custom properties
 
   // Get all teams
-  async getAllTeams(_req, res) {
+  static async getAllTeams(_req, res) {
     try {
       const teams = await teamService.getAllTeams();
       res.json(teams);
@@ -14,10 +14,10 @@ const TeamController = {
       console.error('Error getting teams:', error);
       res.status(500).json({ error: 'Failed to retrieve teams' });
     }
-  },
+  }
 
   // Create new team
-  async createTeam(req, res) {
+  static async createTeam(req, res) {
     try {
       const { name, color, order } = req.body;
 
@@ -46,10 +46,10 @@ const TeamController = {
         res.status(500).json({ error: 'Failed to create team' });
       }
     }
-  },
+  }
 
   // Update team
-  async updateTeam(req, res) {
+  static async updateTeam(req, res) {
     try {
       const { id } = req.params;
       const updates = req.body;
@@ -71,10 +71,10 @@ const TeamController = {
         res.status(500).json({ error: 'Failed to update team' });
       }
     }
-  },
+  }
 
   // Delete team with analysis migration
-  async deleteTeam(req, res) {
+  static async deleteTeam(req, res) {
     try {
       const { id } = req.params;
       const { moveAnalysesTo } = req.body;
@@ -98,10 +98,10 @@ const TeamController = {
         res.status(500).json({ error: 'Failed to delete team' });
       }
     }
-  },
+  }
 
   // Reorder teams
-  async reorderTeams(req, res) {
+  static async reorderTeams(req, res) {
     try {
       const { orderedIds } = req.body;
 
@@ -122,10 +122,10 @@ const TeamController = {
       console.error('Error reordering teams:', error);
       res.status(500).json({ error: 'Failed to reorder teams' });
     }
-  },
+  }
 
   // Move analysis to team
-  async moveAnalysisToTeam(req, res) {
+  static async moveAnalysisToTeam(req, res) {
     try {
       const { name } = req.params;
       const { teamId } = req.body;
@@ -156,10 +156,10 @@ const TeamController = {
         res.status(500).json({ error: 'Failed to move analysis' });
       }
     }
-  },
+  }
 
   // Get analysis count for a specific team/team
-  async getTeamAnalysisCount(req, res) {
+  static async getTeamAnalysisCount(req, res) {
     try {
       const { id } = req.params;
       const count = await teamService.getAnalysisCountByTeamId(id);
@@ -168,15 +168,7 @@ const TeamController = {
       console.error('Error getting analysis count:', error);
       res.status(500).json({ error: 'Failed to get analysis count' });
     }
-  },
-};
+  }
+}
 
-export const {
-  getAllTeams,
-  createTeam,
-  updateTeam,
-  deleteTeam,
-  reorderTeams,
-  moveAnalysisToTeam,
-  getTeamAnalysisCount,
-} = TeamController;
+export default TeamController;

@@ -1,6 +1,6 @@
 // backend/src/routes/analysisRoutes.js
 import { Router } from 'express';
-import * as analysisController from '../controllers/analysisController.js';
+import AnalysisController from '../controllers/analysisController.js';
 import {
   authMiddleware,
   extractAnalysisTeam,
@@ -76,7 +76,7 @@ router.post(
   '/upload',
   uploadLimiter,
   requireTeamPermission('upload_analyses'),
-  asyncHandler(analysisController.uploadAnalysis),
+  asyncHandler(AnalysisController.uploadAnalysis),
 );
 /**
  * @swagger
@@ -113,7 +113,7 @@ router.get(
   // For listing all analyses, allow if user has view permission in ANY team
   // The controller will filter analyses based on user's team memberships
   requireAnyTeamPermission('view_analyses'),
-  asyncHandler(analysisController.getAnalyses),
+  asyncHandler(AnalysisController.getAnalyses),
 );
 /**
  * @swagger
@@ -170,7 +170,7 @@ router.post(
   analysisRunLimiter,
   extractAnalysisTeam,
   requireTeamPermission('run_analyses'),
-  asyncHandler(analysisController.runAnalysis),
+  asyncHandler(AnalysisController.runAnalysis),
 );
 /**
  * @swagger
@@ -214,7 +214,7 @@ router.post(
   analysisRunLimiter,
   extractAnalysisTeam,
   requireTeamPermission('run_analyses'),
-  asyncHandler(analysisController.stopAnalysis),
+  asyncHandler(AnalysisController.stopAnalysis),
 );
 /**
  * @swagger
@@ -255,7 +255,7 @@ router.delete(
   deletionLimiter,
   extractAnalysisTeam,
   requireTeamPermission('delete_analyses'),
-  asyncHandler(analysisController.deleteAnalysis),
+  asyncHandler(AnalysisController.deleteAnalysis),
 );
 /**
  * @swagger
@@ -297,7 +297,7 @@ router.get(
   fileOperationLimiter,
   extractAnalysisTeam,
   requireTeamPermission('view_analyses'),
-  asyncHandler(analysisController.getAnalysisContent),
+  asyncHandler(AnalysisController.getAnalysisContent),
 );
 /**
  * @swagger
@@ -366,7 +366,7 @@ router.put(
   fileOperationLimiter,
   extractAnalysisTeam,
   requireTeamPermission('edit_analyses'),
-  asyncHandler(analysisController.updateAnalysis),
+  asyncHandler(AnalysisController.updateAnalysis),
 );
 /**
  * @swagger
@@ -435,7 +435,7 @@ router.put(
   fileOperationLimiter,
   extractAnalysisTeam,
   requireTeamPermission('edit_analyses'),
-  asyncHandler(analysisController.renameAnalysis),
+  asyncHandler(AnalysisController.renameAnalysis),
 );
 /**
  * @swagger
@@ -496,7 +496,7 @@ router.get(
   fileOperationLimiter,
   extractAnalysisTeam,
   requireTeamPermission('download_analyses'),
-  asyncHandler(analysisController.downloadAnalysis),
+  asyncHandler(AnalysisController.downloadAnalysis),
 );
 
 // Environment management routes
@@ -539,7 +539,7 @@ router.get(
   fileOperationLimiter,
   extractAnalysisTeam,
   requireTeamPermission('view_analyses'),
-  asyncHandler(analysisController.getEnvironment),
+  asyncHandler(AnalysisController.getEnvironment),
 );
 /**
  * @swagger
@@ -607,7 +607,7 @@ router.put(
   fileOperationLimiter,
   extractAnalysisTeam,
   requireTeamPermission('edit_analyses'),
-  asyncHandler(analysisController.updateEnvironment),
+  asyncHandler(AnalysisController.updateEnvironment),
 );
 
 // Logs management routes
@@ -664,7 +664,7 @@ router.get(
   '/:fileName/logs',
   extractAnalysisTeam,
   requireTeamPermission('view_analyses'),
-  asyncHandler(analysisController.getLogs),
+  asyncHandler(AnalysisController.getLogs),
 );
 /**
  * @swagger
@@ -725,7 +725,7 @@ router.get(
   fileOperationLimiter,
   extractAnalysisTeam,
   requireTeamPermission('view_analyses'),
-  asyncHandler(analysisController.downloadLogs),
+  asyncHandler(AnalysisController.downloadLogs),
 );
 /**
  * @swagger
@@ -766,7 +766,7 @@ router.delete(
   deletionLimiter,
   extractAnalysisTeam,
   requireTeamPermission('edit_analyses'),
-  asyncHandler(analysisController.clearLogs),
+  asyncHandler(AnalysisController.clearLogs),
 );
 
 // Version management routes
@@ -828,7 +828,7 @@ router.get(
   versionOperationLimiter,
   extractAnalysisTeam,
   requireTeamPermission('view_analyses'),
-  asyncHandler(analysisController.getVersions),
+  asyncHandler(AnalysisController.getVersions),
 );
 
 /**
@@ -902,7 +902,7 @@ router.post(
   versionOperationLimiter,
   extractAnalysisTeam,
   requireTeamPermission('edit_analyses'),
-  asyncHandler(analysisController.rollbackToVersion),
+  asyncHandler(AnalysisController.rollbackToVersion),
 );
 
 export default router;

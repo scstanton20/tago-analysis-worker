@@ -5,15 +5,15 @@ import ms from 'ms';
 const require = createRequire(import.meta.url);
 
 class StatusController {
-  constructor(analysisService) {
-    this.analysisService = analysisService;
-    this.getSystemStatus = this.getSystemStatus.bind(this);
-  }
-
-  async getSystemStatus(_req, res) {
+  static async getSystemStatus(_req, res) {
     try {
+      // Import analysisService directly instead of dependency injection
+      const { analysisService } = await import(
+        '../services/analysisService.js'
+      );
+
       // Add safety checks for analyses collection
-      const analyses = this.analysisService?.analyses;
+      const analyses = analysisService?.analyses;
       let runningAnalyses = [];
 
       if (analyses && typeof analyses.values === 'function') {

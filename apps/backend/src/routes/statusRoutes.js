@@ -1,9 +1,8 @@
 // backend/src/routes/statusRoutes.js
 import { Router } from 'express';
 import StatusController from '../controllers/statusController.js';
-export default function createStatusRoutes(analysisService) {
-  const router = Router();
-  const statusController = new StatusController(analysisService);
+
+const router = Router();
 
   /**
    * @swagger
@@ -90,7 +89,6 @@ export default function createStatusRoutes(analysisService) {
    *                   type: string
    *                   example: "Detailed error message"
    */
-  router.get('/', statusController.getSystemStatus);
+  router.get('/', StatusController.getSystemStatus);
 
-  return router;
-}
+export default router;

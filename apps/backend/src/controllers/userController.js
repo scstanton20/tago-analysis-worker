@@ -1,7 +1,10 @@
 import { auth } from '../lib/auth.js';
-import config from '../config/default.js';
-import path from 'path';
-import Database from 'better-sqlite3';
+import {
+  executeQuery,
+  executeQueryAll,
+  executeUpdate,
+  executeTransaction,
+} from '../utils/authDatabase.js';
 
 class UserController {
   /**
@@ -73,25 +76,24 @@ class UserController {
       const results = [];
       const errors = [];
 
-      // Use database operations for team assignments
-      const dbPath = path.join(config.storage.base, 'auth.db');
-      const db = new Database(dbPath);
-
       try {
+        // Use database operations for team assignments
         // Get organization ID
-        const org = db
-          .prepare('SELECT id FROM organization WHERE slug = ?')
-          .get('main');
+        const org = executeQuery(
+          'SELECT id FROM organization WHERE slug = ?',
+          ['main'],
+          'getting main organization',
+        );
         if (!org) {
           throw new Error('Main organization not found');
         }
 
         // Ensure user is a member of the organization before adding to teams
-        const existingOrgMember = db
-          .prepare(
-            'SELECT id FROM member WHERE userId = ? AND organizationId = ?',
-          )
-          .get(userId, org.id);
+        const existingOrgMember = executeQuery(
+          'SELECT id FROM member WHERE userId = ? AND organizationId = ?',
+          [userId, org.id],
+          'checking existing organization membership',
+        );
 
         if (!existingOrgMember) {
           console.log(`Adding user ${userId} to organization ${org.id}`);
@@ -122,11 +124,11 @@ class UserController {
 
           try {
             // Check if user is already a member of this team
-            const existingMember = db
-              .prepare(
-                'SELECT * FROM teamMember WHERE userId = ? AND teamId = ?',
-              )
-              .get(userId, teamId);
+            const existingMember = executeQuery(
+              'SELECT * FROM teamMember WHERE userId = ? AND teamId = ?',
+              [userId, teamId],
+              `checking existing team membership for user ${userId} in team ${teamId}`,
+            );
 
             if (existingMember) {
               // Update permissions for existing member
@@ -136,9 +138,11 @@ class UserController {
                   : ['analysis.view', 'analysis.run'],
               );
 
-              db.prepare(
+              executeUpdate(
                 'UPDATE teamMember SET permissions = ? WHERE userId = ? AND teamId = ?',
-              ).run(permissionsJson, userId, teamId);
+                [permissionsJson, userId, teamId],
+                `updating permissions for user ${userId} in team ${teamId}`,
+              );
 
               results.push({
                 teamId,
@@ -157,14 +161,16 @@ class UserController {
                   : ['analysis.view', 'analysis.run'],
               );
 
-              db.prepare(
+              executeUpdate(
                 'INSERT INTO teamMember (id, userId, teamId, permissions, createdAt) VALUES (?, ?, ?, ?, ?)',
-              ).run(
-                uuidv4(),
-                userId,
-                teamId,
-                permissionsJson,
-                new Date().toISOString(),
+                [
+                  uuidv4(),
+                  userId,
+                  teamId,
+                  permissionsJson,
+                  new Date().toISOString(),
+                ],
+                `adding user ${userId} to team ${teamId}`,
               );
 
               results.push({
@@ -183,8 +189,6 @@ class UserController {
       } catch (outerError) {
         console.error('Error in team assignment process:', outerError);
         errors.push(`Process error: ${outerError.message}`);
-      } finally {
-        db.close();
       }
 
       if (errors.length > 0 && results.length === 0) {
@@ -232,41 +236,33 @@ class UserController {
       console.log(`Getting team memberships for user ${userId}`);
 
       // Use database query to get user's team memberships since Better Auth doesn't have getUserTeams
-      const dbPath = path.join(config.storage.base, 'auth.db');
-      const db = new Database(dbPath, { readonly: true });
+      const memberships = executeQueryAll(
+        `
+        SELECT t.id, t.name, m.permissions
+        FROM teamMember m
+        JOIN team t ON m.teamId = t.id
+        WHERE m.userId = ?
+      `,
+        [userId],
+        `getting team memberships for user ${userId}`,
+      );
 
-      try {
-        // Get teams the user is a member of with their permissions
-        const memberships = db
-          .prepare(
-            `
-            SELECT t.id, t.name, m.permissions
-            FROM teamMember m
-            JOIN team t ON m.teamId = t.id
-            WHERE m.userId = ?
-          `,
-          )
-          .all(userId);
+      console.log(
+        `✓ Found ${memberships.length} team memberships for user ${userId}`,
+      );
 
-        console.log(
-          `✓ Found ${memberships.length} team memberships for user ${userId}`,
-        );
-
-        res.json({
-          success: true,
-          data: {
-            teams: memberships.map((membership) => ({
-              id: membership.id,
-              name: membership.name,
-              permissions: membership.permissions
-                ? JSON.parse(membership.permissions)
-                : [],
-            })),
-          },
-        });
-      } finally {
-        db.close();
-      }
+      res.json({
+        success: true,
+        data: {
+          teams: memberships.map((membership) => ({
+            id: membership.id,
+            name: membership.name,
+            permissions: membership.permissions
+              ? JSON.parse(membership.permissions)
+              : [],
+          })),
+        },
+      });
     } catch (error) {
       console.error('Error getting user team memberships:', error);
       res.status(500).json({ error: error.message });
@@ -291,14 +287,13 @@ class UserController {
         `Updating team assignments for user ${userId} with ${teamAssignments.length} teams`,
       );
 
-      // Use database query to get current team memberships
-      const dbPath = path.join(config.storage.base, 'auth.db');
-      const db = new Database(dbPath);
-
       try {
-        const currentMemberships = db
-          .prepare('SELECT teamId FROM teamMember WHERE userId = ?')
-          .all(userId);
+        // Use database query to get current team memberships
+        const currentMemberships = executeQueryAll(
+          'SELECT teamId FROM teamMember WHERE userId = ?',
+          [userId],
+          `getting current team memberships for user ${userId}`,
+        );
         const currentTeamIds = currentMemberships.map((m) => m.teamId);
 
         const newTeamIds = teamAssignments.map(
@@ -309,19 +304,21 @@ class UserController {
         );
 
         // Get organization ID
-        const org = db
-          .prepare('SELECT id FROM organization WHERE slug = ?')
-          .get('main');
+        const org = executeQuery(
+          'SELECT id FROM organization WHERE slug = ?',
+          ['main'],
+          'getting main organization',
+        );
         if (!org) {
           throw new Error('Main organization not found');
         }
 
         // Ensure user is a member of the organization before updating teams
-        const existingOrgMember = db
-          .prepare(
-            'SELECT id FROM member WHERE userId = ? AND organizationId = ?',
-          )
-          .get(userId, org.id);
+        const existingOrgMember = executeQuery(
+          'SELECT id FROM member WHERE userId = ? AND organizationId = ?',
+          [userId, org.id],
+          'checking existing organization membership',
+        );
 
         if (!existingOrgMember) {
           console.log(`Adding user ${userId} to organization ${org.id}`);
@@ -343,9 +340,11 @@ class UserController {
 
         // Remove user from teams they're no longer assigned to
         for (const teamId of teamsToRemove) {
-          db.prepare(
+          executeUpdate(
             'DELETE FROM teamMember WHERE userId = ? AND teamId = ?',
-          ).run(userId, teamId);
+            [userId, teamId],
+            `removing user ${userId} from team ${teamId}`,
+          );
           console.log(`✓ Removed user ${userId} from team ${teamId}`);
         }
 
@@ -374,14 +373,16 @@ class UserController {
                   : ['analysis.view', 'analysis.run'],
               );
 
-              db.prepare(
+              executeUpdate(
                 'INSERT INTO teamMember (id, userId, teamId, permissions, createdAt) VALUES (?, ?, ?, ?, ?)',
-              ).run(
-                uuidv4(),
-                userId,
-                teamId,
-                permissionsJson,
-                new Date().toISOString(),
+                [
+                  uuidv4(),
+                  userId,
+                  teamId,
+                  permissionsJson,
+                  new Date().toISOString(),
+                ],
+                `adding user ${userId} to team ${teamId}`,
               );
 
               console.log(`✓ Added user ${userId} to team ${teamId}`);
@@ -393,9 +394,11 @@ class UserController {
                   : ['analysis.view', 'analysis.run'],
               );
 
-              db.prepare(
+              executeUpdate(
                 'UPDATE teamMember SET permissions = ? WHERE userId = ? AND teamId = ?',
-              ).run(permissionsJson, userId, teamId);
+                [permissionsJson, userId, teamId],
+                `updating permissions for user ${userId} in team ${teamId}`,
+              );
 
               console.log(
                 `✓ Updated permissions for user ${userId} in team ${teamId}`,
@@ -421,8 +424,9 @@ class UserController {
             errors: errors.length > 0 ? errors : null,
           },
         });
-      } finally {
-        db.close();
+      } catch (outerError) {
+        console.error('Error in team assignment update process:', outerError);
+        res.status(500).json({ error: outerError.message });
       }
     } catch (error) {
       console.error('Error updating user team assignments:', error);
@@ -436,16 +440,12 @@ class UserController {
   static async cleanupUserReferences(userId) {
     console.log(`🧹 Cleaning up references for user ${userId}`);
 
-    const dbPath = path.join(config.storage.base, 'auth.db');
-    const Database = (await import('better-sqlite3')).default;
-    const cleanupDb = new Database(dbPath);
-
-    try {
+    return executeTransaction((db) => {
       // Find all foreign key references
-      const teamMemberships = cleanupDb
+      const teamMemberships = db
         .prepare('SELECT * FROM teamMember WHERE userId = ?')
         .all(userId);
-      const sessions = cleanupDb
+      const sessions = db
         .prepare('SELECT * FROM session WHERE userId = ?')
         .all(userId);
 
@@ -455,18 +455,16 @@ class UserController {
 
       // Remove team memberships first (foreign key constraint)
       if (teamMemberships.length > 0) {
-        cleanupDb
-          .prepare('DELETE FROM teamMember WHERE userId = ?')
-          .run(userId);
+        db.prepare('DELETE FROM teamMember WHERE userId = ?').run(userId);
         console.log(`✓ Removed ${teamMemberships.length} team memberships`);
       }
 
       // Remove organization memberships
-      const orgMemberships = cleanupDb
+      const orgMemberships = db
         .prepare('SELECT * FROM member WHERE userId = ?')
         .all(userId);
       if (orgMemberships.length > 0) {
-        cleanupDb.prepare('DELETE FROM member WHERE userId = ?').run(userId);
+        db.prepare('DELETE FROM member WHERE userId = ?').run(userId);
         console.log(
           `✓ Removed ${orgMemberships.length} organization memberships`,
         );
@@ -474,13 +472,13 @@ class UserController {
 
       // Remove sessions
       if (sessions.length > 0) {
-        cleanupDb.prepare('DELETE FROM session WHERE userId = ?').run(userId);
+        db.prepare('DELETE FROM session WHERE userId = ?').run(userId);
         console.log(`✓ Removed ${sessions.length} sessions`);
       }
 
       // Remove passkeys (if table exists)
       try {
-        const passkeys = cleanupDb
+        const passkeys = db
           .prepare('DELETE FROM passkey WHERE userId = ?')
           .run(userId);
         if (passkeys.changes > 0) {
@@ -492,7 +490,7 @@ class UserController {
 
       // Remove verification tokens (if table exists)
       try {
-        const verifications = cleanupDb
+        const verifications = db
           .prepare('DELETE FROM verification WHERE userId = ?')
           .run(userId);
         if (verifications.changes > 0) {
@@ -510,9 +508,7 @@ class UserController {
           sessions: sessions.length,
         },
       };
-    } finally {
-      cleanupDb.close();
-    }
+    }, `cleaning up user references for ${userId}`);
   }
 
   /**
@@ -675,25 +671,20 @@ class UserController {
       }
 
       // Clear the requiresPasswordChange flag in database
-      const dbPath = path.join(config.storage.base, 'auth.db');
-      const db = new Database(dbPath);
+      const updateResult = executeUpdate(
+        'UPDATE user SET requiresPasswordChange = 0 WHERE id = ?',
+        [req.user.id],
+        `clearing password change flag for user ${req.user.id}`,
+      );
 
-      try {
-        const updateResult = db
-          .prepare('UPDATE user SET requiresPasswordChange = 0 WHERE id = ?')
-          .run(req.user.id);
-
-        if (updateResult.changes === 0) {
-          console.warn(
-            `No user found with ID ${req.user.id} to clear password flag`,
-          );
-        } else {
-          console.log(
-            `✓ Cleared requiresPasswordChange flag for user ${req.user.id}`,
-          );
-        }
-      } finally {
-        db.close();
+      if (updateResult.changes === 0) {
+        console.warn(
+          `No user found with ID ${req.user.id} to clear password flag`,
+        );
+      } else {
+        console.log(
+          `✓ Cleared requiresPasswordChange flag for user ${req.user.id}`,
+        );
       }
 
       console.log(`✓ Password onboarding completed for user ${req.user.id}`);

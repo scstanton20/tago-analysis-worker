@@ -1,7 +1,9 @@
 import { v4 as uuidv4 } from 'uuid';
-import Database from 'better-sqlite3';
-import path from 'path';
-import config from '../config/default.js';
+import {
+  executeQuery,
+  executeQueryAll,
+  executeTransaction,
+} from '../utils/authDatabase.js';
 
 /**
  * Service class for managing teams using Better Auth organization plugin and their relationships with analyses
@@ -46,13 +48,11 @@ class TeamService {
    */
   async loadOrganizationId() {
     try {
-      const dbPath = path.join(config.storage.base, 'auth.db');
-      const db = new Database(dbPath, { readonly: true });
-
-      const org = db
-        .prepare('SELECT id FROM organization WHERE slug = ?')
-        .get('main');
-      db.close();
+      const org = executeQuery(
+        'SELECT id FROM organization WHERE slug = ?',
+        ['main'],
+        'loading organization ID',
+      );
 
       if (!org) {
         throw new Error('Main organization not found in better-auth database');
@@ -73,24 +73,17 @@ class TeamService {
    */
   async getAllTeams() {
     try {
-      const dbPath = path.join(config.storage.base, 'auth.db');
-      const db = new Database(dbPath, { readonly: true });
+      const teams = executeQueryAll(
+        'SELECT id, name, organizationId, createdAt, color, order_index, is_system FROM team WHERE organizationId = ? ORDER BY is_system DESC, order_index, name',
+        [this.organizationId],
+        'getting all teams',
+      );
 
-      try {
-        const teams = db
-          .prepare(
-            'SELECT id, name, organizationId, createdAt, color, order_index, is_system FROM team WHERE organizationId = ? ORDER BY is_system DESC, order_index, name',
-          )
-          .all(this.organizationId);
-
-        // Convert is_system from integer to boolean for frontend
-        return teams.map((team) => ({
-          ...team,
-          isSystem: team.is_system === 1,
-        }));
-      } finally {
-        db.close();
-      }
+      // Convert is_system from integer to boolean for frontend
+      return teams.map((team) => ({
+        ...team,
+        isSystem: team.is_system === 1,
+      }));
     } catch (error) {
       console.error('Failed to get teams:', error);
       throw error;
@@ -105,25 +98,18 @@ class TeamService {
    */
   async getTeam(id) {
     try {
-      const dbPath = path.join(config.storage.base, 'auth.db');
-      const db = new Database(dbPath, { readonly: true });
+      const team = executeQuery(
+        'SELECT id, name, organizationId, createdAt, color, order_index, is_system FROM team WHERE id = ? AND organizationId = ?',
+        [id, this.organizationId],
+        `getting team ${id}`,
+      );
 
-      try {
-        const team = db
-          .prepare(
-            'SELECT id, name, organizationId, createdAt, color, order_index, is_system FROM team WHERE id = ? AND organizationId = ?',
-          )
-          .get(id, this.organizationId);
-
-        if (team) {
-          // Convert is_system from integer to boolean for frontend
-          team.isSystem = team.is_system === 1;
-        }
-
-        return team || undefined;
-      } finally {
-        db.close();
+      if (team) {
+        // Convert is_system from integer to boolean for frontend
+        team.isSystem = team.is_system === 1;
       }
+
+      return team || undefined;
     } catch (error) {
       console.error(`Failed to get team ${id}:`, error);
       throw error;
@@ -143,10 +129,7 @@ class TeamService {
       // If custom ID provided, we need to create it directly in the database
       // since better-auth doesn't support custom IDs via API
       if (data.id) {
-        const dbPath = path.join(config.storage.base, 'auth.db');
-        const db = new Database(dbPath);
-
-        try {
+        return executeTransaction((db) => {
           // Check if team already exists
           const existing = db
             .prepare(
@@ -183,15 +166,10 @@ class TeamService {
 
           console.log(`Created team "${data.name}" with custom ID: ${data.id}`);
           return team;
-        } finally {
-          db.close();
-        }
+        }, `creating team with custom ID ${data.id}`);
       } else {
         // Create team with auto-generated ID
-        const dbPath = path.join(config.storage.base, 'auth.db');
-        const db = new Database(dbPath);
-
-        try {
+        return executeTransaction((db) => {
           // Check if team with same name already exists
           const existing = db
             .prepare(
@@ -229,9 +207,7 @@ class TeamService {
 
           console.log(`Created team "${data.name}" with ID: ${teamId}`);
           return team;
-        } finally {
-          db.close();
-        }
+        }, `creating team with auto-generated ID`);
       }
     } catch (error) {
       console.error('Failed to create team:', error);
@@ -249,10 +225,7 @@ class TeamService {
    */
   async updateTeam(id, updates) {
     try {
-      const dbPath = path.join(config.storage.base, 'auth.db');
-      const db = new Database(dbPath);
-
-      try {
+      return executeTransaction((db) => {
         // Check if team exists first
         const existing = db
           .prepare(
@@ -309,9 +282,7 @@ class TeamService {
 
         console.log(`Updated team ${id}`);
         return updatedTeam;
-      } finally {
-        db.close();
-      }
+      }, `updating team ${id}`);
     } catch (error) {
       console.error(`Failed to update team ${id}:`, error);
       throw error;
@@ -356,10 +327,7 @@ class TeamService {
       }
 
       // Delete the team
-      const dbPath = path.join(config.storage.base, 'auth.db');
-      const db = new Database(dbPath);
-
-      try {
+      executeTransaction((db) => {
         // Check if team exists first
         const existing = db
           .prepare('SELECT id FROM team WHERE id = ? AND organizationId = ?')
@@ -374,9 +342,7 @@ class TeamService {
           id,
           this.organizationId,
         );
-      } finally {
-        db.close();
-      }
+      }, `deleting team ${id}`);
 
       console.log(
         `Deleted team ${id}, moved ${analysesMovedCount} analyses to ${moveAnalysesTo}`,
@@ -493,10 +459,7 @@ class TeamService {
    */
   async reorderTeams(orderedIds) {
     try {
-      const dbPath = path.join(config.storage.base, 'auth.db');
-      const db = new Database(dbPath);
-
-      try {
+      return executeTransaction((db) => {
         // Update order_index for each team
         const updateStmt = db.prepare(
           'UPDATE team SET order_index = ? WHERE id = ? AND organizationId = ?',
@@ -521,9 +484,7 @@ class TeamService {
 
         console.log(`Reordered ${orderedIds.length} teams`);
         return teamsWithBoolean;
-      } finally {
-        db.close();
-      }
+      }, `reordering ${orderedIds.length} teams`);
     } catch (error) {
       console.error('Failed to reorder teams:', error);
       throw error;

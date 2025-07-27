@@ -42,8 +42,8 @@ function sanitizeAndValidateFilename(filename) {
   return sanitized;
 }
 
-const analysisController = {
-  async uploadAnalysis(req, res) {
+class AnalysisController {
+  static async uploadAnalysis(req, res) {
     try {
       if (!req.files || !req.files.analysis) {
         return res.status(400).json({ error: 'No file uploaded' });
@@ -78,19 +78,40 @@ const analysisController = {
       console.error('Upload error:', error);
       res.status(500).json({ error: error.message });
     }
-  },
+  }
 
-  async getAnalyses(_req, res) {
+  static async getAnalyses(req, res) {
     try {
-      const analyses = await analysisService.getAllAnalyses();
-      res.json(analyses);
+      const allAnalyses = await analysisService.getAllAnalyses();
+
+      // Admin users can see all analyses
+      if (req.user.role === 'admin') {
+        return res.json(allAnalyses);
+      }
+
+      // Get user's allowed team IDs for view_analyses permission
+      const { getUserTeamIds } = await import(
+        '../middleware/betterAuthMiddleware.js'
+      );
+
+      const allowedTeamIds = getUserTeamIds(req.user.id, 'view_analyses');
+
+      // Filter analyses to only include those in allowed teams
+      const filteredAnalyses = {};
+      for (const [analysisName, analysis] of Object.entries(allAnalyses)) {
+        if (allowedTeamIds.includes(analysis.teamId)) {
+          filteredAnalyses[analysisName] = analysis;
+        }
+      }
+
+      res.json(filteredAnalyses);
     } catch (error) {
       console.error('List analyses error:', error);
       res.status(500).json({ error: error.message });
     }
-  },
+  }
 
-  async runAnalysis(req, res) {
+  static async runAnalysis(req, res) {
     try {
       const { fileName } = req.params;
 
@@ -124,9 +145,9 @@ const analysisController = {
         error: error.message,
       });
     }
-  },
+  }
 
-  async stopAnalysis(req, res) {
+  static async stopAnalysis(req, res) {
     try {
       const { fileName } = req.params;
 
@@ -160,9 +181,9 @@ const analysisController = {
         error: error.message,
       });
     }
-  },
+  }
 
-  async deleteAnalysis(req, res) {
+  static async deleteAnalysis(req, res) {
     try {
       const { fileName } = req.params;
 
@@ -197,9 +218,9 @@ const analysisController = {
 
       res.status(500).json({ error: error.message });
     }
-  },
+  }
 
-  async getAnalysisContent(req, res) {
+  static async getAnalysisContent(req, res) {
     try {
       const { fileName } = req.params;
 
@@ -234,9 +255,9 @@ const analysisController = {
         error: error.message,
       });
     }
-  },
+  }
 
-  async updateAnalysis(req, res) {
+  static async updateAnalysis(req, res) {
     try {
       const { fileName } = req.params;
       const { content } = req.body;
@@ -296,9 +317,9 @@ const analysisController = {
         error: error.message,
       });
     }
-  },
+  }
 
-  async renameAnalysis(req, res) {
+  static async renameAnalysis(req, res) {
     try {
       const { fileName } = req.params;
       const { newFileName } = req.body;
@@ -359,9 +380,9 @@ const analysisController = {
 
       res.status(500).json({ error: error.message });
     }
-  },
+  }
 
-  async getLogs(req, res) {
+  static async getLogs(req, res) {
     try {
       const { fileName } = req.params;
       const page = parseInt(req.query.page) || 1;
@@ -388,9 +409,9 @@ const analysisController = {
 
       res.status(500).json({ error: error.message });
     }
-  },
+  }
 
-  async downloadLogs(req, res) {
+  static async downloadLogs(req, res) {
     try {
       const { fileName } = req.params;
       const { timeRange } = req.query;
@@ -529,9 +550,9 @@ const analysisController = {
 
       res.status(500).json({ error: error.message });
     }
-  },
+  }
 
-  async clearLogs(req, res) {
+  static async clearLogs(req, res) {
     try {
       const { fileName } = req.params;
 
@@ -567,9 +588,9 @@ const analysisController = {
 
       res.status(500).json({ error: error.message });
     }
-  },
+  }
 
-  async downloadAnalysis(req, res) {
+  static async downloadAnalysis(req, res) {
     try {
       const { fileName } = req.params;
       const { version } = req.query;
@@ -616,9 +637,9 @@ const analysisController = {
 
       res.status(500).json({ error: error.message });
     }
-  },
+  }
 
-  async getVersions(req, res) {
+  static async getVersions(req, res) {
     try {
       const { fileName } = req.params;
 
@@ -639,9 +660,9 @@ const analysisController = {
 
       res.status(500).json({ error: error.message });
     }
-  },
+  }
 
-  async rollbackToVersion(req, res) {
+  static async rollbackToVersion(req, res) {
     try {
       const { fileName } = req.params;
       const { version } = req.body;
@@ -696,11 +717,9 @@ const analysisController = {
 
       res.status(500).json({ error: error.message });
     }
-  },
-};
+  }
 
-const environmentController = {
-  async updateEnvironment(req, res) {
+  static async updateEnvironment(req, res) {
     try {
       const { fileName } = req.params;
       const { env } = req.body;
@@ -751,9 +770,9 @@ const environmentController = {
 
       res.status(500).json({ error: error.message });
     }
-  },
+  }
 
-  async getEnvironment(req, res) {
+  static async getEnvironment(req, res) {
     try {
       const { fileName } = req.params;
 
@@ -774,27 +793,7 @@ const environmentController = {
 
       res.status(500).json({ error: error.message });
     }
-  },
-};
+  }
+}
 
-export const {
-  uploadAnalysis,
-  getAnalyses,
-  runAnalysis,
-  stopAnalysis,
-  deleteAnalysis,
-  getAnalysisContent,
-  updateAnalysis,
-  renameAnalysis,
-  getLogs,
-  downloadLogs,
-  clearLogs,
-  downloadAnalysis,
-  getVersions,
-  rollbackToVersion,
-  updateEnvironment,
-  getEnvironment,
-} = {
-  ...analysisController,
-  ...environmentController,
-};
+export default AnalysisController;
