@@ -228,7 +228,7 @@ export default function UserSessionsModal({ opened, onClose, user }) {
           <Text fw={600}>Sessions for {user?.name || user?.email}</Text>
         </Group>
       }
-      size="lg"
+      size="calc(100vw - 3rem)"
       centered
     >
       <Box pos="relative">
