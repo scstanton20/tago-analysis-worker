@@ -114,28 +114,6 @@ export default function ProfileModal({ opened, onClose }) {
   // Load WebAuthn support and passkeys when modal opens
   const [hasLoadedModalData, setHasLoadedModalData] = useState(false);
 
-  if (opened && !hasLoadedModalData) {
-    setHasLoadedModalData(true);
-    checkWebAuthnSupport();
-    loadPasskeys();
-  }
-
-  // Reset loaded flag when modal closes
-  if (!opened && hasLoadedModalData) {
-    setHasLoadedModalData(false);
-  }
-
-  // Listen for password change logout event
-  const handlePasswordChangeLogout = useCallback(
-    (event) => {
-      notify.info(event.detail.message);
-      onClose(); // Close the modal since user will be logged out
-    },
-    [notify, onClose],
-  );
-
-  useEventListener('password-changed-logout', handlePasswordChangeLogout);
-
   const checkWebAuthnSupport = async () => {
     // WebAuthn support check - Better Auth handles this internally
     setIsWebAuthnSupported(true);
@@ -166,6 +144,28 @@ export default function ProfileModal({ opened, onClose }) {
       setPasskeysLoading(false);
     }
   };
+
+  if (opened && !hasLoadedModalData) {
+    setHasLoadedModalData(true);
+    checkWebAuthnSupport();
+    loadPasskeys();
+  }
+
+  // Reset loaded flag when modal closes
+  if (!opened && hasLoadedModalData) {
+    setHasLoadedModalData(false);
+  }
+
+  // Listen for password change logout event
+  const handlePasswordChangeLogout = useCallback(
+    (event) => {
+      notify.info(event.detail.message);
+      onClose(); // Close the modal since user will be logged out
+    },
+    [notify, onClose],
+  );
+
+  useEventListener('password-changed-logout', handlePasswordChangeLogout);
 
   const handlePasswordSubmit = async (values) => {
     try {
