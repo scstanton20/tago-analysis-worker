@@ -142,7 +142,7 @@ async function startServer() {
     // Apply express.json() middleware before auth routes
     app.use(express.json());
 
-    app.use(`${API_PREFIX}/status`, routes.statusRoutes(analysisService));
+    app.use(`${API_PREFIX}/status`, routes.statusRoutes);
     console.log(`✓ Status routes mounted at ${API_PREFIX}/status`);
 
     // Protected routes

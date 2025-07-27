@@ -21,12 +21,11 @@ import {
   IconX,
   IconAlertCircle,
 } from '@tabler/icons-react';
-import { useSSE } from '../../contexts/sseContext';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 
 export default function EditAnalysisModal({
   onClose,
-  analysis: initialAnalysis,
+  analysis: currentAnalysis,
   readOnly = false,
 }) {
   const [content, setContent] = useState('');
@@ -34,43 +33,52 @@ export default function EditAnalysisModal({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isEditingName, setIsEditingName] = useState(false);
-  const [newFileName, setNewFileName] = useState(initialAnalysis.name);
+  const [newFileName, setNewFileName] = useState(currentAnalysis.name);
+  const [displayName, setDisplayName] = useState(currentAnalysis.name);
 
-  // FIXED: Get analyses object from WebSocket context
-  const { analyses } = useSSE();
   const notify = useNotifications();
 
-  // FIXED: Use direct object lookup instead of array.find()
-  const currentAnalysis = analyses?.[initialAnalysis.name] || initialAnalysis;
+  // Update analysis name when it changes via SSE (derived state)
+  if (currentAnalysis.name !== newFileName && !isEditingName) {
+    setNewFileName(currentAnalysis.name);
+    setDisplayName(currentAnalysis.name);
+  }
 
-  // Update analysis name when it changes via WebSocket
+  // Load content when component mounts or analysis changes
   useEffect(() => {
-    if (currentAnalysis.name !== newFileName && !isEditingName) {
-      setNewFileName(currentAnalysis.name);
-    }
-  }, [currentAnalysis.name, isEditingName, newFileName]);
+    let isCancelled = false;
 
-  useEffect(() => {
     async function loadContent() {
+      if (!displayName) return;
+
       try {
         setIsLoading(true);
         setError(null);
-        const fileContent = await analysisService.getAnalysisContent(
-          currentAnalysis.name,
-        );
-        setContent(fileContent);
+        const fileContent =
+          await analysisService.getAnalysisContent(displayName);
+
+        if (!isCancelled) {
+          setContent(fileContent);
+          setHasChanges(false);
+        }
       } catch (error) {
         console.error('Failed to load analysis content:', error);
-        setError(error.message);
+        if (!isCancelled) {
+          setError(error.message);
+        }
       } finally {
-        setIsLoading(false);
+        if (!isCancelled) {
+          setIsLoading(false);
+        }
       }
     }
 
-    if (currentAnalysis.name) {
-      loadContent();
-    }
-  }, [currentAnalysis.name]);
+    loadContent();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [displayName]);
 
   const handleEditorChange = (value) => {
     setContent(value);
@@ -83,8 +91,8 @@ export default function EditAnalysisModal({
       setError(null);
 
       await notify.updateAnalysis(
-        analysisService.updateAnalysis(currentAnalysis.name, content),
-        currentAnalysis.name,
+        analysisService.updateAnalysis(displayName, content),
+        displayName,
       );
 
       setHasChanges(false);
@@ -104,7 +112,7 @@ export default function EditAnalysisModal({
         return;
       }
 
-      if (newFileName === currentAnalysis.name) {
+      if (newFileName === displayName) {
         setIsEditingName(false);
         return;
       }
@@ -113,20 +121,21 @@ export default function EditAnalysisModal({
       setError(null);
 
       await notify.executeWithNotification(
-        analysisService.renameAnalysis(currentAnalysis.name, newFileName),
+        analysisService.renameAnalysis(displayName, newFileName),
         {
-          loading: `Renaming ${currentAnalysis.name} to ${newFileName}...`,
+          loading: `Renaming ${displayName} to ${newFileName}...`,
           success: `Analysis renamed to ${newFileName} successfully.`,
         },
       );
 
-      // Don't close the modal - WebSockets will update the name
+      // Update the displayed name immediately and exit edit mode
+      setDisplayName(newFileName);
       setIsEditingName(false);
     } catch (error) {
       console.error('Rename failed:', error);
       setError(error.message || 'Failed to rename analysis.');
       // Reset the filename input to the current name if rename fails
-      setNewFileName(currentAnalysis.name);
+      setNewFileName(displayName);
     } finally {
       setIsLoading(false);
     }
@@ -164,7 +173,7 @@ export default function EditAnalysisModal({
                 size="sm"
                 onClick={() => {
                   setIsEditingName(false);
-                  setNewFileName(currentAnalysis.name);
+                  setNewFileName(displayName);
                 }}
                 disabled={isLoading}
               >
@@ -173,7 +182,7 @@ export default function EditAnalysisModal({
             </Group>
           ) : (
             <Group gap={4}>
-              <Text>{currentAnalysis.name}</Text>
+              <Text>{displayName}</Text>
               {!readOnly && (
                 <ActionIcon
                   variant="subtle"

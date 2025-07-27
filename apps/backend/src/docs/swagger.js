@@ -103,12 +103,6 @@ This API provides real-time updates via **Server-Sent Events (SSE)** for:
 - Department management updates
 - Session management notifications
 
-**Migration from WebSocket:**
-- Simplified authentication (single HTTP cookie-based auth)
-- Built-in browser reconnection support
-- Standard HTTP-based protocol
-- Same functionality as previous WebSocket implementation
-
 **SSE Endpoint:** \`GET /api/sse/events\`
 **Authentication:** HTTP-only cookies (access_token)
 **Connection:** Persistent keep-alive with automatic reconnection`,

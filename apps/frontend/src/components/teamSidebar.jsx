@@ -209,7 +209,7 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
     });
   }, [teams, hasAdminPerms, canAccessTeam, getTeamAnalysisCount]);
 
-  // Use the efficient count function from WebSocket hook
+  // Use the efficient count function from SSE hook
   const getAnalysisCount = (teamId) => {
     return getTeamAnalysisCount(teamId);
   };

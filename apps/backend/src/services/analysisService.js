@@ -301,7 +301,7 @@ class AnalysisService {
       }),
     );
 
-    // Return as object to match WebSocket expectations
+    // Return as object to match SSE expectations
     const analysesObj = {};
     results.filter(Boolean).forEach((analysis) => {
       analysesObj[analysis.name] = analysis;
@@ -407,7 +407,7 @@ class AnalysisService {
   }
 
   /**
-   * Get initial logs for WebSocket connection with pagination
+   * Get initial logs for SSE connection with pagination
    * @param {string} analysisName - Name of the analysis
    * @param {number} [limit=50] - Maximum number of log entries to return
    * @returns {Promise<Object>} Object with logs array and total count

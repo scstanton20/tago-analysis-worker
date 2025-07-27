@@ -36,7 +36,7 @@ export default function AnalysisList({
       }
     }
 
-    // Use WebSocket data and apply team filtering
+    // Use SSE and apply team filtering
     if (selectedTeam) {
       const filtered = {};
       Object.entries(allAnalyses).forEach(([name, analysis]) => {

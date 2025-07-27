@@ -1,7 +1,9 @@
 import { v4 as uuidv4 } from 'uuid';
-import Database from 'better-sqlite3';
-import path from 'path';
-import config from '../config/default.js';
+import {
+  executeQuery,
+  executeQueryAll,
+  executeTransaction,
+} from '../utils/authDatabase.js';
 
 /**
  * Service class for managing teams using Better Auth organization plugin and their relationships with analyses
@@ -32,15 +34,6 @@ class TeamService {
       // Get the main organization ID from better-auth database
       await this.loadOrganizationId();
 
-      // Check if migration is needed from old department-based config
-      const configData = await this.analysisService.getConfig();
-      if (!configData.version || configData.version < '3.0') {
-        await this.migrateConfig();
-      }
-
-      // Always run the uncategorized string fix after initialization
-      await this.fixUncategorizedAnalyses();
-
       this.initialized = true;
       console.log('Team service initialized (using better-auth teams)');
     } catch (error) {
@@ -55,13 +48,11 @@ class TeamService {
    */
   async loadOrganizationId() {
     try {
-      const dbPath = path.join(config.storage.base, 'auth.db');
-      const db = new Database(dbPath, { readonly: true });
-
-      const org = db
-        .prepare('SELECT id FROM organization WHERE slug = ?')
-        .get('main');
-      db.close();
+      const org = executeQuery(
+        'SELECT id FROM organization WHERE slug = ?',
+        ['main'],
+        'loading organization ID',
+      );
 
       if (!org) {
         throw new Error('Main organization not found in better-auth database');
@@ -76,190 +67,23 @@ class TeamService {
   }
 
   /**
-   * Migrate configuration from older versions to version 3.0 (team-based)
-   * Converts departments to teams and updates analysis references
-   * @returns {Promise<void>}
-   * @throws {Error} If migration fails
-   */
-  async migrateConfig() {
-    console.log('Migrating config to version 3.0 (team-based architecture)...');
-
-    const configData = await this.analysisService.getConfig();
-
-    // If we have departments, migrate them to teams
-    if (configData.departments) {
-      const dbPath = path.join(config.storage.base, 'auth.db');
-      const db = new Database(dbPath);
-
-      try {
-        // Get or create the uncategorized team for uncategorized analyses
-        let uncategorizedTeam = db
-          .prepare('SELECT id FROM team WHERE name = ? AND organizationId = ?')
-          .get('Uncategorized', this.organizationId);
-
-        if (!uncategorizedTeam) {
-          const uncategorizedTeamId = uuidv4();
-          db.prepare(
-            'INSERT INTO team (id, name, organizationId, createdAt, color, order_index, is_system) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          ).run(
-            uncategorizedTeamId,
-            'Uncategorized',
-            this.organizationId,
-            new Date().toISOString(),
-            '#9ca3af',
-            0,
-            1,
-          );
-          uncategorizedTeam = { id: uncategorizedTeamId };
-          console.log('Created uncategorized team for uncategorized analyses');
-        }
-
-        // Create teams for non-system departments
-        const departmentToTeamMap = {
-          uncategorized: uncategorizedTeam.id,
-        };
-
-        for (const [deptId, dept] of Object.entries(configData.departments)) {
-          if (dept.isSystem) continue; // Skip system departments like uncategorized
-
-          // Check if team already exists
-          const existingTeam = db
-            .prepare('SELECT id FROM team WHERE id = ? AND organizationId = ?')
-            .get(deptId, this.organizationId);
-
-          if (!existingTeam) {
-            // Create team with same ID as department and migrate properties
-            db.prepare(
-              'INSERT INTO team (id, name, organizationId, createdAt, color, order_index, is_system) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            ).run(
-              deptId,
-              dept.name,
-              this.organizationId,
-              new Date().toISOString(),
-              dept.color || '#3B82F6', // Default blue color if not specified
-              dept.order || 0, // Default order if not specified
-              dept.isSystem ? 1 : 0, // Convert boolean to integer
-            );
-            console.log(
-              `Created team "${dept.name}" with ID: ${deptId}, color: ${dept.color}, order: ${dept.order}, isSystem: ${dept.isSystem}`,
-            );
-          } else {
-            // Update existing team with migrated properties if they are missing
-            db.prepare(
-              'UPDATE team SET color = ?, order_index = ?, is_system = ? WHERE id = ? AND organizationId = ?',
-            ).run(
-              dept.color || '#3B82F6', // Default blue color if not specified
-              dept.order || 0, // Default order if not specified
-              dept.isSystem ? 1 : 0, // Convert boolean to integer
-              deptId,
-              this.organizationId,
-            );
-            console.log(
-              `Updated existing team "${dept.name}" with migrated properties`,
-            );
-          }
-
-          departmentToTeamMap[deptId] = deptId;
-        }
-
-        // Update analyses to use teamId instead of department
-        if (configData.analyses) {
-          for (const [analysisName, analysis] of Object.entries(
-            configData.analyses,
-          )) {
-            if (analysis.department) {
-              const teamId =
-                departmentToTeamMap[analysis.department] ||
-                uncategorizedTeam.id;
-              analysis.teamId = teamId;
-              delete analysis.department;
-              console.log(
-                `Migrated analysis "${analysisName}" to team: ${teamId}`,
-              );
-            }
-          }
-        }
-
-        // Remove departments section and update version
-        delete configData.departments;
-        configData.version = '3.0';
-
-        await this.analysisService.updateConfig(configData);
-        console.log('Migration to team-based architecture completed');
-      } finally {
-        db.close();
-      }
-    } else {
-      // Just update version if no departments to migrate
-      configData.version = '3.0';
-      await this.analysisService.updateConfig(configData);
-    }
-  }
-
-  /**
-   * Fix analyses that have teamId: "uncategorized" (string) instead of proper team ID
-   * @returns {Promise<void>}
-   */
-  async fixUncategorizedAnalyses() {
-    try {
-      const currentConfig = await this.analysisService.getConfig();
-      if (!currentConfig.analyses) return;
-
-      let needsUpdate = false;
-      const teams = await this.getAllTeams();
-      const uncategorizedTeam = teams.find((t) => t.name === 'Uncategorized');
-
-      if (!uncategorizedTeam) {
-        console.warn('No "Uncategorized" team found to fix analyses');
-        return;
-      }
-
-      for (const [analysisName, analysis] of Object.entries(
-        currentConfig.analyses,
-      )) {
-        if (analysis.teamId === 'uncategorized') {
-          analysis.teamId = uncategorizedTeam.id;
-          needsUpdate = true;
-          console.log(
-            `Fixed analysis "${analysisName}" teamId from "uncategorized" to ${uncategorizedTeam.id}`,
-          );
-        }
-      }
-
-      if (needsUpdate) {
-        await this.analysisService.updateConfig(currentConfig);
-        console.log('Updated analyses with proper team IDs');
-      }
-    } catch (error) {
-      console.error('Failed to fix uncategorized analyses:', error);
-    }
-  }
-
-  /**
    * Get all teams sorted by name
    * @returns {Promise<Array>} Array of team objects from better-auth
    * @throws {Error} If team retrieval fails
    */
   async getAllTeams() {
     try {
-      const dbPath = path.join(config.storage.base, 'auth.db');
-      const db = new Database(dbPath, { readonly: true });
+      const teams = executeQueryAll(
+        'SELECT id, name, organizationId, createdAt, color, order_index, is_system FROM team WHERE organizationId = ? ORDER BY is_system DESC, order_index, name',
+        [this.organizationId],
+        'getting all teams',
+      );
 
-      try {
-        const teams = db
-          .prepare(
-            'SELECT id, name, organizationId, createdAt, color, order_index, is_system FROM team WHERE organizationId = ? ORDER BY is_system DESC, order_index, name',
-          )
-          .all(this.organizationId);
-
-        // Convert is_system from integer to boolean for frontend
-        return teams.map((team) => ({
-          ...team,
-          isSystem: team.is_system === 1,
-        }));
-      } finally {
-        db.close();
-      }
+      // Convert is_system from integer to boolean for frontend
+      return teams.map((team) => ({
+        ...team,
+        isSystem: team.is_system === 1,
+      }));
     } catch (error) {
       console.error('Failed to get teams:', error);
       throw error;
@@ -274,25 +98,18 @@ class TeamService {
    */
   async getTeam(id) {
     try {
-      const dbPath = path.join(config.storage.base, 'auth.db');
-      const db = new Database(dbPath, { readonly: true });
+      const team = executeQuery(
+        'SELECT id, name, organizationId, createdAt, color, order_index, is_system FROM team WHERE id = ? AND organizationId = ?',
+        [id, this.organizationId],
+        `getting team ${id}`,
+      );
 
-      try {
-        const team = db
-          .prepare(
-            'SELECT id, name, organizationId, createdAt, color, order_index, is_system FROM team WHERE id = ? AND organizationId = ?',
-          )
-          .get(id, this.organizationId);
-
-        if (team) {
-          // Convert is_system from integer to boolean for frontend
-          team.isSystem = team.is_system === 1;
-        }
-
-        return team || undefined;
-      } finally {
-        db.close();
+      if (team) {
+        // Convert is_system from integer to boolean for frontend
+        team.isSystem = team.is_system === 1;
       }
+
+      return team || undefined;
     } catch (error) {
       console.error(`Failed to get team ${id}:`, error);
       throw error;
@@ -312,10 +129,7 @@ class TeamService {
       // If custom ID provided, we need to create it directly in the database
       // since better-auth doesn't support custom IDs via API
       if (data.id) {
-        const dbPath = path.join(config.storage.base, 'auth.db');
-        const db = new Database(dbPath);
-
-        try {
+        return executeTransaction((db) => {
           // Check if team already exists
           const existing = db
             .prepare(
@@ -352,15 +166,10 @@ class TeamService {
 
           console.log(`Created team "${data.name}" with custom ID: ${data.id}`);
           return team;
-        } finally {
-          db.close();
-        }
+        }, `creating team with custom ID ${data.id}`);
       } else {
         // Create team with auto-generated ID
-        const dbPath = path.join(config.storage.base, 'auth.db');
-        const db = new Database(dbPath);
-
-        try {
+        return executeTransaction((db) => {
           // Check if team with same name already exists
           const existing = db
             .prepare(
@@ -398,9 +207,7 @@ class TeamService {
 
           console.log(`Created team "${data.name}" with ID: ${teamId}`);
           return team;
-        } finally {
-          db.close();
-        }
+        }, `creating team with auto-generated ID`);
       }
     } catch (error) {
       console.error('Failed to create team:', error);
@@ -418,10 +225,7 @@ class TeamService {
    */
   async updateTeam(id, updates) {
     try {
-      const dbPath = path.join(config.storage.base, 'auth.db');
-      const db = new Database(dbPath);
-
-      try {
+      return executeTransaction((db) => {
         // Check if team exists first
         const existing = db
           .prepare(
@@ -478,9 +282,7 @@ class TeamService {
 
         console.log(`Updated team ${id}`);
         return updatedTeam;
-      } finally {
-        db.close();
-      }
+      }, `updating team ${id}`);
     } catch (error) {
       console.error(`Failed to update team ${id}:`, error);
       throw error;
@@ -525,10 +327,7 @@ class TeamService {
       }
 
       // Delete the team
-      const dbPath = path.join(config.storage.base, 'auth.db');
-      const db = new Database(dbPath);
-
-      try {
+      executeTransaction((db) => {
         // Check if team exists first
         const existing = db
           .prepare('SELECT id FROM team WHERE id = ? AND organizationId = ?')
@@ -543,9 +342,7 @@ class TeamService {
           id,
           this.organizationId,
         );
-      } finally {
-        db.close();
-      }
+      }, `deleting team ${id}`);
 
       console.log(
         `Deleted team ${id}, moved ${analysesMovedCount} analyses to ${moveAnalysesTo}`,
@@ -662,10 +459,7 @@ class TeamService {
    */
   async reorderTeams(orderedIds) {
     try {
-      const dbPath = path.join(config.storage.base, 'auth.db');
-      const db = new Database(dbPath);
-
-      try {
+      return executeTransaction((db) => {
         // Update order_index for each team
         const updateStmt = db.prepare(
           'UPDATE team SET order_index = ? WHERE id = ? AND organizationId = ?',
@@ -690,9 +484,7 @@ class TeamService {
 
         console.log(`Reordered ${orderedIds.length} teams`);
         return teamsWithBoolean;
-      } finally {
-        db.close();
-      }
+      }, `reordering ${orderedIds.length} teams`);
     } catch (error) {
       console.error('Failed to reorder teams:', error);
       throw error;

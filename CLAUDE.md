@@ -29,7 +29,7 @@ docker-compose -f docker-compose.dev.yaml up
 ### Tech Stack
 
 - **Frontend**: React 19 + Vite + Mantine 8.x UI library
-- **Backend**: Node.js 22+ ES modules + Express.js 5.x + WebSocket
+- **Backend**: Node.js 22+ ES modules + Express.js 5.x + SSE
 - **Package Manager**: pnpm workspaces
 - **Containerization**: Docker with multi-stage builds
 
@@ -42,13 +42,13 @@ apps/
 │   │   ├── controllers/        # Route handlers
 │   │   ├── services/          # Business logic (analysis, department services)
 │   │   ├── models/            # AnalysisProcess model for process management
-│   │   ├── utils/             # Crypto, WebSocket, storage utilities
+│   │   ├── utils/             # Crypto, SSE, storage utilities
 │   │   └── server.js          # Application entry point
 │   └── analyses-storage/       # File storage for uploaded analyses
 └── frontend/                   # React SPA
     ├── src/
     │   ├── components/         # UI components
-    │   ├── contexts/          # WebSocket context for real-time updates
+    │   ├── contexts/          # SSE context for real-time updates
     │   └── services/          # Frontend API layer
     └── public/
 ```
@@ -56,8 +56,8 @@ apps/
 ### Key Patterns
 
 - **Backend**: MVC with service layer, custom AnalysisProcess model for managing child processes
-- **Frontend**: Component-based with WebSocket context for real-time state management
-- **Real-time Communication**: WebSocket integration for live status updates and log streaming
+- **Frontend**: Component-based with SSE context for real-time state management
+- **Real-time Communication**: SSE integration for live status updates and log streaming
 - **Department Organization**: Hierarchical structure with drag-and-drop management
 - **Security**: Encryption utilities for sensitive configuration data
 - **Notifications**: Mantine-based notification system for user feedback on async operations

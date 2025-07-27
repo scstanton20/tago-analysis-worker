@@ -1,5 +1,5 @@
 // frontend/src/components/analysis/uploadAnalysis.jsx
-import { useState, useRef, useEffect } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { analysisService } from '../../services/analysisService';
 import { useSSE } from '../../contexts/sseContext/index';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
@@ -12,7 +12,6 @@ import {
   Text,
   Button,
   TextInput,
-  FileInput,
   Tabs,
   Alert,
   Collapse,
@@ -20,14 +19,15 @@ import {
   Box,
   Select,
 } from '@mantine/core';
+import { Dropzone } from '@mantine/dropzone';
 import {
   IconChevronDown,
   IconChevronUp,
   IconUpload,
-  IconFile,
   IconAlertCircle,
   IconX,
   IconFolderPlus,
+  IconFileCode,
 } from '@tabler/icons-react';
 import sanitize from 'sanitize-filename';
 
@@ -49,10 +49,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
   const [error, setError] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  // Refs
-  const fileInputRef = useRef(null);
-
-  // WebSocket context
+  // SSE context
   const { loadingAnalyses, analyses } = useSSE();
 
   // Permissions and team data
@@ -61,7 +58,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
   // Notifications
   const notify = useNotifications();
 
-  // Use WebSocket analyses data directly
+  // Use SSE analyses data directly
   const existingAnalyses = analyses ? Object.keys(analyses) : [];
   const currentAnalysisName =
     mode === 'upload' ? editableFileName : analysisName;
@@ -78,25 +75,25 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
   }));
 
   // Determine initial team selection
-  const getInitialTeam = () => {
+  const getInitialTeam = useCallback(() => {
     // If a target team is specified and user has access, use it
     if (targetTeam && uploadableTeams.some((team) => team.id === targetTeam)) {
       return targetTeam;
     }
 
-    // Otherwise, pick the first available team (uncategorized is just a regular team now)
+    // Otherwise, pick the first available team
     return uploadableTeams.length > 0 ? uploadableTeams[0].id : null;
-  };
+  }, [targetTeam, uploadableTeams]);
 
-  // Set initial team selection when component mounts or permissions change
-  useEffect(() => {
+  // Set initial team selection when component mounts or permissions change (derived effect)
+  useMemo(() => {
     if (!selectedTeamId) {
       const initialTeam = getInitialTeam();
       if (initialTeam) {
         setSelectedTeamId(initialTeam);
       }
     }
-  }, [uploadableTeams, targetTeam, selectedTeamId]);
+  }, [selectedTeamId, getInitialTeam]);
 
   // If user has no upload permissions anywhere, don't show the component
   if (!isAdmin && uploadableTeams.length === 0) {
@@ -128,9 +125,6 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
     !selectedTeamId ||
     error;
   const isTabDisabled = hasFormContent && !isCurrentAnalysisLoading;
-
-  // No longer needed - using WebSocket data directly
-  // Removed redundant API call that duplicated WebSocket data
 
   // Validation
   const validateFilename = (filename) => {
@@ -327,14 +321,6 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
           <Box>
             <Text size="lg" fw={600}>
               Analysis Creator
-              {selectedTeamId && selectedTeamId !== 'uncategorized' && (
-                <Text span size="sm" fw={400} c="dimmed" ml="xs">
-                  - '
-                  {teamSelectData.find((t) => t.value === selectedTeamId)
-                    ?.label || selectedTeamId}
-                  ' team
-                </Text>
-              )}
             </Text>
           </Box>
           <Group gap="xs">
@@ -401,17 +387,96 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
 
               <Tabs.Panel value="upload" pt="md">
                 <Stack>
-                  <FileInput
-                    ref={fileInputRef}
-                    accept=".js,.cjs"
-                    placeholder="Choose file"
-                    label="Select JavaScript file"
-                    value={selectedFile}
-                    onChange={handleFileChange}
-                    disabled={isInputDisabled}
-                    leftSection={<IconUpload size={16} />}
-                    rightSection={selectedFile && <IconFile size={16} />}
-                  />
+                  <Box>
+                    <Text size="sm" fw={500} mb="xs">
+                      Select JavaScript file
+                    </Text>
+                    <Dropzone
+                      accept={{
+                        'text/javascript': ['.js', '.cjs'],
+                        'application/x-javascript': ['.js', '.cjs'],
+                      }}
+                      onDrop={(files) => handleFileChange(files[0])}
+                      onReject={() => {
+                        setError(
+                          'Please select a JavaScript file (.js or .cjs)',
+                        );
+                        setFormTouched(true);
+                      }}
+                      maxFiles={1}
+                      disabled={isInputDisabled}
+                      styles={{
+                        root: {
+                          borderColor: selectedFile
+                            ? 'var(--mantine-color-green-5)'
+                            : undefined,
+                          backgroundColor: selectedFile
+                            ? 'var(--mantine-color-green-light)'
+                            : undefined,
+                        },
+                      }}
+                    >
+                      <Group
+                        justify="center"
+                        gap="xl"
+                        mih={120}
+                        style={{ pointerEvents: 'none' }}
+                      >
+                        <Dropzone.Accept>
+                          <IconUpload
+                            style={{
+                              width: 52,
+                              height: 52,
+                              color: 'var(--mantine-color-blue-6)',
+                            }}
+                            stroke={1.5}
+                          />
+                        </Dropzone.Accept>
+                        <Dropzone.Reject>
+                          <IconX
+                            style={{
+                              width: 52,
+                              height: 52,
+                              color: 'var(--mantine-color-red-6)',
+                            }}
+                            stroke={1.5}
+                          />
+                        </Dropzone.Reject>
+                        <Dropzone.Idle>
+                          {selectedFile ? (
+                            <IconFileCode
+                              style={{
+                                width: 52,
+                                height: 52,
+                                color: 'var(--mantine-color-green-6)',
+                              }}
+                              stroke={1.5}
+                            />
+                          ) : (
+                            <IconFileCode
+                              style={{
+                                width: 52,
+                                height: 52,
+                                color: 'var(--mantine-color-dimmed)',
+                              }}
+                              stroke={1.5}
+                            />
+                          )}
+                        </Dropzone.Idle>
+
+                        <div>
+                          <Text size="xl" inline>
+                            {selectedFile
+                              ? `Selected: ${selectedFile.name}`
+                              : 'Drag JavaScript files here or click to select'}
+                          </Text>
+                          <Text size="sm" c="dimmed" inline mt={7}>
+                            Attach .js or .cjs files only
+                          </Text>
+                        </div>
+                      </Group>
+                    </Dropzone>
+                  </Box>
 
                   {selectedFile && (
                     <TextInput
