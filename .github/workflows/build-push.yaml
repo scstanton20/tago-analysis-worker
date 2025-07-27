@@ -54,7 +54,30 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Check if backend image exists
+        id: backend-check
+        run: |
+          if docker manifest inspect ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ steps.version.outputs.BACKEND_VERSION }} >/dev/null 2>&1; then
+            echo "Backend image ${{ steps.version.outputs.BACKEND_VERSION }} already exists"
+            echo "BACKEND_EXISTS=true" >> $GITHUB_OUTPUT
+          else
+            echo "Backend image ${{ steps.version.outputs.BACKEND_VERSION }} does not exist"
+            echo "BACKEND_EXISTS=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check if frontend image exists
+        id: frontend-check
+        run: |
+          if docker manifest inspect ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ steps.version.outputs.FRONTEND_VERSION }} >/dev/null 2>&1; then
+            echo "Frontend image ${{ steps.version.outputs.FRONTEND_VERSION }} already exists"
+            echo "FRONTEND_EXISTS=true" >> $GITHUB_OUTPUT
+          else
+            echo "Frontend image ${{ steps.version.outputs.FRONTEND_VERSION }} does not exist"
+            echo "FRONTEND_EXISTS=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Build and push Backend image
+        if: steps.backend-check.outputs.BACKEND_EXISTS == 'false'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -68,6 +91,7 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ steps.version.outputs.BACKEND_VERSION }}
 
       - name: Build and push Frontend image
+        if: steps.frontend-check.outputs.FRONTEND_EXISTS == 'false'
         uses: docker/build-push-action@v6
         with:
           context: .
