@@ -8,17 +8,17 @@ A full-stack application for managing and running Tago.io analysis scripts with 
 - 🏢 **Department Organization**: Hierarchical organization with drag-and-drop management
 - 👥 **User Management**: Role-based access control with fine-grained permissions
 - 📊 **Real-time Monitoring**: Live status updates and log streaming via Server-Sent Events (SSE)
-- 🔐 **Secure Authentication**: JWT with refresh tokens and WebAuthn/passkey support
+- 🔐 **Secure Authentication**: Better Auth components for session and user management
 - 📱 **Modern UI**: Built with Mantine components and responsive design
-- 🔔 **Smart Notifications**: Contextual feedback for all user operations
+- 🔔 **Notifications**: Contextual feedback for all user operations
 
 ## Tech Stack
 
 - **Frontend**: React 19 + Vite + Mantine 8.x
 - **Backend**: Node.js 22+ + Express.js 5.x + Server-Sent Events
 - **Package Manager**: pnpm workspaces
-- **Authentication**: JWT + WebAuthn (passkeys)
-- **Real-time**: Server-Sent Events (SSE) with simplified authentication
+- **Authentication**: Better Auth
+- **Real-time**: Server-Sent Events (SSE)
 - **Security**: Encryption for sensitive data
 
 ## Quick Start
@@ -26,7 +26,7 @@ A full-stack application for managing and running Tago.io analysis scripts with 
 ### Prerequisites
 
 - Node.js 22+
-- pnpm 10.12.1+
+- pnpm 10.13.1+
 
 ### Installation
 
@@ -46,7 +46,7 @@ pnpm dev
 
 - **Frontend**: http://localhost:5173
 - **Backend API**: http://localhost:3000/api
-- **API Documentation**: http://localhost:3000/api/docs
+- **API Documentation**: http://localhost:5173/api/docs
 
 ## Development Commands
 
@@ -76,65 +76,6 @@ NODE_ENV=development                    # development/production
 PORT=3000                              # Server port (optional)
 STORAGE_BASE=./analyses-storage        # Storage path (optional)
 ```
-
-## Project Structure
-
-```
-apps/
-├── backend/                    # Express.js API server
-│   ├── src/
-│   │   ├── controllers/        # Route handlers
-│   │   ├── services/          # Business logic
-│   │   ├── models/            # Data models
-│   │   ├── utils/             # Utilities (crypto, SSE, etc.)
-│   │   └── server.js          # Application entry point
-│   └── analyses-storage/       # File storage for analyses
-└── frontend/                   # React SPA
-    ├── src/
-    │   ├── components/         # UI components
-    │   ├── contexts/          # React contexts (auth, SSE)
-    │   ├── hooks/             # Custom React hooks
-    │   └── services/          # API layer
-    └── public/
-```
-
-## Key Features
-
-### Analysis Management
-
-- Upload JavaScript analysis files (.js/.cjs)
-- Real-time execution monitoring
-- Environment variable management
-- Log viewing and downloading
-
-### Department Organization
-
-- Hierarchical department structure
-- Drag-and-drop analysis organization
-- Color-coded department visualization
-- Permission-based access control
-
-### User Management
-
-- Role-based permissions (admin/user)
-- Department-specific access control
-- WebAuthn/passkey authentication
-- Secure password management
-
-### Real-time Updates
-
-- Live analysis status updates
-- Real-time log streaming
-- SSE-based communication
-- Automatic UI synchronization
-
-## Security
-
-- JWT authentication with secure refresh tokens
-- WebAuthn support for passwordless authentication
-- Encrypted storage for sensitive configuration
-- Role-based access control (RBAC)
-- Security-focused ESLint configuration
 
 ## License
 
