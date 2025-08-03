@@ -1,4 +1,3 @@
-// frontend/src/components/analysis/analysisEdit.jsx
 import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import Editor from '@monaco-editor/react';
@@ -23,10 +22,11 @@ import {
 } from '@tabler/icons-react';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 
-export default function EditAnalysisModal({
+export default function AnalysisEditModal({
   onClose,
   analysis: currentAnalysis,
   readOnly = false,
+  type = 'analysis', // 'analysis' or 'env'
 }) {
   const [content, setContent] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
@@ -37,9 +37,10 @@ export default function EditAnalysisModal({
   const [displayName, setDisplayName] = useState(currentAnalysis.name);
 
   const notify = useNotifications();
+  const isEnvMode = type === 'env';
 
-  // Update analysis name when it changes via SSE (derived state)
-  if (currentAnalysis.name !== newFileName && !isEditingName) {
+  // Update analysis name when it changes via SSE (only for analysis mode)
+  if (!isEnvMode && currentAnalysis.name !== newFileName && !isEditingName) {
     setNewFileName(currentAnalysis.name);
     setDisplayName(currentAnalysis.name);
   }
@@ -49,20 +50,23 @@ export default function EditAnalysisModal({
     let isCancelled = false;
 
     async function loadContent() {
-      if (!displayName) return;
+      const nameToUse = isEnvMode ? currentAnalysis.name : displayName;
+      if (!nameToUse) return;
 
       try {
         setIsLoading(true);
         setError(null);
-        const fileContent =
-          await analysisService.getAnalysisContent(displayName);
+
+        const fileContent = isEnvMode
+          ? await analysisService.getAnalysisENVContent(nameToUse)
+          : await analysisService.getAnalysisContent(nameToUse);
 
         if (!isCancelled) {
           setContent(fileContent);
           setHasChanges(false);
         }
       } catch (error) {
-        console.error('Failed to load analysis content:', error);
+        console.error(`Failed to load analysis ${type} content:`, error);
         if (!isCancelled) {
           setError(error.message);
         }
@@ -78,10 +82,35 @@ export default function EditAnalysisModal({
     return () => {
       isCancelled = true;
     };
-  }, [displayName]);
+  }, [currentAnalysis.name, displayName, isEnvMode, type]);
 
   const handleEditorChange = (value) => {
-    setContent(value);
+    if (isEnvMode) {
+      // Ensure value is a string
+      if (typeof value !== 'string') return;
+
+      // Process the content to enforce "KEY=value" format
+      const formattedContent = value
+        .split('\n')
+        .map((line) => {
+          if (line.trim().startsWith('#') || line.trim() === '') {
+            return line; // Keep comments and empty lines as they are
+          }
+
+          const [key, ...valueParts] = line.split('='); // Split only on first `=`
+          if (!key || valueParts.length === 0) return ''; // Ignore invalid lines
+
+          const formattedKey = key.trim().replace(/\s+/g, '_').toUpperCase(); // Normalize key
+          const formattedValue = valueParts.join('=').trim(); // Preserve values
+
+          return `${formattedKey}=${formattedValue}`;
+        })
+        .join('\n');
+
+      setContent(formattedContent);
+    } else {
+      setContent(value);
+    }
     setHasChanges(true);
   };
 
@@ -90,16 +119,26 @@ export default function EditAnalysisModal({
       setIsLoading(true);
       setError(null);
 
-      await notify.updateAnalysis(
-        analysisService.updateAnalysis(displayName, content),
-        displayName,
-      );
+      if (isEnvMode) {
+        await notify.executeWithNotification(
+          analysisService.updateAnalysisENV(currentAnalysis.name, content),
+          {
+            loading: `Updating environment for ${currentAnalysis.name}...`,
+            success: 'Environment variables updated successfully.',
+          },
+        );
+      } else {
+        await notify.updateAnalysis(
+          analysisService.updateAnalysis(displayName, content),
+          displayName,
+        );
+      }
 
       setHasChanges(false);
       onClose();
     } catch (error) {
       console.error('Save failed:', error);
-      setError(error.message || 'Failed to update analysis content.');
+      setError(error.message || `Failed to update analysis ${type} content.`);
     } finally {
       setIsLoading(false);
     }
@@ -141,6 +180,9 @@ export default function EditAnalysisModal({
     }
   };
 
+  const modalTitle = isEnvMode ? 'Environment' : 'Analysis Content';
+  const nameToDisplay = isEnvMode ? currentAnalysis.name : displayName;
+
   return (
     <Modal
       opened
@@ -149,9 +191,9 @@ export default function EditAnalysisModal({
       title={
         <Group gap="xs">
           <Text fw={600}>
-            {readOnly ? 'Viewing' : 'Editing'} Analysis Content:
+            {readOnly ? 'Viewing' : 'Editing'} {modalTitle}:
           </Text>
-          {!readOnly && isEditingName ? (
+          {!isEnvMode && !readOnly && isEditingName ? (
             <Group gap="xs">
               <TextInput
                 value={newFileName}
@@ -182,8 +224,8 @@ export default function EditAnalysisModal({
             </Group>
           ) : (
             <Group gap={4}>
-              <Text>{displayName}</Text>
-              {!readOnly && (
+              <Text>{nameToDisplay}</Text>
+              {!isEnvMode && !readOnly && (
                 <ActionIcon
                   variant="subtle"
                   size="sm"
@@ -194,6 +236,11 @@ export default function EditAnalysisModal({
                 </ActionIcon>
               )}
             </Group>
+          )}
+          {isEnvMode && currentAnalysis.status && (
+            <Text size="sm" c="dimmed">
+              ({currentAnalysis.status})
+            </Text>
           )}
         </Group>
       }
@@ -216,12 +263,33 @@ export default function EditAnalysisModal({
           </Alert>
         )}
 
+        {isEnvMode && (
+          <Alert
+            color="blue"
+            variant="light"
+            title="Environment Variables Format"
+          >
+            <Text size="sm">
+              Use{' '}
+              <Text span ff="monospace">
+                KEY=value
+              </Text>{' '}
+              format. Keys will be automatically normalized to uppercase.
+              Comments starting with{' '}
+              <Text span ff="monospace">
+                #
+              </Text>{' '}
+              are preserved.
+            </Text>
+          </Alert>
+        )}
+
         <Box style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
           <LoadingOverlay visible={isLoading} />
           {!isLoading && (
             <Editor
               height="100%"
-              defaultLanguage="javascript"
+              defaultLanguage={isEnvMode ? 'plaintext' : 'javascript'}
               value={content}
               onChange={handleEditorChange}
               theme="vs-dark"
@@ -264,7 +332,7 @@ export default function EditAnalysisModal({
   );
 }
 
-EditAnalysisModal.propTypes = {
+AnalysisEditModal.propTypes = {
   analysis: PropTypes.shape({
     name: PropTypes.string.isRequired,
     type: PropTypes.oneOf(['listener']),
@@ -279,4 +347,5 @@ EditAnalysisModal.propTypes = {
   }).isRequired,
   onClose: PropTypes.func.isRequired,
   readOnly: PropTypes.bool,
+  type: PropTypes.oneOf(['analysis', 'env']),
 };

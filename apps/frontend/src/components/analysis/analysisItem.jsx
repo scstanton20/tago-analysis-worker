@@ -29,11 +29,10 @@ import { teamService } from '../../services/teamService';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import AnalysisLogs from './analysisLogs';
 import StatusBadge from './statusBadge';
-import { lazy, Suspense } from 'react';
+import { lazy } from 'react';
 
 // Lazy load heavy components that include Monaco editor
-const AnalysisEditModal = lazy(() => import('../modals/analysisEdit'));
-const AnalysisEditENVModal = lazy(() => import('../modals/analysisEditENV'));
+const AnalysisEditModal = lazy(() => import('../modals/analysisEditCommon'));
 import LogDownloadDialog from '../modals/logDownload';
 import TeamSelectModal from '../modals/changeTeamModal';
 import VersionManagementModal from '../modals/versionManagement';
@@ -41,8 +40,7 @@ import { useSSE } from '../../contexts/sseContext';
 import { usePermissions } from '../../hooks/usePermissions';
 
 export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
-  const [showEditAnalysisModal, setShowEditAnalysisModal] = useState(false);
-  const [showEditENVModal, setShowEditENVModal] = useState(false);
+  const [editModalType, setEditModalType] = useState(null); // null, 'analysis', or 'env'
   const [showLogDownloadDialog, setShowLogDownloadDialog] = useState(false);
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [showVersionModal, setShowVersionModal] = useState(false);
@@ -121,47 +119,18 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
     }
   };
 
-  const handleSaveAnalysis = async (content) => {
-    try {
-      await notify.updateAnalysis(
-        analysisService.updateAnalysis(analysis.name, content),
-        analysis.name,
-      );
-      setShowEditAnalysisModal(false);
-    } catch (error) {
-      console.error('Failed to save analysis:', error);
-      throw error;
-    }
-  };
-
-  const handleSaveENV = async (content) => {
-    try {
-      await notify.executeWithNotification(
-        analysisService.updateAnalysisENV(analysis.name, content),
-        {
-          loading: `Updating environment for ${analysis.name}...`,
-          success: 'Environment variables updated successfully.',
-        },
-      );
-      setShowEditENVModal(false);
-    } catch (error) {
-      console.error('Failed to save analysis:', error);
-      throw error;
-    }
-  };
-
   const handleEditAnalysis = async () => {
     if (!canViewAnalyses(analysis)) {
       return; // No permission to view analysis files
     }
-    setShowEditAnalysisModal(true);
+    setEditModalType('analysis');
   };
 
   const handleEditENV = async () => {
     if (!canViewAnalyses(analysis)) {
       return; // No permission to view analysis files
     }
-    setShowEditENVModal(true);
+    setEditModalType('env');
   };
 
   const handleDownloadLogs = async (timeRange) => {
@@ -458,26 +427,14 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
         {showLogs && <AnalysisLogs analysis={analysis} />}
       </Stack>
 
-      {/* Modals - Render if user can view analyses */}
-      {showEditAnalysisModal && canViewAnalyses(analysis) && (
-        <Suspense fallback={<div>Loading editor...</div>}>
-          <AnalysisEditModal
-            analysis={analysis}
-            onClose={() => setShowEditAnalysisModal(false)}
-            onSave={handleSaveAnalysis}
-            readOnly={!canEditAnalyses(analysis)}
-          />
-        </Suspense>
-      )}
-      {showEditENVModal && canViewAnalyses(analysis) && (
-        <Suspense fallback={<div>Loading editor...</div>}>
-          <AnalysisEditENVModal
-            analysis={analysis}
-            onClose={() => setShowEditENVModal(false)}
-            onSave={handleSaveENV}
-            readOnly={!canEditAnalyses(analysis)}
-          />
-        </Suspense>
+      {/* Edit Modal - Render if user can view analyses */}
+      {editModalType && canViewAnalyses(analysis) && (
+        <AnalysisEditModal
+          analysis={analysis}
+          onClose={() => setEditModalType(null)}
+          readOnly={!canEditAnalyses(analysis)}
+          type={editModalType}
+        />
       )}
       <LogDownloadDialog
         isOpen={showLogDownloadDialog}

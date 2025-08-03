@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, lazy } from 'react';
 import PropTypes from 'prop-types';
 import {
   Modal,
@@ -21,9 +21,11 @@ import {
   IconInfoCircle,
   IconClock,
   IconFileText,
+  IconEyeCode,
 } from '@tabler/icons-react';
 import { analysisService } from '../../services/analysisService';
 import { useNotifications } from '../../hooks/useNotifications';
+const AnalysisEditModal = lazy(() => import('../modals/analysisEditCommon'));
 
 export default function VersionManagementModal({
   isOpen,
@@ -31,6 +33,7 @@ export default function VersionManagementModal({
   analysis,
   onVersionRollback,
 }) {
+  const [showContentModal, setShowContentModal] = useState(false);
   const [versionData, setVersionData] = useState({
     versions: [],
     nextVersionNumber: 2,
@@ -235,7 +238,7 @@ export default function VersionManagementModal({
                     <Group gap="xs">
                       <ActionIcon
                         variant="light"
-                        color="blue"
+                        color="green"
                         size="sm"
                         onClick={() => handleDownloadVersion(0)}
                         title="Download current version"
@@ -263,7 +266,7 @@ export default function VersionManagementModal({
                       <Group gap="xs">
                         <ActionIcon
                           variant="light"
-                          color="blue"
+                          color="green"
                           size="sm"
                           onClick={() => handleDownloadVersion(version.version)}
                           title={`Download version ${version.version}`}
@@ -279,6 +282,24 @@ export default function VersionManagementModal({
                           title={`Rollback to version ${version.version}`}
                         >
                           <IconPlayerPlay size={14} />
+                        </ActionIcon>
+                        <ActionIcon
+                          variant="light"
+                          color="blue"
+                          size="sm"
+                          onClick={() => setShowContentModal(true)}
+                          loading={loading}
+                          title={`View this version's conetent`}
+                        >
+                          {showContentModal && (
+                            <AnalysisEditModal
+                              analysis={analysis}
+                              onClose={onClose}
+                              readOnly="true"
+                              type="analysis"
+                            />
+                          )}
+                          <IconEyeCode />
                         </ActionIcon>
                       </Group>
                     </Table.Td>
