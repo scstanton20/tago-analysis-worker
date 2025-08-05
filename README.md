@@ -46,7 +46,19 @@ pnpm dev
 
 - **Frontend**: http://localhost:5173
 - **Backend API**: http://localhost:3000/api
-- **API Documentation**: http://localhost:5173/api/docs
+- **API Documentation**: http://localhost:3000/api/docs
+
+### First Time Setup
+
+When you first run the application, an admin user will be automatically created:
+
+```
+Email: admin@example.com
+Username: admin
+Password: admin123
+```
+
+**⚠️ Important**: You'll be prompted to change this password on first login for security.
 
 ## Development Commands
 
@@ -65,9 +77,40 @@ pnpm lint:fix           # Fix linting issues
 docker-compose -f docker-configs/development/docker-compose.dev.yaml up
 ```
 
+## Authentication System
+
+This application uses **Better Auth** for comprehensive authentication and authorization:
+
+### Features
+- 🔐 **Username/Email + Password** authentication
+- 🏢 **Organization Management** with team-based permissions
+- 👥 **Role-Based Access Control** (Admin, User roles)
+- 🔑 **WebAuthn/Passkey Support** (production)
+- 🛡️ **Session Management** with secure cookies
+
+### User Roles & Permissions
+
+#### Admin Users
+- Full system access
+- User management (create, edit, delete users)
+- Organization and team management
+- All analysis operations
+
+#### Regular Users
+- Access based on team memberships
+- Team-specific analysis permissions:
+  - `analysis.view` - View analyses in assigned teams
+  - `analysis.run` - Start/stop analyses in assigned teams
+  - `analysis.edit` - Modify analyses in assigned teams
+
+### Team Management
+- Users are assigned to teams with specific permissions
+- Analyses are organized within teams
+- Hierarchical organization structure with drag-and-drop support
+
 ## Environment Variables
 
-### Backend (.env)
+### Core Configuration
 
 ```bash
 SECRET_KEY=your-secret-key              # Required for encryption
@@ -75,6 +118,25 @@ PRODUCTION_DOMAIN=your-domain.com       # Required for WebAuthn in production
 NODE_ENV=development                    # development/production
 PORT=3000                              # Server port (optional)
 STORAGE_BASE=./analyses-storage        # Storage path (optional)
+```
+
+### Logging Configuration
+
+```bash
+LOG_LEVEL=info                         # Override log level (debug/info/warn/error)
+LOG_INCLUDE_MODULE=false               # Show module names in console (default: false)
+```
+
+### External Logging (Grafana Loki)
+
+```bash
+LOG_LOKI_URL=http://localhost:3100     # Loki server URL
+LOG_LOKI_USERNAME=username             # Optional authentication
+LOG_LOKI_PASSWORD=password             # Optional authentication
+LOG_LOKI_LABELS=version=1.0.0,dc=us-east-1  # Additional labels (optional)
+LOG_LOKI_BATCHING=true                 # Enable batching (default: true)
+LOG_LOKI_INTERVAL=5000                 # Batch interval in ms (default: 5000)
+LOG_LOKI_TIMEOUT=30000                 # Request timeout in ms (default: 30000)
 ```
 
 ## License

@@ -25,8 +25,8 @@ const AnalysisCreator = lazy(
 import ConnectionStatus from './components/connectionStatus';
 import LoginPage from './components/auth/LoginPage';
 import Logo from './components/logo';
-import ImpersonationBanner from './components/ImpersonationBanner';
-import ThemeSelector from './components/ThemeSelector';
+import ImpersonationBanner from './components/impersonationBanner';
+import ThemeSelector from './components/themeSelector';
 
 // Reusable loading overlay component
 function AppLoadingOverlay({ message, submessage, error, showRetry }) {

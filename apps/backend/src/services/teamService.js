@@ -4,6 +4,9 @@ import {
   executeQueryAll,
   executeTransaction,
 } from '../utils/authDatabase.js';
+import { createChildLogger } from '../utils/logging/logger.js';
+
+const logger = createChildLogger('team-service');
 
 /**
  * Service class for managing teams using Better Auth organization plugin and their relationships with analyses
@@ -35,9 +38,12 @@ class TeamService {
       await this.loadOrganizationId();
 
       this.initialized = true;
-      console.log('Team service initialized (using better-auth teams)');
+      logger.info(
+        { organizationId: this.organizationId },
+        'Team service initialized (using better-auth teams)',
+      );
     } catch (error) {
-      console.error('Failed to initialize team service:', error);
+      logger.error({ error }, 'Failed to initialize team service');
       throw error;
     }
   }
@@ -59,9 +65,12 @@ class TeamService {
       }
 
       this.organizationId = org.id;
-      console.log(`Loaded organization ID: ${this.organizationId}`);
+      logger.info(
+        { organizationId: this.organizationId },
+        'Loaded organization ID',
+      );
     } catch (error) {
-      console.error('Failed to load organization ID:', error);
+      logger.error({ error }, 'Failed to load organization ID');
       throw error;
     }
   }
@@ -85,7 +94,7 @@ class TeamService {
         isSystem: team.is_system === 1,
       }));
     } catch (error) {
-      console.error('Failed to get teams:', error);
+      logger.error({ error }, 'Failed to get teams');
       throw error;
     }
   }
@@ -111,7 +120,7 @@ class TeamService {
 
       return team || undefined;
     } catch (error) {
-      console.error(`Failed to get team ${id}:`, error);
+      logger.error({ error, teamId: id }, 'Failed to get team');
       throw error;
     }
   }
@@ -164,7 +173,10 @@ class TeamService {
             isSystem: data.isSystem || false,
           };
 
-          console.log(`Created team "${data.name}" with custom ID: ${data.id}`);
+          logger.info(
+            { teamId: data.id, teamName: data.name },
+            'Created team with custom ID',
+          );
           return team;
         }, `creating team with custom ID ${data.id}`);
       } else {
@@ -205,12 +217,15 @@ class TeamService {
             isSystem: data.isSystem || false,
           };
 
-          console.log(`Created team "${data.name}" with ID: ${teamId}`);
+          logger.info(
+            { teamId, teamName: data.name },
+            'Created team with auto-generated ID',
+          );
           return team;
         }, `creating team with auto-generated ID`);
       }
     } catch (error) {
-      console.error('Failed to create team:', error);
+      logger.error({ error }, 'Failed to create team');
       throw error;
     }
   }
@@ -280,11 +295,11 @@ class TeamService {
           updatedTeam.isSystem = updatedTeam.is_system === 1;
         }
 
-        console.log(`Updated team ${id}`);
+        logger.info({ teamId: id, updates }, 'Updated team');
         return updatedTeam;
       }, `updating team ${id}`);
     } catch (error) {
-      console.error(`Failed to update team ${id}:`, error);
+      logger.error({ error, teamId: id }, 'Failed to update team');
       throw error;
     }
   }
@@ -344,8 +359,13 @@ class TeamService {
         );
       }, `deleting team ${id}`);
 
-      console.log(
-        `Deleted team ${id}, moved ${analysesMovedCount} analyses to ${moveAnalysesTo}`,
+      logger.info(
+        {
+          deletedTeamId: id,
+          moveToTeamId: moveAnalysesTo,
+          analysesMovedCount,
+        },
+        'Deleted team and moved analyses',
       );
 
       return {
@@ -354,7 +374,7 @@ class TeamService {
         analysesMovedCount,
       };
     } catch (error) {
-      console.error(`Failed to delete team ${id}:`, error);
+      logger.error({ error, teamId: id }, 'Failed to delete team');
       throw error;
     }
   }
@@ -413,8 +433,13 @@ class TeamService {
 
     await this.analysisService.updateConfig(configData);
 
-    console.log(
-      `Moved analysis "${analysisName}" from team ${previousTeam} to ${teamId}`,
+    logger.info(
+      {
+        analysisName,
+        fromTeamId: previousTeam,
+        toTeamId: teamId,
+      },
+      'Moved analysis to team',
     );
 
     return {
@@ -444,8 +469,12 @@ class TeamService {
       if (uncategorizedTeam) {
         configData.analyses[analysisName].teamId = uncategorizedTeam.id;
         await this.analysisService.updateConfig(configData);
-        console.log(
-          `Assigned analysis "${analysisName}" to uncategorized team`,
+        logger.info(
+          {
+            analysisName,
+            teamId: uncategorizedTeam.id,
+          },
+          'Assigned analysis to uncategorized team',
         );
       }
     }
@@ -482,11 +511,14 @@ class TeamService {
           isSystem: team.is_system === 1,
         }));
 
-        console.log(`Reordered ${orderedIds.length} teams`);
+        logger.info(
+          { teamCount: orderedIds.length, orderedIds },
+          'Reordered teams',
+        );
         return teamsWithBoolean;
       }, `reordering ${orderedIds.length} teams`);
     } catch (error) {
-      console.error('Failed to reorder teams:', error);
+      logger.error({ error }, 'Failed to reorder teams');
       throw error;
     }
   }
@@ -501,7 +533,7 @@ class TeamService {
       const analyses = await this.getAnalysesByTeam(teamId);
       return analyses.length;
     } catch (error) {
-      console.error(`Error getting analysis count for team ${teamId}:`, error);
+      logger.error({ error, teamId }, 'Error getting analysis count for team');
       return 0;
     }
   }

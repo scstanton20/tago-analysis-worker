@@ -1,6 +1,9 @@
 // backend/src/utils/sse.js
 import { auth } from '../lib/auth.js';
 import { fromNodeHeaders } from 'better-auth/node';
+import { createChildLogger } from './logging/logger.js';
+
+const logger = createChildLogger('sse');
 
 class SSEManager {
   // Add authenticated SSE client
@@ -23,7 +26,7 @@ class SSEManager {
     // Add to global clients
     this.globalClients.add(client);
 
-    console.log(`SSE client connected: userId=${userId}, clientId=${clientId}`);
+    logger.info({ userId, clientId }, 'SSE client connected');
 
     // Handle client disconnect
     req.on('close', () => {
@@ -33,9 +36,14 @@ class SSEManager {
     req.on('error', (error) => {
       // Only log actual errors, not normal disconnections
       if (error.code !== 'ECONNRESET' && error.code !== 'EPIPE') {
-        console.error(
-          `SSE client error: userId=${userId}, clientId=${clientId}`,
-          error.message,
+        logger.error(
+          {
+            userId,
+            clientId,
+            error: error.message,
+            errorCode: error.code,
+          },
+          'SSE client error',
         );
       }
       this.removeClient(userId, clientId);
@@ -59,9 +67,7 @@ class SSEManager {
           this.clients.delete(userId);
         }
 
-        console.log(
-          `SSE client disconnected: userId=${userId}, clientId=${clientId}`,
-        );
+        logger.info({ userId, clientId }, 'SSE client disconnected');
       }
     }
   }
@@ -81,7 +87,7 @@ class SSEManager {
           sentCount++;
         }
       } catch (error) {
-        console.error(`Error sending SSE to user ${userId}:`, error);
+        logger.error({ userId, error }, 'Error sending SSE to user');
         this.removeClient(userId, client.id);
       }
     }
@@ -104,9 +110,13 @@ class SSEManager {
           failedClients.push(client);
         }
       } catch (error) {
-        console.error(
-          `Error broadcasting SSE to user ${client.userId}:`,
-          error,
+        logger.error(
+          {
+            userId: client.userId,
+            clientId: client.id,
+            error,
+          },
+          'Error broadcasting SSE to user',
         );
         failedClients.push(client);
       }
@@ -172,7 +182,7 @@ class SSEManager {
       // Send initial status
       await this.sendStatusUpdate(client);
     } catch (error) {
-      console.error('Error sending initial SSE data:', error);
+      logger.error({ error }, 'Error sending initial SSE data');
     }
   }
 
@@ -198,7 +208,7 @@ class SSEManager {
           );
         }
       } catch (filterError) {
-        console.error('Error filtering analyses:', filterError);
+        logger.error({ error: filterError }, 'Error filtering analyses');
       }
 
       let tagoVersion;
@@ -206,7 +216,7 @@ class SSEManager {
         const packageJson = require('@tago-io/sdk/package.json');
         tagoVersion = packageJson.version;
       } catch (error) {
-        console.error('Error reading tago SDK version:', error);
+        logger.error({ error }, 'Error reading tago SDK version');
         tagoVersion = 'unknown';
       }
 
@@ -233,7 +243,7 @@ class SSEManager {
       const message = this.formatSSEMessage(status);
       client.res.write(message);
     } catch (error) {
-      console.error('Error sending SSE status update:', error);
+      logger.error({ error }, 'Error sending SSE status update');
     }
   }
 
@@ -320,7 +330,7 @@ export async function authenticateSSE(req, res, next) {
     });
 
     if (!session?.session || !session?.user) {
-      console.log('SSE authentication failed: No valid session');
+      logger.warn('SSE authentication failed: No valid session');
       return res.status(401).json({ error: 'Authentication required' });
     }
 
@@ -328,7 +338,7 @@ export async function authenticateSSE(req, res, next) {
     Object.assign(req, { user: session.user });
     next();
   } catch (error) {
-    console.error('SSE authentication failed:', error.message);
+    logger.error({ error: error.message }, 'SSE authentication failed');
     return res.status(401).json({ error: 'Authentication failed' });
   }
 }

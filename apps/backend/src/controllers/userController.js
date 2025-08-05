@@ -5,6 +5,9 @@ import {
   executeUpdate,
   executeTransaction,
 } from '../utils/authDatabase.js';
+import { createChildLogger } from '../utils/logging/logger.js';
+
+const userLogger = createChildLogger('user-controller');
 
 class UserController {
   /**
@@ -34,7 +37,7 @@ class UserController {
         return res.status(400).json({ error: result.error.message });
       }
 
-      console.log(
+      userLogger.info(
         `✓ Added user ${userId} to organization ${organizationId} with role ${role}`,
       );
       res.json({ success: true, data: result.data });
@@ -59,7 +62,7 @@ class UserController {
 
       // Don't create member entries if no teams are being assigned
       if (teamAssignments.length === 0) {
-        console.log(`No teams to assign for user ${userId} - skipping`);
+        userLogger.info(`No teams to assign for user ${userId} - skipping`);
         return res.json({
           success: true,
           data: {
@@ -69,7 +72,7 @@ class UserController {
         });
       }
 
-      console.log(
+      userLogger.info(
         `Assigning user ${userId} to ${teamAssignments.length} teams`,
       );
 
@@ -96,7 +99,10 @@ class UserController {
         );
 
         if (!existingOrgMember) {
-          console.log(`Adding user ${userId} to organization ${org.id}`);
+          userLogger.info(
+            { userId, organizationId: org.id },
+            'Adding user to organization',
+          );
           const addMemberResult = await auth.api.addMember({
             body: {
               userId,
@@ -110,7 +116,7 @@ class UserController {
               `Failed to add user to organization: ${addMemberResult.error.message}`,
             );
           }
-          console.log(`✓ Added user ${userId} to organization`);
+          userLogger.info({ userId }, '✓ Added user to organization');
         }
 
         // Process each team assignment using database operations
@@ -149,7 +155,7 @@ class UserController {
                 permissions,
                 status: 'updated_permissions',
               });
-              console.log(
+              userLogger.info(
                 `✓ Updated permissions for user ${userId} in team ${teamId}`,
               );
             } else {
@@ -178,7 +184,7 @@ class UserController {
                 permissions,
                 status: 'success',
               });
-              console.log(`✓ Added user ${userId} to team ${teamId}`);
+              userLogger.info(`✓ Added user ${userId} to team ${teamId}`);
             }
           } catch (teamError) {
             errors.push(
@@ -233,7 +239,7 @@ class UserController {
         });
       }
 
-      console.log(`Getting team memberships for user ${userId}`);
+      userLogger.info(`Getting team memberships for user ${userId}`);
 
       // Use database query to get user's team memberships since Better Auth doesn't have getUserTeams
       const memberships = executeQueryAll(
@@ -247,7 +253,7 @@ class UserController {
         `getting team memberships for user ${userId}`,
       );
 
-      console.log(
+      userLogger.info(
         `✓ Found ${memberships.length} team memberships for user ${userId}`,
       );
 
@@ -283,7 +289,7 @@ class UserController {
         });
       }
 
-      console.log(
+      userLogger.info(
         `Updating team assignments for user ${userId} with ${teamAssignments.length} teams`,
       );
 
@@ -321,7 +327,10 @@ class UserController {
         );
 
         if (!existingOrgMember) {
-          console.log(`Adding user ${userId} to organization ${org.id}`);
+          userLogger.info(
+            { userId, organizationId: org.id },
+            'Adding user to organization',
+          );
           const addMemberResult = await auth.api.addMember({
             body: {
               userId,
@@ -335,7 +344,7 @@ class UserController {
               `Failed to add user to organization: ${addMemberResult.error.message}`,
             );
           }
-          console.log(`✓ Added user ${userId} to organization`);
+          userLogger.info({ userId }, '✓ Added user to organization');
         }
 
         // Remove user from teams they're no longer assigned to
@@ -345,7 +354,7 @@ class UserController {
             [userId, teamId],
             `removing user ${userId} from team ${teamId}`,
           );
-          console.log(`✓ Removed user ${userId} from team ${teamId}`);
+          userLogger.info(`✓ Removed user ${userId} from team ${teamId}`);
         }
 
         // Add user to new teams (or update existing memberships)
@@ -385,7 +394,7 @@ class UserController {
                 `adding user ${userId} to team ${teamId}`,
               );
 
-              console.log(`✓ Added user ${userId} to team ${teamId}`);
+              userLogger.info(`✓ Added user ${userId} to team ${teamId}`);
             } else {
               // Update permissions for existing member
               const permissionsJson = JSON.stringify(
@@ -400,7 +409,7 @@ class UserController {
                 `updating permissions for user ${userId} in team ${teamId}`,
               );
 
-              console.log(
+              userLogger.info(
                 `✓ Updated permissions for user ${userId} in team ${teamId}`,
               );
             }
@@ -438,7 +447,7 @@ class UserController {
    * Clean up foreign key references before user deletion
    */
   static async cleanupUserReferences(userId) {
-    console.log(`🧹 Cleaning up references for user ${userId}`);
+    userLogger.info({ userId }, '🧹 Cleaning up references for user');
 
     return executeTransaction((db) => {
       // Find all foreign key references
@@ -449,14 +458,22 @@ class UserController {
         .prepare('SELECT * FROM session WHERE userId = ?')
         .all(userId);
 
-      console.log(
-        `Found ${teamMemberships.length} team memberships, ${sessions.length} sessions to clean up`,
+      userLogger.info(
+        {
+          userId,
+          teamMemberships: teamMemberships.length,
+          sessions: sessions.length,
+        },
+        'Found references to clean up',
       );
 
       // Remove team memberships first (foreign key constraint)
       if (teamMemberships.length > 0) {
         db.prepare('DELETE FROM teamMember WHERE userId = ?').run(userId);
-        console.log(`✓ Removed ${teamMemberships.length} team memberships`);
+        userLogger.info(
+          { userId, count: teamMemberships.length },
+          '✓ Removed team memberships',
+        );
       }
 
       // Remove organization memberships
@@ -465,15 +482,19 @@ class UserController {
         .all(userId);
       if (orgMemberships.length > 0) {
         db.prepare('DELETE FROM member WHERE userId = ?').run(userId);
-        console.log(
-          `✓ Removed ${orgMemberships.length} organization memberships`,
+        userLogger.info(
+          { userId, count: orgMemberships.length },
+          '✓ Removed organization memberships',
         );
       }
 
       // Remove sessions
       if (sessions.length > 0) {
         db.prepare('DELETE FROM session WHERE userId = ?').run(userId);
-        console.log(`✓ Removed ${sessions.length} sessions`);
+        userLogger.info(
+          { userId, count: sessions.length },
+          '✓ Removed sessions',
+        );
       }
 
       // Remove passkeys (if table exists)
@@ -482,10 +503,16 @@ class UserController {
           .prepare('DELETE FROM passkey WHERE userId = ?')
           .run(userId);
         if (passkeys.changes > 0) {
-          console.log(`✓ Removed ${passkeys.changes} passkeys`);
+          userLogger.info(
+            { userId, count: passkeys.changes },
+            '✓ Removed passkeys',
+          );
         }
       } catch {
-        console.log('No passkeys table or no passkeys to remove');
+        userLogger.debug(
+          { userId },
+          'No passkeys table or no passkeys to remove',
+        );
       }
 
       // Remove verification tokens (if table exists)
@@ -494,10 +521,16 @@ class UserController {
           .prepare('DELETE FROM verification WHERE userId = ?')
           .run(userId);
         if (verifications.changes > 0) {
-          console.log(`✓ Removed ${verifications.changes} verification tokens`);
+          userLogger.info(
+            { userId, count: verifications.changes },
+            '✓ Removed verification tokens',
+          );
         }
       } catch {
-        console.log('No verification table or no tokens to remove');
+        userLogger.debug(
+          { userId },
+          'No verification table or no tokens to remove',
+        );
       }
 
       return {
@@ -525,8 +558,9 @@ class UserController {
         });
       }
 
-      console.log(
-        `Updating organization role for user ${userId} to ${role} in organization ${organizationId}`,
+      userLogger.info(
+        { userId, role, organizationId },
+        'Updating organization role for user',
       );
 
       // Use better-auth API to update member role
@@ -540,15 +574,21 @@ class UserController {
       });
 
       if (result.error) {
-        console.error('Better Auth updateMemberRole error:', result.error);
+        userLogger.error(
+          { err: result.error, userId, organizationId, role },
+          'Better Auth updateMemberRole error',
+        );
         const statusCode = result.error.status === 'UNAUTHORIZED' ? 401 : 400;
         return res.status(statusCode).json({ error: result.error.message });
       }
 
-      console.log(`✓ Updated user ${userId} organization role to ${role}`);
+      userLogger.info(
+        { userId, role, organizationId },
+        '✓ Updated user organization role',
+      );
       res.json({ success: true, data: result.data });
     } catch (error) {
-      console.error('Error updating user organization role:', error);
+      userLogger.error({ err: error }, 'Error updating user organization role');
       res.status(500).json({ error: error.message });
     }
   }
@@ -567,8 +607,9 @@ class UserController {
         });
       }
 
-      console.log(
-        `Removing user ${userId} from organization ${organizationId}`,
+      userLogger.info(
+        { userId, organizationId },
+        'Removing user from organization',
       );
 
       // Use better-auth API to remove member
@@ -581,15 +622,21 @@ class UserController {
       });
 
       if (result.error) {
-        console.error('Better Auth removeMember error:', result.error);
+        userLogger.error(
+          { err: result.error, userId, organizationId },
+          'Better Auth removeMember error',
+        );
         const statusCode = result.error.status === 'UNAUTHORIZED' ? 401 : 400;
         return res.status(statusCode).json({ error: result.error.message });
       }
 
-      console.log(`✓ Removed user ${userId} from organization`);
+      userLogger.info(
+        { userId, organizationId },
+        '✓ Removed user from organization',
+      );
       res.json({ success: true, message: 'User removed from organization' });
     } catch (error) {
-      console.error('Error removing user from organization:', error);
+      userLogger.error({ err: error }, 'Error removing user from organization');
       res.status(500).json({ error: error.message });
     }
   }
@@ -605,13 +652,16 @@ class UserController {
         return res.status(400).json({ error: 'userId is required' });
       }
 
-      console.log(`🗑️ Deleting user ${userId}`);
+      userLogger.info({ userId }, '🗑️ Deleting user');
 
       // Clean up foreign key references first
       try {
         await UserController.cleanupUserReferences(userId);
       } catch (cleanupError) {
-        console.warn('Warning: Manual cleanup failed:', cleanupError);
+        userLogger.warn(
+          { err: cleanupError, userId },
+          'Warning: Manual cleanup failed',
+        );
         // Continue with deletion anyway
       }
 
@@ -625,10 +675,10 @@ class UserController {
         return res.status(400).json({ error: result.error.message });
       }
 
-      console.log(`✅ User ${userId} deleted successfully`);
+      userLogger.info({ userId }, '✅ User deleted successfully');
       res.json({ success: true, message: 'User deleted successfully' });
     } catch (error) {
-      console.error('Error deleting user:', error);
+      userLogger.error({ err: error }, 'Error deleting user');
       res.status(500).json({ error: error.message });
     }
   }
@@ -655,16 +705,25 @@ class UserController {
         return res.status(401).json({ error: 'User not authenticated' });
       }
 
-      console.log(`🔐 Setting initial password for user ${req.user.id}`);
+      userLogger.info(
+        { userId: req.user.id },
+        '🔐 Setting initial password for user',
+      );
 
       // Use better-auth's internal adapter to update password
       try {
         const ctx = await auth.$context;
         const hashedPassword = await ctx.password.hash(newPassword);
         await ctx.internalAdapter.updatePassword(req.user.id, hashedPassword);
-        console.log(`✓ Password updated successfully for user ${req.user.id}`);
+        userLogger.info(
+          { userId: req.user.id },
+          '✓ Password updated successfully for user',
+        );
       } catch (passwordError) {
-        console.error('Error updating password:', passwordError);
+        userLogger.error(
+          { err: passwordError, userId: req.user.id },
+          'Error updating password',
+        );
         return res.status(500).json({
           error: 'Failed to update password',
         });
@@ -678,22 +737,30 @@ class UserController {
       );
 
       if (updateResult.changes === 0) {
-        console.warn(
-          `No user found with ID ${req.user.id} to clear password flag`,
+        userLogger.warn(
+          { userId: req.user.id },
+          'No user found to clear password flag',
         );
       } else {
-        console.log(
-          `✓ Cleared requiresPasswordChange flag for user ${req.user.id}`,
+        userLogger.info(
+          { userId: req.user.id },
+          '✓ Cleared requiresPasswordChange flag for user',
         );
       }
 
-      console.log(`✓ Password onboarding completed for user ${req.user.id}`);
+      userLogger.info(
+        { userId: req.user.id },
+        '✓ Password onboarding completed for user',
+      );
       res.json({
         success: true,
         message: 'Password set successfully',
       });
     } catch (error) {
-      console.error('Error setting initial password:', error);
+      userLogger.error(
+        { err: error, userId: req.user?.id },
+        'Error setting initial password',
+      );
       res.status(500).json({ error: error.message });
     }
   }

@@ -1,4 +1,4 @@
-// frontend/src/components/ThemeSelector.jsx
+// frontend/src/components/themeSelector.jsx
 import { useState } from 'react';
 import { Menu, Text, Group, useMantineColorScheme } from '@mantine/core';
 import { IconSun, IconMoon, IconDeviceDesktop } from '@tabler/icons-react';

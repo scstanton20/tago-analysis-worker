@@ -4,6 +4,7 @@ import http from 'http';
 import cors from 'cors';
 import helmet from 'helmet';
 import fileUpload from 'express-fileupload';
+import pinoHttp from 'pino-http';
 import config from './config/default.js';
 import { sseManager } from './utils/sse.js';
 import errorHandler from './middleware/errorHandler.js';
@@ -22,11 +23,18 @@ import {
   createAdminUserIfNeeded,
 } from './migrations/startup.js';
 
+// Logging
+import logger, { createChildLogger } from './utils/logging/logger.js';
+
 // Api prefix
 const API_PREFIX = '/api';
 
 const app = express();
 const server = http.createServer(app);
+
+// Create child loggers for different modules
+const serverLogger = createChildLogger('server');
+const processLogger = createChildLogger('process-restart');
 
 // Initialize container state
 sseManager.updateContainerState({
@@ -34,6 +42,49 @@ sseManager.updateContainerState({
   startTime: new Date(),
   message: 'Container is starting',
 });
+
+// HTTP request logging middleware (using pino-http)
+app.use(
+  pinoHttp({
+    logger: logger,
+    autoLogging: {
+      ignore: (req) => {
+        // Don't log health checks, status endpoints, or static assets
+        return (
+          req.url?.includes('/api/status') ||
+          req.url?.includes('/health') ||
+          req.url?.includes('/favicon.ico')
+        );
+      },
+    },
+    customLogLevel: function (req, res, err) {
+      if (res.statusCode >= 500 || err) {
+        return 'error';
+      } else if (res.statusCode === 401 || res.statusCode === 403) {
+        return 'warn'; // Authentication/authorization issues are worth warning about
+      } else if (res.statusCode >= 400 && res.statusCode < 500) {
+        return 'debug'; // Client errors (400, 404, etc.) are usually expected
+      } else if (res.statusCode >= 300 && res.statusCode < 400) {
+        return 'silent'; // Redirects don't need logging
+      }
+      // Successful requests at DEBUG level
+      return 'debug';
+    },
+    serializers: {
+      req: (req) => ({
+        method: req.method,
+        url: req.url,
+        headers: {
+          'user-agent': req.headers?.['user-agent'],
+          'content-type': req.headers?.['content-type'],
+        },
+      }),
+      res: (res) => ({
+        statusCode: res.statusCode,
+      }),
+    },
+  }),
+);
 
 // Middleware
 app.use(
@@ -73,7 +124,7 @@ async function restartRunningProcesses() {
       message: 'Restarting previously running analyses',
     });
 
-    console.log('Checking for analyses that need to be restarted...');
+    processLogger.info('Checking for analyses that need to be restarted');
 
     const configuration = await analysisService.getConfig();
 
@@ -83,7 +134,7 @@ async function restartRunningProcesses() {
         configuration.analyses,
       )) {
         if (config.status === 'running' || config.enabled === true) {
-          console.log(`Restarting analysis: ${analysisName}`);
+          processLogger.info(`Restarting analysis: ${analysisName}`);
           // Pass the type from config, but default to 'listener' if not found
           await analysisService.runAnalysis(
             analysisName,
@@ -98,20 +149,20 @@ async function restartRunningProcesses() {
       message: 'Container is fully initialized and ready',
     });
 
-    console.log('Process restart check completed');
+    processLogger.info('Process restart check completed');
   } catch (error) {
     sseManager.updateContainerState({
       status: 'error',
       message: `Error during process restart: ${error.message}`,
     });
 
-    console.error('Error restarting processes:', error);
+    processLogger.error({ err: error }, 'Error restarting processes');
   }
 }
 
 async function startServer() {
   try {
-    console.log(`Starting server in ${config.env} mode`);
+    serverLogger.info(`Starting server in ${config.env} mode`);
 
     sseManager.updateContainerState({
       status: 'initializing',
@@ -125,39 +176,39 @@ async function startServer() {
     await createAdminUserIfNeeded();
 
     // IMPORTANT: Initialize services BEFORE setting up routes
-    console.log('Initializing services...');
+    serverLogger.info('Initializing services');
     await initializeAnalyses();
-    console.log('Services initialized successfully');
+    serverLogger.info('Services initialized successfully');
 
     sseManager.updateContainerState({
       status: 'setting_up_routes',
       message: 'Setting up API routes',
     });
-    console.log('Setting up routes...');
+    serverLogger.info('Setting up routes');
 
     // Better Auth routes using toNodeHandler approach
     app.all('/api/auth/*splat', toNodeHandler(auth));
-    console.log(`✓ Better Auth routes mounted at ${API_PREFIX}/auth/*`);
+    serverLogger.info('✓ Better Auth routes mounted');
 
     // Apply express.json() middleware before auth routes
     app.use(express.json());
 
     app.use(`${API_PREFIX}/status`, routes.statusRoutes);
-    console.log(`✓ Status routes mounted at ${API_PREFIX}/status`);
+    serverLogger.info('✓ Status routes mounted');
 
     // Protected routes
     app.use(`${API_PREFIX}/analyses`, routes.analysisRoutes);
-    console.log(`✓ Analysis routes mounted at ${API_PREFIX}/analyses`);
+    serverLogger.info('✓ Analysis routes mounted');
 
     app.use(`${API_PREFIX}/teams`, routes.teamRoutes);
-    console.log(`✓ Team routes mounted at ${API_PREFIX}/teams`);
+    serverLogger.info('✓ Team routes mounted');
 
     app.use(`${API_PREFIX}/users`, routes.userRoutes);
-    console.log(`✓ User routes mounted at ${API_PREFIX}/users`);
+    serverLogger.info('✓ User routes mounted');
 
     // SSE routes
     app.use(`${API_PREFIX}/sse`, routes.sseRoutes);
-    console.log(`✓ SSE routes mounted at ${API_PREFIX}/sse`);
+    serverLogger.info('✓ SSE routes mounted');
 
     // Swagger API Documentation
     app.use(
@@ -174,7 +225,7 @@ async function startServer() {
         },
       }),
     );
-    console.log(`✓ Swagger API docs mounted at ${API_PREFIX}/docs`);
+    serverLogger.info('✓ Swagger API docs mounted');
 
     // Error handling (must be after routes)
     app.use(errorHandler);
@@ -186,7 +237,7 @@ async function startServer() {
 
     // Start the server
     server.listen(PORT, async () => {
-      console.log(`Server is running on port ${PORT}`);
+      serverLogger.info(`Server is running on port ${PORT}`);
 
       sseManager.updateContainerState({
         status: 'checking_processes',
@@ -200,7 +251,7 @@ async function startServer() {
       sseManager.broadcastStatusUpdate();
     });
   } catch (error) {
-    console.error('Failed to start server:', error);
+    serverLogger.error({ err: error }, 'Failed to start server');
     sseManager.updateContainerState({
       status: 'error',
       message: `Failed to start server: ${error.message}`,
@@ -211,7 +262,7 @@ async function startServer() {
 
 // Graceful shutdown
 process.on('SIGINT', () => {
-  console.log('Received SIGINT, shutting down gracefully');
+  serverLogger.info('Received SIGINT, shutting down gracefully');
   sseManager.updateContainerState({
     status: 'shutting_down',
     message: 'Server is shutting down',
@@ -225,14 +276,14 @@ process.on('SIGINT', () => {
 
   setTimeout(() => {
     server.close(() => {
-      console.log('Server closed');
+      serverLogger.info('Server closed');
       process.exit(0);
     });
   }, 1000); // Give time for broadcast to reach clients
 });
 
 process.on('SIGTERM', () => {
-  console.log('Received SIGTERM, shutting down gracefully');
+  serverLogger.info('Received SIGTERM, shutting down gracefully');
   sseManager.updateContainerState({
     status: 'shutting_down',
     message: 'Server is shutting down',
@@ -246,7 +297,7 @@ process.on('SIGTERM', () => {
 
   setTimeout(() => {
     server.close(() => {
-      console.log('Server closed');
+      serverLogger.info('Server closed');
       process.exit(0);
     });
   }, 1000); // Give time for broadcast to reach clients

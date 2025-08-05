@@ -2,7 +2,7 @@ FROM node:23-alpine AS deps
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable
+RUN corepack enable pnpm
 
 WORKDIR /app
 
@@ -18,7 +18,8 @@ FROM node:23-alpine AS run
 # Set up pnpm in the runtime container
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable
+RUN corepack enable pnpm
+
 
 WORKDIR /app
 

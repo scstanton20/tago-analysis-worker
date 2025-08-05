@@ -7,6 +7,9 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import config from '../config/default.js';
+import { createChildLogger } from '../utils/logging/logger.js';
+
+const authLogger = createChildLogger('auth');
 
 // Ensure the storage directory exists
 const dbPath = path.join(config.storage.base, 'auth.db');
@@ -61,8 +64,13 @@ export const auth = betterAuth({
           };
         },
         after: async (user) => {
-          console.log(
-            `✓ User created with requiresPasswordChange=1: ${user.email}`,
+          authLogger.info(
+            {
+              userId: user.id,
+              email: user.email,
+              requiresPasswordChange: user.requiresPasswordChange,
+            },
+            '✓ User created with requiresPasswordChange=1',
           );
         },
       },

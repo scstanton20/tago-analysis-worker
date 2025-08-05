@@ -71,11 +71,25 @@ apps/
 
 ### Environment Variables
 
+#### Core Configuration
 - `SECRET_KEY`: Required in production for encryption
 - `PRODUCTION_DOMAIN`: Required in production for WebAuthn
 - `STORAGE_BASE`: Optional custom storage path
 - `NODE_ENV`: development/production
 - `PORT`: Backend port (defaults to 3000)
+
+#### Logging Configuration
+- `LOG_LEVEL`: Override log level (debug/info/warn/error)
+- `LOG_INCLUDE_MODULE`: Set to 'true' to show module/analysis names in console (always sent to Loki)
+
+#### External Logging (Grafana Loki)
+- `LOG_LOKI_URL`: Loki server URL (e.g., http://localhost:3100)
+- `LOG_LOKI_USERNAME`: Optional authentication username
+- `LOG_LOKI_PASSWORD`: Optional authentication password
+- `LOG_LOKI_LABELS`: Additional labels (format: key1=value1,key2=value2)
+- `LOG_LOKI_BATCHING`: Enable batching (default: true)
+- `LOG_LOKI_INTERVAL`: Batch interval in ms (default: 5000)
+- `LOG_LOKI_TIMEOUT`: Request timeout in ms (default: 30000)
 
 ### Code Quality
 

@@ -4,6 +4,9 @@ import config from '../config/default.js';
 import { encrypt, decrypt } from '../utils/cryptoUtils.js';
 import AnalysisProcess from '../models/analysisProcess.js';
 import teamService from './teamService.js';
+import { createChildLogger } from '../utils/logging/logger.js';
+
+const logger = createChildLogger('analysis-service');
 
 /**
  * Format file size in bytes to human readable format
@@ -148,11 +151,17 @@ class AnalysisService {
         });
       }
 
-      console.log('Configuration loaded with departments');
+      logger.info(
+        {
+          configVersion: config.version,
+          analysisCount: Object.keys(config.analyses || {}).length,
+        },
+        'Configuration loaded with departments',
+      );
       return config;
     } catch (error) {
       if (error.code === 'ENOENT') {
-        console.log('No existing config file, creating new one');
+        logger.info('No existing config file, creating new one');
         this.configCache = {
           version: '3.0',
           analyses: {},
@@ -388,7 +397,10 @@ class AnalysisService {
         restarted: wasRunning,
       };
     } catch (error) {
-      console.error('Error renaming analysis:', error);
+      logger.error(
+        { error, analysisName, newFileName },
+        'Error renaming analysis',
+      );
       throw new Error(`Failed to rename analysis: ${error.message}`);
     }
   }
@@ -457,7 +469,7 @@ class AnalysisService {
 
       return { success: true, message: 'Logs cleared successfully' };
     } catch (error) {
-      console.error('Error clearing logs:', error);
+      logger.error({ error, analysisName }, 'Error clearing logs');
       throw new Error(`Failed to clear logs: ${error.message}`);
     }
   }
@@ -483,7 +495,7 @@ class AnalysisService {
     let analysis = this.analyses.get(analysisName);
 
     if (!analysis) {
-      console.log(`Creating new analysis instance: ${analysisName}`);
+      logger.info({ analysisName, type }, 'Creating new analysis instance');
       // Fix: Pass type and service parameters correctly
       analysis = new AnalysisProcess(analysisName, type, this);
       this.analyses.set(analysisName, analysis);
@@ -559,44 +571,89 @@ class AnalysisService {
         'analysis.log',
       );
 
-      const content = await fs.readFile(logFile, 'utf8');
-      if (!content.trim()) {
-        return { logs: [], hasMore: false, totalCount: 0, source: 'file' };
+      // Check if file exists
+      try {
+        await fs.access(logFile);
+      } catch (error) {
+        if (error.code === 'ENOENT') {
+          return { logs: [], hasMore: false, totalCount: 0, source: 'file' };
+        }
+        throw error;
       }
 
-      const allLogs = content
-        .trim()
-        .split('\n')
-        .map((line, index) => {
-          const match = line.match(/\[(.*?)\] (.*)/);
-          return match
-            ? {
-                sequence: index + 1,
-                timestamp: match[1],
-                message: match[2],
-                createdAt: new Date(match[1]).getTime(),
-              }
-            : null;
-        })
-        .filter(Boolean)
-        .reverse(); // Most recent first
-
-      const startIndex = (page - 1) * limit;
-      const endIndex = startIndex + limit;
-      const paginatedLogs = allLogs.slice(startIndex, endIndex);
-
-      return {
-        logs: paginatedLogs,
-        hasMore: endIndex < allLogs.length,
-        totalCount: allLogs.length,
-        source: 'file',
-      };
+      // Use streaming approach for large files
+      return await this.streamLogsFromFile(logFile, page, limit);
     } catch (error) {
       if (error.code === 'ENOENT') {
         return { logs: [], hasMore: false, totalCount: 0, source: 'file' };
       }
       throw new Error(`Failed to retrieve logs: ${error.message}`);
     }
+  }
+
+  /**
+   * Stream logs from file efficiently without loading entire file into memory
+   * @param {string} logFile - Path to log file
+   * @param {number} page - Page number
+   * @param {number} limit - Logs per page
+   * @returns {Promise<Object>} Paginated logs
+   */
+  async streamLogsFromFile(logFile, page = 1, limit = 100) {
+    const { createReadStream } = await import('fs');
+    const { createInterface } = await import('readline');
+
+    return new Promise((resolve, reject) => {
+      const lines = [];
+      let totalCount = 0;
+      const startIndex = (page - 1) * limit;
+      const endIndex = startIndex + limit;
+
+      const fileStream = createReadStream(logFile, { encoding: 'utf8' });
+      const rl = createInterface({
+        input: fileStream,
+        crlfDelay: Infinity, // Handle Windows line endings
+      });
+
+      rl.on('line', (line) => {
+        if (line.trim()) {
+          totalCount++;
+          
+          // Only collect lines we need for this page (plus some buffer for sorting)
+          if (lines.length < (endIndex + 100)) { // Buffer for reverse sort
+            const match = line.match(/\[(.*?)\] (.*)/);
+            if (match) {
+              lines.push({
+                sequence: totalCount,
+                timestamp: match[1],
+                message: match[2],
+                createdAt: new Date(match[1]).getTime(),
+              });
+            }
+          }
+        }
+      });
+
+      rl.on('close', () => {
+        // Reverse for most recent first, then paginate
+        const allLogs = lines.reverse();
+        const paginatedLogs = allLogs.slice(startIndex, endIndex);
+
+        resolve({
+          logs: paginatedLogs,
+          hasMore: endIndex < totalCount,
+          totalCount,
+          source: 'file-stream',
+        });
+      });
+
+      rl.on('error', (error) => {
+        reject(error);
+      });
+
+      fileStream.on('error', (error) => {
+        reject(error);
+      });
+    });
   }
 
   /**
@@ -657,7 +714,10 @@ class AnalysisService {
             );
           }
         } catch (error) {
-          console.error(`Error loading analysis ${dirName}:`, error);
+          logger.error(
+            { error, analysisName: dirName },
+            'Error loading analysis',
+          );
         }
       }),
     );
@@ -679,7 +739,7 @@ class AnalysisService {
       const content = await fs.readFile(filePath, 'utf8');
       return content;
     } catch (error) {
-      console.error('Error reading analysis content:', error);
+      logger.error({ error, analysisName }, 'Error reading analysis content');
       throw new Error(`Failed to get analysis content: ${error.message}`);
     }
   }
@@ -1057,7 +1117,7 @@ class AnalysisService {
         savedVersion: savedVersion,
       };
     } catch (error) {
-      console.error('Error updating analysis:', error);
+      logger.error({ error, analysisName, updates }, 'Error updating analysis');
       throw new Error(`Failed to update analysis: ${error.message}`);
     }
   }
@@ -1201,7 +1261,7 @@ class AnalysisService {
         restarted: wasRunning,
       };
     } catch (error) {
-      console.error('Error updating environment:', error);
+      logger.error({ error, analysisName }, 'Error updating environment');
       throw new Error(`Failed to update environment: ${error.message}`);
     }
   }

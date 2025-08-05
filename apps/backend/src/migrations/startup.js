@@ -7,11 +7,14 @@ import crypto from 'crypto';
 import config from '../config/default.js';
 import { sseManager } from '../utils/sse.js';
 import { auth } from '../lib/auth.js';
+import { createChildLogger } from '../utils/logging/logger.js';
+
+const logger = createChildLogger('migration');
 
 // Function to run database migrations
 export async function runMigrations() {
   try {
-    console.log('Running database migrations...');
+    logger.info('Running database migrations...');
     sseManager.updateContainerState({
       status: 'running_migrations',
       message: 'Running database migrations',
@@ -36,7 +39,7 @@ export async function runMigrations() {
     }
 
     // Check if team table has color column, add if missing
-    console.log('Checking team table schema...');
+    logger.info('Checking team table schema...');
     const dbPath = path.join(config.storage.base, 'auth.db');
     const db = new Database(dbPath);
 
@@ -54,37 +57,37 @@ export async function runMigrations() {
       );
 
       if (!hasColorColumn) {
-        console.log('Adding color column to team table...');
+        logger.info('Adding color column to team table...');
         db.prepare(
           "ALTER TABLE team ADD COLUMN color TEXT DEFAULT '#3B82F6'",
         ).run();
-        console.log('✓ Color column added to team table');
+        logger.info('✓ Color column added to team table');
       } else {
         return;
       }
 
       if (!hasOrderColumn) {
-        console.log('Adding order_index column to team table...');
+        logger.info('Adding order_index column to team table...');
         db.prepare(
           'ALTER TABLE team ADD COLUMN order_index INTEGER DEFAULT 0',
         ).run();
-        console.log('✓ Order_index column added to team table');
+        logger.info('✓ Order_index column added to team table');
       } else {
         return;
       }
 
       if (!hasIsSystemColumn) {
-        console.log('Adding is_system column to team table...');
+        logger.info('Adding is_system column to team table...');
         db.prepare(
           'ALTER TABLE team ADD COLUMN is_system INTEGER DEFAULT 0',
         ).run();
-        console.log('✓ Is_system column added to team table');
+        logger.info('✓ Is_system column added to team table');
       } else {
         return;
       }
 
       // Check if member table has permissions column, add if missing
-      console.log('Checking teamMember table schema...');
+      logger.info('Checking teamMember table schema...');
       const teamMemberTableInfo = db
         .prepare('PRAGMA table_info(teamMember)')
         .all();
@@ -93,28 +96,28 @@ export async function runMigrations() {
       );
 
       if (!hasPermissionsColumn) {
-        console.log('Adding permissions column to member table...');
+        logger.info('Adding permissions column to member table...');
         db.prepare(
           "ALTER TABLE teamMember ADD COLUMN permissions TEXT DEFAULT '[]'",
         ).run();
-        console.log('✓ Permissions column added to teamMember table');
+        logger.info('✓ Permissions column added to teamMember table');
       } else {
         return;
       }
 
       // Check if member table has permissions column, add if missing
-      console.log('Checking user table schema...');
+      logger.info('Checking user table schema...');
       const userTableInfo = db.prepare('PRAGMA table_info(user)').all();
       const hasPasswordChangeColumn = userTableInfo.some(
         (column) => column.name === 'requiresPasswordChange',
       );
 
       if (!hasPasswordChangeColumn) {
-        console.log('Adding requiresPasswordChange column to user table...');
+        logger.info('Adding requiresPasswordChange column to user table...');
         db.prepare(
           'ALTER TABLE user ADD COLUMN requiresPasswordChange INTEGER DEFAULT 0',
         ).run();
-        console.log('✓ RequiresPasswordChange column added to user table');
+        logger.info('✓ RequiresPasswordChange column added to user table');
       } else {
         return;
       }
@@ -125,11 +128,11 @@ export async function runMigrations() {
         .get('Default Team');
 
       if (defaultTeamExists) {
-        console.log('Renaming "Default Team" to "Uncategorized"...');
+        logger.info('Renaming "Default Team" to "Uncategorized"...');
         db.prepare(
           'UPDATE team SET name = ?, color = ?, is_system = 1 WHERE name = ?',
         ).run('Uncategorized', '#9ca3af', 'Default Team');
-        console.log('✓ "Default Team" renamed to "Uncategorized"');
+        logger.info('✓ "Default Team" renamed to "Uncategorized"');
       }
 
       // Mark uncategorized teams as system teams
@@ -138,39 +141,44 @@ export async function runMigrations() {
         .all('Uncategorized');
 
       if (uncategorizedTeams.length > 0) {
-        console.log('Marking uncategorized teams as system teams...');
+        logger.info('Marking uncategorized teams as system teams...');
         db.prepare('UPDATE team SET is_system = 1 WHERE name = ?').run(
           'Uncategorized',
         );
-        console.log('✓ Uncategorized teams marked as system teams');
+        logger.info('✓ Uncategorized teams marked as system teams');
       }
 
       // Update existing users to have requiresPasswordChange = false (they've already set their passwords)
       try {
-        console.log('Updating existing users requiresPasswordChange field...');
+        logger.info('Updating existing users requiresPasswordChange field...');
         const updateResult = db
           .prepare(
             'UPDATE user SET requiresPasswordChange = 0 WHERE requiresPasswordChange IS NULL',
           )
           .run();
         if (updateResult.changes > 0) {
-          console.log(`✓ Updated ${updateResult.changes} existing users`);
+          logger.info(
+            { changesCount: updateResult.changes },
+            '✓ Updated existing users',
+          );
         } else {
-          console.log(
+          logger.info(
             '✓ All existing users already have requiresPasswordChange field set',
           );
         }
       } catch (updateError) {
-        console.warn(
-          '⚠ Could not update existing users:',
-          updateError.message,
+        logger.warn(
+          {
+            error: updateError.message,
+          },
+          '⚠ Could not update existing users',
         );
       }
     } finally {
       db.close();
     }
   } catch (error) {
-    console.error('Migration failed:', error.message);
+    logger.error({ error: error.message }, 'Migration failed');
     throw error;
   }
 }
@@ -197,7 +205,7 @@ export async function createAdminUserIfNeeded() {
 
     db.close();
 
-    console.log('Creating admin user...');
+    logger.info('Creating admin user...');
     sseManager.updateContainerState({
       status: 'creating_admin',
       message: 'Creating admin user',
@@ -223,10 +231,13 @@ export async function createAdminUserIfNeeded() {
       db2.close();
 
       if (updateResult.changes > 0) {
-        console.log('✓ Admin user created successfully');
+        logger.info(
+          { userId: result.user.id },
+          '✓ Admin user created successfully',
+        );
 
         // Create main organization and add admin to it
-        console.log('Creating main organization...');
+        logger.info('Creating main organization...');
         sseManager.updateContainerState({
           status: 'creating_organization',
           message: 'Creating main organization',
@@ -258,9 +269,15 @@ export async function createAdminUserIfNeeded() {
                 new Date().toISOString(),
               );
             orgId = orgUuid;
-            console.log('✓ Main organization created');
+            logger.info(
+              { organizationId: orgId },
+              '✓ Main organization created',
+            );
           } else {
-            console.log('✓ Main organization already exists');
+            logger.info(
+              { organizationId: orgId },
+              '✓ Main organization already exists',
+            );
           }
 
           if (orgId) {
@@ -286,7 +303,7 @@ export async function createAdminUserIfNeeded() {
                   0,
                   1,
                 );
-              console.log('✓ Uncategorized team created');
+              logger.info({ teamId: teamUuid }, '✓ Uncategorized team created');
             }
 
             // Add admin as organization member with team assignment
@@ -308,7 +325,12 @@ export async function createAdminUserIfNeeded() {
                   'owner',
                   new Date().toISOString(),
                 );
-              console.log(
+              logger.info(
+                {
+                  userId: result.user.id,
+                  organizationId: orgId,
+                  role: 'owner',
+                },
                 '✓ Admin added to organization and uncategorized team as owner',
               );
             }
@@ -316,26 +338,29 @@ export async function createAdminUserIfNeeded() {
 
           db3.close();
         } catch (orgError) {
-          console.warn(
-            '⚠ Organization setup encountered issues:',
-            orgError.message,
+          logger.warn(
+            {
+              error: orgError.message,
+            },
+            '⚠ Organization setup encountered issues',
           );
         }
 
-        console.log('');
-        console.log(' Admin user credentials:');
-        console.log('   Email: admin@example.com');
-        console.log('   Username: admin');
-        console.log('   Password: admin123');
-        console.log('');
-        console.log('You can now sign in with these credentials.');
+        logger.info(
+          {
+            email: 'admin@example.com',
+            username: 'admin',
+            password: 'admin123',
+          },
+          'Admin user credentials created',
+        );
       } else {
-        console.warn(' Admin user created but role assignment may have failed');
+        logger.warn('Admin user created but role assignment may have failed');
       }
     } else {
-      console.error(' Failed to create admin user');
+      logger.error('Failed to create admin user');
     }
   } catch (error) {
-    console.error('Error with admin user setup:', error.message);
+    logger.error({ error: error.message }, 'Error with admin user setup');
   }
 }
