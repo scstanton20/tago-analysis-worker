@@ -18,19 +18,24 @@ jobs:
       - name: Check out
         uses: actions/checkout@v4
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-
       - name: Extract Node.js version from package.json
         id: node-version
         run: |
           echo "NODE_VERSION=$(node -p "require('./package.json').engines.node.replace('>=', '')")" >> $GITHUB_OUTPUT
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
 
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ steps.node-version.outputs.NODE_VERSION }}
           cache: 'pnpm'
+
+      - name: Set pnpm store path
+        run: echo "PNPM_STORE_PATH=$(pnpm store path)" >> $GITHUB_ENV
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -40,19 +45,6 @@ jobs:
         run: |
           echo "FRONTEND_VERSION=$(node -p "require('./apps/frontend/package.json').version")" >> $GITHUB_OUTPUT
           echo "BACKEND_VERSION=$(node -p "require('./apps/backend/package.json').version")" >> $GITHUB_OUTPUT
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3.6.0
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Github Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check if backend image exists
         id: backend-check
@@ -76,16 +68,44 @@ jobs:
             echo "FRONTEND_EXISTS=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Build frontend
+        if: steps.frontend-check.outputs.FRONTEND_EXISTS == 'false'
+        run: pnpm --filter frontend run build
+
+      - name: Deploy backend for Docker
+        if: steps.backend-check.outputs.BACKEND_EXISTS == 'false'
+        run: pnpm --filter backend --prod deploy deploy-output/backend
+
+      - name: Prepare frontend for Docker
+        if: steps.frontend-check.outputs.FRONTEND_EXISTS == 'false'
+        run: |
+          mkdir -p deploy-output/frontend
+          cp -r apps/frontend/dist deploy-output/frontend/
+          cp apps/frontend/nginx.conf deploy-output/frontend/
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3.6.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Github Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build and push Backend image
         if: steps.backend-check.outputs.BACKEND_EXISTS == 'false'
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: deploy-output/backend
           file: ./docker-configs/production/backend.Dockerfile
           push: true
+          platforms: linux/amd64,linux/arm64/v8
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
-          platforms: linux/amd64,linux/arm64/v8
           tags: |
             ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest
             ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ steps.version.outputs.BACKEND_VERSION }}
@@ -94,12 +114,12 @@ jobs:
         if: steps.frontend-check.outputs.FRONTEND_EXISTS == 'false'
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: deploy-output/frontend
           file: ./docker-configs/production/frontend.Dockerfile
           push: true
+          platforms: linux/amd64,linux/arm64/v8
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
-          platforms: linux/amd64,linux/arm64/v8
           tags: |
             ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest
             ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ steps.version.outputs.FRONTEND_VERSION }}

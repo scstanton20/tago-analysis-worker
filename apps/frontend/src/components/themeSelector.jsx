@@ -1,6 +1,11 @@
-// frontend/src/components/themeSelector.jsx
 import { useState } from 'react';
-import { Menu, Text, Group, useMantineColorScheme } from '@mantine/core';
+import {
+  Menu,
+  Text,
+  Group,
+  useMantineColorScheme,
+  ActionIcon,
+} from '@mantine/core';
 import { IconSun, IconMoon, IconDeviceDesktop } from '@tabler/icons-react';
 
 const ThemeSelector = () => {
@@ -28,6 +33,10 @@ const ThemeSelector = () => {
     },
   ];
 
+  const currentTheme =
+    themeOptions.find((t) => t.value === colorScheme) || themeOptions[0];
+  const CurrentIcon = currentTheme.icon;
+
   return (
     <Menu
       opened={opened}
@@ -37,6 +46,17 @@ const ThemeSelector = () => {
       arrowOffset={12}
       offset={8}
     >
+      <Menu.Target>
+        <ActionIcon
+          variant="default"
+          size="lg"
+          radius="xl"
+          aria-label="Theme selector"
+        >
+          <CurrentIcon size={20} />
+        </ActionIcon>
+      </Menu.Target>
+
       <Menu.Dropdown>
         <Menu.Label>Theme Preference</Menu.Label>
         {themeOptions.map((theme) => {
@@ -49,6 +69,7 @@ const ThemeSelector = () => {
                 setColorScheme(theme.value);
                 setOpened(false);
               }}
+              leftSection={<theme.icon size={16} />}
             >
               <Group justify="space-between" w="100%">
                 <div>
