@@ -190,29 +190,36 @@ const AnalysisLogs = ({ analysis }) => {
   // Reset state when logs are cleared
   const [previousLogCount, setPreviousLogCount] = useState(sseLogs.length);
 
-  // Detect when logs are cleared (sse logs go to 0 or contain only a clear message)
-  const logsWereCleared =
-    isMountedRef.current &&
-    hasLoadedInitial.current &&
-    previousLogCount > 0 &&
-    (sseLogs.length === 0 ||
-      (sseLogs.length === 1 && sseLogs[0]?.message?.includes('cleared')));
+  // Use useEffect to handle log clearing detection properly
+  useEffect(() => {
+    // Detect when logs are cleared (sse logs go to 0 or contain only a clear message)
+    const logsWereCleared =
+      isMountedRef.current &&
+      hasLoadedInitial.current &&
+      previousLogCount > 0 &&
+      (sseLogs.length === 0 ||
+        (sseLogs.length === 1 && sseLogs[0]?.message?.includes('cleared')));
 
-  if (logsWereCleared) {
-    console.log('Logs cleared, resetting all state and reloading');
-    setInitialLogs([]);
-    setAdditionalLogs([]);
-    setPage(1);
-    setHasMore(false);
-    shouldAutoScroll.current = false;
-    hasLoadedInitial.current = false; // Force reload of initial logs
-    loadInitialLogs();
-  }
+    if (logsWereCleared) {
+      console.log('Logs cleared, resetting all state and reloading');
+      setInitialLogs([]);
+      setAdditionalLogs([]);
+      setPage(1);
+      setHasMore(false);
+      shouldAutoScroll.current = false;
+      hasLoadedInitial.current = false; // Force reload of initial logs
+      loadInitialLogs();
+    }
 
-  // Update previous count for next render
-  if (sseLogs.length !== previousLogCount) {
+    // Update previous count
     setPreviousLogCount(sseLogs.length);
-  }
+  }, [
+    sseLogs.length,
+    previousLogCount,
+    isMountedRef,
+    loadInitialLogs,
+    sseLogs,
+  ]);
 
   // Memoize combined logs to prevent unnecessary recalculations
   const allLogs = useCallback(() => {
