@@ -5,16 +5,11 @@ import {
   Text,
   Burger,
   Group,
-  Tooltip,
   LoadingOverlay,
   Stack,
   Button,
-  useComputedColorScheme,
-  useMantineColorScheme,
-  Switch,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { IconSun, IconMoon } from '@tabler/icons-react';
 import { useSSE } from './contexts/sseContext';
 import { SSEProvider } from './contexts/sseContext/provider';
 import { CombinedAuthProvider } from './contexts/CombinedAuthProvider';
@@ -31,6 +26,7 @@ import ConnectionStatus from './components/connectionStatus';
 import LoginPage from './components/auth/LoginPage';
 import Logo from './components/logo';
 import ImpersonationBanner from './components/ImpersonationBanner';
+import ThemeSelector from './components/ThemeSelector';
 
 // Reusable loading overlay component
 function AppLoadingOverlay({ message, submessage, error, showRetry }) {
@@ -78,8 +74,6 @@ function AppContent() {
   const [selectedTeam, setSelectedTeam] = useState(null);
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure();
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
-  const { setColorScheme } = useMantineColorScheme();
-  const computedColorScheme = useComputedColorScheme('light');
 
   const getFilteredAnalyses = () => {
     // For admins, show all analyses
@@ -177,75 +171,7 @@ function AppContent() {
               </Group>
             </Group>
             <Group>
-              <Tooltip
-                label={
-                  computedColorScheme === 'light'
-                    ? 'Switch to dark mode'
-                    : 'Switch to light mode'
-                }
-              >
-                <Group gap="xs">
-                  <IconSun
-                    size={16}
-                    style={{
-                      opacity: computedColorScheme === 'light' ? 1 : 0.5,
-                      color:
-                        computedColorScheme === 'light'
-                          ? 'var(--mantine-color-brand-6)'
-                          : 'var(--mantine-color-gray-5)',
-                    }}
-                  />
-                  <Switch
-                    checked={computedColorScheme === 'dark'}
-                    onChange={() =>
-                      setColorScheme(
-                        computedColorScheme === 'dark' ? 'light' : 'dark',
-                      )
-                    }
-                    size="md"
-                    onLabel=""
-                    offLabel=""
-                    color="brand"
-                    styles={{
-                      track: {
-                        cursor: 'pointer',
-                        backgroundColor: 'transparent',
-                        borderWidth: '1px',
-                        borderStyle: 'solid',
-                        borderColor:
-                          computedColorScheme === 'dark'
-                            ? 'var(--mantine-color-brand-4)'
-                            : 'var(--mantine-color-gray-4)',
-                        '&[dataChecked]': {
-                          backgroundColor: 'var(--mantine-color-brand-1)',
-                          borderColor: 'var(--mantine-color-brand-6)',
-                        },
-                      },
-                      thumb: {
-                        cursor: 'pointer',
-                        backgroundColor:
-                          computedColorScheme === 'dark'
-                            ? 'var(--mantine-color-brand-6)'
-                            : 'var(--mantine-color-gray-6)',
-                        border: 'none',
-                        '&[dataChecked]': {
-                          backgroundColor: 'var(--mantine-color-brand-7)',
-                        },
-                      },
-                    }}
-                  />
-                  <IconMoon
-                    size={16}
-                    style={{
-                      opacity: computedColorScheme === 'dark' ? 1 : 0.5,
-                      color:
-                        computedColorScheme === 'dark'
-                          ? 'var(--mantine-color-brand-6)'
-                          : 'var(--mantine-color-gray-5)',
-                    }}
-                  />
-                </Group>
-              </Tooltip>
+              <ThemeSelector />
               <ConnectionStatus />
             </Group>
           </Group>
