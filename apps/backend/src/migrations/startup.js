@@ -21,19 +21,22 @@ export async function runMigrations() {
     });
 
     if (process.env.NODE_ENV === 'development') {
-      execSync(
-        'npx @better-auth/cli@latest migrate --config src/lib/auth.js -y',
-        {
-          stdio: 'inherit',
-          cwd: process.cwd(),
-        },
-      );
+      execSync('npx @better-auth/cli migrate --config src/lib/auth.js -y', {
+        stdio: 'inherit',
+        cwd: process.cwd(),
+      });
     } else {
+      // Set STORAGE_BASE explicitly to ensure correct database location
+      const env = {
+        ...process.env,
+        STORAGE_BASE: '/app/analyses-storage',
+      };
       execSync(
-        'npx @better-auth/cli@latest migrate --config apps/backend/src/lib/auth.js -y',
+        'node apps/backend/node_modules/@better-auth/cli/dist/index.mjs migrate --config apps/backend/src/lib/auth.js -y',
         {
           stdio: 'inherit',
-          cwd: process.cwd(),
+          cwd: '/app',
+          env: env,
         },
       );
     }

@@ -153,13 +153,8 @@ class AnalysisService {
       // Store the full config including departments
       this.configCache = config;
 
-      // Load analyses into the Map
-      this.analyses.clear();
-      if (config.analyses) {
-        Object.entries(config.analyses).forEach(([name, analysis]) => {
-          this.analyses.set(name, analysis);
-        });
-      }
+      // Don't load analyses here - they will be properly initialized
+      // as AnalysisProcess instances in initializeAnalysis method
 
       logger.info(
         {
@@ -513,6 +508,8 @@ class AnalysisService {
     }
 
     await analysis.start();
+    // Ensure config is saved after starting (which updates intendedState)
+    await this.saveConfig();
     return { success: true, status: analysis.status, logs: analysis.logs };
   }
 
@@ -735,6 +732,9 @@ class AnalysisService {
         }
       }),
     );
+
+    // Save config to ensure any newly discovered analyses are persisted
+    await this.saveConfig();
   }
 
   /**

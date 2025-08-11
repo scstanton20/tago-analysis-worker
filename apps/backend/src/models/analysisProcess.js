@@ -336,7 +336,7 @@ class AnalysisProcess {
 
       this.setupProcessHandlers();
       this.updateStatus('running', true);
-      await this.saveConfig();
+      // Config saving is handled by the service after start() completes
     } catch (error) {
       this.logger.error({ err: error }, `Failed to start analysis process`);
       await this.addLog(`ERROR: ${error.message}`);
