@@ -223,13 +223,29 @@ class AnalysisController {
   static async getAnalysisContent(req, res) {
     try {
       const { fileName } = req.params;
+      const { version } = req.query;
 
       // Sanitize the fileName to prevent path traversal
       const sanitizedFileName = sanitizeAndValidateFilename(fileName);
 
       try {
-        const content =
-          await analysisService.getAnalysisContent(sanitizedFileName);
+        let content;
+
+        if (version !== undefined) {
+          // Get version-specific content
+          const versionNumber = parseInt(version, 10);
+          if (isNaN(versionNumber) || versionNumber < 0) {
+            return res.status(400).json({ error: 'Invalid version number' });
+          }
+          content = await analysisService.getVersionContent(
+            sanitizedFileName,
+            versionNumber,
+          );
+        } else {
+          // Get current content
+          content = await analysisService.getAnalysisContent(sanitizedFileName);
+        }
+
         res.set('Content-Type', 'text/plain');
         res.send(content);
       } catch (error) {

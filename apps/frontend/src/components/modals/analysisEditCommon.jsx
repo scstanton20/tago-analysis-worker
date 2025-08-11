@@ -27,6 +27,7 @@ export default function AnalysisEditModal({
   analysis: currentAnalysis,
   readOnly = false,
   type = 'analysis', // 'analysis' or 'env'
+  version = null, // version number for viewing specific versions
 }) {
   const [content, setContent] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
@@ -59,7 +60,7 @@ export default function AnalysisEditModal({
 
         const fileContent = isEnvMode
           ? await analysisService.getAnalysisENVContent(nameToUse)
-          : await analysisService.getAnalysisContent(nameToUse);
+          : await analysisService.getAnalysisContent(nameToUse, version);
 
         if (!isCancelled) {
           setContent(fileContent);
@@ -82,7 +83,7 @@ export default function AnalysisEditModal({
     return () => {
       isCancelled = true;
     };
-  }, [currentAnalysis.name, displayName, isEnvMode, type]);
+  }, [currentAnalysis.name, displayName, isEnvMode, type, version]);
 
   const handleEditorChange = (value) => {
     if (isEnvMode) {
@@ -182,6 +183,7 @@ export default function AnalysisEditModal({
 
   const modalTitle = isEnvMode ? 'Environment' : 'Analysis Content';
   const nameToDisplay = isEnvMode ? currentAnalysis.name : displayName;
+  const versionText = version !== null && version !== 0 ? ` (v${version})` : '';
 
   return (
     <Modal
@@ -224,8 +226,11 @@ export default function AnalysisEditModal({
             </Group>
           ) : (
             <Group gap={4}>
-              <Text>{nameToDisplay}</Text>
-              {!isEnvMode && !readOnly && (
+              <Text>
+                {nameToDisplay}
+                {versionText}
+              </Text>
+              {!isEnvMode && !readOnly && !version && (
                 <ActionIcon
                   variant="subtle"
                   size="sm"
@@ -348,4 +353,5 @@ AnalysisEditModal.propTypes = {
   onClose: PropTypes.func.isRequired,
   readOnly: PropTypes.bool,
   type: PropTypes.oneOf(['analysis', 'env']),
+  version: PropTypes.number,
 };

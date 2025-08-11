@@ -34,6 +34,7 @@ export default function VersionManagementModal({
   onVersionRollback,
 }) {
   const [showContentModal, setShowContentModal] = useState(false);
+  const [selectedVersion, setSelectedVersion] = useState(null);
   const [versionData, setVersionData] = useState({
     versions: [],
     nextVersionNumber: 2,
@@ -245,6 +246,18 @@ export default function VersionManagementModal({
                       >
                         <IconDownload size={14} />
                       </ActionIcon>
+                      <ActionIcon
+                        variant="light"
+                        color="blue"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedVersion(0);
+                          setShowContentModal(true);
+                        }}
+                        title="View current version content"
+                      >
+                        <IconEyeCode size={14} />
+                      </ActionIcon>
                     </Group>
                   </Table.Td>
                 </Table.Tr>
@@ -287,18 +300,13 @@ export default function VersionManagementModal({
                           variant="light"
                           color="blue"
                           size="sm"
-                          onClick={() => setShowContentModal(true)}
+                          onClick={() => {
+                            setSelectedVersion(version.version);
+                            setShowContentModal(true);
+                          }}
                           loading={loading}
-                          title={`View this version's conetent`}
+                          title={`View this version's content`}
                         >
-                          {showContentModal && (
-                            <AnalysisEditModal
-                              analysis={analysis}
-                              onClose={onClose}
-                              readOnly="true"
-                              type="analysis"
-                            />
-                          )}
                           <IconEyeCode />
                         </ActionIcon>
                       </Group>
@@ -316,6 +324,19 @@ export default function VersionManagementModal({
           </Button>
         </Group>
       </Stack>
+
+      {showContentModal && (
+        <AnalysisEditModal
+          analysis={analysis}
+          onClose={() => {
+            setShowContentModal(false);
+            setSelectedVersion(null);
+          }}
+          readOnly={true}
+          type="analysis"
+          version={selectedVersion}
+        />
+      )}
     </Modal>
   );
 }

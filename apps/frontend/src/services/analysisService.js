@@ -83,12 +83,21 @@ export const analysisService = {
     }
   },
 
-  async getAnalysisContent(fileName) {
+  async getAnalysisContent(fileName, version = null) {
     try {
-      console.log('Fetching analysis content for:', fileName);
-      const response = await fetchWithHeaders(`/analyses/${fileName}/content`, {
-        method: 'GET',
-      });
+      console.log(
+        'Fetching analysis content for:',
+        fileName,
+        'version:',
+        version,
+      );
+      const versionParam = version !== null ? `?version=${version}` : '';
+      const response = await fetchWithHeaders(
+        `/analyses/${fileName}/content${versionParam}`,
+        {
+          method: 'GET',
+        },
+      );
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({
