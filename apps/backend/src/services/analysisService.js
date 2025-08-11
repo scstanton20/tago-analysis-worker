@@ -96,7 +96,16 @@ class AnalysisService {
 
       Object.entries(config.analyses).forEach(([name, analysisConfig]) => {
         if (!this.analyses.has(name)) {
-          this.analyses.set(name, analysisConfig);
+          // Create new AnalysisProcess instance with proper configuration
+          const analysis = new AnalysisProcess(name, analysisConfig.type, this);
+          Object.assign(analysis, {
+            enabled: analysisConfig.enabled,
+            status: analysisConfig.status,
+            intendedState: analysisConfig.intendedState || 'stopped',
+            lastStartTime: analysisConfig.lastStartTime,
+            teamId: analysisConfig.teamId,
+          });
+          this.analyses.set(name, analysis);
         }
       });
     }
@@ -120,6 +129,7 @@ class AnalysisService {
         type: analysis.type,
         enabled: analysis.enabled,
         status: analysis.status,
+        intendedState: analysis.intendedState || 'stopped',
         lastStartTime: analysis.lastStartTime,
         teamId: analysis.teamId,
       };
@@ -518,7 +528,10 @@ class AnalysisService {
       throw new Error('Analysis not found');
     }
 
+    // Set intended state to stopped when manually stopping
+    analysis.intendedState = 'stopped';
     await analysis.stop();
+    await this.saveConfig();
     return { success: true };
   }
 
@@ -617,9 +630,10 @@ class AnalysisService {
       rl.on('line', (line) => {
         if (line.trim()) {
           totalCount++;
-          
+
           // Only collect lines we need for this page (plus some buffer for sorting)
-          if (lines.length < (endIndex + 100)) { // Buffer for reverse sort
+          if (lines.length < endIndex + 100) {
+            // Buffer for reverse sort
             const match = line.match(/\[(.*?)\] (.*)/);
             if (match) {
               lines.push({
@@ -1282,6 +1296,7 @@ class AnalysisService {
       type: 'listener',
       enabled: false,
       status: 'stopped',
+      intendedState: 'stopped',
       lastStartTime: null,
       teamId: null, // Will be set to Uncategorized team if not specified
     };
@@ -1292,6 +1307,7 @@ class AnalysisService {
     Object.assign(analysis, {
       enabled: fullConfig.enabled,
       status: fullConfig.status,
+      intendedState: fullConfig.intendedState || 'stopped',
       lastStartTime: fullConfig.lastStartTime,
       teamId: fullConfig.teamId,
     });
@@ -1300,6 +1316,87 @@ class AnalysisService {
     await analysis.initializeLogState();
 
     this.analyses.set(analysisName, analysis);
+  }
+
+  /**
+   * Get all analyses that should be running based on intendedState
+   * @returns {Array<string>} Array of analysis names that should be running
+   */
+  getAnalysesThatShouldBeRunning() {
+    const shouldBeRunning = [];
+    this.analyses.forEach((analysis, name) => {
+      if (analysis.intendedState === 'running') {
+        shouldBeRunning.push(name);
+      }
+    });
+    return shouldBeRunning;
+  }
+
+  /**
+   * Verify intended state and restart analyses that should be running
+   * Used during startup to ensure all intended processes are running
+   * @returns {Promise<Object>} Summary of restart operations
+   */
+  async verifyIntendedState() {
+    const shouldBeRunning = this.getAnalysesThatShouldBeRunning();
+    const results = {
+      shouldBeRunning: shouldBeRunning.length,
+      attempted: [],
+      succeeded: [],
+      failed: [],
+      alreadyRunning: [],
+    };
+
+    logger.info(
+      `Intended state verification: Found ${shouldBeRunning.length} analyses that should be running`,
+    );
+
+    for (const analysisName of shouldBeRunning) {
+      const analysis = this.analyses.get(analysisName);
+      if (!analysis) continue;
+
+      results.attempted.push(analysisName);
+
+      // Skip if already running and healthy (actual process exists and is alive)
+      // This handles the power outage case - if no actual process exists, we restart
+      const hasLiveProcess =
+        analysis.process && !analysis.process.killed && analysis.process.pid;
+      if (analysis.status === 'running' && hasLiveProcess) {
+        results.alreadyRunning.push(analysisName);
+        logger.debug(
+          `${analysisName} is already running with PID ${analysis.process.pid}`,
+        );
+        continue;
+      }
+
+      // If status shows running but no live process exists (e.g., after power outage),
+      // reset status to stopped before restarting
+      if (analysis.status === 'running' && !hasLiveProcess) {
+        logger.info(
+          `${analysisName} status shows running but no live process found - resetting status and restarting`,
+        );
+        analysis.status = 'stopped';
+        analysis.process = null;
+      }
+
+      try {
+        logger.info(`Starting ${analysisName} (intended state: running)`);
+        await analysis.start();
+        results.succeeded.push(analysisName);
+        await this.addLog(
+          analysisName,
+          'Restarted during intended state verification',
+        );
+      } catch (error) {
+        logger.error(
+          { err: error, analysisName },
+          'Failed to start analysis during intended state verification',
+        );
+        results.failed.push({ name: analysisName, error: error.message });
+      }
+    }
+
+    return results;
   }
 }
 

@@ -15,6 +15,7 @@ class AnalysisProcess {
     this.process = null;
     this.enabled = false;
     this.status = 'stopped';
+    this.intendedState = 'stopped'; // What state this should be in (persistent)
     this.lastStartTime = null;
     this.stdoutBuffer = '';
     this.stderrBuffer = '';
@@ -347,6 +348,13 @@ class AnalysisProcess {
     const previousStatus = this.status;
     this.status = status;
     this.enabled = enabled;
+
+    // Update intended state when explicitly enabling/disabling
+    if (status === 'running') {
+      this.intendedState = 'running';
+    } else if (status === 'stopped' && !enabled) {
+      this.intendedState = 'stopped';
+    }
 
     if (this.type === 'listener' && status === 'running') {
       this.lastStartTime = new Date().toString();

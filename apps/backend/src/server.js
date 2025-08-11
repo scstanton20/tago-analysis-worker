@@ -116,32 +116,50 @@ app.set('trust proxy', 1);
 
 const PORT = process.env.PORT || 3000;
 
-// Function to restart processes that were running before
+// Function to verify intended state and restart processes that should be running
 async function restartRunningProcesses() {
   try {
     sseManager.updateContainerState({
       status: 'restarting_processes',
-      message: 'Restarting previously running analyses',
+      message: 'Verifying intended state and restarting analyses',
     });
 
-    processLogger.info('Checking for analyses that need to be restarted');
+    processLogger.info('Verifying intended state for all analyses');
 
-    const configuration = await analysisService.getConfig();
+    // Use the new intended state verification method
+    const verificationResults = await analysisService.verifyIntendedState();
 
-    // Check if configuration has analyses property
-    if (configuration.analyses) {
-      for (const [analysisName, config] of Object.entries(
-        configuration.analyses,
-      )) {
-        if (config.status === 'running' || config.enabled === true) {
-          processLogger.info(`Restarting analysis: ${analysisName}`);
-          // Pass the type from config, but default to 'listener' if not found
-          await analysisService.runAnalysis(
-            analysisName,
-            config.type || 'listener',
-          );
-        }
-      }
+    // Log detailed results
+    processLogger.info(
+      {
+        shouldBeRunning: verificationResults.shouldBeRunning,
+        attempted: verificationResults.attempted.length,
+        succeeded: verificationResults.succeeded.length,
+        failed: verificationResults.failed.length,
+        alreadyRunning: verificationResults.alreadyRunning.length,
+      },
+      'Intended state verification completed',
+    );
+
+    if (verificationResults.succeeded.length > 0) {
+      processLogger.info(
+        `Successfully started: ${verificationResults.succeeded.join(', ')}`,
+      );
+    }
+
+    if (verificationResults.alreadyRunning.length > 0) {
+      processLogger.info(
+        `Already running: ${verificationResults.alreadyRunning.join(', ')}`,
+      );
+    }
+
+    if (verificationResults.failed.length > 0) {
+      processLogger.warn(
+        {
+          failedAnalyses: verificationResults.failed,
+        },
+        `Failed to start ${verificationResults.failed.length} analyses`,
+      );
     }
 
     sseManager.updateContainerState({
@@ -149,14 +167,17 @@ async function restartRunningProcesses() {
       message: 'Container is fully initialized and ready',
     });
 
-    processLogger.info('Process restart check completed');
+    processLogger.info('Intended state verification completed successfully');
   } catch (error) {
     sseManager.updateContainerState({
       status: 'error',
-      message: `Error during process restart: ${error.message}`,
+      message: `Error during intended state verification: ${error.message}`,
     });
 
-    processLogger.error({ err: error }, 'Error restarting processes');
+    processLogger.error(
+      { err: error },
+      'Error during intended state verification',
+    );
   }
 }
 
