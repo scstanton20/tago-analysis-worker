@@ -34,7 +34,10 @@ class AnalysisProcess {
 
     // Health check management
     this.restartAttempts = 0;
-    this.maxRestartAttempts = 3;
+    this.maxRestartAttempts = 10; // Increased for better internet outage handling
+    this.restartDelay = 5000; // Initial restart delay
+    this.maxRestartDelay = 60000; // Max 1 minute between retries
+    this.connectionErrorDetected = false;
 
     // Create main logger for lifecycle events (not analysis output)
     this.logger = createChildLogger('analysis', {
@@ -276,15 +279,16 @@ class AnalysisProcess {
             fullLine.includes('¬ Error :: Analysis not found or not active.')
           ) {
             this.logger.warn(
-              'Tago SDK connection error detected - scheduling restart',
+              'Tago SDK connection error detected - marking for restart',
             );
 
-            this.addLog('Tago connection lost - restarting process');
-            setTimeout(() => {
-              if (this.status === 'running') {
-                this.restartProcess();
-              }
-            }, 5000);
+            this.connectionErrorDetected = true;
+            this.addLog('Tago connection lost - will restart process');
+
+            // Kill the process to trigger restart logic
+            if (this.process && !this.process.killed) {
+              this.process.kill('SIGTERM');
+            }
           }
           this.addLog(isError ? `ERROR: ${fullLine}` : fullLine);
         }
@@ -353,7 +357,10 @@ class AnalysisProcess {
     if (status === 'running') {
       this.intendedState = 'running';
     } else if (status === 'stopped' && !enabled) {
-      this.intendedState = 'stopped';
+      // Only set intended state to stopped if not a connection error
+      if (!this.connectionErrorDetected) {
+        this.intendedState = 'stopped';
+      }
     }
 
     if (this.type === 'listener' && status === 'running') {
@@ -423,11 +430,68 @@ class AnalysisProcess {
     this.updateStatus('stopped', false);
     await this.saveConfig();
 
-    // Auto-restart listeners that exit unexpectedly
-    if (this.type === 'listener' && this.enabled && code !== 0) {
-      this.logger.warn(`Listener exited unexpectedly, scheduling auto-restart`);
-      await this.addLog(`Listener exited unexpectedly, auto-restarting...`);
-      setTimeout(() => this.start(), config.analysis.autoRestartDelay || 5000);
+    // Auto-restart listeners that exit unexpectedly OR have connection errors
+    const shouldRestart =
+      this.type === 'listener' &&
+      this.intendedState === 'running' &&
+      (code !== 0 || this.connectionErrorDetected);
+
+    if (shouldRestart) {
+      if (this.connectionErrorDetected) {
+        this.restartAttempts++;
+
+        // Calculate exponential backoff delay
+        const delay = Math.min(
+          this.restartDelay * Math.pow(2, this.restartAttempts - 1),
+          this.maxRestartDelay,
+        );
+
+        this.logger.warn(
+          `Connection error detected, scheduling restart attempt ${this.restartAttempts}/${this.maxRestartAttempts} in ${delay}ms`,
+        );
+        await this.addLog(
+          `Connection error - restart attempt ${this.restartAttempts}/${this.maxRestartAttempts} in ${delay / 1000}s`,
+        );
+
+        if (this.restartAttempts <= this.maxRestartAttempts) {
+          setTimeout(async () => {
+            // Reset connection error flag before restart
+            this.connectionErrorDetected = false;
+            try {
+              await this.start();
+              // Reset attempts on successful start
+              this.restartAttempts = 0;
+            } catch (error) {
+              this.logger.error(
+                { err: error },
+                'Failed to restart after connection error',
+              );
+              // Will retry on next exit if still under max attempts
+            }
+          }, delay);
+        } else {
+          await this.addLog(
+            `Maximum restart attempts (${this.maxRestartAttempts}) reached. Manual intervention required.`,
+          );
+          this.logger.error(
+            `Maximum restart attempts reached for ${this.analysisName}. Stopping auto-restart.`,
+          );
+        }
+      } else {
+        // Regular unexpected exit (non-connection error)
+        this.logger.warn(
+          `Listener exited unexpectedly, scheduling auto-restart`,
+        );
+        await this.addLog(`Listener exited unexpectedly, auto-restarting...`);
+        setTimeout(
+          () => this.start(),
+          config.analysis.autoRestartDelay || 5000,
+        );
+      }
+    } else if (this.connectionErrorDetected) {
+      // Reset connection error flag if not restarting
+      this.connectionErrorDetected = false;
+      this.restartAttempts = 0;
     }
   }
 }

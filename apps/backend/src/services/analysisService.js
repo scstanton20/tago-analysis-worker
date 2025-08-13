@@ -35,6 +35,8 @@ class AnalysisService {
     this.configCache = null;
     /** @type {string} Path to the configuration file */
     this.configPath = path.join(config.paths.config, 'analyses-config.json');
+    /** @type {NodeJS.Timeout|null} Health check interval timer */
+    this.healthCheckInterval = null;
   }
 
   validateTimeRange(timeRange) {
@@ -735,6 +737,9 @@ class AnalysisService {
 
     // Save config to ensure any newly discovered analyses are persisted
     await this.saveConfig();
+
+    // Start periodic health check
+    this.startHealthCheck();
   }
 
   /**
@@ -1397,6 +1402,78 @@ class AnalysisService {
     }
 
     return results;
+  }
+
+  /**
+   * Start periodic health check for analyses
+   * Runs every 5 minutes to ensure analyses that should be running are actually running
+   * This helps recover from connection issues and internet outages
+   */
+  startHealthCheck() {
+    // Clear any existing interval
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+    }
+
+    // Run health check every 5 minutes
+    const healthCheckIntervalMs = 5 * 60 * 1000; // 5 minutes
+
+    this.healthCheckInterval = setInterval(async () => {
+      logger.debug('Running periodic health check for analyses');
+
+      try {
+        // Check each analysis that should be running
+        for (const [analysisName, analysis] of this.analyses) {
+          if (
+            analysis.intendedState === 'running' &&
+            analysis.status !== 'running'
+          ) {
+            logger.warn(
+              `Health check: ${analysisName} should be running but is ${analysis.status}. Attempting restart.`,
+            );
+
+            try {
+              await analysis.start();
+              await this.addLog(
+                analysisName,
+                'Restarted by periodic health check',
+              );
+              logger.info(
+                `Health check: Successfully restarted ${analysisName}`,
+              );
+
+              // Reset restart attempts on successful health check restart
+              if (analysis.connectionErrorDetected) {
+                analysis.connectionErrorDetected = false;
+                analysis.restartAttempts = 0;
+              }
+            } catch (error) {
+              logger.error(
+                { err: error, analysisName },
+                'Health check: Failed to restart analysis',
+              );
+            }
+          }
+        }
+      } catch (error) {
+        logger.error({ err: error }, 'Error during periodic health check');
+      }
+    }, healthCheckIntervalMs);
+
+    logger.info(
+      'Started periodic health check for analyses (5 minute interval)',
+    );
+  }
+
+  /**
+   * Stop the periodic health check
+   */
+  stopHealthCheck() {
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+      this.healthCheckInterval = null;
+      logger.info('Stopped periodic health check');
+    }
   }
 }
 

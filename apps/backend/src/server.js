@@ -289,6 +289,9 @@ process.on('SIGINT', () => {
     message: 'Server is shutting down',
   });
 
+  // Stop health check
+  analysisService.stopHealthCheck();
+
   // Broadcast shutdown notification to all users
   sseManager.broadcast({
     type: 'serverShutdown',
@@ -309,6 +312,9 @@ process.on('SIGTERM', () => {
     status: 'shutting_down',
     message: 'Server is shutting down',
   });
+
+  // Stop health check
+  analysisService.stopHealthCheck();
 
   // Broadcast shutdown notification to all users
   sseManager.broadcast({
