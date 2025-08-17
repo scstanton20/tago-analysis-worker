@@ -22,10 +22,11 @@ import {
   IconClock,
   IconFileText,
   IconEyeCode,
+  IconGitCompare,
 } from '@tabler/icons-react';
 import { analysisService } from '../../services/analysisService';
 import { useNotifications } from '../../hooks/useNotifications';
-const AnalysisEditModal = lazy(() => import('../modals/analysisEditCommon'));
+const AnalysisEditModal = lazy(() => import('../modals/codeMirrorCommon'));
 
 export default function VersionManagementModal({
   isOpen,
@@ -125,6 +126,7 @@ export default function VersionManagementModal({
       console.error('Failed to download version:', error);
     }
   };
+
 
   const formatDate = (timestamp) => {
     return new Date(timestamp).toLocaleString();
@@ -335,6 +337,7 @@ export default function VersionManagementModal({
           readOnly={true}
           type="analysis"
           version={selectedVersion}
+          showDiffToggle={selectedVersion !== 0} // Only show diff toggle for non-current versions
         />
       )}
     </Modal>

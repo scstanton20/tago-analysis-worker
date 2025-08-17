@@ -4,7 +4,7 @@ import { analysisService } from '../../services/analysisService';
 import { useSSE } from '../../contexts/sseContext/index';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import { usePermissions } from '../../hooks/usePermissions.js';
-import Editor from '@monaco-editor/react';
+import { CodeMirrorEditor } from '../modals/codeMirrorCommon';
 import {
   Paper,
   Stack,
@@ -95,6 +95,16 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
     }
   }, [selectedTeamId, getInitialTeam]);
 
+  // Form validation and state checks
+  const isInputDisabled = isCurrentAnalysisLoading;
+
+  const handleEditorChange = (newContent) => {
+    setEditorContent(newContent);
+    if (newContent !== DEFAULT_EDITOR_CONTENT) {
+      setFormTouched(true);
+    }
+  };
+
   // If user has no upload permissions anywhere, don't show the component
   if (!isAdmin && uploadableTeams.length === 0) {
     return (
@@ -109,9 +119,6 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
       </Paper>
     );
   }
-
-  // Form validation and state checks
-  const isInputDisabled = isCurrentAnalysisLoading;
   const hasFormContent =
     selectedFile ||
     editorContent !== DEFAULT_EDITOR_CONTENT ||
@@ -205,13 +212,6 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
     setFormTouched(true);
     setAnalysisName(value);
     setError(validateFilename(value));
-  };
-
-  const handleEditorChange = (value) => {
-    setEditorContent(value);
-    if (value !== DEFAULT_EDITOR_CONTENT) {
-      setFormTouched(true);
-    }
   };
 
   const handleModeChange = (newMode) => {
@@ -525,21 +525,12 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
                       overflow: 'hidden',
                     }}
                   >
-                    <Editor
-                      height="100%"
-                      defaultLanguage="javascript"
+                    <CodeMirrorEditor
                       value={editorContent}
                       onChange={handleEditorChange}
-                      theme="vs-dark"
-                      options={{
-                        minimap: { enabled: true },
-                        scrollBeyondLastLine: false,
-                        fontSize: 14,
-                        automaticLayout: true,
-                        wordWrap: 'on',
-                        lineNumbers: 'on',
-                        readOnly: isInputDisabled,
-                      }}
+                      readOnly={isInputDisabled}
+                      language="javascript"
+                      height="100%"
                     />
                   </Box>
                 </Stack>

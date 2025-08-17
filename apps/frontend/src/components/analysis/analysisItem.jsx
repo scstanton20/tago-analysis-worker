@@ -31,8 +31,7 @@ import AnalysisLogs from './analysisLogs';
 import StatusBadge from './statusBadge';
 import { lazy } from 'react';
 
-// Lazy load heavy components that include Monaco editor
-const AnalysisEditModal = lazy(() => import('../modals/analysisEditCommon'));
+const AnalysisEditModal = lazy(() => import('../modals/codeMirrorCommon'));
 import LogDownloadDialog from '../modals/logDownload';
 import TeamSelectModal from '../modals/changeTeamModal';
 import VersionManagementModal from '../modals/versionManagement';
