@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import PropTypes from 'prop-types';
-import { basicSetup, minimalSetup } from 'codemirror';
+import { basicSetup } from 'codemirror';
 import { EditorView, lineNumbers } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
 import { javascript } from '@codemirror/lang-javascript';
@@ -280,13 +280,13 @@ function CodeMirrorEditor({
     if (diffMode && originalContent) {
       // Create unified diff view (inline diff)
       const extensions = [
-        readOnlyRef.current ? minimalSetup : basicSetup,
+        readOnlySetup, // Use consistent read-only setup for diff views
         currentTheme,
         unifiedMergeView({
           original: value || '', // Current version as original
           mergeControls: false, // Disable accept/reject controls for read-only viewing
+          collapseUnchanged: { margin: 3, minSize: 4 }, // Collapse unchanged lines
         }),
-        EditorView.editable.of(false), // Diff view is always read-only
       ];
 
       // Add language support
@@ -374,13 +374,13 @@ function CodeMirrorEditor({
       if (isDiffView) {
         // Recreate unified diff view
         const extensions = [
-          readOnlyRef.current ? minimalSetup : basicSetup,
+          readOnlySetup, // Use consistent read-only setup for diff views
           currentTheme,
           unifiedMergeView({
             original: currentContent || '', // Current version as original
             mergeControls: false, // Disable accept/reject controls
+            collapseUnchanged: { margin: 3, minSize: 4 }, // Collapse unchanged lines
           }),
-          EditorView.editable.of(false),
         ];
 
         if (languageRef.current === 'javascript') {
@@ -454,13 +454,13 @@ function CodeMirrorEditor({
           viewRef.current.destroy();
 
           const extensions = [
-            readOnlyRef.current ? minimalSetup : basicSetup,
+            readOnlySetup, // Use consistent read-only setup for diff views
             currentTheme,
             unifiedMergeView({
               original: value || '', // Current version as original
               mergeControls: false, // Disable accept/reject controls
+              collapseUnchanged: { margin: 3, minSize: 4 }, // Collapse unchanged lines
             }),
-            EditorView.editable.of(false),
           ];
 
           if (languageRef.current === 'javascript') {
