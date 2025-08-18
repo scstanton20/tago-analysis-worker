@@ -6,6 +6,8 @@ import { EditorState } from '@codemirror/state';
 import { javascript } from '@codemirror/lang-javascript';
 import { unifiedMergeView } from '@codemirror/merge';
 import { useMantineColorScheme } from '@mantine/core';
+import { vsCodeDark } from '@fsegurai/codemirror-theme-vscode-dark';
+import { vsCodeLight } from '@fsegurai/codemirror-theme-vscode-light';
 
 // Custom read-only setup with line numbers and syntax highlighting
 const readOnlySetup = [
@@ -15,177 +17,6 @@ const readOnlySetup = [
   EditorView.editable.of(false),
 ];
 
-// Dark theme for CodeMirror
-const darkTheme = EditorView.theme(
-  {
-    '&': {
-      color: '#e6edf3',
-      backgroundColor: '#0d1117',
-      height: '100%',
-      fontSize: '14px',
-      border: '1px solid #30363d',
-    },
-    '.cm-editor': {
-      height: '100%',
-      backgroundColor: '#0d1117',
-    },
-    '.cm-scroller': {
-      fontFamily: 'inherit',
-      backgroundColor: '#0d1117',
-    },
-    '.cm-content': {
-      padding: '10px',
-      caretColor: '#e6edf3',
-      minHeight: '100%',
-      backgroundColor: '#0d1117',
-    },
-    '.cm-focused .cm-cursor': {
-      borderLeftColor: '#e6edf3',
-    },
-    '.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection':
-      {
-        backgroundColor: '#264f78',
-      },
-    '.cm-gutters': {
-      backgroundColor: '#161b22',
-      color: '#8b949e',
-      border: 'none',
-      borderRight: '1px solid #30363d',
-    },
-    '.cm-activeLineGutter': {
-      backgroundColor: '#1f2937',
-      color: '#58a6ff',
-    },
-    '.cm-activeLine': {
-      backgroundColor: '#21262d',
-    },
-    '.cm-comment': {
-      color: '#8b949e',
-      fontStyle: 'italic',
-    },
-    '.cm-scroller, .cm-content, .cm-editor, .cm-focused': {
-      willChange: 'auto !important',
-    },
-    '.cm-line': {
-      willChange: 'auto !important',
-    },
-    '.cm-readonly-container .cm-scroller, .cm-readonly-container .cm-content, .cm-readonly-container .cm-editor, .cm-readonly-container .cm-line':
-      {
-        willChange: 'auto !important',
-        transform: 'none !important',
-      },
-    // Diff view specific overrides
-    '.cm-merge-view, .cm-merge-view *': {
-      willChange: 'auto !important',
-      transform: 'none !important',
-    },
-    '.cm-merge-gutter, .cm-merge-chunk, .cm-merge-spacer': {
-      willChange: 'auto !important',
-      transform: 'none !important',
-    },
-    '.cm-deletedChunk, .cm-insertedChunk, .cm-unchangedChunk': {
-      willChange: 'auto !important',
-      transform: 'none !important',
-    },
-    // Global override for all CodeMirror elements in diff mode
-    '*[class*="cm-"], *[class*="merge-"], *[class*="diff-"]': {
-      willChange: 'auto !important',
-      transform: 'none !important',
-    },
-    // Additional specific classes that might be created
-    '.cm-unified-merge, .cm-merge-editor': {
-      willChange: 'auto !important',
-      transform: 'none !important',
-    },
-  },
-  { dark: true },
-);
-
-// Light theme for CodeMirror
-const lightTheme = EditorView.theme(
-  {
-    '&': {
-      color: '#24292e',
-      backgroundColor: '#ffffff',
-      height: '100%',
-      fontSize: '14px',
-      border: '1px solid #d0d7de',
-    },
-    '.cm-editor': {
-      height: '100%',
-      backgroundColor: '#ffffff',
-    },
-    '.cm-scroller': {
-      fontFamily: 'inherit',
-      backgroundColor: '#ffffff',
-    },
-    '.cm-content': {
-      padding: '10px',
-      caretColor: '#24292e',
-      minHeight: '100%',
-      backgroundColor: '#ffffff',
-    },
-    '.cm-focused .cm-cursor': {
-      borderLeftColor: '#24292e',
-    },
-    '.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection':
-      {
-        backgroundColor: '#c8e1ff',
-      },
-    '.cm-gutters': {
-      backgroundColor: '#f6f8fa',
-      color: '#6e7781',
-      border: 'none',
-      borderRight: '1px solid #d0d7de',
-    },
-    '.cm-activeLineGutter': {
-      backgroundColor: '#e6f3ff',
-      color: '#0969da',
-    },
-    '.cm-activeLine': {
-      backgroundColor: '#f6f8fa',
-    },
-    '.cm-comment': {
-      color: '#6a737d',
-      fontStyle: 'italic',
-    },
-    '.cm-scroller, .cm-content, .cm-editor, .cm-focused': {
-      willChange: 'auto !important',
-    },
-    '.cm-line': {
-      willChange: 'auto !important',
-    },
-    '.cm-readonly-container .cm-scroller, .cm-readonly-container .cm-content, .cm-readonly-container .cm-editor, .cm-readonly-container .cm-line':
-      {
-        willChange: 'auto !important',
-        transform: 'none !important',
-      },
-    // Diff view specific overrides
-    '.cm-merge-view, .cm-merge-view *': {
-      willChange: 'auto !important',
-      transform: 'none !important',
-    },
-    '.cm-merge-gutter, .cm-merge-chunk, .cm-merge-spacer': {
-      willChange: 'auto !important',
-      transform: 'none !important',
-    },
-    '.cm-deletedChunk, .cm-insertedChunk, .cm-unchangedChunk': {
-      willChange: 'auto !important',
-      transform: 'none !important',
-    },
-    // Global override for all CodeMirror elements in diff mode
-    '*[class*="cm-"], *[class*="merge-"], *[class*="diff-"]': {
-      willChange: 'auto !important',
-      transform: 'none !important',
-    },
-    // Additional specific classes that might be created
-    '.cm-unified-merge, .cm-merge-editor': {
-      willChange: 'auto !important',
-      transform: 'none !important',
-    },
-  },
-  { dark: false },
-);
 import { analysisService } from '../../services/analysisService.js';
 import {
   Modal,
@@ -233,39 +64,6 @@ function CodeMirrorEditor({
     languageRef.current = language;
   });
 
-  // Inject global CSS to override will-change for all CodeMirror elements
-  useEffect(() => {
-    const styleId = 'codemirror-will-change-override';
-    const existingStyle = document.getElementById(styleId);
-
-    if (!existingStyle) {
-      const style = document.createElement('style');
-      style.id = styleId;
-      style.textContent = `
-        /* Global will-change override for CodeMirror elements */
-        .cm-editor *, 
-        .cm-content *, 
-        .cm-scroller *, 
-        .cm-line *,
-        [class*="cm-"] *,
-        [class*="merge-"] *,
-        [class*="diff-"] * {
-          will-change: auto !important;
-          transform: none !important;
-        }
-      `;
-      document.head.appendChild(style);
-    }
-
-    return () => {
-      // Clean up the style when component unmounts
-      const style = document.getElementById(styleId);
-      if (style) {
-        style.remove();
-      }
-    };
-  }, []);
-
   // Create editor once on mount
   useEffect(() => {
     if (!editorRef.current || viewRef.current) return;
@@ -275,13 +73,12 @@ function CodeMirrorEditor({
       colorScheme === 'dark' ||
       (colorScheme === 'auto' &&
         window.matchMedia('(prefers-color-scheme: dark)').matches);
-    const currentTheme = isDark ? darkTheme : lightTheme;
 
     if (diffMode && originalContent) {
       // Create unified diff view (inline diff)
       const extensions = [
         readOnlySetup, // Use consistent read-only setup for diff views
-        currentTheme,
+        isDark ? vsCodeDark : vsCodeLight,
         unifiedMergeView({
           original: value || '', // Current version as original
           mergeControls: false, // Disable accept/reject controls for read-only viewing
@@ -309,7 +106,7 @@ function CodeMirrorEditor({
       // Create regular editor
       const extensions = [
         readOnlyRef.current ? readOnlySetup : basicSetup,
-        currentTheme,
+        isDark ? vsCodeDark : vsCodeLight,
       ];
 
       // Add update listener for editable editors
@@ -359,7 +156,6 @@ function CodeMirrorEditor({
         colorScheme === 'dark' ||
         (colorScheme === 'auto' &&
           window.matchMedia('(prefers-color-scheme: dark)').matches);
-      const currentTheme = isDark ? darkTheme : lightTheme;
 
       // For theme changes, we need to recreate the editor with the new theme
       // This is the correct way to handle theme switching in CodeMirror 6
@@ -375,7 +171,7 @@ function CodeMirrorEditor({
         // Recreate unified diff view
         const extensions = [
           readOnlySetup, // Use consistent read-only setup for diff views
-          currentTheme,
+          isDark ? vsCodeDark : vsCodeLight,
           unifiedMergeView({
             original: currentContent || '', // Current version as original
             mergeControls: false, // Disable accept/reject controls
@@ -402,7 +198,7 @@ function CodeMirrorEditor({
         // Recreate regular editor
         const extensions = [
           readOnlyRef.current ? readOnlySetup : basicSetup,
-          currentTheme,
+          isDark ? vsCodeDark : vsCodeLight,
         ];
 
         // Add update listener for editable editors
@@ -449,13 +245,12 @@ function CodeMirrorEditor({
             colorScheme === 'dark' ||
             (colorScheme === 'auto' &&
               window.matchMedia('(prefers-color-scheme: dark)').matches);
-          const currentTheme = isDark ? darkTheme : lightTheme;
 
           viewRef.current.destroy();
 
           const extensions = [
             readOnlySetup, // Use consistent read-only setup for diff views
-            currentTheme,
+            isDark ? vsCodeDark : vsCodeLight,
             unifiedMergeView({
               original: value || '', // Current version as original
               mergeControls: false, // Disable accept/reject controls
@@ -497,16 +292,10 @@ function CodeMirrorEditor({
   return (
     <div
       ref={editorRef}
-      className={readOnly ? 'cm-readonly-container' : 'cm-editable-container'}
       style={{
         height,
         width: '100%',
-        overflow: 'hidden',
-        fontSize: '14px',
-        display: 'flex',
-        flexDirection: 'column',
-        // Global will-change override for all children
-        willChange: 'auto',
+        overflow: 'auto',
       }}
     />
   );
