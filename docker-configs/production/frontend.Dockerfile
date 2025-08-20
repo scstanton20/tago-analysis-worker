@@ -2,7 +2,6 @@ FROM node:23-alpine AS deps
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable
 
 WORKDIR /app
 
@@ -11,13 +10,13 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/frontend/package.json ./apps/frontend/
 
 # Install dependencies
+RUN corepack enable
 RUN pnpm install --filter frontend --frozen-lockfile
 
 FROM node:23-alpine AS build
 # Set up pnpm in the runtime container
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable
 
 # Set working directory to frontend app
 WORKDIR /app
@@ -35,6 +34,9 @@ COPY --chown=nginx:nginx apps/frontend ./apps/frontend
 
 # Set production environment
 ENV NODE_ENV=production
+
+# Install corepack
+RUN corepack enable
 
 # Build for production
 WORKDIR /app/apps/frontend

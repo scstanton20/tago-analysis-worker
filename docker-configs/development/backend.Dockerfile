@@ -2,7 +2,6 @@ FROM node:23-alpine
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable
 
 WORKDIR /app
 
@@ -11,6 +10,7 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/backend/package.json ./apps/backend/
 
 # Install dependencies
+RUN corepack enable
 RUN pnpm install --filter backend --frozen-lockfile
 
 # Set working directory to backend app
