@@ -23,6 +23,7 @@ const db = new Database(dbPath);
 
 export const auth = betterAuth({
   database: db,
+  telemetry: { enabled: false },
   rateLimit: {
     window: 10,
     max: 100,

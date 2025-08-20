@@ -31,12 +31,8 @@ export const PermissionsProvider = ({ children }) => {
       setMembershipLoading(true);
 
       // Set the main organization as active and get its data
-      // ORGANIZATION_ID from DB is set in .env file becuase of broken slug lookup in better-auth client 1.3.2
       const activeOrgResult = await authClient.organization.setActive({
-        organizationId: import.meta.env.PROD
-          ? 'c7dc7497-2e36-4e16-ad20-545aa5e744b0'
-          : import.meta.env.VITE_ORGANIZATION_ID,
-        //organizationSlug: 'main',
+        organizationSlug: 'main',
       });
 
       if (activeOrgResult.data) {
