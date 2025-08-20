@@ -2,7 +2,6 @@ FROM node:23-alpine AS deps
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable
 
 WORKDIR /app
 
@@ -11,6 +10,7 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/backend/package.json ./apps/backend/
 
 # Install dependencies
+RUN corepack enable
 RUN pnpm install --filter backend --frozen-lockfile --prod
 
 FROM node:23-alpine AS run
@@ -29,6 +29,9 @@ COPY --chown=node:node apps/backend/package.json ./apps/backend/
 # Copy dependencies from the deps stage
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/backend/node_modules ./apps/backend/node_modules
+
+# Install corepack
+RUN corepack enable
 
 # Copy source code
 COPY --chown=node:node apps/backend/src ./apps/backend/src

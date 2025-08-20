@@ -16,7 +16,7 @@ jobs:
       id-token: write
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Extract versions from package.json files
         id: version
