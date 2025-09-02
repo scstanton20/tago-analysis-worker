@@ -30,13 +30,14 @@ import {
   Tooltip,
 } from '@mantine/core';
 import {
-  IconSettings,
+  IconBrandAsana,
   IconFolder,
   IconGripVertical,
   IconLogout,
   IconUser,
-  IconUsers,
+  IconUserPlus,
   IconUserCog,
+  IconUserEdit,
 } from '@tabler/icons-react';
 import TeamManagementModal from './modals/teamManagementModal';
 import UserManagementModal from './modals/userManagementModal';
@@ -295,7 +296,7 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
                 size="lg"
                 onClick={() => setShowManageModal(true)}
               >
-                <IconSettings size={18} />
+                <IconBrandAsana size={18} />
               </ActionIcon>
             </Tooltip>
           )}
@@ -307,7 +308,7 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
                 size="lg"
                 onClick={() => setShowUserModal(true)}
               >
-                <IconUsers size={18} />
+                <IconUserPlus size={18} />
               </ActionIcon>
             </Tooltip>
           )}
@@ -384,7 +385,6 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
       >
         <Group justify="space-between" align="center">
           <Group gap="xs" style={{ flex: 1, minWidth: 0 }}>
-            <IconUser size={16} color="var(--mantine-color-brand-6)" />
             <Box style={{ flex: 1, minWidth: 0 }}>
               <Text size="sm" fw={500} truncate>
                 Hi, {user.username || user.name}
@@ -404,7 +404,7 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
                 size="sm"
                 onClick={() => setShowProfileModal(true)}
               >
-                <IconUserCog size={14} />
+                <IconUserEdit size={14} />
               </ActionIcon>
             </Tooltip>
             <Tooltip label="Logout">

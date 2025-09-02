@@ -10,7 +10,7 @@
     "#utils/mqAPI": "./apps/backend/src/utils/mqAPI.cjs"
   },
   "scripts": {
-    "dev": "pnpm run dev:frontend & pnpm run dev:backend",
+    "dev": "concurrently \"pnpm run dev:frontend\" \"pnpm run dev:backend\"",
     "dev:frontend": "pnpm --filter \"frontend\" run dev",
     "dev:backend": "pnpm --filter \"backend\" run dev",
     "format": "npx prettier --write .",
@@ -20,6 +20,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.33.0",
+    "concurrently": "^9.2.0",
     "eslint": "^9.33.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-n": "^17.21.3",

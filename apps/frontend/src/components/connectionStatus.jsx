@@ -1,5 +1,6 @@
 // frontend/src/components/connectionStatus.jsx
 import { useState } from 'react';
+import SettingsModal from './modals/settingsModal';
 import { useSSE } from '../contexts/sseContext';
 import {
   ActionIcon,
@@ -12,10 +13,11 @@ import {
   Box,
   Indicator,
 } from '@mantine/core';
-import { IconRefresh, IconBook } from '@tabler/icons-react';
+import { IconRefresh, IconSettings } from '@tabler/icons-react';
 
 const ConnectionStatus = () => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [settingsModalOpened, setSettingsModalOpened] = useState(false);
   const { connectionStatus, backendStatus, requestStatusUpdate } = useSSE();
 
   const getOverallStatusColor = () => {
@@ -37,6 +39,9 @@ const ConnectionStatus = () => {
 
   const getStatusText = () => {
     if (!backendStatus) return 'Loading...';
+    if (connectionStatus === 'server_restarting') return 'Server Restarting...';
+    if (connectionStatus === 'manual_restart_required')
+      return 'Manual Restart Required';
     if (connectionStatus !== 'connected') return 'Disconnected from Server';
     if (backendStatus.container_health.status !== 'healthy')
       return 'Partially Disconnected';
@@ -63,9 +68,9 @@ const ConnectionStatus = () => {
     requestStatusUpdate();
   };
 
-  const handleOpenApiDocs = () => {
-    const apiDocsUrl = `${window.location.origin}/api/docs`;
-    window.open(apiDocsUrl, '_blank', 'noopener,noreferrer');
+  const handleOpenSettings = () => {
+    setIsExpanded(false);
+    setSettingsModalOpened(true);
   };
 
   if (!backendStatus && connectionStatus === 'connecting') {
@@ -254,15 +259,6 @@ const ConnectionStatus = () => {
 
             <Divider />
             <Stack gap="xs">
-              <Button
-                variant="light"
-                size="xs"
-                onClick={handleOpenApiDocs}
-                leftSection={<IconBook size={14} />}
-                fullWidth
-              >
-                API Documentation
-              </Button>
               {isDisconnected && (
                 <>
                   <Text size="sm" c="dimmed" fw={500}>
@@ -279,10 +275,24 @@ const ConnectionStatus = () => {
                   </Button>
                 </>
               )}
+              <Button
+                variant="light"
+                size="xs"
+                onClick={handleOpenSettings}
+                leftSection={<IconSettings size={14} />}
+                fullWidth
+              >
+                Settings
+              </Button>
             </Stack>
           </Stack>
         </Popover.Dropdown>
       </Popover>
+
+      <SettingsModal
+        opened={settingsModalOpened}
+        onClose={() => setSettingsModalOpened(false)}
+      />
     </>
   );
 };

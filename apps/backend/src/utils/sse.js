@@ -213,8 +213,29 @@ class SSEManager {
 
       let tagoVersion;
       try {
-        const packageJson = require('@tago-io/sdk/package.json');
-        tagoVersion = packageJson.version;
+        const fs = await import('fs');
+        const path = await import('path');
+
+        // Find the SDK package.json by resolving the SDK path
+        const sdkPath = require.resolve('@tago-io/sdk');
+        let currentDir = path.dirname(sdkPath);
+
+        // Walk up directories to find the correct package.json
+        while (currentDir !== path.dirname(currentDir)) {
+          const potentialPath = path.join(currentDir, 'package.json');
+          if (fs.existsSync(potentialPath)) {
+            const pkg = JSON.parse(fs.readFileSync(potentialPath, 'utf8'));
+            if (pkg.name === '@tago-io/sdk') {
+              tagoVersion = pkg.version;
+              break;
+            }
+          }
+          currentDir = path.dirname(currentDir);
+        }
+
+        if (!tagoVersion) {
+          tagoVersion = 'unknown';
+        }
       } catch (error) {
         logger.error({ error }, 'Error reading tago SDK version');
         tagoVersion = 'unknown';
