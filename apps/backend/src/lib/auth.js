@@ -15,8 +15,26 @@ const authLogger = createChildLogger('auth');
 const dbPath = path.join(config.storage.base, 'auth.db');
 const dbDir = path.dirname(dbPath);
 
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true });
+try {
+  if (!fs.existsSync(dbDir)) {
+    authLogger.info(`Creating auth storage directory: ${dbDir}`);
+    fs.mkdirSync(dbDir, { recursive: true });
+  }
+
+  // Test write permissions
+  const testFile = path.join(dbDir, '.write-test');
+  fs.writeFileSync(testFile, 'test');
+  fs.unlinkSync(testFile);
+
+  authLogger.info(`Auth storage initialized at: ${dbPath}`);
+} catch (error) {
+  authLogger.error(
+    `Failed to initialize auth storage at ${dbDir}: ${error.message}`,
+  );
+  authLogger.error(
+    'Check STORAGE_BASE permissions and ensure volume is mounted correctly',
+  );
+  throw new Error(`Auth storage initialization failed: ${error.message}`);
 }
 
 const db = new Database(dbPath);

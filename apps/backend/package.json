@@ -1,13 +1,13 @@
 {
   "name": "backend",
   "private": true,
-  "version": "1.3.1",
+  "version": "1.3.2",
   "type": "module",
   "engines": {
     "node": ">=22.0.0"
   },
   "imports": {
-    "#utils/mqAPI": "./src/utils/mqAPI.cjs"
+    "#utils/mqAPI": "./src/utils/mqAPI.js"
   },
   "scripts": {
     "start": "node src/server.js",

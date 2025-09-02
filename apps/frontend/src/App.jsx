@@ -22,8 +22,8 @@ const AnalysisList = lazy(() => import('./components/analysis/analysisList'));
 const AnalysisCreator = lazy(
   () => import('./components/analysis/uploadAnalysis'),
 );
+const LoginPage = lazy(() => import('./components/auth/LoginPage'));
 import ConnectionStatus from './components/connectionStatus';
-import LoginPage from './components/auth/LoginPage';
 import Logo from './components/logo';
 import ImpersonationBanner from './components/impersonationBanner';
 import ThemeSelector from './components/themeSelector';
@@ -264,7 +264,11 @@ function AppRouter() {
   }
 
   if (!isAuthenticated) {
-    return <LoginPage />;
+    return (
+      <Suspense fallback={<AppLoadingOverlay message="Loading..." />}>
+        <LoginPage />
+      </Suspense>
+    );
   }
 
   // Only load SSE and heavy components when authenticated

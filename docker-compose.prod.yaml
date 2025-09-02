@@ -27,7 +27,7 @@ services:
     container_name: tago-runner-backend
     restart: unless-stopped
     volumes:
-      - analysis-data:/app/analyses-storage
+      - analysis-data:/app/apps/backend/analyses-storage
     networks:
       - backend
     env_file: stack.env

@@ -20,26 +20,11 @@ export async function runMigrations() {
       message: 'Running database migrations',
     });
 
-    if (process.env.NODE_ENV === 'development') {
-      execSync('npx @better-auth/cli migrate --config src/lib/auth.js -y', {
-        stdio: 'inherit',
-        cwd: process.cwd(),
-      });
-    } else {
-      // Set STORAGE_BASE explicitly to ensure correct database location
-      const env = {
-        ...process.env,
-        STORAGE_BASE: '/app/analyses-storage',
-      };
-      execSync(
-        'node apps/backend/node_modules/@better-auth/cli/dist/index.mjs migrate --config apps/backend/src/lib/auth.js -y',
-        {
-          stdio: 'inherit',
-          cwd: '/app',
-          env: env,
-        },
-      );
-    }
+    // Both development and production run from backend directory
+    execSync('npx @better-auth/cli migrate --config src/lib/auth.js -y', {
+      stdio: 'inherit',
+      cwd: process.cwd(),
+    });
 
     // Check if team table has color column, add if missing
     logger.info('Checking team table schema...');

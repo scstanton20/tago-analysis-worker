@@ -1,5 +1,5 @@
 // frontend/src/components/analysis/analysisItem.jsx
-import { useState } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import PropTypes from 'prop-types';
 import {
   Paper,
@@ -11,6 +11,7 @@ import {
   Badge,
   Stack,
   Box,
+  LoadingOverlay,
 } from '@mantine/core';
 import {
   IconPlayerPlay,
@@ -29,12 +30,14 @@ import { teamService } from '../../services/teamService';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import AnalysisLogs from './analysisLogs';
 import StatusBadge from './statusBadge';
-import { lazy } from 'react';
 
+// Lazy load all modal components
 const AnalysisEditModal = lazy(() => import('../modals/codeMirrorCommon'));
-import LogDownloadDialog from '../modals/logDownload';
-import TeamSelectModal from '../modals/changeTeamModal';
-import VersionManagementModal from '../modals/versionManagement';
+const LogDownloadDialog = lazy(() => import('../modals/logDownload'));
+const TeamSelectModal = lazy(() => import('../modals/changeTeamModal'));
+const VersionManagementModal = lazy(
+  () => import('../modals/versionManagement'),
+);
 import { useSSE } from '../../contexts/sseContext';
 import { usePermissions } from '../../hooks/usePermissions';
 
@@ -428,35 +431,45 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
 
       {/* Edit Modal - Render if user can view analyses */}
       {editModalType && canViewAnalyses(analysis) && (
-        <AnalysisEditModal
-          analysis={analysis}
-          onClose={() => setEditModalType(null)}
-          readOnly={!canEditAnalyses(analysis)}
-          type={editModalType}
-        />
+        <Suspense fallback={<LoadingOverlay visible />}>
+          <AnalysisEditModal
+            analysis={analysis}
+            onClose={() => setEditModalType(null)}
+            readOnly={!canEditAnalyses(analysis)}
+            type={editModalType}
+          />
+        </Suspense>
       )}
-      <LogDownloadDialog
-        isOpen={showLogDownloadDialog}
-        onClose={() => setShowLogDownloadDialog(false)}
-        onDownload={handleDownloadLogs}
-      />
+      {showLogDownloadDialog && (
+        <Suspense fallback={<LoadingOverlay visible />}>
+          <LogDownloadDialog
+            isOpen={showLogDownloadDialog}
+            onClose={() => setShowLogDownloadDialog(false)}
+            onDownload={handleDownloadLogs}
+          />
+        </Suspense>
+      )}
       {showTeamModal && (
-        <TeamSelectModal
-          isOpen={showTeamModal}
-          onClose={() => setShowTeamModal(false)}
-          onSelect={handleTeamChange}
-          teams={teamsArray}
-          currentTeam={analysis.teamId || analysis.team}
-          analysisName={analysis.name}
-        />
+        <Suspense fallback={<LoadingOverlay visible />}>
+          <TeamSelectModal
+            isOpen={showTeamModal}
+            onClose={() => setShowTeamModal(false)}
+            onSelect={handleTeamChange}
+            teams={teamsArray}
+            currentTeam={analysis.teamId || analysis.team}
+            analysisName={analysis.name}
+          />
+        </Suspense>
       )}
       {showVersionModal && (
-        <VersionManagementModal
-          isOpen={showVersionModal}
-          onClose={() => setShowVersionModal(false)}
-          analysis={analysis}
-          onVersionRollback={handleVersionRollback}
-        />
+        <Suspense fallback={<LoadingOverlay visible />}>
+          <VersionManagementModal
+            isOpen={showVersionModal}
+            onClose={() => setShowVersionModal(false)}
+            analysis={analysis}
+            onVersionRollback={handleVersionRollback}
+          />
+        </Suspense>
       )}
     </Paper>
   );

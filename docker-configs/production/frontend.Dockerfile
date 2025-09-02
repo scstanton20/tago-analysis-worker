@@ -47,7 +47,7 @@ FROM nginx:alpine AS frontend
 
 WORKDIR /app
 # Copy built frontend files to nginx
-COPY --from=build --chown=nginx:nginx  /app/apps/frontend/dist /usr/share/nginx/html
+COPY --from=build --chown=nginx:nginx /app/apps/frontend/dist /usr/share/nginx/html
 
 # Copy nginx configuration
 COPY --from=build --chown=nginx:nginx /app/apps/frontend/nginx.conf /etc/nginx/conf.d/default.conf

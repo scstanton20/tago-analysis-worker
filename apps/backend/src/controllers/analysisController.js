@@ -632,7 +632,7 @@ class AnalysisController {
 
       // Set the download filename using headers with sanitized name
       const versionSuffix = version && version !== '0' ? `_v${version}` : '';
-      const downloadFilename = `${sanitize(sanitizedFileName)}${versionSuffix}.cjs`;
+      const downloadFilename = `${sanitize(sanitizedFileName)}${versionSuffix}.js`;
       res.setHeader(
         'Content-Disposition',
         `attachment; filename="${downloadFilename}"`,

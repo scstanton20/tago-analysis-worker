@@ -471,7 +471,7 @@ router.put(
  *             description: Attachment filename with version suffix if applicable
  *             schema:
  *               type: string
- *               example: analysis_v2.cjs
+ *               example: analysis_v2.js
  *       400:
  *         description: Invalid version number
  *         content:

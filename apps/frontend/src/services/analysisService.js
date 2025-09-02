@@ -361,7 +361,7 @@ export const analysisService = {
       const a = document.createElement('a');
       a.href = url;
       const versionSuffix = version ? `_v${version}` : '';
-      a.download = `${safeFileName}${versionSuffix}.cjs`;
+      a.download = `${safeFileName}${versionSuffix}.js`;
       a.style.display = 'none';
       a.rel = 'noopener noreferrer';
 

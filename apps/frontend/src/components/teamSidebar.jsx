@@ -1,5 +1,5 @@
 // frontend/src/components/teamSidebar.jsx
-import { useState, useMemo } from 'react';
+import { useState, useMemo, lazy, Suspense } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -28,6 +28,7 @@ import {
   ScrollArea,
   NavLink,
   Tooltip,
+  LoadingOverlay,
 } from '@mantine/core';
 import {
   IconBrandAsana,
@@ -39,9 +40,10 @@ import {
   IconUserCog,
   IconUserEdit,
 } from '@tabler/icons-react';
-import TeamManagementModal from './modals/teamManagementModal';
-import UserManagementModal from './modals/userManagementModal';
-import ProfileModal from './modals/profileModal';
+// Lazy load modal components
+const TeamManagementModal = lazy(() => import('./modals/teamManagementModal'));
+const UserManagementModal = lazy(() => import('./modals/userManagementModal'));
+const ProfileModal = lazy(() => import('./modals/profileModal'));
 import { teamService } from '../services/teamService';
 import { useAuth } from '../hooks/useAuth';
 import { usePermissions } from '../hooks/usePermissions';
@@ -422,23 +424,35 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
       </Box>
 
       {/* Team Management Modal */}
-      <TeamManagementModal
-        opened={showManageModal}
-        onClose={() => setShowManageModal(false)}
-        teams={teams}
-      />
+      {showManageModal && (
+        <Suspense fallback={<LoadingOverlay visible />}>
+          <TeamManagementModal
+            opened={showManageModal}
+            onClose={() => setShowManageModal(false)}
+            teams={teams}
+          />
+        </Suspense>
+      )}
 
       {/* User Management Modal */}
-      <UserManagementModal
-        opened={showUserModal}
-        onClose={() => setShowUserModal(false)}
-      />
+      {showUserModal && (
+        <Suspense fallback={<LoadingOverlay visible />}>
+          <UserManagementModal
+            opened={showUserModal}
+            onClose={() => setShowUserModal(false)}
+          />
+        </Suspense>
+      )}
 
       {/* Profile Modal */}
-      <ProfileModal
-        opened={showProfileModal}
-        onClose={() => setShowProfileModal(false)}
-      />
+      {showProfileModal && (
+        <Suspense fallback={<LoadingOverlay visible />}>
+          <ProfileModal
+            opened={showProfileModal}
+            onClose={() => setShowProfileModal(false)}
+          />
+        </Suspense>
+      )}
     </Stack>
   );
 }

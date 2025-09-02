@@ -7,7 +7,9 @@ function determineStorageBase() {
     return process.env.STORAGE_BASE;
   }
 
-  // For both Docker and local development, use a directory in the backend project
+  // In both development and production, use analyses-storage relative to current working directory
+  // - Development: cwd is apps/backend, so it becomes apps/backend/analyses-storage
+  // - Production Docker: cwd is /app/apps/backend, so it becomes /app/apps/backend/analyses-storage
   return path.join(process.cwd(), 'analyses-storage');
 }
 
@@ -35,13 +37,6 @@ const config = {
     maxLogsInMemory: 100,
     forceKillTimeout: 3000,
     autoRestartDelay: 1000,
-  },
-  process: {
-    env: {
-      NODE_PATH:
-        process.env.NODE_PATH ||
-        `${path.join(process.cwd(), '../node_modules')}:${path.join(process.cwd(), 'src')}`,
-    },
   },
 };
 

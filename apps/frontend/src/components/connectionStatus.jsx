@@ -1,6 +1,5 @@
 // frontend/src/components/connectionStatus.jsx
-import { useState } from 'react';
-import SettingsModal from './modals/settingsModal';
+import { useState, lazy, Suspense } from 'react';
 import { useSSE } from '../contexts/sseContext';
 import {
   ActionIcon,
@@ -12,8 +11,12 @@ import {
   Divider,
   Box,
   Indicator,
+  LoadingOverlay,
 } from '@mantine/core';
 import { IconRefresh, IconSettings } from '@tabler/icons-react';
+
+// Lazy load settings modal
+const SettingsModal = lazy(() => import('./modals/settingsModal'));
 
 const ConnectionStatus = () => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -289,10 +292,14 @@ const ConnectionStatus = () => {
         </Popover.Dropdown>
       </Popover>
 
-      <SettingsModal
-        opened={settingsModalOpened}
-        onClose={() => setSettingsModalOpened(false)}
-      />
+      {settingsModalOpened && (
+        <Suspense fallback={<LoadingOverlay visible />}>
+          <SettingsModal
+            opened={settingsModalOpened}
+            onClose={() => setSettingsModalOpened(false)}
+          />
+        </Suspense>
+      )}
     </>
   );
 };

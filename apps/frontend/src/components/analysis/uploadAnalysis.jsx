@@ -179,8 +179,8 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
 
     setFormTouched(true);
 
-    if (!file.name.endsWith('.js') && !file.name.endsWith('.cjs')) {
-      setError('Please select a JavaScript file (.js or .cjs)');
+    if (!file.name.endsWith('.js') && !file.name.endsWith('.js')) {
+      setError('Please select a JavaScript file (.js or .js)');
       resetFileSelection();
       return;
     }
@@ -393,13 +393,13 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
                     </Text>
                     <Dropzone
                       accept={{
-                        'text/javascript': ['.js', '.cjs'],
-                        'application/x-javascript': ['.js', '.cjs'],
+                        'text/javascript': ['.js', '.js'],
+                        'application/x-javascript': ['.js', '.js'],
                       }}
                       onDrop={(files) => handleFileChange(files[0])}
                       onReject={() => {
                         setError(
-                          'Please select a JavaScript file (.js or .cjs)',
+                          'Please select a JavaScript file (.js or .js)',
                         );
                         setFormTouched(true);
                       }}
@@ -471,7 +471,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
                               : 'Drag JavaScript files here or click to select'}
                           </Text>
                           <Text size="sm" c="dimmed" inline mt={7}>
-                            Attach .js or .cjs files only
+                            Attach .js or .js files only
                           </Text>
                         </div>
                       </Group>
@@ -490,8 +490,8 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
                   )}
 
                   <Text size="sm" c="dimmed">
-                    The .cjs extension will be added automatically by the
-                    backend as Tago.IO requires CommonJS modules.
+                    If not already included, the .js extension will be added by
+                    the backend as TagoIO requires ES modules.
                   </Text>
                 </Stack>
               </Tabs.Panel>
@@ -508,8 +508,8 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
                   />
 
                   <Text size="sm" c="dimmed">
-                    The .cjs extension will be added automatically by the
-                    backend as Tago.IO requires CommonJS modules.
+                    The .js extension will be added by the backend as TagoIO
+                    requires ES modules.
                   </Text>
 
                   <Text size="sm" c="dimmed">

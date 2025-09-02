@@ -211,7 +211,7 @@ class AnalysisService {
   async uploadAnalysis(file, type, targetDepartment = null) {
     const analysisName = path.parse(file.name).name;
     const basePath = await this.createAnalysisDirectories(analysisName);
-    const filePath = path.join(basePath, 'index.cjs');
+    const filePath = path.join(basePath, 'index.js');
 
     await file.mv(filePath);
     const analysis = new AnalysisProcess(analysisName, type, this);
@@ -250,7 +250,7 @@ class AnalysisService {
     const currentFilePath = path.join(
       config.paths.analysis,
       analysisName,
-      'index.cjs',
+      'index.js',
     );
 
     // Create versions directory
@@ -258,7 +258,7 @@ class AnalysisService {
 
     // Read the uploaded content and save it as v1
     const uploadedContent = await fs.readFile(currentFilePath, 'utf8');
-    const v1Path = path.join(versionsDir, 'v1.cjs');
+    const v1Path = path.join(versionsDir, 'v1.js');
     await fs.writeFile(v1Path, uploadedContent, 'utf8');
 
     // Create metadata - uploaded file is version 1
@@ -287,11 +287,7 @@ class AnalysisService {
 
     const results = await Promise.all(
       analysisDirectories.map(async (dirName) => {
-        const indexPath = path.join(
-          config.paths.analysis,
-          dirName,
-          'index.cjs',
-        );
+        const indexPath = path.join(config.paths.analysis, dirName, 'index.js');
         try {
           const stats = await fs.stat(indexPath);
           const analysis = this.analyses.get(dirName);
@@ -717,7 +713,7 @@ class AnalysisService {
           const indexPath = path.join(
             config.paths.analysis,
             dirName,
-            'index.cjs',
+            'index.js',
           );
           const stats = await fs.stat(indexPath);
           if (stats.isFile()) {
@@ -753,7 +749,7 @@ class AnalysisService {
       const filePath = path.join(
         config.paths.analysis,
         analysisName,
-        'index.cjs',
+        'index.js',
       );
       const content = await fs.readFile(filePath, 'utf8');
       return content;
@@ -778,7 +774,7 @@ class AnalysisService {
     const currentFilePath = path.join(
       config.paths.analysis,
       analysisName,
-      'index.cjs',
+      'index.js',
     );
 
     // Ensure versions directory exists
@@ -814,7 +810,7 @@ class AnalysisService {
       try {
         const versionFilePath = path.join(
           versionsDir,
-          `v${version.version}.cjs`,
+          `v${version.version}.js`,
         );
         const versionContent = await fs.readFile(versionFilePath, 'utf8');
         if (currentContent === versionContent) {
@@ -831,7 +827,7 @@ class AnalysisService {
     const newVersionNumber = isFirstVersionSave
       ? 1
       : metadata.nextVersionNumber;
-    const versionFilePath = path.join(versionsDir, `v${newVersionNumber}.cjs`);
+    const versionFilePath = path.join(versionsDir, `v${newVersionNumber}.js`);
     await fs.writeFile(versionFilePath, currentContent, 'utf8');
 
     // Update metadata - add the new version and increment counter
@@ -870,7 +866,7 @@ class AnalysisService {
     const currentFilePath = path.join(
       config.paths.analysis,
       analysisName,
-      'index.cjs',
+      'index.js',
     );
 
     try {
@@ -881,7 +877,7 @@ class AnalysisService {
         metadata.currentVersion = metadata.nextVersionNumber - 1;
       }
 
-      // Check if the current index.cjs content matches any saved version
+      // Check if the current index.js content matches any saved version
       try {
         const currentContent = await fs.readFile(currentFilePath, 'utf8');
         let currentContentMatchesVersion = false;
@@ -893,7 +889,7 @@ class AnalysisService {
               config.paths.analysis,
               analysisName,
               'versions',
-              `v${version.version}.cjs`,
+              `v${version.version}.js`,
             );
             const versionContent = await fs.readFile(versionFilePath, 'utf8');
             if (currentContent === versionContent) {
@@ -942,11 +938,11 @@ class AnalysisService {
       analysisName,
       'versions',
     );
-    const versionFilePath = path.join(versionsDir, `v${version}.cjs`);
+    const versionFilePath = path.join(versionsDir, `v${version}.js`);
     const currentFilePath = path.join(
       config.paths.analysis,
       analysisName,
-      'index.cjs',
+      'index.js',
     );
     const metadataPath = path.join(versionsDir, 'metadata.json');
 
@@ -1011,7 +1007,7 @@ class AnalysisService {
       const currentFilePath = path.join(
         config.paths.analysis,
         analysisName,
-        'index.cjs',
+        'index.js',
       );
       return fs.readFile(currentFilePath, 'utf8');
     }
@@ -1020,7 +1016,7 @@ class AnalysisService {
       config.paths.analysis,
       analysisName,
       'versions',
-      `v${version}.cjs`,
+      `v${version}.js`,
     );
     try {
       return await fs.readFile(versionFilePath, 'utf8');
@@ -1073,7 +1069,7 @@ class AnalysisService {
         const filePath = path.join(
           config.paths.analysis,
           analysisName,
-          'index.cjs',
+          'index.js',
         );
         await fs.writeFile(filePath, updates.content, 'utf8');
 
@@ -1089,7 +1085,7 @@ class AnalysisService {
                 config.paths.analysis,
                 analysisName,
                 'versions',
-                `v${version.version}.cjs`,
+                `v${version.version}.js`,
               );
               const versionContent = await fs.readFile(versionFilePath, 'utf8');
               if (updates.content === versionContent) {
@@ -1217,6 +1213,7 @@ class AnalysisService {
       'env',
       '.env',
     );
+
     try {
       const envContent = await fs.readFile(envFile, 'utf8');
       const envVariables = {};

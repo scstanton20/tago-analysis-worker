@@ -311,7 +311,7 @@ class AnalysisProcess {
       const filePath = path.join(
         config.paths.analysis,
         this.analysisName,
-        'index.cjs',
+        'index.js',
       );
 
       this.logger.info(`Starting analysis process`);
@@ -325,7 +325,7 @@ class AnalysisProcess {
       this.process = fork(filePath, [], {
         env: {
           ...process.env,
-          ...config.process.env,
+          ...(config.process?.env || {}),
           ...storedEnv,
           STORAGE_BASE: config.storage.base,
         },

@@ -74,9 +74,15 @@ apps/
 #### Core Configuration
 - `SECRET_KEY`: Required in production for encryption
 - `PRODUCTION_DOMAIN`: Required in production for WebAuthn
-- `STORAGE_BASE`: Optional custom storage path
+- `STORAGE_BASE`: Optional custom storage path (see Docker Volume Notes below)
 - `NODE_ENV`: development/production
 - `PORT`: Backend port (defaults to 3000)
+
+#### Docker Volume Notes
+When using `STORAGE_BASE` in production, you must also update the docker-compose volume mount:
+- Default: `analysis-data:/app/analyses-storage`
+- Custom: `analysis-data:${YOUR_CUSTOM_PATH}` and set `STORAGE_BASE=${YOUR_CUSTOM_PATH}`
+- The volume mount path and `STORAGE_BASE` must match for data persistence
 
 #### Logging Configuration
 - `LOG_LEVEL`: Override log level (debug/info/warn/error)
