@@ -273,10 +273,7 @@ class AnalysisProcess {
         if (fullLine) {
           // Check for SDK connection errors
           if (
-            fullLine.includes(
-              '¬ Connection was closed, trying to reconnect...',
-            ) ||
-            fullLine.includes('¬ Error :: Analysis not found or not active.')
+            fullLine.includes('¬ Connection was closed, trying to reconnect...')
           ) {
             this.logger.warn(
               'Tago SDK connection error detected - marking for restart',
@@ -286,6 +283,42 @@ class AnalysisProcess {
             this.addLog('Tago connection lost - will restart process');
 
             // Kill the process to trigger restart logic
+            if (this.process && !this.process.killed) {
+              this.process.kill('SIGTERM');
+            }
+          } else if (
+            fullLine.includes('¬ Error :: Analysis not found or not active.')
+          ) {
+            this.logger.warn(
+              'Analysis not found or not active on Tago platform - stopping permanently',
+            );
+
+            // Set intended state to stopped to prevent restart attempts
+            this.intendedState = 'stopped';
+            this.addLog(
+              'Analysis not found on Tago platform - stopping permanently',
+            );
+
+            // Save config immediately to persist the stopped state
+            this.saveConfig().catch((error) => {
+              this.logger.error(
+                { err: error },
+                'Failed to save config after marking analysis as not found',
+              );
+            });
+
+            // Broadcast status change to UI immediately
+            sseManager.broadcast({
+              type: 'analysisStatus',
+              data: {
+                fileName: this.analysisName,
+                status: 'stopped',
+                enabled: false,
+                intendedState: 'stopped',
+              },
+            });
+
+            // Kill the process without setting connectionErrorDetected
             if (this.process && !this.process.killed) {
               this.process.kill('SIGTERM');
             }
