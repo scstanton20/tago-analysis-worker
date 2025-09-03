@@ -13,6 +13,7 @@ export function SSEProvider({ children }) {
   const [backendStatus, setBackendStatus] = useState(null);
   const [serverShutdown, setServerShutdown] = useState(false);
   const [hasInitialData, setHasInitialData] = useState(false);
+  const [dnsCache, setDnsCache] = useState(null);
 
   const eventSourceRef = useRef(null);
   const reconnectAttemptsRef = useRef(0);
@@ -468,6 +469,39 @@ export function SSEProvider({ children }) {
             break;
           }
 
+          case 'dnsConfigUpdated':
+            if (data.data) {
+              setDnsCache(data.data);
+            }
+            break;
+
+          case 'dnsCacheCleared':
+            if (data.data) {
+              setDnsCache((prev) => ({
+                ...(prev || {}),
+                stats: data.data.stats,
+              }));
+            }
+            break;
+
+          case 'dnsStatsReset':
+            if (data.data) {
+              setDnsCache((prev) => ({
+                ...(prev || {}),
+                stats: data.data.stats,
+              }));
+            }
+            break;
+
+          case 'dnsStatsUpdate':
+            if (data.data) {
+              setDnsCache((prev) => ({
+                ...(prev || {}),
+                stats: data.data.stats,
+              }));
+            }
+            break;
+
           default:
             console.log('Unhandled SSE message type:', data.type);
             break;
@@ -683,6 +717,7 @@ export function SSEProvider({ children }) {
     getTeam,
     hasInitialData,
     serverShutdown,
+    dnsCache,
   };
 
   return <SSEContext.Provider value={value}>{children}</SSEContext.Provider>;

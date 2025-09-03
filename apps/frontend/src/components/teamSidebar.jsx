@@ -29,6 +29,7 @@ import {
   NavLink,
   Tooltip,
   LoadingOverlay,
+  Portal,
 } from '@mantine/core';
 import {
   IconBrandAsana,
@@ -44,9 +45,50 @@ import {
 const TeamManagementModal = lazy(() => import('./modals/teamManagementModal'));
 const UserManagementModal = lazy(() => import('./modals/userManagementModal'));
 const ProfileModal = lazy(() => import('./modals/profileModal'));
+
+// Custom loading overlay component
+function AppLoadingOverlay({ message, submessage, error, showRetry }) {
+  return (
+    <Portal>
+      <LoadingOverlay
+        visible={true}
+        zIndex={9999}
+        overlayProps={{ blur: 2, radius: 'sm' }}
+        loaderProps={{
+          size: 'xl',
+          children: (
+            <Stack align="center" gap="lg">
+              <Logo size={48} className={error ? '' : 'pulse'} />
+              <Text size="lg" fw={500} c={error ? 'red' : undefined}>
+                {message}
+              </Text>
+              {submessage && (
+                <Text size="sm" c="dimmed" ta="center" maw={400}>
+                  {submessage}
+                </Text>
+              )}
+              {showRetry && (
+                <Button
+                  onClick={() => window.location.reload()}
+                  variant="gradient"
+                  gradient={{ from: 'brand.6', to: 'accent.6' }}
+                  mt="md"
+                >
+                  Retry Connection
+                </Button>
+              )}
+            </Stack>
+          ),
+        }}
+        pos="fixed"
+      />
+    </Portal>
+  );
+}
 import { teamService } from '../services/teamService';
 import { useAuth } from '../hooks/useAuth';
 import { usePermissions } from '../hooks/usePermissions';
+import Logo from './logo';
 
 // Sortable Team Item
 const SortableTeamItem = ({ team, isSelected, onClick, analysisCount }) => {
@@ -425,7 +467,9 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
 
       {/* Team Management Modal */}
       {showManageModal && (
-        <Suspense fallback={<LoadingOverlay visible />}>
+        <Suspense
+          fallback={<AppLoadingOverlay message="Loading team management..." />}
+        >
           <TeamManagementModal
             opened={showManageModal}
             onClose={() => setShowManageModal(false)}
@@ -436,7 +480,9 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
 
       {/* User Management Modal */}
       {showUserModal && (
-        <Suspense fallback={<LoadingOverlay visible />}>
+        <Suspense
+          fallback={<AppLoadingOverlay message="Loading user management..." />}
+        >
           <UserManagementModal
             opened={showUserModal}
             onClose={() => setShowUserModal(false)}
@@ -446,7 +492,7 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
 
       {/* Profile Modal */}
       {showProfileModal && (
-        <Suspense fallback={<LoadingOverlay visible />}>
+        <Suspense fallback={<AppLoadingOverlay message="Loading profile..." />}>
           <ProfileModal
             opened={showProfileModal}
             onClose={() => setShowProfileModal(false)}

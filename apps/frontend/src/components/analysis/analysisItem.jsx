@@ -12,6 +12,7 @@ import {
   Stack,
   Box,
   LoadingOverlay,
+  Portal,
 } from '@mantine/core';
 import {
   IconPlayerPlay,
@@ -30,6 +31,7 @@ import { teamService } from '../../services/teamService';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import AnalysisLogs from './analysisLogs';
 import StatusBadge from './statusBadge';
+import Logo from '../logo';
 
 // Lazy load all modal components
 const AnalysisEditModal = lazy(() => import('../modals/codeMirrorCommon'));
@@ -40,6 +42,46 @@ const VersionManagementModal = lazy(
 );
 import { useSSE } from '../../contexts/sseContext';
 import { usePermissions } from '../../hooks/usePermissions';
+
+// Custom loading overlay component
+function AppLoadingOverlay({ message, submessage, error, showRetry }) {
+  return (
+    <Portal>
+      <LoadingOverlay
+        visible={true}
+        zIndex={9999}
+        overlayProps={{ blur: 2, radius: 'sm' }}
+        loaderProps={{
+          size: 'xl',
+          children: (
+            <Stack align="center" gap="lg">
+              <Logo size={48} className={error ? '' : 'pulse'} />
+              <Text size="lg" fw={500} c={error ? 'red' : undefined}>
+                {message}
+              </Text>
+              {submessage && (
+                <Text size="sm" c="dimmed" ta="center" maw={400}>
+                  {submessage}
+                </Text>
+              )}
+              {showRetry && (
+                <Button
+                  onClick={() => window.location.reload()}
+                  variant="gradient"
+                  gradient={{ from: 'brand.6', to: 'accent.6' }}
+                  mt="md"
+                >
+                  Retry Connection
+                </Button>
+              )}
+            </Stack>
+          ),
+        }}
+        pos="fixed"
+      />
+    </Portal>
+  );
+}
 
 export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
   const [editModalType, setEditModalType] = useState(null); // null, 'analysis', or 'env'
@@ -431,7 +473,13 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
 
       {/* Edit Modal - Render if user can view analyses */}
       {editModalType && canViewAnalyses(analysis) && (
-        <Suspense fallback={<LoadingOverlay visible />}>
+        <Suspense
+          fallback={
+            <AppLoadingOverlay
+              message={`Loading ${editModalType === 'analysis' ? 'analysis editor' : 'environment editor'}...`}
+            />
+          }
+        >
           <AnalysisEditModal
             analysis={analysis}
             onClose={() => setEditModalType(null)}
@@ -441,7 +489,11 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
         </Suspense>
       )}
       {showLogDownloadDialog && (
-        <Suspense fallback={<LoadingOverlay visible />}>
+        <Suspense
+          fallback={
+            <AppLoadingOverlay message="Loading log download options..." />
+          }
+        >
           <LogDownloadDialog
             isOpen={showLogDownloadDialog}
             onClose={() => setShowLogDownloadDialog(false)}
@@ -450,7 +502,9 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
         </Suspense>
       )}
       {showTeamModal && (
-        <Suspense fallback={<LoadingOverlay visible />}>
+        <Suspense
+          fallback={<AppLoadingOverlay message="Loading team selection..." />}
+        >
           <TeamSelectModal
             isOpen={showTeamModal}
             onClose={() => setShowTeamModal(false)}
@@ -462,7 +516,9 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
         </Suspense>
       )}
       {showVersionModal && (
-        <Suspense fallback={<LoadingOverlay visible />}>
+        <Suspense
+          fallback={<AppLoadingOverlay message="Loading version history..." />}
+        >
           <VersionManagementModal
             isOpen={showVersionModal}
             onClose={() => setShowVersionModal(false)}

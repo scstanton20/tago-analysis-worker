@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   Modal,
   Stack,
@@ -342,21 +342,23 @@ export default function UserManagementModal({ opened, onClose }) {
     );
   };
 
-  // Load data when modal opens (derived state)
+  // Load data when modal opens
   const [hasLoadedModalData, setHasLoadedModalData] = useState(false);
 
-  if (opened && isAdmin && !hasLoadedModalData) {
-    setHasLoadedModalData(true);
-    loadUsers();
-    loadTeams();
-    loadActions();
-    setError('');
-  }
+  useEffect(() => {
+    if (opened && isAdmin && !hasLoadedModalData) {
+      setHasLoadedModalData(true);
+      loadUsers();
+      loadTeams();
+      loadActions();
+      setError('');
+    }
 
-  // Reset loaded flag when modal closes
-  if (!opened && hasLoadedModalData) {
-    setHasLoadedModalData(false);
-  }
+    // Reset loaded flag when modal closes
+    if (!opened && hasLoadedModalData) {
+      setHasLoadedModalData(false);
+    }
+  }, [opened, isAdmin, hasLoadedModalData]);
 
   const handleSubmit = async (values) => {
     try {

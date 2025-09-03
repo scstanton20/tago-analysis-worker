@@ -1,7 +1,12 @@
 {
   "verbose": true,
   "ignore": ["analyses-storage", "dist"],
-  "watch": ["apps/backend/src/**/*.js", "apps/backend/config/*.js", "apps/backend/src/**/*.ts", "apps/backend/config/*.ts"],
+  "watch": [
+    "apps/backend/src/**/*.js",
+    "apps/backend/config/*.js",
+    "apps/backend/src/**/*.ts",
+    "apps/backend/config/*.ts"
+  ],
   "env": {
     "NODE_ENV": "development"
   },

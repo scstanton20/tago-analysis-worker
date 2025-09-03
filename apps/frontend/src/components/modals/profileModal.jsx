@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useEventListener } from '../../hooks/useEventListener';
 import { useFormSync } from '../../hooks/useFormSync';
 import PropTypes from 'prop-types';
@@ -153,16 +153,19 @@ export default function ProfileModal({ opened, onClose }) {
     }
   };
 
-  if (opened && !hasLoadedModalData) {
-    setHasLoadedModalData(true);
-    checkWebAuthnSupport();
-    loadPasskeys();
-  }
+  // Load WebAuthn support and passkeys when modal opens
+  useEffect(() => {
+    if (opened && !hasLoadedModalData) {
+      setHasLoadedModalData(true);
+      checkWebAuthnSupport();
+      loadPasskeys();
+    }
 
-  // Reset loaded flag when modal closes
-  if (!opened && hasLoadedModalData) {
-    setHasLoadedModalData(false);
-  }
+    // Reset loaded flag when modal closes
+    if (!opened && hasLoadedModalData) {
+      setHasLoadedModalData(false);
+    }
+  }, [opened, hasLoadedModalData]);
 
   // Listen for password change logout event
   const handlePasswordChangeLogout = useCallback(
