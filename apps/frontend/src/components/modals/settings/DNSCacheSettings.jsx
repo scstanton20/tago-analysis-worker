@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useInitialValues } from '../../../hooks/useInitialState';
 import {
   Stack,
   Paper,
@@ -27,9 +28,9 @@ import {
   IconAlertCircle,
   IconDeviceFloppy,
 } from '@tabler/icons-react';
-import { dnsService } from '../../services/dnsService';
-import { useSSE } from '../../contexts/sseContext';
-import { useAuth } from '../../hooks/useAuth';
+import { dnsService } from '../../../services/dnsService';
+import { useSSE } from '../../../contexts/sseContext';
+import { useAuth } from '../../../hooks/useAuth';
 
 export default function DNSCacheSettings() {
   const { dnsCache } = useSSE();
@@ -60,12 +61,13 @@ export default function DNSCacheSettings() {
   }, [isAuthenticated]);
 
   // Initialize pending values when config is first loaded
-  useEffect(() => {
-    if (config && pendingTtl === null && pendingMaxEntries === null) {
-      setPendingTtl(config.ttl);
-      setPendingMaxEntries(config.maxEntries);
-    }
-  }, [config, pendingTtl, pendingMaxEntries]);
+  useInitialValues(
+    {
+      ttl: { setter: setPendingTtl, value: config?.ttl },
+      maxEntries: { setter: setPendingMaxEntries, value: config?.maxEntries },
+    },
+    config && pendingTtl === null && pendingMaxEntries === null,
+  );
 
   // Validation functions
   const validateTtl = (value) => {

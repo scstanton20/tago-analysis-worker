@@ -11,7 +11,7 @@ import {
   Box,
 } from '@mantine/core';
 import { IconSettings, IconBook, IconTransfer } from '@tabler/icons-react';
-import DNSCacheSettings from '../settings/DNSCacheSettings';
+import DNSCacheSettings from '../modals/settings/DNSCacheSettings';
 
 export default function SettingsModal({ opened, onClose }) {
   const [activeTab, setActiveTab] = useState('api');
