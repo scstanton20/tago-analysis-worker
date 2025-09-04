@@ -33,7 +33,7 @@ function AppLoadingOverlay({ message, submessage, error, showRetry }) {
   return (
     <LoadingOverlay
       visible={true}
-      zIndex={1000}
+      zIndex={9999}
       overlayProps={{ blur: 2, radius: 'sm' }}
       loaderProps={{
         size: 'xl',

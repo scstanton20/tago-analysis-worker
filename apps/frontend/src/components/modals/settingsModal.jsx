@@ -10,7 +10,8 @@ import {
   Tabs,
   Box,
 } from '@mantine/core';
-import { IconSettings, IconBook } from '@tabler/icons-react';
+import { IconSettings, IconBook, IconTransfer } from '@tabler/icons-react';
+import DNSCacheSettings from '../modals/settings/DNSCacheSettings';
 
 export default function SettingsModal({ opened, onClose }) {
   const [activeTab, setActiveTab] = useState('api');
@@ -45,6 +46,9 @@ export default function SettingsModal({ opened, onClose }) {
               <Tabs.Tab value="api" leftSection={<IconBook size={16} />}>
                 API Docs
               </Tabs.Tab>
+              <Tabs.Tab value="dns" leftSection={<IconTransfer size={16} />}>
+                DNS Cache
+              </Tabs.Tab>
             </Tabs.List>
           </Box>
 
@@ -72,6 +76,10 @@ export default function SettingsModal({ opened, onClose }) {
                   </Stack>
                 </Paper>
               </Stack>
+            </Tabs.Panel>
+
+            <Tabs.Panel value="dns">
+              <DNSCacheSettings />
             </Tabs.Panel>
           </Box>
         </Group>

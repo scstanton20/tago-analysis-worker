@@ -72,6 +72,7 @@ apps/
 ### Environment Variables
 
 #### Core Configuration
+
 - `SECRET_KEY`: Required in production for encryption
 - `PRODUCTION_DOMAIN`: Required in production for WebAuthn
 - `STORAGE_BASE`: Optional custom storage path (see Docker Volume Notes below)
@@ -79,16 +80,20 @@ apps/
 - `PORT`: Backend port (defaults to 3000)
 
 #### Docker Volume Notes
+
 When using `STORAGE_BASE` in production, you must also update the docker-compose volume mount:
+
 - Default: `analysis-data:/app/analyses-storage`
 - Custom: `analysis-data:${YOUR_CUSTOM_PATH}` and set `STORAGE_BASE=${YOUR_CUSTOM_PATH}`
 - The volume mount path and `STORAGE_BASE` must match for data persistence
 
 #### Logging Configuration
+
 - `LOG_LEVEL`: Override log level (debug/info/warn/error)
 - `LOG_INCLUDE_MODULE`: Set to 'true' to show module/analysis names in console (always sent to Loki)
 
 #### External Logging (Grafana Loki)
+
 - `LOG_LOKI_URL`: Loki server URL (e.g., http://localhost:3100)
 - `LOG_LOKI_USERNAME`: Optional authentication username
 - `LOG_LOKI_PASSWORD`: Optional authentication password

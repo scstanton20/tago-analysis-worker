@@ -14,6 +14,9 @@ export function useSSE() {
     analyses: context.analyses || {},
     teams: context.teams || {},
 
+    // DNS cache state
+    dnsCache: context.dnsCache,
+
     // Connection state
     connectionStatus: context.connectionStatus || 'connecting',
     backendStatus: context.backendStatus,

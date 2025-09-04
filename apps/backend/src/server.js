@@ -12,6 +12,7 @@ import {
   analysisService,
   initializeAnalyses,
 } from './services/analysisService.js';
+import dnsCache from './services/dnsCache.js';
 
 // Route modules
 import * as routes from './routes/index.js';
@@ -196,6 +197,11 @@ async function startServer() {
     // Create admin user if needed
     await createAdminUserIfNeeded();
 
+    // Initialize DNS cache service early (before any network calls)
+    serverLogger.info('Initializing DNS cache');
+    await dnsCache.initialize();
+    serverLogger.info('DNS cache initialized');
+
     // IMPORTANT: Initialize services BEFORE setting up routes
     serverLogger.info('Initializing services');
     await initializeAnalyses();
@@ -226,6 +232,9 @@ async function startServer() {
 
     app.use(`${API_PREFIX}/users`, routes.userRoutes);
     serverLogger.info('✓ User routes mounted');
+
+    app.use(`${API_PREFIX}/settings`, routes.settingsRoutes);
+    serverLogger.info('✓ Settings routes mounted');
 
     // SSE routes
     app.use(`${API_PREFIX}/sse`, routes.sseRoutes);

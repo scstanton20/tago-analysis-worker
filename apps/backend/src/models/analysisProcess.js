@@ -2,10 +2,21 @@
 import path from 'path';
 import { promises as fs } from 'fs';
 import { fork } from 'child_process';
+import { fileURLToPath } from 'url';
 import { sseManager } from '../utils/sse.js';
 import config from '../config/default.js';
 import { createChildLogger } from '../utils/logging/logger.js';
 import pino from 'pino';
+import dnsCache from '../services/dnsCache.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const WRAPPER_SCRIPT = path.join(
+  __dirname,
+  '..',
+  'utils',
+  'analysisWrapper.js',
+);
 
 class AnalysisProcess {
   constructor(analysisName, type, service) {
@@ -254,6 +265,42 @@ class AnalysisProcess {
       this.process.stderr.on('data', this.handleOutput.bind(this, true));
     }
 
+    // Listen for IPC messages from child process
+    this.process.on('message', async (message) => {
+      if (message.type === 'DNS_LOOKUP_REQUEST') {
+        // Handle shared DNS lookup request
+        const result = await dnsCache.handleDNSLookupRequest(
+          message.hostname,
+          message.options,
+        );
+        this.process.send({
+          type: 'DNS_LOOKUP_RESPONSE',
+          requestId: message.requestId,
+          result,
+        });
+      } else if (message.type === 'DNS_RESOLVE4_REQUEST') {
+        // Handle shared DNS resolve4 request
+        const result = await dnsCache.handleDNSResolve4Request(
+          message.hostname,
+        );
+        this.process.send({
+          type: 'DNS_RESOLVE4_RESPONSE',
+          requestId: message.requestId,
+          result,
+        });
+      } else if (message.type === 'DNS_RESOLVE6_REQUEST') {
+        // Handle shared DNS resolve6 request
+        const result = await dnsCache.handleDNSResolve6Request(
+          message.hostname,
+        );
+        this.process.send({
+          type: 'DNS_RESOLVE6_RESPONSE',
+          requestId: message.requestId,
+          result,
+        });
+      }
+    });
+
     this.process.once('exit', this.handleExit.bind(this));
   }
 
@@ -355,12 +402,14 @@ class AnalysisProcess {
         ? await this.service.getEnvironment(this.analysisName)
         : {};
 
-      this.process = fork(filePath, [], {
+      // Use wrapper script to initialize DNS cache before running analysis
+      this.process = fork(WRAPPER_SCRIPT, [filePath], {
         env: {
           ...process.env,
           ...(config.process?.env || {}),
           ...storedEnv,
           STORAGE_BASE: config.storage.base,
+          // DNS cache configuration is automatically passed via environment variables
         },
         stdio: ['inherit', 'pipe', 'pipe', 'ipc'],
       });

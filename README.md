@@ -9,6 +9,7 @@ A full-stack application for managing and running Tago.io analysis scripts with 
 - 👥 **User Management**: Role-based access control with fine-grained permissions
 - 📊 **Real-time Monitoring**: Live status updates and log streaming via Server-Sent Events (SSE)
 - 🔐 **Secure Authentication**: Better Auth components for session and user management
+- 🌐 **DNS Caching**: Intelligent DNS resolution caching for improved network performance
 - 📱 **Modern UI**: Built with Mantine components and responsive design
 - 🔔 **Notifications**: Contextual feedback for all user operations
 
@@ -82,6 +83,7 @@ docker-compose -f docker-configs/development/docker-compose.dev.yaml up
 This application uses **Better Auth** for comprehensive authentication and authorization:
 
 ### Features
+
 - 🔐 **Username/Email + Password** authentication
 - 🏢 **Organization Management** with team-based permissions
 - 👥 **Role-Based Access Control** (Admin, User roles)
@@ -91,12 +93,14 @@ This application uses **Better Auth** for comprehensive authentication and autho
 ### User Roles & Permissions
 
 #### Admin Users
+
 - Full system access
 - User management (create, edit, delete users)
 - Organization and team management
 - All analysis operations
 
 #### Regular Users
+
 - Access based on team memberships
 - Team-specific analysis permissions:
   - `analysis.view` - View analyses in assigned teams
@@ -104,6 +108,7 @@ This application uses **Better Auth** for comprehensive authentication and autho
   - `analysis.edit` - Modify analyses in assigned teams
 
 ### Team Management
+
 - Users are assigned to teams with specific permissions
 - Analyses are organized within teams
 - Hierarchical organization structure with drag-and-drop support

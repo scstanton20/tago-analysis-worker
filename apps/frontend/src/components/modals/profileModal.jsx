@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useEventListener } from '../../hooks/useEventListener';
 import { useFormSync } from '../../hooks/useFormSync';
+import { useModalDataLoader } from '../../hooks/useModalDataLoader';
 import PropTypes from 'prop-types';
 import {
   Modal,
@@ -119,15 +120,12 @@ export default function ProfileModal({ opened, onClose }) {
     [user.name, user.email, user.username],
   );
 
-  // Load WebAuthn support and passkeys when modal opens
-  const [hasLoadedModalData, setHasLoadedModalData] = useState(false);
-
-  const checkWebAuthnSupport = async () => {
+  const checkWebAuthnSupport = useCallback(async () => {
     // WebAuthn support check - Better Auth handles this internally
     setIsWebAuthnSupported(true);
-  };
+  }, []);
 
-  const loadPasskeys = async () => {
+  const loadPasskeys = useCallback(async () => {
     try {
       setPasskeysLoading(true);
       setPasskeysError('');
@@ -151,18 +149,10 @@ export default function ProfileModal({ opened, onClose }) {
     } finally {
       setPasskeysLoading(false);
     }
-  };
+  }, []);
 
-  if (opened && !hasLoadedModalData) {
-    setHasLoadedModalData(true);
-    checkWebAuthnSupport();
-    loadPasskeys();
-  }
-
-  // Reset loaded flag when modal closes
-  if (!opened && hasLoadedModalData) {
-    setHasLoadedModalData(false);
-  }
+  // Load WebAuthn support and passkeys when modal opens
+  useModalDataLoader(opened, [checkWebAuthnSupport, loadPasskeys]);
 
   // Listen for password change logout event
   const handlePasswordChangeLogout = useCallback(

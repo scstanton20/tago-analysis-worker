@@ -444,6 +444,158 @@ This API uses Better Auth for authentication. The following Better Auth endpoint
 
 **Note:** Most user management is handled through the custom \`/api/users/*\` endpoints documented in this API for better integration with the team permission system.`,
         },
+        DNSConfig: {
+          type: 'object',
+          properties: {
+            enabled: {
+              type: 'boolean',
+              description: 'Whether DNS caching is enabled',
+              example: true,
+            },
+            ttl: {
+              type: 'number',
+              description: 'Time to live for cached entries in milliseconds',
+              minimum: 1000,
+              maximum: 86400000,
+              example: 300000,
+            },
+            maxEntries: {
+              type: 'number',
+              description: 'Maximum number of entries to cache',
+              minimum: 10,
+              maximum: 10000,
+              example: 1000,
+            },
+          },
+        },
+        DNSStats: {
+          type: 'object',
+          properties: {
+            hits: {
+              type: 'number',
+              description: 'Number of cache hits',
+              example: 150,
+            },
+            misses: {
+              type: 'number',
+              description: 'Number of cache misses',
+              example: 50,
+            },
+            errors: {
+              type: 'number',
+              description: 'Number of DNS resolution errors',
+              example: 2,
+            },
+            evictions: {
+              type: 'number',
+              description: 'Number of entries evicted from cache',
+              example: 5,
+            },
+            cacheSize: {
+              type: 'number',
+              description: 'Current number of entries in cache',
+              example: 123,
+            },
+            hitRate: {
+              type: 'string',
+              description: 'Cache hit rate as a percentage',
+              example: '75.00',
+            },
+          },
+        },
+        DNSCacheEntry: {
+          type: 'object',
+          properties: {
+            key: {
+              type: 'string',
+              description:
+                'Cache key (hostname:family or resolve4:hostname, etc.)',
+              example: 'google.com:4',
+            },
+            data: {
+              type: 'object',
+              description: 'Cached DNS resolution data',
+              example: { address: '142.250.191.78', family: 4 },
+            },
+            timestamp: {
+              type: 'number',
+              description: 'Timestamp when entry was cached (Unix timestamp)',
+              example: 1704067200000,
+            },
+            age: {
+              type: 'number',
+              description: 'Age of cache entry in milliseconds',
+              example: 120000,
+            },
+            remainingTTL: {
+              type: 'number',
+              description: 'Remaining time to live in milliseconds',
+              example: 180000,
+            },
+            expired: {
+              type: 'boolean',
+              description: 'Whether the cache entry has expired',
+              example: false,
+            },
+            source: {
+              type: 'string',
+              description: 'Source of the cache entry',
+              example: 'shared',
+            },
+          },
+        },
+        DNSConfigResponse: {
+          type: 'object',
+          properties: {
+            config: {
+              $ref: '#/components/schemas/DNSConfig',
+            },
+            stats: {
+              $ref: '#/components/schemas/DNSStats',
+            },
+          },
+        },
+        DNSConfigUpdateRequest: {
+          type: 'object',
+          properties: {
+            enabled: {
+              type: 'boolean',
+              description: 'Whether to enable DNS caching',
+              example: true,
+            },
+            ttl: {
+              type: 'number',
+              description: 'Time to live for cached entries in milliseconds',
+              minimum: 1000,
+              maximum: 86400000,
+              example: 300000,
+            },
+            maxEntries: {
+              type: 'number',
+              description: 'Maximum number of entries to cache',
+              minimum: 10,
+              maximum: 10000,
+              example: 1000,
+            },
+          },
+        },
+        DNSCacheEntriesResponse: {
+          type: 'object',
+          properties: {
+            entries: {
+              type: 'array',
+              items: {
+                $ref: '#/components/schemas/DNSCacheEntry',
+              },
+              description: 'Array of DNS cache entries',
+            },
+            total: {
+              type: 'number',
+              description: 'Total number of cache entries',
+              example: 123,
+            },
+          },
+        },
       },
     },
   },

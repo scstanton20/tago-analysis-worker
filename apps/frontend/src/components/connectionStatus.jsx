@@ -12,11 +12,53 @@ import {
   Box,
   Indicator,
   LoadingOverlay,
+  Portal,
 } from '@mantine/core';
 import { IconRefresh, IconSettings } from '@tabler/icons-react';
+import Logo from './logo';
 
 // Lazy load settings modal
 const SettingsModal = lazy(() => import('./modals/settingsModal'));
+
+// Custom loading overlay component
+function AppLoadingOverlay({ message, submessage, error, showRetry }) {
+  return (
+    <Portal>
+      <LoadingOverlay
+        visible={true}
+        zIndex={9999}
+        overlayProps={{ blur: 2, radius: 'sm' }}
+        loaderProps={{
+          size: 'xl',
+          children: (
+            <Stack align="center" gap="lg">
+              <Logo size={48} className={error ? '' : 'pulse'} />
+              <Text size="lg" fw={500} c={error ? 'red' : undefined}>
+                {message}
+              </Text>
+              {submessage && (
+                <Text size="sm" c="dimmed" ta="center" maw={400}>
+                  {submessage}
+                </Text>
+              )}
+              {showRetry && (
+                <Button
+                  onClick={() => window.location.reload()}
+                  variant="gradient"
+                  gradient={{ from: 'brand.6', to: 'accent.6' }}
+                  mt="md"
+                >
+                  Retry Connection
+                </Button>
+              )}
+            </Stack>
+          ),
+        }}
+        pos="fixed"
+      />
+    </Portal>
+  );
+}
 
 const ConnectionStatus = () => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -293,7 +335,9 @@ const ConnectionStatus = () => {
       </Popover>
 
       {settingsModalOpened && (
-        <Suspense fallback={<LoadingOverlay visible />}>
+        <Suspense
+          fallback={<AppLoadingOverlay message="Loading settings..." />}
+        >
           <SettingsModal
             opened={settingsModalOpened}
             onClose={() => setSettingsModalOpened(false)}
