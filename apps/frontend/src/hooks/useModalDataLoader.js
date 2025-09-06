@@ -33,4 +33,3 @@ export function useModalDataLoader(opened, loaders = [], condition = true) {
 
   return hasLoaded;
 }
-

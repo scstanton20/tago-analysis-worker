@@ -10,8 +10,14 @@ import {
   Tabs,
   Box,
 } from '@mantine/core';
-import { IconSettings, IconBook, IconTransfer } from '@tabler/icons-react';
+import {
+  IconSettings,
+  IconBook,
+  IconTransfer,
+  IconChartBar,
+} from '@tabler/icons-react';
 import DNSCacheSettings from '../modals/settings/DNSCacheSettings';
+import MetricsDashboard from '../metrics/MetricsDashboard';
 
 export default function SettingsModal({ opened, onClose }) {
   const [activeTab, setActiveTab] = useState('api');
@@ -35,7 +41,7 @@ export default function SettingsModal({ opened, onClose }) {
           <Text fw={600}>Settings</Text>
         </Group>
       }
-      size="xl"
+      size="95%"
       centered
     >
       <Tabs value={activeTab} onChange={setActiveTab} orientation="vertical">
@@ -45,6 +51,12 @@ export default function SettingsModal({ opened, onClose }) {
             <Tabs.List>
               <Tabs.Tab value="api" leftSection={<IconBook size={16} />}>
                 API Docs
+              </Tabs.Tab>
+              <Tabs.Tab
+                value="metrics"
+                leftSection={<IconChartBar size={16} />}
+              >
+                Metrics
               </Tabs.Tab>
               <Tabs.Tab value="dns" leftSection={<IconTransfer size={16} />}>
                 DNS Cache
@@ -76,6 +88,10 @@ export default function SettingsModal({ opened, onClose }) {
                   </Stack>
                 </Paper>
               </Stack>
+            </Tabs.Panel>
+
+            <Tabs.Panel value="metrics">
+              <MetricsDashboard />
             </Tabs.Panel>
 
             <Tabs.Panel value="dns">

@@ -180,7 +180,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
     setFormTouched(true);
 
     if (!file.name.endsWith('.js') && !file.name.endsWith('.js')) {
-      setError('Please select a JavaScript file (.js or .js)');
+      setError('Please select a JavaScript file (.js)');
       resetFileSelection();
       return;
     }
@@ -393,14 +393,12 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
                     </Text>
                     <Dropzone
                       accept={{
-                        'text/javascript': ['.js', '.js'],
-                        'application/x-javascript': ['.js', '.js'],
+                        'text/javascript': ['.js'],
+                        'application/x-javascript': ['.js'],
                       }}
                       onDrop={(files) => handleFileChange(files[0])}
                       onReject={() => {
-                        setError(
-                          'Please select a JavaScript file (.js or .js)',
-                        );
+                        setError('Please select a JavaScript file (.js)');
                         setFormTouched(true);
                       }}
                       maxFiles={1}
@@ -471,7 +469,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
                               : 'Drag JavaScript files here or click to select'}
                           </Text>
                           <Text size="sm" c="dimmed" inline mt={7}>
-                            Attach .js or .js files only
+                            Attach .js files only
                           </Text>
                         </div>
                       </Group>

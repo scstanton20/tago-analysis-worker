@@ -27,6 +27,9 @@ import {
 // Logging
 import logger, { createChildLogger } from './utils/logging/logger.js';
 
+// Metrics
+import { metricsMiddleware } from './utils/metrics-enhanced.js';
+
 // Api prefix
 const API_PREFIX = '/api';
 
@@ -219,6 +222,11 @@ async function startServer() {
 
     // Apply express.json() middleware before auth routes
     app.use(express.json());
+
+    // Metrics middleware and route
+    app.use(metricsMiddleware);
+    app.use(`${API_PREFIX}`, routes.metricsRoutes);
+    serverLogger.info('✓ Metrics routes mounted');
 
     app.use(`${API_PREFIX}/status`, routes.statusRoutes);
     serverLogger.info('✓ Status routes mounted');

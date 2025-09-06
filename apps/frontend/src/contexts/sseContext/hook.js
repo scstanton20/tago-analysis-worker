@@ -17,6 +17,9 @@ export function useSSE() {
     // DNS cache state
     dnsCache: context.dnsCache,
 
+    // Metrics data
+    metricsData: context.metricsData,
+
     // Connection state
     connectionStatus: context.connectionStatus || 'connecting',
     backendStatus: context.backendStatus,

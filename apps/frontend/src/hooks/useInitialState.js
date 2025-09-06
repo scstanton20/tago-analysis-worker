@@ -3,7 +3,7 @@ import { useRef, useEffect } from 'react';
 /**
  * Unified hook for state initialization patterns
  * Replaces useInitialValue, useInitialValues, and useConditionalInitialization
- * 
+ *
  * @param {Function|Object} setter - Single setter function or object of {key: {setter, value}}
  * @param {any} value - Value to set (when using single setter) or condition (when using multiple)
  * @param {Object} options - Configuration options
@@ -13,15 +13,15 @@ import { useRef, useEffect } from 'react';
  */
 export function useInitialState(setter, value, options = {}) {
   const initialized = useRef(false);
-  
+
   // Handle parameter overloading
   const isMultiple = typeof setter === 'object' && !Array.isArray(setter);
   const settersObject = isMultiple ? setter : null;
   const singleSetter = isMultiple ? null : setter;
   const singleValue = isMultiple ? null : value;
-  
+
   // When using multiple setters, value parameter becomes options
-  const actualOptions = isMultiple ? (value || {}) : options;
+  const actualOptions = isMultiple ? value || {} : options;
   const { condition = true, resetCondition } = actualOptions;
 
   // Reset initialization when resetCondition changes

@@ -14,6 +14,7 @@ export function SSEProvider({ children }) {
   const [serverShutdown, setServerShutdown] = useState(false);
   const [hasInitialData, setHasInitialData] = useState(false);
   const [dnsCache, setDnsCache] = useState(null);
+  const [metricsData, setMetricsData] = useState(null);
 
   const eventSourceRef = useRef(null);
   const reconnectAttemptsRef = useRef(0);
@@ -502,6 +503,23 @@ export function SSEProvider({ children }) {
             }
             break;
 
+          case 'metricsUpdate':
+            if (
+              data.total ||
+              data.container ||
+              data.children ||
+              data.processes
+            ) {
+              setMetricsData({
+                total: data.total,
+                container: data.container,
+                children: data.children,
+                processes: data.processes,
+                timestamp: data.timestamp,
+              });
+            }
+            break;
+
           default:
             console.log('Unhandled SSE message type:', data.type);
             break;
@@ -718,6 +736,7 @@ export function SSEProvider({ children }) {
     hasInitialData,
     serverShutdown,
     dnsCache,
+    metricsData,
   };
 
   return <SSEContext.Provider value={value}>{children}</SSEContext.Provider>;

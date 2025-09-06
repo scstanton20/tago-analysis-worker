@@ -2,6 +2,7 @@
 import { auth } from '../lib/auth.js';
 import { fromNodeHeaders } from 'better-auth/node';
 import { createChildLogger } from './logging/logger.js';
+import { metricsService } from '../services/metricsService.js';
 
 const logger = createChildLogger('sse');
 
@@ -27,6 +28,11 @@ class SSEManager {
     this.globalClients.add(client);
 
     logger.info({ userId, clientId }, 'SSE client connected');
+
+    // Start metrics broadcasting if this is the first client
+    if (this.globalClients.size === 1 && !this.metricsInterval) {
+      this.startMetricsBroadcasting();
+    }
 
     // Handle client disconnect
     req.on('close', () => {
@@ -69,6 +75,11 @@ class SSEManager {
 
         logger.info({ userId, clientId }, 'SSE client disconnected');
       }
+    }
+
+    // Stop metrics broadcasting if no clients remaining
+    if (this.globalClients.size === 0) {
+      this.stopMetricsBroadcasting();
     }
   }
 
@@ -277,6 +288,7 @@ class SSEManager {
       startTime: new Date(),
       message: 'Container is ready',
     };
+    this.metricsInterval = null;
   }
 
   setContainerState(state) {
@@ -336,6 +348,47 @@ class SSEManager {
         analysisName: type,
         update: data,
       });
+    }
+  }
+
+  // Metrics broadcasting methods
+  async broadcastMetricsUpdate() {
+    if (this.globalClients.size === 0) return;
+
+    try {
+      const metrics = await metricsService.getAllMetrics();
+
+      this.broadcast({
+        type: 'metricsUpdate',
+        ...metrics,
+      });
+    } catch (error) {
+      logger.error(
+        { error: error.message },
+        'Failed to broadcast metrics update',
+      );
+    }
+  }
+
+  startMetricsBroadcasting() {
+    if (this.metricsInterval) return; // Already running
+
+    // Send initial metrics
+    this.broadcastMetricsUpdate();
+
+    // Start broadcasting every 1 second
+    this.metricsInterval = setInterval(() => {
+      this.broadcastMetricsUpdate();
+    }, 1000);
+
+    logger.info('Started metrics broadcasting');
+  }
+
+  stopMetricsBroadcasting() {
+    if (this.metricsInterval) {
+      clearInterval(this.metricsInterval);
+      this.metricsInterval = null;
+      logger.info('Stopped metrics broadcasting');
     }
   }
 }

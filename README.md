@@ -7,7 +7,7 @@ A full-stack application for managing and running Tago.io analysis scripts with 
 - 🔧 **Analysis Management**: Upload, run, stop, and monitor Tago.io analysis scripts
 - 🏢 **Department Organization**: Hierarchical organization with drag-and-drop management
 - 👥 **User Management**: Role-based access control with fine-grained permissions
-- 📊 **Real-time Monitoring**: Live status updates and log streaming via Server-Sent Events (SSE)
+- 📊 **Real-time Monitoring**: Live status updates, metrics, and log streaming via Prom-Client and Server-Sent Events (SSE)
 - 🔐 **Secure Authentication**: Better Auth components for session and user management
 - 🌐 **DNS Caching**: Intelligent DNS resolution caching for improved network performance
 - 📱 **Modern UI**: Built with Mantine components and responsive design

@@ -5,6 +5,7 @@ import { encrypt, decrypt } from '../utils/cryptoUtils.js';
 import AnalysisProcess from '../models/analysisProcess.js';
 import teamService from './teamService.js';
 import { createChildLogger } from '../utils/logging/logger.js';
+import { collectChildProcessMetrics } from '../utils/metrics-enhanced.js';
 
 const logger = createChildLogger('analysis-service');
 
@@ -37,6 +38,8 @@ class AnalysisService {
     this.configPath = path.join(config.paths.config, 'analyses-config.json');
     /** @type {NodeJS.Timeout|null} Health check interval timer */
     this.healthCheckInterval = null;
+    /** @type {NodeJS.Timeout|null} Metrics collection interval timer */
+    this.metricsInterval = null;
   }
 
   validateTimeRange(timeRange) {
@@ -1460,6 +1463,9 @@ class AnalysisService {
     logger.info(
       'Started periodic health check for analyses (5 minute interval)',
     );
+
+    // Start metrics collection (separate from health check for more frequent updates)
+    this.startMetricsCollection();
   }
 
   /**
@@ -1471,6 +1477,35 @@ class AnalysisService {
       this.healthCheckInterval = null;
       logger.info('Stopped periodic health check');
     }
+
+    if (this.metricsInterval) {
+      clearInterval(this.metricsInterval);
+      this.metricsInterval = null;
+      logger.info('Stopped metrics collection');
+    }
+  }
+
+  /**
+   * Start metrics collection for process monitoring
+   */
+  startMetricsCollection() {
+    // Clear any existing interval
+    if (this.metricsInterval) {
+      clearInterval(this.metricsInterval);
+    }
+
+    // Collect metrics every 1 second
+    const metricsIntervalMs = 1 * 1000; // 1 second
+
+    this.metricsInterval = setInterval(async () => {
+      try {
+        await collectChildProcessMetrics(this.analyses);
+      } catch (error) {
+        logger.debug({ err: error }, 'Error collecting process metrics');
+      }
+    }, metricsIntervalMs);
+
+    logger.info('Started process metrics collection (1 second interval)');
   }
 }
 

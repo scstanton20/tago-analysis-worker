@@ -5,6 +5,7 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import config from '../config/default.js';
 import { createChildLogger } from '../utils/logging/logger.js';
+import { dnsCacheHits, dnsCacheMisses } from '../utils/metrics-enhanced.js';
 
 const logger = createChildLogger('dns-cache');
 const DNS_CONFIG_FILE = path.join(config.paths.config, 'dns-cache-config.json');
@@ -98,6 +99,7 @@ class DNSCacheService {
       const cached = this.getFromCache(cacheKey);
       if (cached) {
         this.stats.hits++;
+        dnsCacheHits.inc(); // Update Prometheus metrics
         logger.debug({ hostname, family, cached }, 'DNS cache hit');
         return process.nextTick(() =>
           callback(null, cached.address, cached.family),
@@ -106,6 +108,7 @@ class DNSCacheService {
 
       // Cache miss - perform actual lookup
       this.stats.misses++;
+      dnsCacheMisses.inc(); // Update Prometheus metrics
       this.originalLookup.call(
         dns,
         hostname,
@@ -129,12 +132,14 @@ class DNSCacheService {
       const cached = this.getFromCache(cacheKey);
       if (cached) {
         this.stats.hits++;
+        dnsCacheHits.inc(); // Update Prometheus metrics
         logger.debug({ hostname, cached }, 'DNS resolve4 cache hit');
         return cached.addresses;
       }
 
       try {
         this.stats.misses++;
+        dnsCacheMisses.inc(); // Update Prometheus metrics
         const addresses = await this.originalResolve4.call(
           dnsPromises,
           hostname,
@@ -155,12 +160,14 @@ class DNSCacheService {
       const cached = this.getFromCache(cacheKey);
       if (cached) {
         this.stats.hits++;
+        dnsCacheHits.inc(); // Update Prometheus metrics
         logger.debug({ hostname, cached }, 'DNS resolve6 cache hit');
         return cached.addresses;
       }
 
       try {
         this.stats.misses++;
+        dnsCacheMisses.inc(); // Update Prometheus metrics
         const addresses = await this.originalResolve6.call(
           dnsPromises,
           hostname,
@@ -202,12 +209,14 @@ class DNSCacheService {
     const cached = this.getFromCache(cacheKey);
     if (cached) {
       this.stats.hits++;
+      dnsCacheHits.inc(); // Update Prometheus metrics
       logger.debug({ hostname, family, cached }, 'DNS cache hit (IPC)');
       return { success: true, ...cached };
     }
 
     // Cache miss - perform actual lookup
     this.stats.misses++;
+    dnsCacheMisses.inc(); // Update Prometheus metrics
     return new Promise((resolve) => {
       this.originalLookup.call(
         dns,
@@ -240,12 +249,14 @@ class DNSCacheService {
     const cached = this.getFromCache(cacheKey);
     if (cached) {
       this.stats.hits++;
+      dnsCacheHits.inc(); // Update Prometheus metrics
       logger.debug({ hostname, cached }, 'DNS resolve4 cache hit (IPC)');
       return { success: true, addresses: cached.addresses };
     }
 
     try {
       this.stats.misses++;
+      dnsCacheMisses.inc(); // Update Prometheus metrics
       const addresses = await this.originalResolve4.call(dnsPromises, hostname);
       this.addToCache(cacheKey, { addresses });
       logger.debug({ hostname, addresses }, 'DNS resolve4 result cached (IPC)');
@@ -268,12 +279,14 @@ class DNSCacheService {
     const cached = this.getFromCache(cacheKey);
     if (cached) {
       this.stats.hits++;
+      dnsCacheHits.inc(); // Update Prometheus metrics
       logger.debug({ hostname, cached }, 'DNS resolve6 cache hit (IPC)');
       return { success: true, addresses: cached.addresses };
     }
 
     try {
       this.stats.misses++;
+      dnsCacheMisses.inc(); // Update Prometheus metrics
       const addresses = await this.originalResolve6.call(dnsPromises, hostname);
       this.addToCache(cacheKey, { addresses });
       logger.debug({ hostname, addresses }, 'DNS resolve6 result cached (IPC)');
