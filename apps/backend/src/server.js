@@ -216,22 +216,23 @@ async function startServer() {
     });
     serverLogger.info('Setting up routes');
 
+    // Apply express.json() and metrics middleware before auth routes
+    app.use(express.json());
+    app.use(metricsMiddleware);
+
     // Better Auth routes using toNodeHandler approach
     app.all('/api/auth/*splat', toNodeHandler(auth));
     serverLogger.info('✓ Better Auth routes mounted');
-
-    // Apply express.json() middleware before auth routes
-    app.use(express.json());
-
-    // Metrics middleware and route
-    app.use(metricsMiddleware);
-    app.use(`${API_PREFIX}`, routes.metricsRoutes);
-    serverLogger.info('✓ Metrics routes mounted');
 
     app.use(`${API_PREFIX}/status`, routes.statusRoutes);
     serverLogger.info('✓ Status routes mounted');
 
     // Protected routes
+
+    // Metrics route
+    app.use(`${API_PREFIX}`, routes.metricsRoutes);
+    serverLogger.info('✓ Metrics routes mounted');
+
     app.use(`${API_PREFIX}/analyses`, routes.analysisRoutes);
     serverLogger.info('✓ Analysis routes mounted');
 
