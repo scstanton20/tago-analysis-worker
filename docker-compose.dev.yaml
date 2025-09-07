@@ -7,7 +7,6 @@ services:
       dockerfile: ./docker-configs/development/frontend.Dockerfile
     volumes:
       - ./apps/frontend:/app/apps/frontend
-      - /app/apps/frontend/node_modules
     ports:
       - '5173:5173'
     environment:
@@ -18,7 +17,7 @@ services:
       context: .
       dockerfile: ./docker-configs/development/backend.Dockerfile
     volumes:
-      - ./apps/backend:/app/apps/backend
+      - ./apps/backend/src:/app/apps/backend/src
       - analysis-data:/app/apps/backend/analyses-storage
     ports:
       - '3000:3000'
