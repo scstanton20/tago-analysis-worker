@@ -5,6 +5,7 @@ import path from 'path';
 import config from '../config/default.js';
 import { promises as fs } from 'fs';
 import sanitize from 'sanitize-filename';
+import { safeWriteFile, safeUnlink } from '../utils/safePath.js';
 
 // Helper function to validate that a path is within the expected directory
 function validatePath(targetPath, allowedBasePath) {
@@ -511,8 +512,6 @@ class AnalysisController {
       // Validate that the logs directory is within the expected analysis path
       validatePath(analysisLogsDir, config.paths.analysis);
 
-      await fs.mkdir(analysisLogsDir, { recursive: true });
-
       // Create a temporary file in the correct logs directory with sanitized filename
       const tempLogFile = path.join(
         analysisLogsDir,
@@ -523,7 +522,7 @@ class AnalysisController {
       validatePath(tempLogFile, analysisLogsDir);
 
       try {
-        await fs.writeFile(tempLogFile, content);
+        await safeWriteFile(tempLogFile, content);
 
         // Set the download filename using headers with sanitized name
         const downloadFilename = `${sanitize(path.parse(sanitizedFileName).name)}.log`;
@@ -536,7 +535,7 @@ class AnalysisController {
         // Send the file using the full tempLogFile path
         res.sendFile(tempLogFile, (err) => {
           // Clean up temp file using the already validated tempLogFile path
-          fs.unlink(tempLogFile).catch((unlinkError) => {
+          safeUnlink(tempLogFile).catch((unlinkError) => {
             console.error('Error cleaning up temporary file:', unlinkError);
           });
 

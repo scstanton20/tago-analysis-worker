@@ -13,6 +13,7 @@ import {
   initializeAnalyses,
 } from './services/analysisService.js';
 import dnsCache from './services/dnsCache.js';
+import storage from './utils/storage.js';
 
 // Route modules
 import * as routes from './routes/index.js';
@@ -199,6 +200,11 @@ async function startServer() {
 
     // Create admin user if needed
     await createAdminUserIfNeeded();
+
+    // Initialize storage directories first (before any services that write files)
+    serverLogger.info('Initializing storage directories');
+    await storage.initializeStorage();
+    serverLogger.info('Storage directories initialized');
 
     // Initialize DNS cache service early (before any network calls)
     serverLogger.info('Initializing DNS cache');

@@ -2,6 +2,16 @@ import path from 'path';
 import { promises as fs } from 'fs';
 import config from '../config/default.js';
 import { encrypt, decrypt } from '../utils/cryptoUtils.js';
+import {
+  safeMkdir,
+  safeWriteFile,
+  safeReadFile,
+  safeReaddir,
+  safeStat,
+  safeRename,
+  getAnalysisPath,
+  isAnalysisNameSafe,
+} from '../utils/safePath.js';
 import AnalysisProcess from '../models/analysisProcess.js';
 import teamService from './teamService.js';
 import { createChildLogger } from '../utils/logging/logger.js';
@@ -45,15 +55,6 @@ class AnalysisService {
   validateTimeRange(timeRange) {
     const validRanges = ['1h', '24h', '7d', '30d', 'all'];
     return validRanges.includes(timeRange);
-  }
-  /**
-   * Ensure required directories exist
-   * @returns {Promise<void>}
-   * @throws {Error} If directory creation fails
-   */
-  async ensureDirectories() {
-    await fs.mkdir(config.paths.analysis, { recursive: true });
-    await fs.mkdir(config.paths.config, { recursive: true });
   }
 
   /**
@@ -140,7 +141,10 @@ class AnalysisService {
       };
     });
 
-    await fs.writeFile(this.configPath, JSON.stringify(configuration, null, 2));
+    await safeWriteFile(
+      this.configPath,
+      JSON.stringify(configuration, null, 2),
+    );
 
     this.configCache = configuration;
   }
@@ -152,7 +156,7 @@ class AnalysisService {
    */
   async loadConfig() {
     try {
-      const data = await fs.readFile(this.configPath, 'utf8');
+      const data = await safeReadFile(this.configPath, 'utf8');
       const config = JSON.parse(data);
 
       // Store the full config including departments
@@ -191,12 +195,15 @@ class AnalysisService {
    * @throws {Error} If directory creation fails
    */
   async createAnalysisDirectories(analysisName) {
-    const basePath = path.join(config.paths.analysis, analysisName);
+    if (!isAnalysisNameSafe(analysisName)) {
+      throw new Error('Invalid analysis name');
+    }
+    const basePath = getAnalysisPath(analysisName);
     await Promise.all([
-      fs.mkdir(basePath, { recursive: true }),
-      fs.mkdir(path.join(basePath, 'env'), { recursive: true }),
-      fs.mkdir(path.join(basePath, 'logs'), { recursive: true }),
-      fs.mkdir(path.join(basePath, 'versions'), { recursive: true }),
+      safeMkdir(basePath, { recursive: true }),
+      safeMkdir(path.join(basePath, 'env'), { recursive: true }),
+      safeMkdir(path.join(basePath, 'logs'), { recursive: true }),
+      safeMkdir(path.join(basePath, 'versions'), { recursive: true }),
     ]);
     return basePath;
   }
@@ -225,7 +232,7 @@ class AnalysisService {
     this.analyses.set(analysisName, analysis);
 
     const envFile = path.join(basePath, 'env', '.env');
-    await fs.writeFile(envFile, '', 'utf8');
+    await safeWriteFile(envFile, '', 'utf8');
 
     await this.saveConfig();
 
@@ -257,12 +264,12 @@ class AnalysisService {
     );
 
     // Create versions directory
-    await fs.mkdir(versionsDir, { recursive: true });
+    await safeMkdir(versionsDir, { recursive: true });
 
     // Read the uploaded content and save it as v1
-    const uploadedContent = await fs.readFile(currentFilePath, 'utf8');
+    const uploadedContent = await safeReadFile(currentFilePath, 'utf8');
     const v1Path = path.join(versionsDir, 'v1.js');
-    await fs.writeFile(v1Path, uploadedContent, 'utf8');
+    await safeWriteFile(v1Path, uploadedContent, 'utf8');
 
     // Create metadata - uploaded file is version 1
     const metadata = {
@@ -277,7 +284,11 @@ class AnalysisService {
       currentVersion: 1,
     };
 
-    await fs.writeFile(metadataPath, JSON.stringify(metadata, null, 2), 'utf8');
+    await safeWriteFile(
+      metadataPath,
+      JSON.stringify(metadata, null, 2),
+      'utf8',
+    );
   }
 
   /**
@@ -286,13 +297,13 @@ class AnalysisService {
    * @throws {Error} If directory read or file stat fails
    */
   async getAllAnalyses() {
-    const analysisDirectories = await fs.readdir(config.paths.analysis);
+    const analysisDirectories = await safeReaddir(config.paths.analysis);
 
     const results = await Promise.all(
       analysisDirectories.map(async (dirName) => {
         const indexPath = path.join(config.paths.analysis, dirName, 'index.js');
         try {
-          const stats = await fs.stat(indexPath);
+          const stats = await safeStat(indexPath);
           const analysis = this.analyses.get(dirName);
 
           if (!this.analyses.has(dirName)) {
@@ -366,7 +377,7 @@ class AnalysisService {
       }
 
       // Perform the rename
-      await fs.rename(oldFilePath, newFilePath);
+      await safeRename(oldFilePath, newFilePath);
 
       // Update the analysis object and maps
       this.analyses.delete(analysisName);
@@ -464,7 +475,7 @@ class AnalysisService {
       );
 
       // Clear file
-      await fs.writeFile(logFilePath, '', 'utf8');
+      await safeWriteFile(logFilePath, '', 'utf8');
 
       // Reset in-memory state
       analysis.logs = [];
@@ -702,14 +713,12 @@ class AnalysisService {
    * @throws {Error} If initialization fails
    */
   async initialize() {
-    await this.ensureDirectories();
-
     const configuration = await this.loadConfig();
 
     // Initialize department service after config is loaded
     await teamService.initialize(this);
 
-    const analysisDirectories = await fs.readdir(config.paths.analysis);
+    const analysisDirectories = await safeReaddir(config.paths.analysis);
     await Promise.all(
       analysisDirectories.map(async (dirName) => {
         try {
@@ -718,7 +727,7 @@ class AnalysisService {
             dirName,
             'index.js',
           );
-          const stats = await fs.stat(indexPath);
+          const stats = await safeStat(indexPath);
           if (stats.isFile()) {
             await this.initializeAnalysis(
               dirName,
@@ -754,7 +763,7 @@ class AnalysisService {
         analysisName,
         'index.js',
       );
-      const content = await fs.readFile(filePath, 'utf8');
+      const content = await safeReadFile(filePath, 'utf8');
       return content;
     } catch (error) {
       logger.error({ error, analysisName }, 'Error reading analysis content');
@@ -781,13 +790,13 @@ class AnalysisService {
     );
 
     // Ensure versions directory exists
-    await fs.mkdir(versionsDir, { recursive: true });
+    await safeMkdir(versionsDir, { recursive: true });
 
     // Load or create metadata
     let metadata = { versions: [], nextVersionNumber: 1, currentVersion: 0 };
     let isFirstVersionSave = false;
     try {
-      const metadataContent = await fs.readFile(metadataPath, 'utf8');
+      const metadataContent = await safeReadFile(metadataPath, 'utf8');
       metadata = JSON.parse(metadataContent);
       // Ensure currentVersion exists for backward compatibility
       if (metadata.currentVersion === undefined) {
@@ -806,7 +815,7 @@ class AnalysisService {
     }
 
     // Read current content
-    const currentContent = await fs.readFile(currentFilePath, 'utf8');
+    const currentContent = await safeReadFile(currentFilePath, 'utf8');
 
     // Check if current content matches ANY existing saved version
     for (const version of metadata.versions) {
@@ -815,7 +824,7 @@ class AnalysisService {
           versionsDir,
           `v${version.version}.js`,
         );
-        const versionContent = await fs.readFile(versionFilePath, 'utf8');
+        const versionContent = await safeReadFile(versionFilePath, 'utf8');
         if (currentContent === versionContent) {
           // Content already exists as a saved version, no need to save again
           return null;
@@ -831,7 +840,7 @@ class AnalysisService {
       ? 1
       : metadata.nextVersionNumber;
     const versionFilePath = path.join(versionsDir, `v${newVersionNumber}.js`);
-    await fs.writeFile(versionFilePath, currentContent, 'utf8');
+    await safeWriteFile(versionFilePath, currentContent, 'utf8');
 
     // Update metadata - add the new version and increment counter
     metadata.versions.push({
@@ -849,7 +858,11 @@ class AnalysisService {
       metadata.currentVersion = newVersionNumber;
     }
 
-    await fs.writeFile(metadataPath, JSON.stringify(metadata, null, 2), 'utf8');
+    await safeWriteFile(
+      metadataPath,
+      JSON.stringify(metadata, null, 2),
+      'utf8',
+    );
 
     return newVersionNumber;
   }
@@ -873,7 +886,7 @@ class AnalysisService {
     );
 
     try {
-      const metadataContent = await fs.readFile(metadataPath, 'utf8');
+      const metadataContent = await safeReadFile(metadataPath, 'utf8');
       const metadata = JSON.parse(metadataContent);
       // Ensure currentVersion exists for backward compatibility
       if (metadata.currentVersion === undefined) {
@@ -882,7 +895,7 @@ class AnalysisService {
 
       // Check if the current index.js content matches any saved version
       try {
-        const currentContent = await fs.readFile(currentFilePath, 'utf8');
+        const currentContent = await safeReadFile(currentFilePath, 'utf8');
         let currentContentMatchesVersion = false;
 
         // Check against all saved versions
@@ -894,7 +907,7 @@ class AnalysisService {
               'versions',
               `v${version.version}.js`,
             );
-            const versionContent = await fs.readFile(versionFilePath, 'utf8');
+            const versionContent = await safeReadFile(versionFilePath, 'utf8');
             if (currentContent === versionContent) {
               // Current content matches this saved version
               metadata.currentVersion = version.version;
@@ -971,13 +984,17 @@ class AnalysisService {
     await this.saveVersion(analysisName);
 
     // Replace current file with the target version content
-    const versionContent = await fs.readFile(versionFilePath, 'utf8');
-    await fs.writeFile(currentFilePath, versionContent, 'utf8');
+    const versionContent = await safeReadFile(versionFilePath, 'utf8');
+    await safeWriteFile(currentFilePath, versionContent, 'utf8');
 
     // Update metadata to track current version after rollback
     const metadata = await this.getVersions(analysisName);
     metadata.currentVersion = version;
-    await fs.writeFile(metadataPath, JSON.stringify(metadata, null, 2), 'utf8');
+    await safeWriteFile(
+      metadataPath,
+      JSON.stringify(metadata, null, 2),
+      'utf8',
+    );
 
     // Clear logs
     await this.clearLogs(analysisName);
@@ -1012,7 +1029,7 @@ class AnalysisService {
         analysisName,
         'index.js',
       );
-      return fs.readFile(currentFilePath, 'utf8');
+      return safeReadFile(currentFilePath, 'utf8');
     }
 
     const versionFilePath = path.join(
@@ -1022,7 +1039,7 @@ class AnalysisService {
       `v${version}.js`,
     );
     try {
-      return await fs.readFile(versionFilePath, 'utf8');
+      return await safeReadFile(versionFilePath, 'utf8');
     } catch (error) {
       if (error.code === 'ENOENT') {
         throw new Error(`Version ${version} not found`);
@@ -1074,7 +1091,7 @@ class AnalysisService {
           analysisName,
           'index.js',
         );
-        await fs.writeFile(filePath, updates.content, 'utf8');
+        await safeWriteFile(filePath, updates.content, 'utf8');
 
         // Update currentVersion based on what happened
         if (savedVersion !== null) {
@@ -1090,7 +1107,10 @@ class AnalysisService {
                 'versions',
                 `v${version.version}.js`,
               );
-              const versionContent = await fs.readFile(versionFilePath, 'utf8');
+              const versionContent = await safeReadFile(
+                versionFilePath,
+                'utf8',
+              );
               if (updates.content === versionContent) {
                 // New content matches existing version, update currentVersion
                 metadata.currentVersion = version.version;
@@ -1100,7 +1120,7 @@ class AnalysisService {
                   'versions',
                   'metadata.json',
                 );
-                await fs.writeFile(
+                await safeWriteFile(
                   metadataPath,
                   JSON.stringify(metadata, null, 2),
                   'utf8',
@@ -1159,7 +1179,7 @@ class AnalysisService {
       // Ensure the log file exists
       await fs.access(logFile);
 
-      const content = await fs.readFile(logFile, 'utf8');
+      const content = await safeReadFile(logFile, 'utf8');
       const lines = content.trim().split('\n');
 
       if (timeRange === 'all') {
@@ -1218,7 +1238,7 @@ class AnalysisService {
     );
 
     try {
-      const envContent = await fs.readFile(envFile, 'utf8');
+      const envContent = await safeReadFile(envFile, 'utf8');
       const envVariables = {};
       envContent.split('\n').forEach((line) => {
         const [key, encryptedValue] = line.split('=');
@@ -1266,8 +1286,7 @@ class AnalysisService {
         .map(([key, value]) => `${key}=${encrypt(value)}`)
         .join('\n');
 
-      await fs.mkdir(path.dirname(envFile), { recursive: true });
-      await fs.writeFile(envFile, envContent, 'utf8');
+      await safeWriteFile(envFile, envContent, 'utf8');
 
       // If it was running before, restart it
       if (wasRunning) {

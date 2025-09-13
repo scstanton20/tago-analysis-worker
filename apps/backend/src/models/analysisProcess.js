@@ -1,7 +1,12 @@
 // Enhanced AnalysisProcess.js
 import path from 'path';
-import { promises as fs } from 'fs';
 import { fork } from 'child_process';
+import {
+  safeMkdir,
+  safeStat,
+  safeUnlink,
+  safeReadFile,
+} from '../utils/safePath.js';
 import { fileURLToPath } from 'url';
 import { sseManager } from '../utils/sse.js';
 import config from '../config/default.js';
@@ -94,7 +99,7 @@ class AnalysisProcess {
     try {
       // Create directory if it doesn't exist
       const logsDir = path.dirname(this.logFile);
-      fs.mkdir(logsDir, { recursive: true }).catch(() => {}); // Don't await, let it happen async
+      safeMkdir(logsDir, { recursive: true }).catch(() => {}); // Don't await, let it happen async
 
       // Create Pino write stream for this analysis log file
       const fileStream = pino.destination({
@@ -180,7 +185,7 @@ class AnalysisProcess {
     this.initializeFileLogger();
 
     try {
-      const stats = await fs.stat(this.logFile);
+      const stats = await safeStat(this.logFile);
 
       // Check if file is too large (> 50MB)
       const maxFileSize = 50 * 1024 * 1024; // 50MB
@@ -196,7 +201,7 @@ class AnalysisProcess {
         });
 
         // Delete the oversized log file
-        await fs.unlink(this.logFile);
+        await safeUnlink(this.logFile);
 
         // Start fresh
         this.totalLogCount = 0;
@@ -212,7 +217,7 @@ class AnalysisProcess {
         );
       } else {
         // For normal-sized files, read as usual
-        const content = await fs.readFile(this.logFile, 'utf8');
+        const content = await safeReadFile(this.logFile, 'utf8');
         const lines = content
           .trim()
           .split('\n')

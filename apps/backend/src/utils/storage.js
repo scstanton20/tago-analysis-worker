@@ -1,15 +1,19 @@
 // utils/storage.js
 import { promises as fs } from 'fs';
 import config from '../config/default.js';
+import { safeMkdir, safeWriteFile } from './safePath.js';
 
 async function initializeStorage() {
   if (!config.storage.createDirs) return;
 
   try {
+    // Create base storage directory first
+    await safeMkdir(config.storage.base, { recursive: true });
+
     // Create all directory paths
     await Promise.all(
       Object.values(config.paths).map((dir) =>
-        fs.mkdir(dir, { recursive: true }),
+        safeMkdir(dir, { recursive: true }),
       ),
     );
 
@@ -17,7 +21,7 @@ async function initializeStorage() {
     try {
       await fs.access(config.files.config);
     } catch {
-      await fs.writeFile(
+      await safeWriteFile(
         config.files.config,
         JSON.stringify(
           { version: '1.0', created: new Date().toISOString() },

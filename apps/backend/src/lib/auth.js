@@ -5,8 +5,13 @@ import { username } from 'better-auth/plugins/username';
 import { organization } from 'better-auth/plugins/organization';
 import Database from 'better-sqlite3';
 import path from 'path';
-import fs from 'fs';
 import config from '../config/default.js';
+import {
+  safeExistsSync,
+  safeMkdirSync,
+  safeWriteFileSync,
+  safeUnlinkSync,
+} from '../utils/safePath.js';
 import { createChildLogger } from '../utils/logging/logger.js';
 
 const authLogger = createChildLogger('auth');
@@ -16,15 +21,15 @@ const dbPath = path.join(config.storage.base, 'auth.db');
 const dbDir = path.dirname(dbPath);
 
 try {
-  if (!fs.existsSync(dbDir)) {
+  if (!safeExistsSync(dbDir)) {
     authLogger.info(`Creating auth storage directory: ${dbDir}`);
-    fs.mkdirSync(dbDir, { recursive: true });
+    safeMkdirSync(dbDir, { recursive: true });
   }
 
   // Test write permissions
   const testFile = path.join(dbDir, '.write-test');
-  fs.writeFileSync(testFile, 'test');
-  fs.unlinkSync(testFile);
+  safeWriteFileSync(testFile, 'test');
+  safeUnlinkSync(testFile);
 
   authLogger.info(`Auth storage initialized at: ${dbPath}`);
 } catch (error) {

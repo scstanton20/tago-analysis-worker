@@ -1,9 +1,9 @@
 // services/dnsCache.js
 import dns from 'dns';
 import { promises as dnsPromises } from 'dns';
-import { promises as fs } from 'fs';
 import path from 'path';
 import config from '../config/default.js';
+import { safeReadFile, safeWriteFile } from '../utils/safePath.js';
 import { createChildLogger } from '../utils/logging/logger.js';
 import { dnsCacheHits, dnsCacheMisses } from '../utils/metrics-enhanced.js';
 
@@ -57,7 +57,7 @@ class DNSCacheService {
 
   async loadConfig() {
     try {
-      const data = await fs.readFile(DNS_CONFIG_FILE, 'utf-8');
+      const data = await safeReadFile(DNS_CONFIG_FILE, 'utf-8');
       const savedConfig = JSON.parse(data);
       this.config = { ...this.config, ...savedConfig };
     } catch (error) {
@@ -71,7 +71,10 @@ class DNSCacheService {
 
   async saveConfig() {
     try {
-      await fs.writeFile(DNS_CONFIG_FILE, JSON.stringify(this.config, null, 2));
+      await safeWriteFile(
+        DNS_CONFIG_FILE,
+        JSON.stringify(this.config, null, 2),
+      );
       logger.debug('DNS cache config saved');
     } catch (error) {
       logger.error({ err: error }, 'Failed to save DNS cache config');
