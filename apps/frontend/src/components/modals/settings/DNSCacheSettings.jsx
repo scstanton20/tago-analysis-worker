@@ -17,6 +17,7 @@ import {
   ActionIcon,
   Tooltip,
   Divider,
+  Progress,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import {
@@ -402,7 +403,7 @@ export default function DNSCacheSettings() {
             </Card>
             <Card p="xs" withBorder>
               <Text size="xs" c="dimmed">
-                Hit Rate
+                Hit Rate (this TTL)
               </Text>
               <Text size="lg" fw={600}>
                 {stats?.hitRate || 0}%
@@ -410,11 +411,29 @@ export default function DNSCacheSettings() {
             </Card>
             <Card p="xs" withBorder>
               <Text size="xs" c="dimmed">
-                Hits / Misses
+                Hits / Misses (this TTL)
               </Text>
               <Text size="lg" fw={600}>
                 {stats?.hits || 0} / {stats?.misses || 0}
               </Text>
+            </Card>
+            <Card p="xs" withBorder>
+              <Text size="xs" c="dimmed">
+                TTL Period Progress
+              </Text>
+              <Stack gap={4}>
+                <Progress
+                  value={Math.min(
+                    parseFloat(stats?.ttlPeriodProgress || 0),
+                    100,
+                  )}
+                  size="sm"
+                  color="blue"
+                />
+                <Text size="sm" fw={600}>
+                  {formatTTL(stats?.ttlPeriodRemaining || 0)} left
+                </Text>
+              </Stack>
             </Card>
             <Card p="xs" withBorder>
               <Text size="xs" c="dimmed">

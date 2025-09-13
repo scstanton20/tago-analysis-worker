@@ -269,7 +269,7 @@ function MetricsTabContent({
               <MetricCard
                 title="DNS Cache Hit Rate"
                 value={formatNumber(data.dnsHitRate, 1)}
-                unit="% (internal cache)"
+                unit="% (this TTL period)"
                 icon={IconNetwork}
                 color="cyan"
                 loading={loading}

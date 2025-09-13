@@ -28,6 +28,7 @@ class DNSCacheService {
       errors: 0,
       evictions: 0,
     };
+    this.ttlPeriodStart = Date.now();
     this.originalLookup = null;
     this.originalResolve4 = null;
     this.originalResolve6 = null;
@@ -101,6 +102,7 @@ class DNSCacheService {
       // Check cache first
       const cached = this.getFromCache(cacheKey);
       if (cached) {
+        this.checkAndResetTTLPeriod();
         this.stats.hits++;
         dnsCacheHits.inc(); // Update Prometheus metrics
         logger.debug({ hostname, family, cached }, 'DNS cache hit');
@@ -110,6 +112,7 @@ class DNSCacheService {
       }
 
       // Cache miss - perform actual lookup
+      this.checkAndResetTTLPeriod();
       this.stats.misses++;
       dnsCacheMisses.inc(); // Update Prometheus metrics
       this.originalLookup.call(
@@ -134,6 +137,7 @@ class DNSCacheService {
 
       const cached = this.getFromCache(cacheKey);
       if (cached) {
+        this.checkAndResetTTLPeriod();
         this.stats.hits++;
         dnsCacheHits.inc(); // Update Prometheus metrics
         logger.debug({ hostname, cached }, 'DNS resolve4 cache hit');
@@ -141,6 +145,7 @@ class DNSCacheService {
       }
 
       try {
+        this.checkAndResetTTLPeriod();
         this.stats.misses++;
         dnsCacheMisses.inc(); // Update Prometheus metrics
         const addresses = await this.originalResolve4.call(
@@ -162,6 +167,7 @@ class DNSCacheService {
 
       const cached = this.getFromCache(cacheKey);
       if (cached) {
+        this.checkAndResetTTLPeriod();
         this.stats.hits++;
         dnsCacheHits.inc(); // Update Prometheus metrics
         logger.debug({ hostname, cached }, 'DNS resolve6 cache hit');
@@ -169,6 +175,7 @@ class DNSCacheService {
       }
 
       try {
+        this.checkAndResetTTLPeriod();
         this.stats.misses++;
         dnsCacheMisses.inc(); // Update Prometheus metrics
         const addresses = await this.originalResolve6.call(
@@ -211,6 +218,7 @@ class DNSCacheService {
     // Check cache first
     const cached = this.getFromCache(cacheKey);
     if (cached) {
+      this.checkAndResetTTLPeriod();
       this.stats.hits++;
       dnsCacheHits.inc(); // Update Prometheus metrics
       logger.debug({ hostname, family, cached }, 'DNS cache hit (IPC)');
@@ -218,6 +226,7 @@ class DNSCacheService {
     }
 
     // Cache miss - perform actual lookup
+    this.checkAndResetTTLPeriod();
     this.stats.misses++;
     dnsCacheMisses.inc(); // Update Prometheus metrics
     return new Promise((resolve) => {
@@ -251,6 +260,7 @@ class DNSCacheService {
     // Check cache first
     const cached = this.getFromCache(cacheKey);
     if (cached) {
+      this.checkAndResetTTLPeriod();
       this.stats.hits++;
       dnsCacheHits.inc(); // Update Prometheus metrics
       logger.debug({ hostname, cached }, 'DNS resolve4 cache hit (IPC)');
@@ -258,6 +268,7 @@ class DNSCacheService {
     }
 
     try {
+      this.checkAndResetTTLPeriod();
       this.stats.misses++;
       dnsCacheMisses.inc(); // Update Prometheus metrics
       const addresses = await this.originalResolve4.call(dnsPromises, hostname);
@@ -281,6 +292,7 @@ class DNSCacheService {
     // Check cache first
     const cached = this.getFromCache(cacheKey);
     if (cached) {
+      this.checkAndResetTTLPeriod();
       this.stats.hits++;
       dnsCacheHits.inc(); // Update Prometheus metrics
       logger.debug({ hostname, cached }, 'DNS resolve6 cache hit (IPC)');
@@ -288,6 +300,7 @@ class DNSCacheService {
     }
 
     try {
+      this.checkAndResetTTLPeriod();
       this.stats.misses++;
       dnsCacheMisses.inc(); // Update Prometheus metrics
       const addresses = await this.originalResolve6.call(dnsPromises, hostname);
@@ -301,6 +314,22 @@ class DNSCacheService {
         'DNS resolve6 error (IPC)',
       );
       return { success: false, error: error.message };
+    }
+  }
+
+  // Check if we're in a new TTL period and reset stats if needed
+  checkAndResetTTLPeriod() {
+    const now = Date.now();
+    const ttlPeriodAge = now - this.ttlPeriodStart;
+
+    // If the current TTL period has expired, start a new one and reset stats
+    if (ttlPeriodAge >= this.config.ttl) {
+      this.ttlPeriodStart = now;
+      this.stats.hits = 0;
+      this.stats.misses = 0;
+      // Don't reset errors and evictions as they're not TTL-dependent
+
+      logger.debug('TTL period expired, reset hit/miss statistics');
     }
   }
 
@@ -334,7 +363,19 @@ class DNSCacheService {
 
   async updateConfig(newConfig) {
     const wasEnabled = this.config.enabled;
+    const oldTtl = this.config.ttl;
     this.config = { ...this.config, ...newConfig };
+
+    // If TTL changed, reset the TTL period and stats
+    if (newConfig.ttl !== undefined && newConfig.ttl !== oldTtl) {
+      this.ttlPeriodStart = Date.now();
+      this.stats.hits = 0;
+      this.stats.misses = 0;
+      logger.info(
+        { oldTtl, newTtl: newConfig.ttl },
+        'TTL changed, reset hit/miss statistics',
+      );
+    }
 
     // If enabling/disabling, install/uninstall interceptors and stats broadcasting
     if (wasEnabled && !this.config.enabled) {
@@ -401,6 +442,10 @@ class DNSCacheService {
 
   // Get cache stats (simplified for shared cache)
   getStats() {
+    const now = Date.now();
+    const ttlPeriodAge = now - this.ttlPeriodStart;
+    const ttlPeriodRemaining = Math.max(0, this.config.ttl - ttlPeriodAge);
+
     return {
       ...this.stats,
       cacheSize: this.cache.size,
@@ -411,6 +456,9 @@ class DNSCacheService {
               100
             ).toFixed(2)
           : 0,
+      ttlPeriodAge,
+      ttlPeriodRemaining,
+      ttlPeriodProgress: ((ttlPeriodAge / this.config.ttl) * 100).toFixed(1),
     };
   }
 
@@ -421,6 +469,7 @@ class DNSCacheService {
       errors: 0,
       evictions: 0,
     };
+    this.ttlPeriodStart = Date.now();
     this.lastStatsSnapshot = { ...this.stats };
     logger.info('DNS cache stats reset');
   }
