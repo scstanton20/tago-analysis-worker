@@ -43,7 +43,7 @@ WORKDIR /app/apps/frontend
 RUN pnpm build
 
 # Production stage - Frontend
-FROM nginx:alpine AS frontend
+FROM nginx:alpine-perl AS frontend
 
 WORKDIR /app
 # Copy built frontend files to nginx
