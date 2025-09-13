@@ -25,11 +25,14 @@ class TeamController {
         return res.status(400).json({ error: 'Team name is required' });
       }
 
-      const team = await teamService.createTeam({
-        name,
-        color,
-        order,
-      });
+      const team = await teamService.createTeam(
+        {
+          name,
+          color,
+          order,
+        },
+        req.headers,
+      );
 
       // Broadcast to all SSE clients
       sseManager.broadcast({
@@ -73,20 +76,18 @@ class TeamController {
     }
   }
 
-  // Delete team with analysis migration
+  // Delete team (analysis migration handled by hooks)
   static async deleteTeam(req, res) {
     try {
       const { id } = req.params;
-      const { moveAnalysesTo } = req.body;
 
-      // Handle analysis migration and team deletion
-      const result = await teamService.deleteTeam(id, moveAnalysesTo);
+      // Delete team (hooks handle analysis migration automatically)
+      const result = await teamService.deleteTeam(id, req.headers);
 
       // Broadcast deletion
       sseManager.broadcast({
         type: 'teamDeleted',
         deleted: id,
-        analysesMovedTo: result.analysesMovedTo,
       });
 
       res.json(result);

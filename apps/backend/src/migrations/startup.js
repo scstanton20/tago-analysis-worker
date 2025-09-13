@@ -1,5 +1,5 @@
 // backend/src/migrations/startup.js
-
+import { v4 as uuidv4 } from 'uuid';
 import { execSync } from 'child_process';
 import Database from 'better-sqlite3';
 import path from 'path';
@@ -7,6 +7,11 @@ import crypto from 'crypto';
 import config from '../config/default.js';
 import { sseManager } from '../utils/sse.js';
 import { auth } from '../lib/auth.js';
+import {
+  executeQuery,
+  executeUpdate,
+  executeTransaction,
+} from '../utils/authDatabase.js';
 import { createChildLogger } from '../utils/logging/logger.js';
 
 const logger = createChildLogger('migration');
@@ -32,48 +37,6 @@ export async function runMigrations() {
     const db = new Database(dbPath);
 
     try {
-      // Check if color column exists
-      const tableInfo = db.prepare('PRAGMA table_info(team)').all();
-      const hasColorColumn = tableInfo.some(
-        (column) => column.name === 'color',
-      );
-      const hasOrderColumn = tableInfo.some(
-        (column) => column.name === 'order_index',
-      );
-      const hasIsSystemColumn = tableInfo.some(
-        (column) => column.name === 'is_system',
-      );
-
-      if (!hasColorColumn) {
-        logger.info('Adding color column to team table...');
-        db.prepare(
-          "ALTER TABLE team ADD COLUMN color TEXT DEFAULT '#3B82F6'",
-        ).run();
-        logger.info('✓ Color column added to team table');
-      } else {
-        return;
-      }
-
-      if (!hasOrderColumn) {
-        logger.info('Adding order_index column to team table...');
-        db.prepare(
-          'ALTER TABLE team ADD COLUMN order_index INTEGER DEFAULT 0',
-        ).run();
-        logger.info('✓ Order_index column added to team table');
-      } else {
-        return;
-      }
-
-      if (!hasIsSystemColumn) {
-        logger.info('Adding is_system column to team table...');
-        db.prepare(
-          'ALTER TABLE team ADD COLUMN is_system INTEGER DEFAULT 0',
-        ).run();
-        logger.info('✓ Is_system column added to team table');
-      } else {
-        return;
-      }
-
       // Check if member table has permissions column, add if missing
       logger.info('Checking teamMember table schema...');
       const teamMemberTableInfo = db
@@ -179,19 +142,15 @@ export async function createAdminUserIfNeeded() {
       message: 'Checking for admin user',
     });
 
-    const dbPath = path.join(config.storage.base, 'auth.db');
-    const db = new Database(dbPath);
-
-    const existingAdmin = db
-      .prepare('SELECT id FROM user WHERE email = ? OR role = ?')
-      .get('admin@example.com', 'admin');
+    const existingAdmin = executeQuery(
+      'SELECT id FROM user WHERE email = ? OR role = ?',
+      ['admin@example.com', 'admin'],
+      'checking for existing admin user',
+    );
 
     if (existingAdmin) {
-      db.close();
       return;
     }
-
-    db.close();
 
     logger.info('Creating admin user...');
     sseManager.updateContainerState({
@@ -210,13 +169,11 @@ export async function createAdminUserIfNeeded() {
     });
 
     if (result.user) {
-      const db2 = new Database(dbPath);
-      const updateResult = db2
-        .prepare(
-          'UPDATE user SET role = ?, requiresPasswordChange = 1 WHERE id = ?',
-        )
-        .run('admin', result.user.id);
-      db2.close();
+      const updateResult = executeUpdate(
+        'UPDATE user SET role = ?, requiresPasswordChange = 1 WHERE id = ?',
+        ['admin', result.user.id],
+        'updating admin user role and password change flag',
+      );
 
       if (updateResult.changes > 0) {
         logger.info(
@@ -232,105 +189,123 @@ export async function createAdminUserIfNeeded() {
         });
 
         try {
-          // Create organization and team directly in database during setup
-          const dbPath = path.join(config.storage.base, 'auth.db');
-          const db3 = new Database(dbPath);
+          // Use transaction to ensure organization setup is atomic
+          executeTransaction((db) => {
+            const existingOrg = db
+              .prepare('SELECT id FROM organization WHERE slug = ?')
+              .get('main');
 
-          // Check if organization already exists
-          const existingOrg = db3
-            .prepare('SELECT id FROM organization WHERE slug = ?')
-            .get('main');
+            let organizationId = existingOrg?.id;
 
-          let orgId = existingOrg?.id;
-
-          if (!existingOrg) {
-            // Insert organization directly
-            const orgUuid = crypto.randomUUID();
-            db3
-              .prepare(
+            if (!existingOrg) {
+              // Create organization directly in database during startup
+              const orgUuid = uuidv4();
+              db.prepare(
                 'INSERT INTO organization (id, name, slug, createdAt) VALUES (?, ?, ?, ?)',
-              )
-              .run(
+              ).run(
                 orgUuid,
                 'Tago Analysis Runner',
                 'main',
                 new Date().toISOString(),
               );
-            orgId = orgUuid;
-            logger.info(
-              { organizationId: orgId },
-              '✓ Main organization created',
-            );
-          } else {
-            logger.info(
-              { organizationId: orgId },
-              '✓ Main organization already exists',
-            );
-          }
+              organizationId = orgUuid;
+              logger.info({ organizationId }, '✓ Main organization created');
 
-          if (orgId) {
-            // Create uncategorized team first
-            const existingTeam = db3
-              .prepare(
-                'SELECT id FROM team WHERE organizationId = ? AND name = ?',
-              )
-              .get(orgId, 'Uncategorized');
+              // Create uncategorized team for the new organization
+              const teamUuid = uuidv4();
+              db.prepare(
+                'INSERT INTO team (id, name, organizationId, createdAt, color, order_index, is_system) VALUES (?, ?, ?, ?, ?, ?, ?)',
+              ).run(
+                teamUuid,
+                'Uncategorized',
+                organizationId,
+                new Date().toISOString(),
+                '#9ca3af',
+                0,
+                1,
+              );
+              logger.info(
+                { teamId: teamUuid, organizationId },
+                '✓ Uncategorized team created',
+              );
+            } else {
+              logger.info(
+                { organizationId },
+                '✓ Main organization already exists',
+              );
 
-            if (!existingTeam) {
-              const teamUuid = crypto.randomUUID();
-              db3
+              // Ensure uncategorized team exists for existing organization
+              const existingTeam = db
                 .prepare(
-                  'INSERT INTO team (id, name, organizationId, createdAt, color, order_index, is_system) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                  'SELECT id FROM team WHERE organizationId = ? AND name = ? AND is_system = 1',
                 )
-                .run(
+                .get(organizationId, 'Uncategorized');
+
+              if (!existingTeam) {
+                logger.info('Creating missing uncategorized team...');
+                const teamUuid = uuidv4();
+                db.prepare(
+                  'INSERT INTO team (id, name, organizationId, createdAt, color, order_index, is_system) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                ).run(
                   teamUuid,
                   'Uncategorized',
-                  orgId,
+                  organizationId,
                   new Date().toISOString(),
                   '#9ca3af',
                   0,
                   1,
                 );
-              logger.info({ teamId: teamUuid }, '✓ Uncategorized team created');
+                logger.info(
+                  { teamId: teamUuid, organizationId },
+                  '✓ Uncategorized team created for existing organization',
+                );
+              } else {
+                logger.info(
+                  { teamId: existingTeam.id },
+                  '✓ Uncategorized team already exists',
+                );
+              }
             }
 
-            // Add admin as organization member with team assignment
-            const existingMember = db3
-              .prepare(
-                'SELECT id FROM member WHERE userId = ? AND organizationId = ?',
-              )
-              .get(result.user.id, orgId);
-
-            if (!existingMember) {
-              db3
+            if (organizationId) {
+              // Add admin as organization member
+              const existingMember = db
                 .prepare(
-                  'INSERT INTO member (id, organizationId, userId, role, createdAt) VALUES (?, ?, ?, ?, ?)',
+                  'SELECT id FROM member WHERE userId = ? AND organizationId = ?',
                 )
-                .run(
+                .get(result.user.id, organizationId);
+
+              if (!existingMember) {
+                db.prepare(
+                  'INSERT INTO member (id, organizationId, userId, role, createdAt) VALUES (?, ?, ?, ?, ?)',
+                ).run(
                   crypto.randomUUID(),
-                  orgId,
+                  organizationId,
                   result.user.id,
                   'owner',
                   new Date().toISOString(),
                 );
-              logger.info(
-                {
-                  userId: result.user.id,
-                  organizationId: orgId,
-                  role: 'owner',
-                },
-                '✓ Admin added to organization and uncategorized team as owner',
-              );
+                logger.info(
+                  {
+                    userId: result.user.id,
+                    organizationId,
+                    role: 'owner',
+                  },
+                  '✓ Admin added to organization as owner',
+                );
+              }
             }
-          }
 
-          db3.close();
+            return organizationId;
+          }, 'organization and team setup during admin user creation');
         } catch (orgError) {
-          logger.warn(
+          logger.error(
             {
               error: orgError.message,
+              stack: orgError.stack,
+              name: orgError.name,
             },
-            '⚠ Organization setup encountered issues',
+            '❌ Organization setup failed',
           );
         }
 

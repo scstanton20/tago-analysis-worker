@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
 import {
   executeQuery,
   executeQueryAll,
@@ -130,100 +129,62 @@ class TeamService {
    * @param {Object} data - Team data
    * @param {string} data.name - Team name
    * @param {string} [data.id] - Custom team ID (generates UUID if not provided)
+   * @param {Object} [headers] - Request headers for better-auth session context
    * @returns {Promise<Object>} Created team object
    * @throws {Error} If team creation fails
    */
-  async createTeam(data) {
+  async createTeam(data, headers = {}) {
     try {
-      // If custom ID provided, we need to create it directly in the database
-      // since better-auth doesn't support custom IDs via API
-      if (data.id) {
-        return executeTransaction((db) => {
-          // Check if team already exists
-          const existing = db
-            .prepare(
-              'SELECT id FROM team WHERE id = ? OR (name = ? AND organizationId = ?)',
-            )
-            .get(data.id, data.name, this.organizationId);
+      // Use better-auth API for normal team creation (leverages additional fields)
+      // First check if team with same name already exists
+      const existing = executeQuery(
+        'SELECT id FROM team WHERE name = ? AND organizationId = ?',
+        [data.name, this.organizationId],
+        `checking if team "${data.name}" exists`,
+      );
 
-          if (existing) {
-            throw new Error(`Team with id or name already exists`);
-          }
-
-          // Create team with custom ID
-          db.prepare(
-            'INSERT INTO team (id, name, organizationId, createdAt, color, order_index, is_system) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          ).run(
-            data.id,
-            data.name,
-            this.organizationId,
-            new Date().toISOString(),
-            data.color || '#3B82F6',
-            data.order || 0,
-            data.isSystem ? 1 : 0,
-          );
-
-          const team = {
-            id: data.id,
-            name: data.name,
-            organizationId: this.organizationId,
-            createdAt: new Date().toISOString(),
-            color: data.color || '#3B82F6',
-            order_index: data.order || 0,
-            isSystem: data.isSystem || false,
-          };
-
-          logger.info(
-            { teamId: data.id, teamName: data.name },
-            'Created team with custom ID',
-          );
-          return team;
-        }, `creating team with custom ID ${data.id}`);
-      } else {
-        // Create team with auto-generated ID
-        return executeTransaction((db) => {
-          // Check if team with same name already exists
-          const existing = db
-            .prepare(
-              'SELECT id FROM team WHERE name = ? AND organizationId = ?',
-            )
-            .get(data.name, this.organizationId);
-
-          if (existing) {
-            throw new Error(`Team with name "${data.name}" already exists`);
-          }
-
-          // Create team with auto-generated ID
-          const teamId = uuidv4();
-          db.prepare(
-            'INSERT INTO team (id, name, organizationId, createdAt, color, order_index, is_system) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          ).run(
-            teamId,
-            data.name,
-            this.organizationId,
-            new Date().toISOString(),
-            data.color || '#3B82F6',
-            data.order || 0,
-            data.isSystem ? 1 : 0,
-          );
-
-          const team = {
-            id: teamId,
-            name: data.name,
-            organizationId: this.organizationId,
-            createdAt: new Date().toISOString(),
-            color: data.color || '#3B82F6',
-            order_index: data.order || 0,
-            isSystem: data.isSystem || false,
-          };
-
-          logger.info(
-            { teamId, teamName: data.name },
-            'Created team with auto-generated ID',
-          );
-          return team;
-        }, `creating team with auto-generated ID`);
+      if (existing) {
+        throw new Error(`Team with name "${data.name}" already exists`);
       }
+
+      // Import auth dynamically to avoid circular dependencies
+      const { auth } = await import('../lib/auth.js');
+
+      // Create team using better-auth API with additional fields
+      const teamResult = await auth.api.createTeam({
+        body: {
+          name: data.name,
+          organizationId: this.organizationId,
+          // Use additional fields defined in schema
+          color: data.color || '#3B82F6',
+          order_index: data.order || 0,
+          is_system: data.isSystem || false,
+        },
+        headers,
+      });
+
+      if (teamResult.error) {
+        throw new Error(`Failed to create team: ${teamResult.error.message}`);
+      }
+
+      // Better-auth API returns the team object directly
+      const teamData = teamResult;
+
+      const team = {
+        id: teamData.id,
+        name: teamData.name,
+        organizationId: teamData.organizationId,
+        createdAt: teamData.createdAt,
+        color: teamData.color,
+        order_index: teamData.order_index,
+        isSystem: teamData.is_system,
+      };
+
+      logger.info(
+        { teamId: team.id, teamName: team.name },
+        'Created team via better-auth API with additional fields',
+      );
+      return team;
     } catch (error) {
       logger.error({ error }, 'Failed to create team');
       throw error;
@@ -305,76 +266,56 @@ class TeamService {
   }
 
   /**
-   * Delete a team and optionally move its analyses to another team
+   * Delete a team (analysis migration handled automatically by beforeDeleteTeam hook)
    * @param {string} id - Team ID to delete
-   * @param {string} [moveAnalysesTo] - Team ID to move analyses to (gets uncategorized team if not provided)
-   * @returns {Promise<Object>} Deletion result with moved analysis count
+   * @param {Object} [headers] - Request headers for better-auth session context
+   * @returns {Promise<Object>} Deletion result
    * @throws {Error} If team not found or deletion fails
    */
-  async deleteTeam(id, moveAnalysesTo = null) {
+  async deleteTeam(id, headers = {}) {
     try {
-      // Get uncategorized team ID if no target specified
-      if (!moveAnalysesTo || moveAnalysesTo === 'uncategorized') {
-        const teams = await this.getAllTeams();
-        const uncategorizedTeam = teams.find((t) => t.name === 'Uncategorized');
-        if (!uncategorizedTeam) {
-          throw new Error('No uncategorized team found to move analyses to');
-        }
-        moveAnalysesTo = uncategorizedTeam.id;
+      // Verify team exists and get details for better error messages
+      const team = await this.getTeam(id);
+      if (!team) {
+        throw new Error(`Team ${id} not found`);
       }
-
-      // Move analyses to target team
-      const configData = await this.analysisService.getConfig();
-      let analysesMovedCount = 0;
-
-      if (configData.analyses) {
-        for (const [, analysis] of Object.entries(configData.analyses)) {
-          if (analysis.teamId === id) {
-            analysis.teamId = moveAnalysesTo;
-            analysis.lastModified = new Date().toISOString();
-            analysesMovedCount++;
-          }
-        }
-
-        if (analysesMovedCount > 0) {
-          await this.analysisService.updateConfig(configData);
-        }
-      }
-
-      // Delete the team
-      executeTransaction((db) => {
-        // Check if team exists first
-        const existing = db
-          .prepare('SELECT id FROM team WHERE id = ? AND organizationId = ?')
-          .get(id, this.organizationId);
-
-        if (!existing) {
-          throw new Error(`Team ${id} not found`);
-        }
-
-        // Delete the team
-        db.prepare('DELETE FROM team WHERE id = ? AND organizationId = ?').run(
-          id,
-          this.organizationId,
-        );
-      }, `deleting team ${id}`);
 
       logger.info(
-        {
-          deletedTeamId: id,
-          moveToTeamId: moveAnalysesTo,
-          analysesMovedCount,
+        { teamId: id, teamName: team.name },
+        'Deleting team via better-auth API (beforeDeleteTeam hook will handle analysis migration)',
+      );
+
+      // Import auth dynamically to avoid circular dependencies
+      const { auth } = await import('../lib/auth.js');
+
+      // Use better-auth API to delete team (triggers beforeDeleteTeam hook)
+      const result = await auth.api.removeTeam({
+        body: {
+          teamId: id,
         },
-        'Deleted team and moved analyses',
+        headers,
+      });
+
+      if (result.error) {
+        throw new Error(
+          `Failed to delete team via better-auth: ${result.error.message}`,
+        );
+      }
+
+      logger.info(
+        { deletedTeamId: id, teamName: team.name },
+        '✓ Team deleted successfully (analysis migration handled by hook)',
       );
 
       return {
         deleted: id,
-        analysesMovedTo: moveAnalysesTo,
-        analysesMovedCount,
+        name: team.name,
       };
     } catch (error) {
-      logger.error({ error, teamId: id }, 'Failed to delete team');
+      logger.error(
+        { error: error.message, teamId: id },
+        'Failed to delete team',
+      );
       throw error;
     }
   }

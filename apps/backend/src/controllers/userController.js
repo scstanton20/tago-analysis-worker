@@ -1,9 +1,9 @@
 import { auth } from '../lib/auth.js';
+import { v4 as uuidv4 } from 'uuid';
 import {
   executeQuery,
   executeQueryAll,
   executeUpdate,
-  executeTransaction,
 } from '../utils/authDatabase.js';
 import { createChildLogger } from '../utils/logging/logger.js';
 
@@ -139,9 +139,7 @@ class UserController {
             if (existingMember) {
               // Update permissions for existing member
               const permissionsJson = JSON.stringify(
-                permissions.length > 0
-                  ? permissions
-                  : ['analysis.view', 'analysis.run'],
+                permissions.length > 0 ? permissions : ['analysis.view'],
               );
 
               executeUpdate(
@@ -160,7 +158,6 @@ class UserController {
               );
             } else {
               // Add user to team
-              const { v4: uuidv4 } = await import('uuid');
               const permissionsJson = JSON.stringify(
                 permissions.length > 0
                   ? permissions
@@ -375,7 +372,6 @@ class UserController {
 
             if (!alreadyMember) {
               // Add user to team with permissions using database
-              const { v4: uuidv4 } = await import('uuid');
               const permissionsJson = JSON.stringify(
                 permissions.length > 0
                   ? permissions
@@ -444,107 +440,6 @@ class UserController {
   }
 
   /**
-   * Clean up foreign key references before user deletion
-   */
-  static async cleanupUserReferences(userId) {
-    userLogger.info({ userId }, '🧹 Cleaning up references for user');
-
-    return executeTransaction((db) => {
-      // Find all foreign key references
-      const teamMemberships = db
-        .prepare('SELECT * FROM teamMember WHERE userId = ?')
-        .all(userId);
-      const sessions = db
-        .prepare('SELECT * FROM session WHERE userId = ?')
-        .all(userId);
-
-      userLogger.info(
-        {
-          userId,
-          teamMemberships: teamMemberships.length,
-          sessions: sessions.length,
-        },
-        'Found references to clean up',
-      );
-
-      // Remove team memberships first (foreign key constraint)
-      if (teamMemberships.length > 0) {
-        db.prepare('DELETE FROM teamMember WHERE userId = ?').run(userId);
-        userLogger.info(
-          { userId, count: teamMemberships.length },
-          '✓ Removed team memberships',
-        );
-      }
-
-      // Remove organization memberships
-      const orgMemberships = db
-        .prepare('SELECT * FROM member WHERE userId = ?')
-        .all(userId);
-      if (orgMemberships.length > 0) {
-        db.prepare('DELETE FROM member WHERE userId = ?').run(userId);
-        userLogger.info(
-          { userId, count: orgMemberships.length },
-          '✓ Removed organization memberships',
-        );
-      }
-
-      // Remove sessions
-      if (sessions.length > 0) {
-        db.prepare('DELETE FROM session WHERE userId = ?').run(userId);
-        userLogger.info(
-          { userId, count: sessions.length },
-          '✓ Removed sessions',
-        );
-      }
-
-      // Remove passkeys (if table exists)
-      try {
-        const passkeys = db
-          .prepare('DELETE FROM passkey WHERE userId = ?')
-          .run(userId);
-        if (passkeys.changes > 0) {
-          userLogger.info(
-            { userId, count: passkeys.changes },
-            '✓ Removed passkeys',
-          );
-        }
-      } catch {
-        userLogger.debug(
-          { userId },
-          'No passkeys table or no passkeys to remove',
-        );
-      }
-
-      // Remove verification tokens (if table exists)
-      try {
-        const verifications = db
-          .prepare('DELETE FROM verification WHERE userId = ?')
-          .run(userId);
-        if (verifications.changes > 0) {
-          userLogger.info(
-            { userId, count: verifications.changes },
-            '✓ Removed verification tokens',
-          );
-        }
-      } catch {
-        userLogger.debug(
-          { userId },
-          'No verification table or no tokens to remove',
-        );
-      }
-
-      return {
-        success: true,
-        cleanedUp: {
-          teamMemberships: teamMemberships.length,
-          orgMemberships: orgMemberships.length,
-          sessions: sessions.length,
-        },
-      };
-    }, `cleaning up user references for ${userId}`);
-  }
-
-  /**
    * Update user's organization role
    */
   static async updateUserOrganizationRole(req, res) {
@@ -601,22 +496,51 @@ class UserController {
       const { userId } = req.params;
       const { organizationId } = req.body;
 
+      userLogger.info(
+        {
+          userId,
+          organizationId,
+          bodyReceived: req.body,
+          userIdType: typeof userId,
+          organizationIdType: typeof organizationId,
+        },
+        'Debug: removeUserFromOrganization called',
+      );
+
       if (!userId || !organizationId) {
         return res.status(400).json({
           error: 'userId and organizationId are required',
         });
       }
 
+      // Check if user is actually a member before trying to remove
+      const existingMember = executeQuery(
+        'SELECT id FROM member WHERE userId = ? AND organizationId = ?',
+        [userId, organizationId],
+        'checking if user is member before removal',
+      );
+
+      if (!existingMember) {
+        userLogger.warn(
+          { userId, organizationId },
+          'User is not a member of this organization - nothing to remove',
+        );
+        return res.json({
+          success: true,
+          message: 'User was not a member of the organization',
+        });
+      }
+
       userLogger.info(
-        { userId, organizationId },
+        { userId, organizationId, memberId: existingMember.id },
         'Removing user from organization',
       );
 
       // Use better-auth API to remove member
       const result = await auth.api.removeMember({
-        headers: req.headers, // Pass request headers for authentication
+        headers: req.headers,
         body: {
-          memberIdOrEmail: userId, // Better Auth expects 'memberIdOrEmail' not 'userId'
+          memberIdOrEmail: existingMember.id,
           organizationId,
         },
       });
@@ -637,48 +561,6 @@ class UserController {
       res.json({ success: true, message: 'User removed from organization' });
     } catch (error) {
       userLogger.error({ err: error }, 'Error removing user from organization');
-      res.status(500).json({ error: error.message });
-    }
-  }
-
-  /**
-   * Delete user with proper cleanup
-   */
-  static async deleteUser(req, res) {
-    try {
-      const { userId } = req.params;
-
-      if (!userId) {
-        return res.status(400).json({ error: 'userId is required' });
-      }
-
-      userLogger.info({ userId }, '🗑️ Deleting user');
-
-      // Clean up foreign key references first
-      try {
-        await UserController.cleanupUserReferences(userId);
-      } catch (cleanupError) {
-        userLogger.warn(
-          { err: cleanupError, userId },
-          'Warning: Manual cleanup failed',
-        );
-        // Continue with deletion anyway
-      }
-
-      // Now delete the user through better-auth
-      const result = await auth.api.removeUser({
-        headers: req.headers,
-        body: { userId },
-      });
-
-      if (result.error) {
-        return res.status(400).json({ error: result.error.message });
-      }
-
-      userLogger.info({ userId }, '✅ User deleted successfully');
-      res.json({ success: true, message: 'User deleted successfully' });
-    } catch (error) {
-      userLogger.error({ err: error }, 'Error deleting user');
       res.status(500).json({ error: error.message });
     }
   }

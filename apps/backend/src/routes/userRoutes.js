@@ -415,8 +415,8 @@ router.put(
  * @swagger
  * /users/{userId}/organization:
  *   delete:
- *     summary: Remove user from organization
- *     description: Remove a user from the organization (admin only)
+ *     summary: Remove user from organization and delete user
+ *     description: Remove a user from the organization (admin only). Due to single-organization architecture, this automatically deletes the user entirely via the afterRemoveMember hook, including cleanup of all user data (sessions, team memberships, etc.)
  *     tags: [User Management - Admin]
  *     parameters:
  *       - in: path
@@ -424,7 +424,7 @@ router.put(
  *         required: true
  *         schema:
  *           type: string
- *         description: ID of the user to remove from organization
+ *         description: ID of the user to remove from organization and delete
  *     requestBody:
  *       required: true
  *       content:
@@ -435,11 +435,15 @@ router.put(
  *               organizationId:
  *                 type: string
  *                 description: ID of the organization to remove user from
+ *               userId:
+ *                 type: string
+ *                 description: ID of the user (must match path parameter)
  *             required:
  *               - organizationId
+ *               - userId
  *     responses:
  *       200:
- *         description: User removed from organization successfully
+ *         description: User removed from organization and deleted successfully
  *         content:
  *           application/json:
  *             schema:
@@ -451,8 +455,9 @@ router.put(
  *                 message:
  *                   type: string
  *                   example: "User removed from organization"
+ *               description: Note - User is also automatically deleted via hook after organization removal
  *       400:
- *         description: Invalid request data
+ *         description: Invalid request data or user/organization not found
  *         content:
  *           application/json:
  *             schema:
@@ -474,60 +479,5 @@ router.delete(
   '/:userId/organization',
   UserController.removeUserFromOrganization,
 );
-
-/**
- * @swagger
- * /users/{userId}:
- *   delete:
- *     summary: Delete user with proper cleanup
- *     description: Permanently delete a user account with proper cleanup of all related data (admin only)
- *     tags: [User Management - Admin]
- *     parameters:
- *       - in: path
- *         name: userId
- *         required: true
- *         schema:
- *           type: string
- *         description: ID of the user to delete
- *     responses:
- *       200:
- *         description: User deleted successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 message:
- *                   type: string
- *                   example: "User deleted successfully"
- *       400:
- *         description: Invalid userId or deletion failed
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
- *       401:
- *         description: Authentication required
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
- *       403:
- *         description: Admin access required
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
- *       404:
- *         description: User not found
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
- */
-router.delete('/:userId', UserController.deleteUser);
 
 export default router;

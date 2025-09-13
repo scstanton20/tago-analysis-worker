@@ -104,25 +104,6 @@ export const userService = {
   },
 
   /**
-   * Delete user
-   * @param {string} userId - User ID
-   * @returns {Promise<Object>} Result of user deletion
-   */
-  async deleteUser(userId) {
-    try {
-      console.log('Deleting user:', { userId });
-      const response = await fetchWithHeaders(`/users/${userId}`, {
-        method: 'DELETE',
-      });
-
-      return await handleResponse(response);
-    } catch (error) {
-      console.error('Failed to delete user:', error);
-      throw new Error(`Failed to delete user: ${error.message}`);
-    }
-  },
-
-  /**
    * Get current session information
    * @returns {Promise<Object>} Current session data
    */
@@ -271,10 +252,11 @@ export const userService = {
   },
 
   /**
-   * Remove user from organization
+   * Remove user from organization (also deletes user via backend hook)
+   * Note: Due to single-org architecture, removing from org automatically deletes the user
    * @param {string} userId - User ID
    * @param {string} organizationId - Organization ID
-   * @returns {Promise<Object>} Result of removing user from organization
+   * @returns {Promise<Object>} Result of removing user from organization and deletion
    */
   async removeUserFromOrganization(userId, organizationId) {
     try {

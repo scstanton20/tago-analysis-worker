@@ -693,7 +693,10 @@ export default function UserManagementModal({ opened, onClose }) {
       setLoading(true);
       setError('');
 
-      const result = await userService.deleteUser(user.id);
+      const result = await userService.removeUserFromOrganization(
+        user.id,
+        organizationId,
+      );
 
       if (result.error) {
         throw new Error(result.error.message);
