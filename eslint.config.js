@@ -12,7 +12,16 @@ import prettierConfig from 'eslint-config-prettier';
 
 export default [
   // Common ignores
-  { ignores: ['dist', 'node_modules', 'build', '.pnpm'] },
+  {
+    ignores: [
+      'apps/frontend/dist',
+      'node_modules/',
+      'apps/**/node_modules/',
+      'apps/backend/build/',
+      '.pnpm',
+      'apps/backend/analyses-storage/',
+    ],
+  },
 
   // Common base configuration for all JavaScript files
   {
