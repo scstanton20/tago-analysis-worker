@@ -174,11 +174,51 @@ class SSEManager {
         '../services/analysisService.js'
       );
       const teamService = (await import('../services/teamService.js')).default;
+      const { getUserTeamIds } = await import(
+        '../middleware/betterAuthMiddleware.js'
+      );
 
-      const [analyses, teams] = await Promise.all([
+      // Get user from client request
+      const user = client.req.user;
+
+      const [allAnalyses, allTeamsArray] = await Promise.all([
         analysisService.getAllAnalyses(),
         teamService.getAllTeams(),
       ]);
+
+      // Convert teams array to object keyed by ID for frontend compatibility
+      const allTeams = {};
+      allTeamsArray.forEach((team) => {
+        allTeams[team.id] = team;
+      });
+
+      let analyses = allAnalyses;
+      let teams = allTeams;
+
+      // Filter data for non-admin users
+      if (user.role !== 'admin') {
+        // Get user's allowed team IDs for view_analyses permission
+        const allowedTeamIds = getUserTeamIds(user.id, 'view_analyses');
+
+        // Filter analyses to only include those from accessible teams
+        const filteredAnalyses = {};
+        for (const [analysisName, analysis] of Object.entries(allAnalyses)) {
+          if (allowedTeamIds.includes(analysis.teamId || 'uncategorized')) {
+            filteredAnalyses[analysisName] = analysis;
+          }
+        }
+
+        // Filter teams to only those user has access to
+        const filteredTeams = {};
+        for (const [teamId, team] of Object.entries(allTeams)) {
+          if (allowedTeamIds.includes(teamId)) {
+            filteredTeams[teamId] = team;
+          }
+        }
+
+        analyses = filteredAnalyses;
+        teams = filteredTeams;
+      }
 
       const initData = {
         type: 'init',
@@ -319,8 +359,37 @@ class SSEManager {
     this.broadcast({ type: 'refresh' });
   }
 
+  // Team-aware broadcast that only sends to users with access to the team
+  async broadcastToTeamUsers(teamId, data) {
+    if (!teamId) {
+      // If no team specified, broadcast to all (for backwards compatibility)
+      return this.broadcast(data);
+    }
+
+    try {
+      const { getUsersWithTeamAccess } = await import(
+        '../middleware/betterAuthMiddleware.js'
+      );
+      const authorizedUsers = await getUsersWithTeamAccess(
+        teamId,
+        'view_analyses',
+      );
+
+      let sentCount = 0;
+      for (const userId of authorizedUsers) {
+        sentCount += this.sendToUser(userId, data);
+      }
+
+      return sentCount;
+    } catch (error) {
+      logger.error({ error, teamId }, 'Error broadcasting to team users');
+      return 0;
+    }
+  }
+
   broadcastTeamUpdate(team, action) {
-    this.broadcast({
+    // Send team updates only to admin users (who can manage teams)
+    this.broadcastToAdminUsers({
       type: 'teamUpdate',
       action,
       team,
@@ -328,22 +397,89 @@ class SSEManager {
   }
 
   broadcastAnalysisMove(analysisName, fromTeam, toTeam) {
-    this.broadcast({
+    // Send to users who have access to either the source or destination team
+    const data = {
       type: 'analysisMovedToTeam',
       analysis: analysisName,
       from: fromTeam,
       to: toTeam,
-    });
+    };
+
+    // Broadcast to users with access to the source team
+    if (fromTeam && fromTeam !== 'uncategorized') {
+      this.broadcastToTeamUsers(fromTeam, data);
+    }
+
+    // Broadcast to users with access to the destination team (avoid duplicates)
+    if (toTeam && toTeam !== fromTeam) {
+      this.broadcastToTeamUsers(toTeam, data);
+    }
+  }
+
+  // Broadcast analysis updates only to users with access to the analysis's team
+  async broadcastAnalysisUpdate(analysisName, updateData, teamId = null) {
+    try {
+      // If teamId not provided, try to get it from the analysis
+      let analysisTeamId = teamId;
+      if (!analysisTeamId) {
+        const { analysisService } = await import(
+          '../services/analysisService.js'
+        );
+        const analyses = await analysisService.getAllAnalyses();
+        const analysis = analyses[analysisName];
+        analysisTeamId = analysis?.teamId || 'uncategorized';
+      }
+
+      return await this.broadcastToTeamUsers(analysisTeamId, updateData);
+    } catch (error) {
+      logger.error(
+        { error, analysisName },
+        'Error broadcasting analysis update',
+      );
+      return 0;
+    }
+  }
+
+  // Broadcast only to admin users
+  async broadcastToAdminUsers(data) {
+    let sentCount = 0;
+    for (const client of this.globalClients) {
+      try {
+        if (client.req.user?.role === 'admin' && !client.res.destroyed) {
+          client.res.write(this.formatSSEMessage(data));
+          sentCount++;
+        }
+      } catch (error) {
+        logger.error(
+          { userId: client.userId, error },
+          'Error sending to admin user',
+        );
+        this.removeClient(client.userId, client.id);
+      }
+    }
+    return sentCount;
   }
 
   broadcastUpdate(type, data) {
     if (type === 'log') {
-      this.broadcast({
-        type: 'log',
-        data: data,
-      });
+      // Log broadcasts should be sent to users who can access the analysis
+      // Extract analysis name from log data to determine team
+      const analysisName = data.analysis || data.fileName;
+      if (analysisName) {
+        this.broadcastAnalysisUpdate(analysisName, {
+          type: 'log',
+          data: data,
+        });
+      } else {
+        // Fallback to global broadcast if no analysis identified
+        this.broadcast({
+          type: 'log',
+          data: data,
+        });
+      }
     } else {
-      this.broadcast({
+      // Analysis update - use team-aware broadcasting
+      this.broadcastAnalysisUpdate(type, {
         type: 'analysisUpdate',
         analysisName: type,
         update: data,
@@ -351,17 +487,78 @@ class SSEManager {
     }
   }
 
-  // Metrics broadcasting methods
+  // Metrics broadcasting methods - team-aware
   async broadcastMetricsUpdate() {
     if (this.globalClients.size === 0) return;
 
     try {
       const metrics = await metricsService.getAllMetrics();
+      const { analysisService } = await import(
+        '../services/analysisService.js'
+      );
+      const { getUserTeamIds } = await import(
+        '../middleware/betterAuthMiddleware.js'
+      );
+      const allAnalyses = await analysisService.getAllAnalyses();
 
-      this.broadcast({
-        type: 'metricsUpdate',
-        ...metrics,
-      });
+      // Send customized metrics to each connected client
+      for (const client of this.globalClients) {
+        try {
+          if (client.res.destroyed) continue;
+
+          const user = client.req.user;
+          const filteredMetrics = { ...metrics };
+
+          // Filter process metrics based on team access for non-admin users
+          if (user.role !== 'admin') {
+            const allowedTeamIds = getUserTeamIds(user.id, 'view_analyses');
+
+            // Filter process metrics to only include analyses from accessible teams
+            filteredMetrics.processes = metrics.processes.filter((process) => {
+              const analysis = allAnalyses[process.name];
+              const teamId = analysis?.teamId || 'uncategorized';
+              return allowedTeamIds.includes(teamId);
+            });
+
+            // Recalculate children metrics based on filtered processes
+            const filteredChildrenMetrics = {
+              ...metrics.children,
+              processCount: filteredMetrics.processes.length,
+              memoryUsage: filteredMetrics.processes.reduce(
+                (sum, p) => sum + (p.memory || 0),
+                0,
+              ),
+              cpuUsage: filteredMetrics.processes.reduce(
+                (sum, p) => sum + (p.cpu || 0),
+                0,
+              ),
+            };
+
+            // Update children and total metrics
+            filteredMetrics.children = filteredChildrenMetrics;
+            filteredMetrics.total = {
+              ...metrics.total,
+              analysisProcesses: filteredChildrenMetrics.processCount,
+              childrenCPU: filteredChildrenMetrics.cpuUsage,
+              memoryUsage:
+                metrics.container.memoryUsage +
+                filteredChildrenMetrics.memoryUsage,
+            };
+          }
+
+          const message = this.formatSSEMessage({
+            type: 'metricsUpdate',
+            ...filteredMetrics,
+          });
+          client.res.write(message);
+        } catch (clientError) {
+          logger.error(
+            { userId: client.userId, error: clientError },
+            'Error sending metrics to client',
+          );
+          this.removeClient(client.userId, client.id);
+        }
+      }
     } catch (error) {
       logger.error(
         { error: error.message },

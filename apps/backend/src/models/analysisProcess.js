@@ -155,13 +155,12 @@ class AnalysisProcess {
       );
     }
 
-    sseManager.broadcast({
-      type: 'log',
-      data: {
-        fileName: this.analysisName,
-        log: logEntry,
-        totalCount: this.totalLogCount,
-      },
+    // Use team-aware broadcasting for log messages
+    sseManager.broadcastUpdate('log', {
+      fileName: this.analysisName,
+      analysis: this.analysisName,
+      log: logEntry,
+      totalCount: this.totalLogCount,
     });
   }
 

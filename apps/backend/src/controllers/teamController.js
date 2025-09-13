@@ -34,8 +34,8 @@ class TeamController {
         req.headers,
       );
 
-      // Broadcast to all SSE clients
-      sseManager.broadcast({
+      // Broadcast to admin users only (they manage teams)
+      sseManager.broadcastToAdminUsers({
         type: 'teamCreated',
         team: team,
       });
@@ -59,8 +59,8 @@ class TeamController {
 
       const team = await teamService.updateTeam(id, updates);
 
-      // Broadcast update
-      sseManager.broadcast({
+      // Broadcast update to admin users only
+      sseManager.broadcastToAdminUsers({
         type: 'teamUpdated',
         team: team,
       });
@@ -84,8 +84,8 @@ class TeamController {
       // Delete team (hooks handle analysis migration automatically)
       const result = await teamService.deleteTeam(id, req.headers);
 
-      // Broadcast deletion
-      sseManager.broadcast({
+      // Broadcast deletion to admin users only
+      sseManager.broadcastToAdminUsers({
         type: 'teamDeleted',
         deleted: id,
       });
@@ -112,8 +112,8 @@ class TeamController {
 
       const teams = await teamService.reorderTeams(orderedIds);
 
-      // Broadcast reorder - use correct format
-      sseManager.broadcast({
+      // Broadcast reorder to admin users only
+      sseManager.broadcastToAdminUsers({
         type: 'teamsReordered',
         teams: teams,
       });
@@ -140,13 +140,8 @@ class TeamController {
 
       const result = await teamService.moveAnalysisToTeam(name, targetTeamId);
 
-      // Broadcast move - use correct format
-      sseManager.broadcast({
-        type: 'analysisMovedToTeam',
-        analysis: result.analysis,
-        from: result.from,
-        to: result.to,
-      });
+      // Broadcast move to users with access to involved teams
+      sseManager.broadcastAnalysisMove(result.analysis, result.from, result.to);
 
       res.json(result);
     } catch (error) {

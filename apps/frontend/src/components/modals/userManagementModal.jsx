@@ -445,13 +445,16 @@ export default function UserManagementModal({ opened, onClose }) {
 
               // Show notification for permission updates
               const assignedTeams = teamAssignments.length;
-              if (assignedTeams > 0) {
-                notify.showNotification({
-                  title: 'Permissions Updated',
-                  message: `User permissions updated successfully for ${assignedTeams} team${assignedTeams !== 1 ? 's' : ''}.`,
-                  color: 'blue',
-                });
-              }
+              const message =
+                assignedTeams > 0
+                  ? `User permissions updated successfully for ${assignedTeams} team${assignedTeams !== 1 ? 's' : ''}.`
+                  : 'User access to all teams has been removed.';
+
+              notify.showNotification({
+                title: 'Permissions Updated',
+                message,
+                color: assignedTeams > 0 ? 'blue' : 'orange',
+              });
             } catch (teamError) {
               console.warn('Failed to update team assignments:', teamError);
               // Don't throw error here as other updates were successful

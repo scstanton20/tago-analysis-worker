@@ -6,6 +6,7 @@ import {
   executeUpdate,
 } from '../utils/authDatabase.js';
 import { createChildLogger } from '../utils/logging/logger.js';
+import { sseManager } from '../utils/sse.js';
 
 const userLogger = createChildLogger('user-controller');
 
@@ -198,6 +199,22 @@ class UserController {
         return res.status(400).json({
           error: 'Failed to assign user to any teams',
           details: errors,
+        });
+      }
+
+      // Send SSE notification to the affected user to refresh their data
+      if (results.length > 0) {
+        const teamCount = results.length;
+        const message = `You have been assigned to ${teamCount} team${teamCount !== 1 ? 's' : ''}`;
+
+        sseManager.sendToUser(userId, {
+          type: 'userTeamsUpdated',
+          data: {
+            userId,
+            message,
+            action: 'refresh',
+            showNotification: true,
+          },
         });
       }
 
@@ -422,6 +439,23 @@ class UserController {
           }
         }
 
+        // Send SSE notification to the affected user to refresh their data
+        const teamCount = teamAssignments.length;
+        const message =
+          teamCount > 0
+            ? `You have been assigned to ${teamCount} team${teamCount !== 1 ? 's' : ''}`
+            : 'Your team access has been removed';
+
+        sseManager.sendToUser(userId, {
+          type: 'userTeamsUpdated',
+          data: {
+            userId,
+            message,
+            action: 'refresh',
+            showNotification: true,
+          },
+        });
+
         res.json({
           success: true,
           data: {
@@ -481,6 +515,21 @@ class UserController {
         { userId, role, organizationId },
         '✓ Updated user organization role',
       );
+
+      // Send SSE notification to the affected user to refresh their data
+      // Role changes may affect permissions
+      const roleLabel = role === 'admin' ? 'Administrator' : 'User';
+      sseManager.sendToUser(userId, {
+        type: 'userRoleUpdated',
+        data: {
+          userId,
+          role,
+          message: `Your role has been updated to ${roleLabel}`,
+          action: 'refresh',
+          showNotification: true,
+        },
+      });
+
       res.json({ success: true, data: result.data });
     } catch (error) {
       userLogger.error({ err: error }, 'Error updating user organization role');
@@ -558,6 +607,17 @@ class UserController {
         { userId, organizationId },
         '✓ Removed user from organization',
       );
+
+      // Send SSE notification to disconnect the removed user
+      sseManager.sendToUser(userId, {
+        type: 'userRemoved',
+        data: {
+          userId,
+          message: 'Your account has been removed',
+          action: 'logout',
+        },
+      });
+
       res.json({ success: true, message: 'User removed from organization' });
     } catch (error) {
       userLogger.error({ err: error }, 'Error removing user from organization');

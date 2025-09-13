@@ -124,6 +124,47 @@ export function getUserTeamIds(userId, permission) {
   }
 }
 
+// Helper function to get all users who have access to a specific team with a given permission
+export function getUsersWithTeamAccess(teamId, permission) {
+  try {
+    // Get all admin users (they have global access)
+    const adminUsers = executeQueryAll(
+      'SELECT id FROM user WHERE role = ?',
+      ['admin'],
+      'getting admin users',
+    );
+
+    // Get users with specific team membership and permission
+    const teamMembers = executeQueryAll(
+      'SELECT userId, permissions FROM teamMember WHERE teamId = ?',
+      [teamId],
+      'getting team members',
+    );
+
+    const authorizedUsers = new Set();
+
+    // Add all admin users
+    adminUsers.forEach((user) => {
+      authorizedUsers.add(user.id);
+    });
+
+    // Add team members with the required permission
+    teamMembers.forEach((membership) => {
+      if (membership.permissions) {
+        const permissions = JSON.parse(membership.permissions);
+        if (permissions.includes(permission)) {
+          authorizedUsers.add(membership.userId);
+        }
+      }
+    });
+
+    return Array.from(authorizedUsers);
+  } catch (error) {
+    console.error('Error getting users with team access:', error);
+    return [];
+  }
+}
+
 // Middleware to extract team information from analysis and add to request
 export const extractAnalysisTeam = async (req, _res, next) => {
   try {

@@ -365,6 +365,54 @@ export function SSEProvider({ children }) {
             }
             break;
 
+          case 'userTeamsUpdated':
+            // Show notification to user about team changes
+            if (data.data?.showNotification && data.data?.message) {
+              // Import notifications dynamically to avoid circular dependencies
+              import('@mantine/notifications').then(({ notifications }) => {
+                notifications.show({
+                  title: 'Team Access Updated',
+                  message: data.data.message,
+                  color: 'blue',
+                  autoClose: 5000,
+                });
+              });
+            }
+
+            // When user's team assignments change, reload to refresh all data
+            console.log('SSE: User teams updated, reloading page...');
+            setTimeout(() => {
+              window.location.reload();
+            }, 1000); // Small delay to let notification show
+            break;
+
+          case 'userRemoved':
+            // When user is removed from organization, log them out
+            console.log('SSE: User account removed, logging out...');
+            window.location.href = '/login';
+            break;
+
+          case 'userRoleUpdated':
+            // Show notification to user about role changes
+            if (data.data?.showNotification && data.data?.message) {
+              // Import notifications dynamically to avoid circular dependencies
+              import('@mantine/notifications').then(({ notifications }) => {
+                notifications.show({
+                  title: 'Role Updated',
+                  message: data.data.message,
+                  color: 'green',
+                  autoClose: 5000,
+                });
+              });
+            }
+
+            // When user's role changes, reload to refresh permissions
+            console.log('SSE: User role updated, reloading page...');
+            setTimeout(() => {
+              window.location.reload();
+            }, 1000); // Small delay to let notification show
+            break;
+
           case 'log':
             if (data.data?.fileName && data.data?.log) {
               const { fileName, log, totalCount } = data.data;

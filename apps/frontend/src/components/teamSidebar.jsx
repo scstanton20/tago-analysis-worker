@@ -238,10 +238,15 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
 
     // Filter teams based on user permissions and business rules
     return allTeams.filter((team) => {
-      // Check for Uncategorized team: only show if it has analyses (applies to all users)
+      // Check for Uncategorized team: show if it has analyses AND user has access
       if (team.isSystem && team.name === 'Uncategorized') {
         const analysisCount = getTeamAnalysisCount(team.id);
-        return analysisCount > 0;
+        // Admin users see uncategorized if it has analyses
+        if (hasAdminPerms) {
+          return analysisCount > 0;
+        }
+        // Non-admin users must be assigned to uncategorized team to see it
+        return analysisCount > 0 && canAccessTeam(team.id);
       }
 
       // If user is admin, show all other teams

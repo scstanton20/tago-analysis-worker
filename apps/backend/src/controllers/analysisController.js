@@ -64,15 +64,19 @@ class AnalysisController {
       const analysisData = await analysisService.getAllAnalyses();
       const createdAnalysis = analysisData[result.analysisName];
 
-      // Broadcast analysis creation with complete data
-      sseManager.broadcast({
-        type: 'analysisCreated',
-        data: {
-          analysis: result.analysisName,
-          teamId: teamId,
-          analysisData: createdAnalysis,
+      // Broadcast analysis creation to team users only
+      sseManager.broadcastAnalysisUpdate(
+        result.analysisName,
+        {
+          type: 'analysisCreated',
+          data: {
+            analysis: result.analysisName,
+            teamId: teamId,
+            analysisData: createdAnalysis,
+          },
         },
-      });
+        teamId,
+      );
 
       res.json(result);
     } catch (error) {
@@ -121,7 +125,7 @@ class AnalysisController {
 
       const result = await analysisService.runAnalysis(sanitizedFileName);
 
-      sseManager.broadcast({
+      sseManager.broadcastAnalysisUpdate(sanitizedFileName, {
         type: 'analysisStatus',
         data: {
           fileName: sanitizedFileName,
@@ -157,7 +161,7 @@ class AnalysisController {
 
       const result = await analysisService.stopAnalysis(sanitizedFileName);
 
-      sseManager.broadcast({
+      sseManager.broadcastAnalysisUpdate(sanitizedFileName, {
         type: 'analysisStatus',
         data: {
           fileName: sanitizedFileName,
@@ -198,13 +202,17 @@ class AnalysisController {
       await analysisService.deleteAnalysis(sanitizedFileName);
 
       // Broadcast deletion with analysis data
-      sseManager.broadcast({
-        type: 'analysisDeleted',
-        data: {
-          fileName: sanitizedFileName,
-          teamId: analysisToDelete?.teamId,
+      sseManager.broadcastAnalysisUpdate(
+        sanitizedFileName,
+        {
+          type: 'analysisDeleted',
+          data: {
+            fileName: sanitizedFileName,
+            teamId: analysisToDelete?.teamId,
+          },
         },
-      });
+        analysisToDelete?.teamId,
+      );
 
       res.json({ success: true });
     } catch (error) {
@@ -305,7 +313,7 @@ class AnalysisController {
       const updatedAnalysis = analyses[sanitizedFileName];
 
       // Broadcast update with complete analysis data
-      sseManager.broadcast({
+      sseManager.broadcastAnalysisUpdate(sanitizedFileName, {
         type: 'analysisUpdated',
         data: {
           fileName: sanitizedFileName,
@@ -369,7 +377,7 @@ class AnalysisController {
       const renamedAnalysis = analyses[sanitizedNewFileName];
 
       // Broadcast update with complete analysis data
-      sseManager.broadcast({
+      sseManager.broadcastAnalysisUpdate(sanitizedNewFileName, {
         type: 'analysisRenamed',
         data: {
           oldFileName: sanitizedFileName,
@@ -578,7 +586,7 @@ class AnalysisController {
 
       // Broadcast logs cleared with the "Log file cleared" message included
       // This avoids race conditions with separate log events
-      sseManager.broadcast({
+      sseManager.broadcastAnalysisUpdate(sanitizedFileName, {
         type: 'logsCleared',
         data: {
           fileName: sanitizedFileName,
@@ -702,7 +710,7 @@ class AnalysisController {
       const updatedAnalysis = analyses[sanitizedFileName];
 
       // Broadcast rollback with complete analysis data
-      sseManager.broadcast({
+      sseManager.broadcastAnalysisUpdate(sanitizedFileName, {
         type: 'analysisRolledBack',
         data: {
           fileName: sanitizedFileName,
@@ -758,7 +766,7 @@ class AnalysisController {
       const updatedAnalysis = analyses[sanitizedFileName];
 
       // Broadcast update with complete analysis data
-      sseManager.broadcast({
+      sseManager.broadcastAnalysisUpdate(sanitizedFileName, {
         type: 'analysisEnvironmentUpdated',
         data: {
           fileName: sanitizedFileName,

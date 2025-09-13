@@ -20,13 +20,13 @@ API for managing and running Tago.io analysis scripts with real-time monitoring 
 
 ## Authentication
 
-This API uses **Better Auth** for authentication with cookie-based sessions. The session token is stored in an HTTP-only cookie named \`better-auth.session_token\`.
+This API uses **Better-Auth** for authentication with cookie-based sessions. The session token is stored in an HTTP-only cookie named \`better-auth.session_token\`.
 
-### Better Auth Endpoints
+### Better-Auth Endpoints
 
-The following Better Auth endpoints are available at \`/api/auth/*\` but are not fully documented in this Swagger spec.
+The following Better-Auth endpoints are available at \`/api/auth/*\` but are not fully documented in this Swagger spec.
 
-**Note:** Most user and team management is handled through the custom \`/api/users/*\` and \`/api/teams/*\` endpoints documented in this API for better integration with the application's Better Auth permission system.
+**Note:** Most user and team management is handled through the custom \`/api/users/*\` and \`/api/teams/*\` endpoints documented in this API for better integration with the application's Better-Auth permission system.
 
 ## Real-time Updates
 
@@ -416,11 +416,49 @@ This API provides real-time updates via **Server-Sent Events (SSE)** for:
             },
           },
         },
+        Session: {
+          type: 'object',
+          properties: {
+            user: {
+              $ref: '#/components/schemas/User',
+            },
+            session: {
+              type: 'object',
+              properties: {
+                id: {
+                  type: 'string',
+                  description: 'Session ID',
+                },
+                token: {
+                  type: 'string',
+                  description: 'Session token',
+                },
+                userId: {
+                  type: 'string',
+                  description: 'User ID associated with session',
+                },
+                expiresAt: {
+                  type: 'string',
+                  format: 'date-time',
+                  description: 'Session expiration timestamp',
+                },
+                ipAddress: {
+                  type: 'string',
+                  description: 'IP address of the session',
+                },
+                userAgent: {
+                  type: 'string',
+                  description: 'User agent string',
+                },
+              },
+            },
+          },
+        },
         BetterAuthInfo: {
           type: 'object',
-          description: `**Better Auth Endpoints:**
+          description: `**Better-Auth Endpoints:**
             
-This API uses Better Auth for authentication. The following Better Auth endpoints are available but not documented here:
+This API uses Better-Auth for authentication. The following Better-Auth endpoints are available but not documented here:
 
 **Authentication:**
 - \`POST /api/auth/sign-in/email\` - Email/password login
