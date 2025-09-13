@@ -45,7 +45,7 @@ class AnalysisProcess {
 
     // Health check management
     this.restartAttempts = 0;
-    this.maxRestartAttempts = 10; // Increased for better internet outage handling
+    // No max restart attempts - will retry indefinitely
     this.restartDelay = 5000; // Initial restart delay
     this.maxRestartDelay = 60000; // Max 1 minute between retries
     this.connectionErrorDetected = false;
@@ -320,52 +320,21 @@ class AnalysisProcess {
         if (fullLine) {
           // Check for SDK connection errors
           if (
-            fullLine.includes('¬ Connection was closed, trying to reconnect...')
-          ) {
-            this.logger.warn(
-              'Tago SDK connection error detected - marking for restart',
-            );
-
-            this.connectionErrorDetected = true;
-            this.addLog('Tago connection lost - will restart process');
-
-            // Kill the process to trigger restart logic
-            if (this.process && !this.process.killed) {
-              this.process.kill('SIGTERM');
-            }
-          } else if (
+            fullLine.includes(
+              '¬ Connection was closed, trying to reconnect...',
+            ) ||
             fullLine.includes('¬ Error :: Analysis not found or not active.')
           ) {
             this.logger.warn(
-              'Analysis not found or not active on Tago platform - stopping permanently',
+              'Tago SDK connection/analysis error detected - marking for restart',
             );
 
-            // Set intended state to stopped to prevent restart attempts
-            this.intendedState = 'stopped';
+            this.connectionErrorDetected = true;
             this.addLog(
-              'Analysis not found on Tago platform - stopping permanently',
+              'Tago connection/analysis error - will restart process',
             );
 
-            // Save config immediately to persist the stopped state
-            this.saveConfig().catch((error) => {
-              this.logger.error(
-                { err: error },
-                'Failed to save config after marking analysis as not found',
-              );
-            });
-
-            // Broadcast status change to UI immediately
-            sseManager.broadcast({
-              type: 'analysisStatus',
-              data: {
-                fileName: this.analysisName,
-                status: 'stopped',
-                enabled: false,
-                intendedState: 'stopped',
-              },
-            });
-
-            // Kill the process without setting connectionErrorDetected
+            // Kill the process to trigger restart logic
             if (this.process && !this.process.killed) {
               this.process.kill('SIGTERM');
             }
@@ -529,36 +498,28 @@ class AnalysisProcess {
         );
 
         this.logger.warn(
-          `Connection error detected, scheduling restart attempt ${this.restartAttempts}/${this.maxRestartAttempts} in ${delay}ms`,
+          `Connection error detected, scheduling restart attempt ${this.restartAttempts} in ${delay}ms`,
         );
         await this.addLog(
-          `Connection error - restart attempt ${this.restartAttempts}/${this.maxRestartAttempts} in ${delay / 1000}s`,
+          `Connection error - restart attempt ${this.restartAttempts} in ${delay / 1000}s`,
         );
 
-        if (this.restartAttempts <= this.maxRestartAttempts) {
-          setTimeout(async () => {
-            // Reset connection error flag before restart
-            this.connectionErrorDetected = false;
-            try {
-              await this.start();
-              // Reset attempts on successful start
-              this.restartAttempts = 0;
-            } catch (error) {
-              this.logger.error(
-                { err: error },
-                'Failed to restart after connection error',
-              );
-              // Will retry on next exit if still under max attempts
-            }
-          }, delay);
-        } else {
-          await this.addLog(
-            `Maximum restart attempts (${this.maxRestartAttempts}) reached. Manual intervention required.`,
-          );
-          this.logger.error(
-            `Maximum restart attempts reached for ${this.analysisName}. Stopping auto-restart.`,
-          );
-        }
+        // Always retry on connection errors - no limit
+        setTimeout(async () => {
+          // Reset connection error flag before restart
+          this.connectionErrorDetected = false;
+          try {
+            await this.start();
+            // Reset attempts on successful start
+            this.restartAttempts = 0;
+          } catch (error) {
+            this.logger.error(
+              { err: error },
+              'Failed to restart after connection error',
+            );
+            // Will retry again on next exit
+          }
+        }, delay);
       } else {
         // Regular unexpected exit (non-connection error)
         this.logger.warn(
