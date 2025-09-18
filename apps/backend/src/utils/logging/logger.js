@@ -116,7 +116,7 @@ if (process.env.LOG_LOKI_URL) {
               }
             : undefined,
         labels: {
-          application: 'tago-analysis-runner',
+          application: 'tago-analysis-worker',
           environment: config.env,
           service: 'backend',
           // Parse additional labels from LOG_LOKI_LABELS (format: key1=value1,key2=value2)
@@ -221,7 +221,7 @@ export const createAnalysisLogger = (analysisName, additionalContext = {}) => {
                 }
               : undefined,
           labels: {
-            application: 'tago-analysis-runner',
+            application: 'tago-analysis-worker',
             environment: config.env,
             service: 'backend',
             analysis: analysisName, // Add analysis name as Loki label

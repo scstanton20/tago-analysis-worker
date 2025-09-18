@@ -124,7 +124,7 @@ function AppContent() {
     return (
       <AppLoadingOverlay
         message="Connection Failed"
-        submessage="Unable to connect to the Tago Analysis Runner server. Please ensure the backend server is running and accessible."
+        submessage="Unable to connect to the Tago Analysis Worker server. Please ensure the backend server is running and accessible."
         error={true}
         showRetry={true}
       />
@@ -166,7 +166,7 @@ function AppContent() {
                   variant="gradient"
                   gradient={{ from: 'brand.6', to: 'accent.6' }}
                 >
-                  Tago Analysis Runner
+                  Tago Analysis Worker
                 </Text>
               </Group>
             </Group>
@@ -193,7 +193,7 @@ function AppContent() {
             <Suspense
               fallback={
                 <AppLoadingOverlay
-                  message="Connecting to Tago Analysis Runner..."
+                  message="Connecting to Tago Analysis Worker..."
                   submessage={
                     (connectionStatus === 'connecting' &&
                       'Establishing server connection...') ||
@@ -212,7 +212,7 @@ function AppContent() {
           <Suspense
             fallback={
               <AppLoadingOverlay
-                message="Connecting to Tago Analysis Runner..."
+                message="Connecting to Tago Analysis Worker..."
                 submessage={
                   (connectionStatus === 'connecting' &&
                     'Establishing server connection...') ||

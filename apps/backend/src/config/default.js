@@ -27,7 +27,7 @@ const config = {
       console.warn(
         'Warning: Using consistent development SECRET_KEY. Set SECRET_KEY environment variable for production.',
       );
-      return 'dev-secret-key-for-tago-analysis-runner-change-in-production';
+      return 'dev-secret-key-for-tago-analysis-worker-change-in-production';
     })(),
   storage: {
     base: determineStorageBase(),

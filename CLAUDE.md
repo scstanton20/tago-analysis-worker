@@ -24,7 +24,7 @@ docker-compose -f docker-compose.dev.yaml up
 
 ## Architecture Overview
 
-**Tago Analysis Runner** is a full-stack monorepo application for managing and running Tago.io analysis scripts with real-time monitoring capabilities.
+**Tago Analysis Worker** is a full-stack monorepo application for managing and running Tago.io analysis scripts with real-time monitoring capabilities.
 
 ### Tech Stack
 

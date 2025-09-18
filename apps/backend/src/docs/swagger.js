@@ -11,11 +11,9 @@ const options = {
   definition: {
     openapi: '3.0.0',
     info: {
-      title: 'Tago Analysis Runner API',
+      title: 'Tago Analysis Worker API',
       version: '2.0.0',
       description: `
-# Tago Analysis Runner API
-
 API for managing and running Tago.io analysis scripts with real-time monitoring capabilities. Features Server-Sent Events (SSE) for real-time updates with simplified authentication.
 
 ## Authentication

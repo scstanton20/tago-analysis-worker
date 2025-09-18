@@ -311,7 +311,7 @@ export const auth = betterAuth({
       defaultRole: 'user',
     }),
     passkey({
-      rpName: 'Tago Analysis Runner',
+      rpName: 'Tago Analysis Worker',
       rpID: process.env.PRODUCTION_DOMAIN || 'localhost',
     }),
   ],

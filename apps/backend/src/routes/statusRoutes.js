@@ -60,7 +60,7 @@ const router = Router();
  * /status:
  *   get:
  *     summary: Get system status and health information
- *     description: Returns comprehensive status information about the analysis runner including container health, Tago SDK version, and running analyses count. Status updates are also streamed via SSE at /sse/events for real-time monitoring.
+ *     description: Returns comprehensive status information about the analysis worker including container health, Tago SDK version, and running analyses count. Status updates are also streamed via SSE at /sse/events for real-time monitoring.
  *     tags: [Status]
  *     responses:
  *       200:

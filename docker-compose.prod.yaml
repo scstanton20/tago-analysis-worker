@@ -2,8 +2,8 @@
 ---
 services:
   frontend:
-    image: ghcr.io/scstanton20/tago-analysis-runner/frontend:latest
-    container_name: tago-runner-frontend
+    image: ghcr.io/scstanton20/tago-analysis-worker/frontend:latest
+    container_name: tago-worker-frontend
     networks:
       - traefik-public
       - backend
@@ -16,15 +16,15 @@ services:
         condition: service_healthy
     labels:
       traefik.enable: 'true'
-      traefik.http.routers.tago-runner.rule: 'Host(`tago-runner.scstanton.net`)'
-      traefik.http.routers.tago-runner.middlewares: 'secured@file'
-      traefik.http.routers.tago-runner.entrypoints: 'https'
-      traefik.http.routers.tago-runner.tls: 'true'
+      traefik.http.routers.tago-worker.rule: 'Host(`tago-worker.scstanton.net`)'
+      traefik.http.routers.tago-worker.middlewares: 'secured@file'
+      traefik.http.routers.tago-worker.entrypoints: 'https'
+      traefik.http.routers.tago-worker.tls: 'true'
       traefik.docker.network: 'traefik-public'
 
   backend:
-    image: ghcr.io/scstanton20/tago-analysis-runner/backend:latest
-    container_name: tago-runner-backend
+    image: ghcr.io/scstanton20/tago-analysis-worker/backend:latest
+    container_name: tago-worker-backend
     restart: unless-stopped
     volumes:
       - analysis-data:/app/apps/backend/analyses-storage

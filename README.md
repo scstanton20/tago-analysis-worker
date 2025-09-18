@@ -1,4 +1,4 @@
-# Tago Analysis Runner
+# Tago Analysis Worker
 
 A full-stack application for managing and running Tago.io analysis scripts with real-time monitoring capabilities.
 
@@ -33,8 +33,8 @@ A full-stack application for managing and running Tago.io analysis scripts with 
 
 ```bash
 # Clone the repository
-git clone [<repository-url>](https://github.com/scstanton20/tago-analysis-runner)
-cd tago-analysis-runner
+git clone [<repository-url>](https://github.com/scstanton20/tago-analysis-worker)
+cd tago-analysis-worker
 
 # Install dependencies
 pnpm install
@@ -146,4 +146,4 @@ LOG_LOKI_TIMEOUT=30000                 # Request timeout in ms (default: 30000)
 
 ## License
 
-This Tago Analysis runner matches the TagoIO SDK for JavaScript and Node.js usage terms under the [Apache-2.0 License](https://github.com/scstanton20/tago-analysis-runner/blob/main/LICENSE.md).
+This Tago Analysis worker matches the TagoIO SDK for JavaScript and Node.js usage terms under the [Apache-2.0 License](https://github.com/scstanton20/tago-analysis-worker/blob/main/LICENSE.md).

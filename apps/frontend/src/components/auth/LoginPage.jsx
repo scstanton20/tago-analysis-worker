@@ -224,7 +224,7 @@ export default function LoginPage() {
                     backgroundClip: 'text',
                   }}
                 >
-                  Tago Analysis Runner
+                  Tago Analysis Worker
                 </Title>
                 <Text size="sm" c="dimmed" ta="center">
                   Sign in to your account

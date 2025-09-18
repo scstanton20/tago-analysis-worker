@@ -204,7 +204,7 @@ export async function createAdminUserIfNeeded() {
                 'INSERT INTO organization (id, name, slug, createdAt) VALUES (?, ?, ?, ?)',
               ).run(
                 orgUuid,
-                'Tago Analysis Runner',
+                'Tago Analysis Worker',
                 'main',
                 new Date().toISOString(),
               );
