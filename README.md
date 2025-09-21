@@ -45,9 +45,17 @@ pnpm dev
 
 ### Access
 
+**Development:**
+
 - **Frontend**: http://localhost:5173
 - **Backend API**: http://localhost:3000/api
 - **API Documentation**: http://localhost:3000/api/docs
+
+**Production (Docker):**
+
+- **Frontend**: https://localhost:8443
+- **Backend API**: https://localhost:8443/api
+- **API Documentation**: https://localhost:8443/api/docs
 
 ### First Time Setup
 
@@ -74,9 +82,57 @@ pnpm lint:fix           # Fix linting issues
 
 ## Docker Development
 
+For development with Docker (HTTP only):
+
 ```bash
 docker-compose -f docker-configs/development/docker-compose.dev.yaml up
 ```
+
+## Production Docker with HTTPS
+
+The production Docker configuration includes built-in HTTPS support with self-signed certificates generated at build time.
+
+### Quick Production Start
+
+```bash
+# Build and run production containers
+docker-compose -f docker-compose.prod.yaml up
+```
+
+Access via HTTPS: https://localhost:8443
+
+### HTTPS Configuration
+
+Both frontend (nginx) and backend (Node.js) support HTTPS in production:
+
+- **Frontend**: nginx with HTTP/2 on port 443
+- **Backend**: Express.js with HTTPS on port 3443
+- **Auto-generated certificates**: Self-signed RSA 2048-bit certificates
+- **Production-only**: HTTP is disabled in production for security
+
+### Custom SSL Certificates
+
+You can provide your own SSL certificates by mounting them and setting the HTTPS environment variables (see [Environment Variables](#https-configuration)):
+
+```yaml
+# docker-compose.prod.yaml
+services:
+  frontend:
+    environment:
+      NGINX_CERT_PATH: /custom/certs/frontend.crt
+      NGINX_KEY_PATH: /custom/certs/frontend.key
+    volumes:
+      - /host/path/to/certs:/custom/certs:ro
+
+  backend:
+    environment:
+      CERT_PATH: /custom/certs/backend.crt
+      KEY_PATH: /custom/certs/backend.key
+    volumes:
+      - /host/path/to/certs:/custom/certs:ro
+```
+
+**Note**: Custom certificates override the auto-generated ones. Containers will fail to start if specified certificate files don't exist.
 
 ## Authentication System
 
@@ -124,6 +180,21 @@ NODE_ENV=development                    # development/production
 PORT=3000                              # Server port (optional)
 STORAGE_BASE=./analyses-storage        # Storage path (optional)
 ```
+
+### HTTPS Configuration
+
+```bash
+# Backend HTTPS Settings
+CERT_PATH=/app/certs/backend.crt       # Backend SSL certificate path
+KEY_PATH=/app/certs/backend.key        # Backend SSL private key path
+HTTPS_PORT=3443                        # Backend HTTPS port (optional, defaults to 3443)
+
+# Frontend HTTPS Settings
+NGINX_CERT_PATH=/etc/ssl/certs/tago-worker.crt    # Frontend SSL certificate path
+NGINX_KEY_PATH=/etc/ssl/private/tago-worker.key   # Frontend SSL private key path
+```
+
+**Note**: HTTPS is automatically enabled when both certificate and key paths are provided. In production (`NODE_ENV=production`), only HTTPS is available for security.
 
 ### Logging Configuration
 

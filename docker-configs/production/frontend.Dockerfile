@@ -43,16 +43,38 @@ WORKDIR /app/apps/frontend
 RUN pnpm build
 
 # Production stage - Frontend
-FROM nginx:alpine-perl AS frontend
+FROM nginx:alpine AS frontend
+
+# Install dependencies for certificate generation and environment substitution
+RUN apk add --no-cache openssl gettext
 
 WORKDIR /app
+
+# Generate self-signed SSL certificates
+RUN openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+    -keyout /etc/ssl/private/tago-worker.key \
+    -out /etc/ssl/certs/tago-worker.crt \
+    -subj "/C=US/ST=Florida/L=Orlando/O=Tago Analysis Worker/CN=localhost" \
+    -addext "subjectAltName=DNS:localhost,DNS:frontend,IP:127.0.0.1" && \
+    chmod 644 /etc/ssl/certs/tago-worker.crt && \
+    chmod 600 /etc/ssl/private/tago-worker.key && \
+    chown nginx:nginx /etc/ssl/certs/tago-worker.crt /etc/ssl/private/tago-worker.key
+
 # Copy built frontend files to nginx
 COPY --from=build --chown=nginx:nginx /app/apps/frontend/dist /usr/share/nginx/html
 
-# Copy nginx configuration
-COPY --from=build --chown=nginx:nginx /app/apps/frontend/nginx.conf /etc/nginx/conf.d/default.conf
+# Copy nginx configuration template and entrypoint script
+COPY --chown=nginx:nginx docker-configs/production/nginx.conf.template /etc/nginx/conf.d/default.conf.template
+COPY --chown=root:root docker-configs/production/nginx-entrypoint.sh /usr/local/bin/nginx-entrypoint.sh
+RUN chmod +x /usr/local/bin/nginx-entrypoint.sh
 
-# Expose frontend port
-EXPOSE 80
+# Set default environment variables for certificate paths
+ENV NGINX_CERT_PATH=/etc/ssl/certs/tago-worker.crt
+ENV NGINX_KEY_PATH=/etc/ssl/private/tago-worker.key
 
+# Expose HTTPS port only in production
+EXPOSE 443
+
+# Use entrypoint script to configure nginx with environment variables
+ENTRYPOINT ["/usr/local/bin/nginx-entrypoint.sh"]
 CMD ["nginx", "-g", "daemon off;"]

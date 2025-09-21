@@ -15,6 +15,9 @@ RUN pnpm install --filter backend --frozen-lockfile --prod
 
 FROM node:23-alpine AS run
 
+# Install openssl for certificate generation
+RUN apk add --no-cache openssl
+
 WORKDIR /app
 
 # Copy package files for Node.js module resolution
@@ -36,15 +39,28 @@ COPY --chown=node:node apps/backend/src ./apps/backend/src
 WORKDIR /app/apps/backend
 
 USER root
+
+# Generate self-signed SSL certificates for backend
+RUN mkdir -p /app/certs && \
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+    -keyout /app/certs/backend.key \
+    -out /app/certs/backend.crt \
+    -subj "/C=US/ST=Florida/L=Orlando/O=Tago Analysis Worker/CN=backend" \
+    -addext "subjectAltName=DNS:backend,DNS:localhost,IP:127.0.0.1" && \
+    chmod 644 /app/certs/backend.crt && \
+    chmod 600 /app/certs/backend.key
+
 RUN mkdir -p /app/apps/backend/analyses-storage/analyses \
    /app/apps/backend/analyses-storage/config \
-   && chown -R node:node /app/apps/backend/analyses-storage
+   && chown -R node:node /app/apps/backend/analyses-storage /app/certs
 
 ENV NODE_ENV=production
+ENV CERT_PATH=/app/certs/backend.crt
+ENV KEY_PATH=/app/certs/backend.key
 
 VOLUME [ "/app/apps/backend/analyses-storage" ]
 
 USER node
-EXPOSE 3000
+EXPOSE 3443
 # Start in production mode from backend directory
 CMD ["node", "src/server.js"]

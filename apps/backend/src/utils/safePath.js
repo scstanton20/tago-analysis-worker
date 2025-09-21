@@ -175,3 +175,13 @@ export function safeWriteFileSync(filePath, data, options = {}) {
 export function safeUnlinkSync(filePath) {
   return fsSync.unlinkSync(filePath);
 }
+
+/**
+ * Safe wrapper for fs.readFileSync
+ * @param {string} filePath - File path to read
+ * @param {Object|string} options - readFileSync options
+ * @returns {Buffer|string}
+ */
+export function safeReadFileSync(filePath, options = {}) {
+  return fsSync.readFileSync(filePath, options);
+}

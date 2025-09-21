@@ -1,11 +1,13 @@
 // backend/src/server.js
 import express from 'express';
 import http from 'http';
+import https from 'https';
 import cors from 'cors';
 import helmet from 'helmet';
 import fileUpload from 'express-fileupload';
 import pinoHttp from 'pino-http';
 import config from './config/default.js';
+import { safeReadFileSync } from './utils/safePath.js';
 import { sseManager } from './utils/sse.js';
 import errorHandler from './middleware/errorHandler.js';
 import {
@@ -35,7 +37,8 @@ import { metricsMiddleware } from './utils/metrics-enhanced.js';
 const API_PREFIX = '/api';
 
 const app = express();
-const server = http.createServer(app);
+let server;
+let httpsServer;
 
 // Create child loggers for different modules
 const serverLogger = createChildLogger('server');
@@ -97,7 +100,12 @@ app.use(
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        connectSrc: ["'self'", 'http://localhost:3000'],
+        connectSrc: [
+          "'self'",
+          'http://localhost:3000',
+          'https://localhost:3443',
+          'https://backend:3443',
+        ],
         styleSrc: ["'self'", "'unsafe-inline'"],
         scriptSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", 'data:', 'https:'],
@@ -280,21 +288,92 @@ async function startServer() {
       message: 'Starting analysis processes',
     });
 
-    // Start the server
-    server.listen(PORT, async () => {
-      serverLogger.info(`Server is running on port ${PORT}`);
+    // Create servers based on environment
+    const certPath = process.env.CERT_PATH;
+    const keyPath = process.env.KEY_PATH;
+    const httpsPort = process.env.HTTPS_PORT || 3443;
+    const isProduction = process.env.NODE_ENV === 'production';
 
-      sseManager.updateContainerState({
-        status: 'checking_processes',
-        message: 'Checking for processes to restart',
+    // Auto-enable HTTPS if certificate paths are provided
+    const httpsEnabled = !!(certPath && keyPath);
+
+    // In production with certificates, only use HTTPS
+    if (isProduction && httpsEnabled) {
+      try {
+        const httpsOptions = {
+          cert: safeReadFileSync(certPath),
+          key: safeReadFileSync(keyPath),
+        };
+
+        httpsServer = https.createServer(httpsOptions, app);
+
+        // Start HTTPS server only in production
+        httpsServer.listen(httpsPort, async () => {
+          serverLogger.info(
+            `HTTPS Server is running on port ${httpsPort} (production mode)`,
+          );
+
+          sseManager.updateContainerState({
+            status: 'checking_processes',
+            message: 'Checking for processes to restart',
+          });
+
+          // Check for processes to restart
+          await restartRunningProcesses();
+
+          // Broadcast status update to all connected clients
+          sseManager.broadcastStatusUpdate();
+        });
+
+        serverLogger.info('HTTPS-only mode enabled for production');
+      } catch (error) {
+        serverLogger.error(
+          { err: error },
+          'Failed to enable HTTPS in production',
+        );
+        process.exit(1);
+      }
+    } else {
+      // Development mode: create both HTTP and optionally HTTPS
+      server = http.createServer(app);
+
+      // Create HTTPS server if certificates are available
+      if (httpsEnabled) {
+        try {
+          const httpsOptions = {
+            cert: safeReadFileSync(certPath),
+            key: safeReadFileSync(keyPath),
+          };
+
+          httpsServer = https.createServer(httpsOptions, app);
+
+          // Start HTTPS server
+          httpsServer.listen(httpsPort, () => {
+            serverLogger.info(`HTTPS Server is running on port ${httpsPort}`);
+          });
+
+          serverLogger.info('HTTPS support enabled');
+        } catch (error) {
+          serverLogger.error({ err: error }, 'Failed to enable HTTPS');
+        }
+      }
+
+      // Start HTTP server
+      server.listen(PORT, async () => {
+        serverLogger.info(`HTTP Server is running on port ${PORT}`);
+
+        sseManager.updateContainerState({
+          status: 'checking_processes',
+          message: 'Checking for processes to restart',
+        });
+
+        // Check for processes to restart
+        await restartRunningProcesses();
+
+        // Broadcast status update to all connected clients
+        sseManager.broadcastStatusUpdate();
       });
-
-      // Check for processes to restart
-      await restartRunningProcesses();
-
-      // Broadcast status update to all connected clients
-      sseManager.broadcastStatusUpdate();
-    });
+    }
   } catch (error) {
     serverLogger.error({ err: error }, 'Failed to start server');
     sseManager.updateContainerState({
@@ -323,10 +402,25 @@ process.on('SIGINT', () => {
   });
 
   setTimeout(() => {
-    server.close(() => {
-      serverLogger.info('Server closed');
-      process.exit(0);
-    });
+    // Close servers based on what's running
+    if (httpsServer) {
+      httpsServer.close(() => {
+        serverLogger.info('HTTPS Server closed');
+        if (!server) {
+          process.exit(0);
+        }
+      });
+    }
+
+    if (server) {
+      server.close(() => {
+        serverLogger.info('HTTP Server closed');
+        process.exit(0);
+      });
+    } else if (httpsServer) {
+      // If only HTTPS server is running, exit after closing it
+      setTimeout(() => process.exit(0), 100);
+    }
   }, 1000); // Give time for broadcast to reach clients
 });
 
@@ -347,10 +441,25 @@ process.on('SIGTERM', () => {
   });
 
   setTimeout(() => {
-    server.close(() => {
-      serverLogger.info('Server closed');
-      process.exit(0);
-    });
+    // Close servers based on what's running
+    if (httpsServer) {
+      httpsServer.close(() => {
+        serverLogger.info('HTTPS Server closed');
+        if (!server) {
+          process.exit(0);
+        }
+      });
+    }
+
+    if (server) {
+      server.close(() => {
+        serverLogger.info('HTTP Server closed');
+        process.exit(0);
+      });
+    } else if (httpsServer) {
+      // If only HTTPS server is running, exit after closing it
+      setTimeout(() => process.exit(0), 100);
+    }
   }, 1000); // Give time for broadcast to reach clients
 });
 

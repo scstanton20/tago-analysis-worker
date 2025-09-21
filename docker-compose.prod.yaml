@@ -2,13 +2,14 @@
 ---
 services:
   frontend:
-    image: ghcr.io/scstanton20/tago-analysis-worker/frontend:latest
+    image: ghcr.io/scstanton20/tago-analysis-worker/frontend:2.5.2
     container_name: tago-worker-frontend
     networks:
       - traefik-public
       - backend
     #ports:
     #- 80:80
+    #- 8443:443
     restart: unless-stopped
     env_file: stack.env
     depends_on:
@@ -19,11 +20,12 @@ services:
       traefik.http.routers.tago-worker.rule: 'Host(`tago-worker.scstanton.net`)'
       traefik.http.routers.tago-worker.middlewares: 'secured@file'
       traefik.http.routers.tago-worker.entrypoints: 'https'
+      traefik.http.services.tago-worker.loadbalancer.server.url: 'https://tago-worker-frontend'
       traefik.http.routers.tago-worker.tls: 'true'
       traefik.docker.network: 'traefik-public'
 
   backend:
-    image: ghcr.io/scstanton20/tago-analysis-worker/backend:latest
+    image: ghcr.io/scstanton20/tago-analysis-worker/backend:2.4.2
     container_name: tago-worker-backend
     restart: unless-stopped
     volumes:
@@ -38,7 +40,7 @@ services:
       test:
         [
           'CMD-SHELL',
-          'node -e "require(''http'').request(''http://localhost:3000/api/status'', { timeout: 2000 }, (res) => { const allowed = [200, 203]; process.exit(allowed.includes(res.statusCode) ? 0 : 1); }).on(''error'', () => process.exit(1)).end()"',
+          'node -e "require(''https'').request(''https://localhost:3443/api/status'', { timeout: 2000, rejectUnauthorized: false }, (res) => { const allowed = [200, 203]; process.exit(allowed.includes(res.statusCode) ? 0 : 1); }).on(''error'', () => process.exit(1)).end()"',
         ]
       interval: 10s
       timeout: 5s
