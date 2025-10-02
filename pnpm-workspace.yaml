@@ -9,8 +9,6 @@ injectWorkspacePackages: true
 
 onlyBuiltDependencies:
   - '@swc/core'
-  - argon2
-  - bcrypt
   - better-sqlite3
   - esbuild
 
