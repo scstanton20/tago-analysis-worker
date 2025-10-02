@@ -14,7 +14,7 @@ import {
 } from '../utils/safePath.js';
 import AnalysisProcess from '../models/analysisProcess.js';
 import teamService from './teamService.js';
-import { createChildLogger } from '../utils/logging/logger.js';
+import { createChildLogger, parseLogLine } from '../utils/logging/logger.js';
 import { collectChildProcessMetrics } from '../utils/metrics-enhanced.js';
 
 const logger = createChildLogger('analysis-service');
@@ -474,7 +474,7 @@ class AnalysisService {
         'analysis.log',
       );
 
-      // Clear file
+      // Clear file (logs are stored in NDJSON format: one JSON object per line)
       await safeWriteFile(logFilePath, '', 'utf8');
 
       // Reset in-memory state
@@ -643,13 +643,13 @@ class AnalysisService {
           // Only collect lines we need for this page (plus some buffer for sorting)
           if (lines.length < endIndex + 100) {
             // Buffer for reverse sort
-            const match = line.match(/\[(.*?)\] (.*)/);
-            if (match) {
+            const parsed = parseLogLine(line, true);
+            if (parsed) {
               lines.push({
                 sequence: totalCount,
-                timestamp: match[1],
-                message: match[2],
-                createdAt: new Date(match[1]).getTime(),
+                timestamp: parsed.timestamp,
+                message: parsed.message,
+                createdAt: parsed.date.getTime(),
               });
             }
           }
@@ -1162,6 +1162,8 @@ class AnalysisService {
 
   /**
    * Get filtered logs for download based on time range
+   * Logs are stored in NDJSON format (one JSON object per line) and converted to
+   * human-readable format for download: [timestamp] message
    * @param {string} analysisName - Name of the analysis
    * @param {string} timeRange - Time range filter ('1h', '24h', '7d', '30d', 'all')
    * @returns {Promise<Object>} Object with logFile path and filtered content
@@ -1180,10 +1182,18 @@ class AnalysisService {
       await fs.access(logFile);
 
       const content = await safeReadFile(logFile, 'utf8');
-      const lines = content.trim().split('\n');
+      const lines = content
+        .trim()
+        .split('\n')
+        .filter((line) => line.length > 0);
 
       if (timeRange === 'all') {
-        return { logFile, content };
+        // Format all logs for human-readable download
+        const formattedContent = lines
+          .map((line) => parseLogLine(line, false))
+          .filter(Boolean)
+          .join('\n');
+        return { logFile, content: formattedContent };
       }
 
       // Filter logs based on timestamp
@@ -1205,14 +1215,16 @@ class AnalysisService {
           throw new Error('Invalid time range specified');
       }
 
-      const filteredLogs = lines.filter((line) => {
-        const timestampMatch = line.match(/\[(.*?)\]/);
-        if (timestampMatch) {
-          const logDate = new Date(timestampMatch[1]);
-          return logDate >= cutoffDate;
-        }
-        return false;
-      });
+      // Filter logs and format for human-readable download
+      const filteredLogs = lines
+        .map((line) => {
+          const parsed = parseLogLine(line, true);
+          if (parsed && parsed.date >= cutoffDate) {
+            return parseLogLine(line, false); // Return formatted string
+          }
+          return null;
+        })
+        .filter(Boolean);
 
       return { logFile, content: filteredLogs.join('\n') };
     } catch (error) {

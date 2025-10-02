@@ -108,13 +108,15 @@ class AnalysisProcess {
         mkdir: true,
       });
 
-      // Create a simple file-only logger
+      // Create a simple file-only logger using pino's native NDJSON format
+      // Each line is a complete JSON object: {"time":"2025-01-01T00:00:00.000Z","msg":"log message"}
       this.fileLogger = pino(
         {
-          timestamp: () => `,"time":"${new Date().toLocaleString()}"`,
+          // Custom timestamp without leading comma (pino's default adds comma for middle-of-object insertion)
+          timestamp: () => `"time":"${new Date().toISOString()}"`,
+          base: null, // Remove pid, hostname fields for cleaner logs
           formatters: {
-            level: () => ({}), // Remove level from file output
-            log: (object) => ({ message: object.msg }), // Only keep the message
+            level: () => ({}), // Remove level from output
           },
           messageKey: 'msg',
         },
@@ -145,8 +147,9 @@ class AnalysisProcess {
     this.totalLogCount++;
 
     // Write analysis output ONLY to the file logger (not console/Loki)
+    // The fileLogger outputs NDJSON format: {"time":"2025-01-01T00:00:00.000Z","msg":"message"}
     if (this.fileLogger) {
-      this.fileLogger.info(`[${timestamp}] ${message}`);
+      this.fileLogger.info(message);
     } else {
       // Fallback if file logger failed to initialize
       this.logger.warn(
@@ -225,19 +228,26 @@ class AnalysisProcess {
         this.totalLogCount = lines.length;
         this.logSequence = lines.length;
 
-        // Load recent logs into memory
+        // Load recent logs into memory (NDJSON format)
         const recentLines = lines.slice(-this.maxMemoryLogs);
         this.logs = recentLines
           .map((line, index) => {
-            const match = line.match(/\[(.*?)\] (.*)/);
-            return match
-              ? {
-                  sequence: this.logSequence - recentLines.length + index + 1,
-                  timestamp: match[1],
-                  message: match[2],
-                  createdAt: new Date(match[1]).getTime(),
-                }
-              : null;
+            try {
+              const logEntry = JSON.parse(line);
+
+              if (!logEntry.time || !logEntry.msg) {
+                return null;
+              }
+
+              return {
+                sequence: this.logSequence - recentLines.length + index + 1,
+                timestamp: new Date(logEntry.time).toLocaleString(),
+                message: logEntry.msg,
+                createdAt: new Date(logEntry.time).getTime(),
+              };
+            } catch {
+              return null;
+            }
           })
           .filter(Boolean)
           .reverse();

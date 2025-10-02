@@ -279,5 +279,35 @@ export const createAnalysisLogger = (analysisName, additionalContext = {}) => {
   return analysisLogger;
 };
 
+/**
+ * Parse a log line in NDJSON format
+ * @param {string} line - The log line to parse (NDJSON format: {"time":"ISO8601","msg":"message"})
+ * @param {boolean} asObject - Return as object (true) or formatted string (false)
+ * @returns {Object|string|null} Parsed log entry or null if invalid
+ */
+export function parseLogLine(line, asObject = true) {
+  try {
+    const logEntry = JSON.parse(line);
+
+    if (!logEntry.time || !logEntry.msg) {
+      return null;
+    }
+
+    const logDate = new Date(logEntry.time);
+
+    if (asObject) {
+      return {
+        timestamp: logDate.toLocaleString(),
+        message: logEntry.msg,
+        time: logEntry.time,
+        date: logDate,
+      };
+    }
+    return `[${logDate.toLocaleString()}] ${logEntry.msg}`;
+  } catch {
+    return null;
+  }
+}
+
 // Export main logger as default
 export default logger;
