@@ -17,7 +17,7 @@ import {
   IconChartBar,
 } from '@tabler/icons-react';
 import DNSCacheSettings from '../modals/settings/DNSCacheSettings';
-import MetricsDashboard from '../metrics/metricsDashboard';
+import MetricsDashboard from '../metrics/MetricsDashboard';
 
 export default function SettingsModal({ opened, onClose }) {
   const [activeTab, setActiveTab] = useState('api');

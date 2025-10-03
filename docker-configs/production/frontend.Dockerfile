@@ -69,8 +69,8 @@ COPY --chown=root:root docker-configs/production/nginx-entrypoint.sh /usr/local/
 RUN chmod +x /usr/local/bin/nginx-entrypoint.sh
 
 # Set default environment variables for certificate paths
-ENV NGINX_CERT_PATH=/etc/ssl/certs/tago-worker.crt
-ENV NGINX_KEY_PATH=/etc/ssl/private/tago-worker.key
+ENV NGINX_CERT_FILE=/etc/ssl/certs/tago-worker.crt
+ENV NGINX_CERT_KEYFILE=/etc/ssl/private/tago-worker.key
 
 # Expose HTTPS port only in production
 EXPOSE 443

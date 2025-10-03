@@ -20,8 +20,8 @@ server {
     server_name localhost;
 
     # SSL Certificate Configuration (configurable via environment variables)
-    ssl_certificate ${NGINX_CERT_PATH};
-    ssl_certificate_key ${NGINX_KEY_PATH};
+    ssl_certificate ${NGINX_CERT_FILE};
+    ssl_certificate_key ${NGINX_CERT_KEYFILE};
 
     # Modern SSL Configuration
     ssl_protocols TLSv1.2 TLSv1.3;

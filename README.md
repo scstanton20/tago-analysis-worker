@@ -119,8 +119,8 @@ You can provide your own SSL certificates by mounting them and setting the HTTPS
 services:
   frontend:
     environment:
-      NGINX_CERT_PATH: /custom/certs/frontend.crt
-      NGINX_KEY_PATH: /custom/certs/frontend.key
+      NGINX_CERT_FILE: /custom/certs/frontend.crt
+      NGINX_CERT_KEYFILE: /custom/certs/frontend.key
     volumes:
       - /host/path/to/certs:/custom/certs:ro
 
@@ -190,8 +190,8 @@ KEY_PATH=/app/certs/backend.key        # Backend SSL private key path
 HTTPS_PORT=3443                        # Backend HTTPS port (optional, defaults to 3443)
 
 # Frontend HTTPS Settings
-NGINX_CERT_PATH=/etc/ssl/certs/tago-worker.crt    # Frontend SSL certificate path
-NGINX_KEY_PATH=/etc/ssl/private/tago-worker.key   # Frontend SSL private key path
+NGINX_CERT_FILE=/etc/ssl/certs/tago-worker.crt    # Frontend SSL certificate path
+NGINX_CERT_KEYFILE=/etc/ssl/private/tago-worker.key   # Frontend SSL private key path
 ```
 
 **Note**: HTTPS is automatically enabled when both certificate and key paths are provided. In production (`NODE_ENV=production`), only HTTPS is available for security.

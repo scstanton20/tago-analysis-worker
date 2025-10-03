@@ -3,8 +3,6 @@ on: workflow_dispatch
 env:
   DOCKER_BUILDKIT: 1
   REGISTRY: ghcr.io
-  FRONTEND_IMAGE_NAME: ${{ github.repository }}/frontend
-  BACKEND_IMAGE_NAME: ${{ github.repository }}/backend
 
 jobs:
   build-and-push:
@@ -14,15 +12,23 @@ jobs:
       actions: read
       packages: write
       id-token: write
+    strategy:
+      matrix:
+        app:
+          - name: backend
+            dockerfile: ./docker-configs/production/backend.Dockerfile
+            path: ./apps/backend
+          - name: frontend
+            dockerfile: ./docker-configs/production/frontend.Dockerfile
+            path: ./apps/frontend
     steps:
       - name: Check out
         uses: actions/checkout@v5
 
-      - name: Extract versions from package.json files
+      - name: Extract version from package.json
         id: version
         run: |
-          echo "FRONTEND_VERSION=$(node -p "require('./apps/frontend/package.json').version")" >> $GITHUB_OUTPUT
-          echo "BACKEND_VERSION=$(node -p "require('./apps/backend/package.json').version")" >> $GITHUB_OUTPUT
+          echo "VERSION=$(node -p "require('${{ matrix.app.path }}/package.json').version")" >> $GITHUB_OUTPUT
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3.6.0
@@ -37,52 +43,28 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Check if backend image exists
-        id: backend-check
+      - name: Check if image exists
+        id: image-check
         run: |
-          if docker manifest inspect ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ steps.version.outputs.BACKEND_VERSION }} >/dev/null 2>&1; then
-            echo "Backend image ${{ steps.version.outputs.BACKEND_VERSION }} already exists"
-            echo "BACKEND_EXISTS=true" >> $GITHUB_OUTPUT
+          IMAGE_NAME=${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.app.name }}:${{ steps.version.outputs.VERSION }}
+          if docker manifest inspect $IMAGE_NAME >/dev/null 2>&1; then
+            echo "${{ matrix.app.name }} image ${{ steps.version.outputs.VERSION }} already exists"
+            echo "EXISTS=true" >> $GITHUB_OUTPUT
           else
-            echo "Backend image ${{ steps.version.outputs.BACKEND_VERSION }} does not exist"
-            echo "BACKEND_EXISTS=false" >> $GITHUB_OUTPUT
+            echo "${{ matrix.app.name }} image ${{ steps.version.outputs.VERSION }} does not exist"
+            echo "EXISTS=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Check if frontend image exists
-        id: frontend-check
-        run: |
-          if docker manifest inspect ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ steps.version.outputs.FRONTEND_VERSION }} >/dev/null 2>&1; then
-            echo "Frontend image ${{ steps.version.outputs.FRONTEND_VERSION }} already exists"
-            echo "FRONTEND_EXISTS=true" >> $GITHUB_OUTPUT
-          else
-            echo "Frontend image ${{ steps.version.outputs.FRONTEND_VERSION }} does not exist"
-            echo "FRONTEND_EXISTS=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Build and push Backend image
-        if: steps.backend-check.outputs.BACKEND_EXISTS == 'false'
+      - name: Build and push ${{ matrix.app.name }} image
+        if: steps.image-check.outputs.EXISTS == 'false'
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./docker-configs/production/backend.Dockerfile
+          file: ${{ matrix.app.dockerfile }}
           push: true
-          cache-from: type=gha,scope=backend
-          cache-to: type=gha,mode=max,scope=backend
+          cache-from: type=gha,scope=${{ matrix.app.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app.name }}
           platforms: linux/amd64,linux/arm64/v8
           tags: |
-            ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:latest
-            ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ steps.version.outputs.BACKEND_VERSION }}
-
-      - name: Build and push Frontend image
-        if: steps.frontend-check.outputs.FRONTEND_EXISTS == 'false'
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./docker-configs/production/frontend.Dockerfile
-          push: true
-          cache-from: type=gha,scope=frontend
-          cache-to: type=gha,mode=max,scope=frontend
-          platforms: linux/amd64,linux/arm64/v8
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:latest
-            ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ steps.version.outputs.FRONTEND_VERSION }}
+            ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.app.name }}:latest
+            ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.app.name }}:${{ steps.version.outputs.VERSION }}
