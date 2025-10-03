@@ -42,7 +42,7 @@ USER root
 
 # Generate self-signed SSL certificates for backend
 RUN mkdir -p /app/certs && \
-    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+    openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
     -keyout /app/certs/backend.key \
     -out /app/certs/backend.crt \
     -subj "/C=US/ST=Florida/L=Orlando/O=Tago Analysis Worker/CN=backend" \

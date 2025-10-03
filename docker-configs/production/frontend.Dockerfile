@@ -51,7 +51,7 @@ RUN apk add --no-cache openssl gettext
 WORKDIR /app
 
 # Generate self-signed SSL certificates
-RUN openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+RUN openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
     -keyout /etc/ssl/private/tago-worker.key \
     -out /etc/ssl/certs/tago-worker.crt \
     -subj "/C=US/ST=Florida/L=Orlando/O=Tago Analysis Worker/CN=localhost" \
