@@ -55,8 +55,8 @@ RUN mkdir -p /app/apps/backend/analyses-storage/analyses \
    && chown -R node:node /app/apps/backend/analyses-storage /app/certs
 
 ENV NODE_ENV=production
-ENV CERT_PATH=/app/certs/backend.crt
-ENV KEY_PATH=/app/certs/backend.key
+ENV CERT_FILE=/app/certs/backend.crt
+ENV CERT_KEYFILE=/app/certs/backend.key
 
 VOLUME [ "/app/apps/backend/analyses-storage" ]
 

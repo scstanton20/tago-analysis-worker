@@ -289,8 +289,8 @@ async function startServer() {
     });
 
     // Create servers based on environment
-    const certPath = process.env.CERT_PATH;
-    const keyPath = process.env.KEY_PATH;
+    const certPath = process.env.CERT_FILE;
+    const keyPath = process.env.CERT_KEYFILE;
     const httpsPort = process.env.HTTPS_PORT || 3443;
     const isProduction = process.env.NODE_ENV === 'production';
 

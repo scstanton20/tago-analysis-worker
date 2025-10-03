@@ -126,8 +126,8 @@ services:
 
   backend:
     environment:
-      CERT_PATH: /custom/certs/backend.crt
-      KEY_PATH: /custom/certs/backend.key
+      CERT_FILE: /custom/certs/backend.crt
+      CERT_KEYFILE: /custom/certs/backend.key
     volumes:
       - /host/path/to/certs:/custom/certs:ro
 ```
@@ -185,8 +185,8 @@ STORAGE_BASE=./analyses-storage        # Storage path (optional)
 
 ```bash
 # Backend HTTPS Settings
-CERT_PATH=/app/certs/backend.crt       # Backend SSL certificate path
-KEY_PATH=/app/certs/backend.key        # Backend SSL private key path
+CERT_FILE=/app/certs/backend.crt       # Backend SSL certificate path
+CERT_KEYFILE=/app/certs/backend.key        # Backend SSL private key path
 HTTPS_PORT=3443                        # Backend HTTPS port (optional, defaults to 3443)
 
 # Frontend HTTPS Settings
