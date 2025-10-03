@@ -15,8 +15,9 @@ map $http_x_forwarded_host $forwarded_host {
 
 # HTTPS-only server block
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
     server_name localhost;
 
     # SSL Certificate Configuration (configurable via environment variables)
