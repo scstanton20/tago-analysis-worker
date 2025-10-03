@@ -1,4 +1,4 @@
-// frontend/src/components/metrics/MetricsDashboard.jsx
+// frontend/src/components/metrics/metricsDashboard.jsx
 import { useState, useEffect } from 'react';
 import {
   Grid,

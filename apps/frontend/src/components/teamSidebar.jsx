@@ -33,12 +33,9 @@ import {
 } from '@mantine/core';
 import {
   IconBrandAsana,
-  IconFolder,
   IconGripVertical,
   IconLogout,
-  IconUser,
   IconUserPlus,
-  IconUserCog,
   IconUserEdit,
 } from '@tabler/icons-react';
 // Lazy load modal components
@@ -141,8 +138,7 @@ const SortableTeamItem = ({ team, isSelected, onClick, analysisCount }) => {
         }
         leftSection={
           <Group gap={6}>
-            <ColorSwatch color={team.color} size={16} />
-            <IconFolder size={18} />
+            <ColorSwatch color={team.color} size={18} />
           </Group>
         }
         rightSection={
