@@ -126,8 +126,9 @@ class AnalysisService {
    */
   async saveConfig() {
     const configuration = {
-      version: this.configCache?.version || '3.0',
+      version: this.configCache?.version || '4.0',
       analyses: {},
+      teamStructure: this.configCache?.teamStructure || {},
     };
 
     this.analyses.forEach((analysis, analysisName) => {
@@ -159,6 +160,56 @@ class AnalysisService {
       const data = await safeReadFile(this.configPath, 'utf8');
       const config = JSON.parse(data);
 
+      // Version 4.0 migration: Convert flat teamId to nested structure
+      const currentVersion = parseFloat(config.version) || 1.0;
+      const needsMigration =
+        currentVersion < 4.0 ||
+        !config.teamStructure ||
+        Object.keys(config.teamStructure).length === 0;
+
+      if (
+        needsMigration &&
+        config.analyses &&
+        Object.keys(config.analyses).length > 0
+      ) {
+        logger.info(
+          `Migrating config from v${config.version} to v4.0 (nested folder structure)`,
+        );
+        config.version = '4.0';
+        config.teamStructure = {};
+
+        // Group analyses by team
+        const teamGroups = {};
+        for (const [analysisName, analysis] of Object.entries(
+          config.analyses || {},
+        )) {
+          const teamId = analysis.teamId || 'uncategorized';
+          if (!teamGroups[teamId]) teamGroups[teamId] = [];
+          teamGroups[teamId].push(analysisName);
+        }
+
+        // Create flat items structure for each team (no folders initially)
+        for (const [teamId, analysisNames] of Object.entries(teamGroups)) {
+          config.teamStructure[teamId] = {
+            items: analysisNames.map((name) => ({
+              id: crypto.randomUUID(),
+              type: 'analysis',
+              analysisName: name,
+            })),
+          };
+        }
+
+        // Save migrated config
+        await safeWriteFile(this.configPath, JSON.stringify(config, null, 2));
+        logger.info(
+          {
+            teamsCount: Object.keys(config.teamStructure).length,
+            analysisCount: Object.keys(config.analyses || {}).length,
+          },
+          'Successfully migrated config to v4.0',
+        );
+      }
+
       // Store the full config including departments
       this.configCache = config;
 
@@ -170,15 +221,16 @@ class AnalysisService {
           configVersion: config.version,
           analysisCount: Object.keys(config.analyses || {}).length,
         },
-        'Configuration loaded with departments',
+        'Configuration loaded',
       );
       return config;
     } catch (error) {
       if (error.code === 'ENOENT') {
         logger.info('No existing config file, creating new one');
         this.configCache = {
-          version: '3.0',
+          version: '4.0',
           analyses: {},
+          teamStructure: {},
         };
         await this.saveConfig();
         return this.configCache;
@@ -215,10 +267,16 @@ class AnalysisService {
    * @param {Function} file.mv - Method to move file to destination
    * @param {string} type - Type of analysis (e.g., 'listener')
    * @param {string|null} [targetDepartment=null] - Department to assign analysis to (null means uncategorized)
+   * @param {string|null} [targetFolderId=null] - Target folder ID within team structure (null means root)
    * @returns {Promise<Object>} Object with analysisName property
    * @throws {Error} If upload or registration fails
    */
-  async uploadAnalysis(file, type, targetDepartment = null) {
+  async uploadAnalysis(
+    file,
+    type,
+    targetDepartment = null,
+    targetFolderId = null,
+  ) {
     const analysisName = path.parse(file.name).name;
     const basePath = await this.createAnalysisDirectories(analysisName);
     const filePath = path.join(basePath, 'index.js');
@@ -226,8 +284,14 @@ class AnalysisService {
     await file.mv(filePath);
     const analysis = new AnalysisProcess(analysisName, type, this);
 
-    // Always set team ID - use 'uncategorized' as default if not specified
-    analysis.teamId = targetDepartment || 'uncategorized';
+    // Set team ID from parameter, or get Uncategorized team ID if not provided
+    let teamId = targetDepartment;
+    if (!teamId || !teamId.trim()) {
+      const teams = await teamService.getAllTeams();
+      const uncategorizedTeam = teams.find((t) => t.name === 'Uncategorized');
+      teamId = uncategorizedTeam?.id || 'uncategorized';
+    }
+    analysis.teamId = teamId;
 
     this.analyses.set(analysisName, analysis);
 
@@ -236,11 +300,34 @@ class AnalysisService {
 
     await this.saveConfig();
 
+    if (!this.configCache.teamStructure) {
+      this.configCache.teamStructure = {};
+    }
+
+    if (!this.configCache.teamStructure[teamId]) {
+      this.configCache.teamStructure[teamId] = { items: [] };
+    }
+
+    const newItem = {
+      id: crypto.randomUUID(),
+      type: 'analysis',
+      analysisName: analysisName,
+    };
+
+    await teamService.addItemToTeamStructure(teamId, newItem, targetFolderId);
+
     // Initialize version management
     await this.initializeVersionManagement(analysisName);
 
-    // Ensure department tracking
-    await teamService.ensureAnalysisHasTeam(analysisName);
+    logger.info(
+      {
+        analysisName,
+        teamId,
+        type,
+        targetFolderId,
+      },
+      'Analysis uploaded successfully',
+    );
 
     return { analysisName };
   }
@@ -402,7 +489,7 @@ class AnalysisService {
 
       // If it was running before, restart it
       if (wasRunning) {
-        await this.runAnalysis(newFileName, analysis.type);
+        await this.runAnalysis(newFileName);
         await this.addLog(
           newFileName,
           'Analysis restarted after rename operation',
@@ -504,23 +591,17 @@ class AnalysisService {
   /**
    * Start/run an analysis process
    * @param {string} analysisName - Name of the analysis to run
-   * @param {string} [type='listener'] - Type of analysis (default: 'listener')
    * @returns {Promise<Object>} Result object with success status and analysis info
    * @throws {Error} If analysis start fails
    */
-  async runAnalysis(analysisName, type = 'listener') {
-    let analysis = this.analyses.get(analysisName);
+  async runAnalysis(analysisName) {
+    const analysis = this.analyses.get(analysisName);
 
     if (!analysis) {
-      logger.info({ analysisName, type }, 'Creating new analysis instance');
-      // Fix: Pass type and service parameters correctly
-      analysis = new AnalysisProcess(analysisName, type, this);
-      this.analyses.set(analysisName, analysis);
-      await this.saveConfig();
+      throw new Error(`Analysis ${analysisName} not found`);
     }
 
     await analysis.start();
-    // Ensure config is saved after starting (which updates intendedState)
     await this.saveConfig();
     return { success: true, status: analysis.status, logs: analysis.logs };
   }
@@ -687,6 +768,8 @@ class AnalysisService {
    */
   async deleteAnalysis(analysisName) {
     const analysis = this.analyses.get(analysisName);
+    const teamId = analysis?.teamId;
+
     if (analysis) {
       await analysis.stop();
     }
@@ -701,8 +784,50 @@ class AnalysisService {
       }
     }
 
+    // Remove from in-memory map
     this.analyses.delete(analysisName);
+
+    // Remove from team structure BEFORE saving config
+    // This ensures the teamStructure is updated but doesn't call updateConfig
+    if (teamId) {
+      const configData = await this.getConfig();
+
+      if (configData.teamStructure?.[teamId]) {
+        const removeFromArray = (items) => {
+          for (let i = items.length - 1; i >= 0; i--) {
+            const item = items[i];
+            if (
+              item.type === 'analysis' &&
+              item.analysisName === analysisName
+            ) {
+              items.splice(i, 1);
+              return true;
+            }
+            if (item.type === 'folder' && item.items) {
+              if (removeFromArray(item.items)) {
+                return true;
+              }
+            }
+          }
+          return false;
+        };
+
+        removeFromArray(configData.teamStructure[teamId].items);
+        // Update configCache directly
+        this.configCache = configData;
+      }
+    }
+
+    // Save config once - this will write both analyses and teamStructure
     await this.saveConfig();
+
+    logger.info(
+      {
+        analysisName,
+        teamId,
+      },
+      'Analysis deleted successfully',
+    );
 
     return { message: 'Analysis and all versions deleted successfully' };
   }
@@ -1002,7 +1127,7 @@ class AnalysisService {
 
     // Restart if it was running
     if (wasRunning) {
-      await this.runAnalysis(analysisName, analysis.type);
+      await this.runAnalysis(analysisName);
       // Small delay to ensure the restart log is visible
       await new Promise((resolve) => setTimeout(resolve, 100));
       await this.addLog(analysisName, 'Analysis restarted after rollback');
@@ -1141,7 +1266,7 @@ class AnalysisService {
 
       // If it was running before and content was updated, restart it
       if (wasRunning && updates.content) {
-        await this.runAnalysis(analysisName, analysis.type);
+        await this.runAnalysis(analysisName);
         const logMessage =
           savedVersion !== null
             ? `Analysis updated successfully (previous version saved as v${savedVersion})`
@@ -1302,7 +1427,7 @@ class AnalysisService {
 
       // If it was running before, restart it
       if (wasRunning) {
-        await this.runAnalysis(analysisName, analysis.type);
+        await this.runAnalysis(analysisName);
         await this.addLog(analysisName, 'Analysis updated successfully');
       }
 

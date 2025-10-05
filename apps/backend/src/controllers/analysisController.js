@@ -53,11 +53,13 @@ class AnalysisController {
       const analysis = req.files.analysis;
       const type = req.body.type || 'listener';
       const teamId = req.body.teamId;
+      const targetFolderId = req.body.targetFolderId || null;
 
       const result = await analysisService.uploadAnalysis(
         analysis,
         type,
         teamId,
+        targetFolderId,
       );
 
       // Get the complete analysis data to broadcast
@@ -77,6 +79,14 @@ class AnalysisController {
         },
         teamId,
       );
+
+      // Broadcast team structure update
+      const config = await analysisService.getConfig();
+      sseManager.broadcastToTeamUsers(teamId, {
+        type: 'teamStructureUpdated',
+        teamId: teamId,
+        items: config.teamStructure[teamId]?.items || [],
+      });
 
       res.json(result);
     } catch (error) {
@@ -213,6 +223,16 @@ class AnalysisController {
         },
         analysisToDelete?.teamId,
       );
+
+      // Broadcast team structure update
+      if (analysisToDelete?.teamId) {
+        const config = await analysisService.getConfig();
+        sseManager.broadcastToTeamUsers(analysisToDelete.teamId, {
+          type: 'teamStructureUpdated',
+          teamId: analysisToDelete.teamId,
+          items: config.teamStructure[analysisToDelete.teamId]?.items || [],
+        });
+      }
 
       res.json({ success: true });
     } catch (error) {

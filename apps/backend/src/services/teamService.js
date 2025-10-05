@@ -478,6 +478,333 @@ class TeamService {
       return 0;
     }
   }
+
+  /**
+   * Recursively find an item by ID in the tree structure
+   * @param {Array} items - Array of items to search
+   * @param {string} id - Item ID to find
+   * @returns {Object|null} Found item or null
+   */
+  findItemById(items, id) {
+    for (const item of items) {
+      if (item.id === id) return item;
+      if (item.type === 'folder' && item.items) {
+        const found = this.findItemById(item.items, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Find an item with its parent and index for manipulation
+   * @param {Array} items - Array of items to search
+   * @param {string} id - Item ID to find
+   * @param {Object|null} parent - Parent item (used in recursion)
+   * @returns {Object} Object with parent, item, and index
+   */
+  findItemWithParent(items, id, parent = null) {
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.id === id) {
+        return { parent, item, index: i };
+      }
+      if (item.type === 'folder' && item.items) {
+        const found = this.findItemWithParent(item.items, id, item);
+        if (found.item) return found;
+      }
+    }
+    return { parent: null, item: null, index: -1 };
+  }
+
+  /**
+   * Add an item to team structure at specified location
+   * @param {string} teamId - Team ID
+   * @param {Object} newItem - Item to add
+   * @param {string|null} targetFolderId - Target folder ID (null = root)
+   * @returns {Promise<void>}
+   */
+  async addItemToTeamStructure(teamId, newItem, targetFolderId = null) {
+    const configData = await this.analysisService.getConfig();
+
+    if (!configData.teamStructure) {
+      configData.teamStructure = {};
+    }
+
+    if (!configData.teamStructure[teamId]) {
+      configData.teamStructure[teamId] = { items: [] };
+    }
+
+    const teamItems = configData.teamStructure[teamId].items;
+
+    if (!targetFolderId) {
+      // Add to root level
+      teamItems.push(newItem);
+    } else {
+      // Find target folder and add to its items
+      const targetFolder = this.findItemById(teamItems, targetFolderId);
+      if (!targetFolder || targetFolder.type !== 'folder') {
+        throw new Error('Target folder not found');
+      }
+      if (!targetFolder.items) {
+        targetFolder.items = [];
+      }
+      targetFolder.items.push(newItem);
+    }
+
+    await this.analysisService.updateConfig(configData);
+  }
+
+  /**
+   * Remove an item from team structure by analysis name
+   * @param {string} teamId - Team ID
+   * @param {string} analysisName - Analysis name to remove
+   * @returns {Promise<void>}
+   */
+  async removeItemFromTeamStructure(teamId, analysisName) {
+    const configData = await this.analysisService.getConfig();
+
+    if (!configData.teamStructure?.[teamId]) {
+      return; // Nothing to remove
+    }
+
+    const removeFromArray = (items) => {
+      for (let i = items.length - 1; i >= 0; i--) {
+        const item = items[i];
+        if (item.type === 'analysis' && item.analysisName === analysisName) {
+          items.splice(i, 1);
+          return true;
+        }
+        if (item.type === 'folder' && item.items) {
+          if (removeFromArray(item.items)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    };
+
+    removeFromArray(configData.teamStructure[teamId].items);
+    await this.analysisService.updateConfig(configData);
+  }
+
+  /**
+   * Create a folder in a team's item tree
+   * @param {string} teamId - Team ID
+   * @param {string|null} parentFolderId - Parent folder ID (null = root)
+   * @param {string} name - Folder name
+   * @returns {Promise<Object>} Created folder object
+   */
+  async createFolder(teamId, parentFolderId, name) {
+    const configData = await this.analysisService.getConfig();
+
+    // Verify team exists
+    const team = await this.getTeam(teamId);
+    if (!team) {
+      throw new Error(`Team ${teamId} not found`);
+    }
+
+    if (!configData.teamStructure) {
+      configData.teamStructure = {};
+    }
+
+    if (!configData.teamStructure[teamId]) {
+      configData.teamStructure[teamId] = { items: [] };
+    }
+
+    const newFolder = {
+      id: crypto.randomUUID(),
+      type: 'folder',
+      name: name,
+      items: [],
+    };
+
+    const teamItems = configData.teamStructure[teamId].items;
+
+    if (!parentFolderId) {
+      // Add to root level
+      teamItems.push(newFolder);
+    } else {
+      // Find parent folder and add to its items
+      const parent = this.findItemById(teamItems, parentFolderId);
+      if (!parent || parent.type !== 'folder') {
+        throw new Error('Parent folder not found');
+      }
+      if (!parent.items) {
+        parent.items = [];
+      }
+      parent.items.push(newFolder);
+    }
+
+    await this.analysisService.updateConfig(configData);
+
+    logger.info(
+      { teamId, folderId: newFolder.id, name, parentFolderId },
+      'Created folder',
+    );
+
+    return newFolder;
+  }
+
+  /**
+   * Update folder properties (name, expanded state)
+   * @param {string} teamId - Team ID
+   * @param {string} folderId - Folder ID to update
+   * @param {Object} updates - Updates to apply
+   * @returns {Promise<Object>} Updated folder
+   */
+  async updateFolder(teamId, folderId, updates) {
+    const configData = await this.analysisService.getConfig();
+
+    if (!configData.teamStructure?.[teamId]) {
+      throw new Error(`Team ${teamId} not found in structure`);
+    }
+
+    const folder = this.findItemById(
+      configData.teamStructure[teamId].items,
+      folderId,
+    );
+
+    if (!folder || folder.type !== 'folder') {
+      throw new Error(`Folder ${folderId} not found`);
+    }
+
+    // Apply updates
+    if (updates.name !== undefined) {
+      folder.name = updates.name;
+    }
+    if (updates.expanded !== undefined) {
+      folder.expanded = updates.expanded;
+    }
+
+    await this.analysisService.updateConfig(configData);
+
+    logger.info({ teamId, folderId, updates }, 'Updated folder');
+
+    return folder;
+  }
+
+  /**
+   * Delete a folder (move children to parent or root)
+   * @param {string} teamId - Team ID
+   * @param {string} folderId - Folder ID to delete
+   * @returns {Promise<Object>} Deletion result
+   */
+  async deleteFolder(teamId, folderId) {
+    const configData = await this.analysisService.getConfig();
+
+    if (!configData.teamStructure?.[teamId]) {
+      throw new Error(`Team ${teamId} not found in structure`);
+    }
+
+    const teamItems = configData.teamStructure[teamId].items;
+
+    const { parent, item, index } = this.findItemWithParent(
+      teamItems,
+      folderId,
+    );
+
+    if (!item || item.type !== 'folder') {
+      throw new Error(`Folder ${folderId} not found`);
+    }
+
+    // Move children to parent
+    const children = item.items || [];
+    if (parent) {
+      // Remove folder and insert children in its place
+      parent.items.splice(index, 1, ...children);
+    } else {
+      // Folder is at root level
+      teamItems.splice(index, 1, ...children);
+    }
+
+    await this.analysisService.updateConfig(configData);
+
+    logger.info(
+      { teamId, folderId, childrenMoved: children.length },
+      'Deleted folder',
+    );
+
+    return { deleted: folderId, childrenMoved: children.length };
+  }
+
+  /**
+   * Move an item within the tree structure (drag-drop)
+   * @param {string} teamId - Team ID
+   * @param {string} itemId - Item ID to move
+   * @param {string|null} targetParentId - Target parent folder ID (null = root)
+   * @param {number} targetIndex - Target index in parent's items array
+   * @returns {Promise<Object>} Move result
+   */
+  async moveItem(teamId, itemId, targetParentId, targetIndex) {
+    const configData = await this.analysisService.getConfig();
+
+    if (!configData.teamStructure?.[teamId]) {
+      throw new Error(`Team ${teamId} not found in structure`);
+    }
+
+    const teamItems = configData.teamStructure[teamId].items;
+
+    // Find and remove from current location
+    const {
+      parent: sourceParent,
+      item,
+      index: sourceIndex,
+    } = this.findItemWithParent(teamItems, itemId);
+
+    if (!item) {
+      throw new Error(`Item ${itemId} not found`);
+    }
+
+    // Prevent moving folder into itself
+    if (item.type === 'folder' && targetParentId === itemId) {
+      throw new Error('Cannot move folder into itself');
+    }
+
+    // Prevent moving folder into its own descendant
+    if (item.type === 'folder' && targetParentId) {
+      const isDescendant = (folderId, items) => {
+        for (const child of items) {
+          if (child.id === folderId) return true;
+          if (child.type === 'folder' && child.items) {
+            if (isDescendant(folderId, child.items)) return true;
+          }
+        }
+        return false;
+      };
+
+      if (isDescendant(targetParentId, item.items || [])) {
+        throw new Error('Cannot move folder into its own descendant');
+      }
+    }
+
+    const sourceArray = sourceParent ? sourceParent.items : teamItems;
+    sourceArray.splice(sourceIndex, 1);
+
+    // Insert at target location
+    if (!targetParentId) {
+      // Moving to root
+      teamItems.splice(targetIndex, 0, item);
+    } else {
+      const targetParent = this.findItemById(teamItems, targetParentId);
+      if (!targetParent || targetParent.type !== 'folder') {
+        throw new Error('Target parent must be a folder');
+      }
+      if (!targetParent.items) {
+        targetParent.items = [];
+      }
+      targetParent.items.splice(targetIndex, 0, item);
+    }
+
+    await this.analysisService.updateConfig(configData);
+
+    logger.info(
+      { teamId, itemId, targetParentId, targetIndex },
+      'Moved item in tree',
+    );
+
+    return { moved: itemId, to: targetParentId || 'root' };
+  }
 }
 
 // Singleton instance

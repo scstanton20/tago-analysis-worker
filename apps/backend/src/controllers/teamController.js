@@ -165,6 +165,169 @@ class TeamController {
       res.status(500).json({ error: 'Failed to get analysis count' });
     }
   }
+
+  // Create folder in team
+  static async createFolder(req, res) {
+    try {
+      const { teamId } = req.params;
+      const { parentFolderId, name } = req.body;
+
+      if (!name) {
+        return res.status(400).json({ error: 'Folder name is required' });
+      }
+
+      const folder = await teamService.createFolder(
+        teamId,
+        parentFolderId,
+        name,
+      );
+
+      // Broadcast to team members
+      sseManager.broadcastToTeamUsers(teamId, {
+        type: 'folderCreated',
+        teamId,
+        folder,
+      });
+
+      // Broadcast structure update
+      const { analysisService } = await import(
+        '../services/analysisService.js'
+      );
+      const config = await analysisService.getConfig();
+      sseManager.broadcastToTeamUsers(teamId, {
+        type: 'teamStructureUpdated',
+        teamId,
+        items: config.teamStructure[teamId]?.items || [],
+      });
+
+      res.status(201).json(folder);
+    } catch (error) {
+      console.error('Error creating folder:', error);
+      if (error.message.includes('not found')) {
+        res.status(404).json({ error: error.message });
+      } else {
+        res.status(500).json({ error: 'Failed to create folder' });
+      }
+    }
+  }
+
+  // Update folder
+  static async updateFolder(req, res) {
+    try {
+      const { teamId, folderId } = req.params;
+      const updates = req.body;
+
+      const folder = await teamService.updateFolder(teamId, folderId, updates);
+
+      // Broadcast to team members
+      sseManager.broadcastToTeamUsers(teamId, {
+        type: 'folderUpdated',
+        teamId,
+        folder,
+      });
+
+      // Broadcast structure update
+      const { analysisService } = await import(
+        '../services/analysisService.js'
+      );
+      const config = await analysisService.getConfig();
+      sseManager.broadcastToTeamUsers(teamId, {
+        type: 'teamStructureUpdated',
+        teamId,
+        items: config.teamStructure[teamId]?.items || [],
+      });
+
+      res.json(folder);
+    } catch (error) {
+      console.error('Error updating folder:', error);
+      if (error.message.includes('not found')) {
+        res.status(404).json({ error: error.message });
+      } else {
+        res.status(500).json({ error: 'Failed to update folder' });
+      }
+    }
+  }
+
+  // Delete folder
+  static async deleteFolder(req, res) {
+    try {
+      const { teamId, folderId } = req.params;
+
+      const result = await teamService.deleteFolder(teamId, folderId);
+
+      // Broadcast to team members
+      sseManager.broadcastToTeamUsers(teamId, {
+        type: 'folderDeleted',
+        teamId,
+        ...result,
+      });
+
+      // Broadcast structure update
+      const { analysisService } = await import(
+        '../services/analysisService.js'
+      );
+      const config = await analysisService.getConfig();
+      sseManager.broadcastToTeamUsers(teamId, {
+        type: 'teamStructureUpdated',
+        teamId,
+        items: config.teamStructure[teamId]?.items || [],
+      });
+
+      res.json(result);
+    } catch (error) {
+      console.error('Error deleting folder:', error);
+      if (error.message.includes('not found')) {
+        res.status(404).json({ error: error.message });
+      } else {
+        res.status(500).json({ error: 'Failed to delete folder' });
+      }
+    }
+  }
+
+  // Move item within team structure
+  static async moveItem(req, res) {
+    try {
+      const { teamId } = req.params;
+      const { itemId, targetParentId, targetIndex } = req.body;
+
+      if (!itemId || targetIndex === undefined) {
+        return res
+          .status(400)
+          .json({ error: 'itemId and targetIndex are required' });
+      }
+
+      const result = await teamService.moveItem(
+        teamId,
+        itemId,
+        targetParentId,
+        targetIndex,
+      );
+
+      // Broadcast full structure update to team members
+      const { analysisService } = await import(
+        '../services/analysisService.js'
+      );
+      const config = await analysisService.getConfig();
+
+      sseManager.broadcastToTeamUsers(teamId, {
+        type: 'teamStructureUpdated',
+        teamId,
+        items: config.teamStructure[teamId]?.items || [],
+      });
+
+      res.json(result);
+    } catch (error) {
+      console.error('Error moving item:', error);
+      if (
+        error.message.includes('not found') ||
+        error.message.includes('Cannot move')
+      ) {
+        res.status(400).json({ error: error.message });
+      } else {
+        res.status(500).json({ error: 'Failed to move item' });
+      }
+    }
+  }
 }
 
 export default TeamController;

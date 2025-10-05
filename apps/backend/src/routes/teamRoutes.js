@@ -122,6 +122,18 @@ router.post('/', TeamController.createTeam);
  *               properties:
  *                 message:
  *                   type: string
+ *       401:
+ *         description: Authentication required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       403:
+ *         description: Admin access required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.put('/reorder', TeamController.reorderTeams);
 
@@ -267,6 +279,24 @@ router.delete('/:id', TeamController.deleteTeam);
  *                 count:
  *                   type: number
  *                   description: Number of analyses in the team
+ *       401:
+ *         description: Authentication required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       403:
+ *         description: Admin access required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: Team not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
  */
 router.get('/:id/count', TeamController.getTeamAnalysisCount);
 
@@ -343,5 +373,238 @@ router.get('/:id/count', TeamController.getTeamAnalysisCount);
  *               $ref: '#/components/schemas/Error'
  */
 router.put('/analyses/:name/team', TeamController.moveAnalysisToTeam);
+
+// Folder management routes
+/**
+ * @swagger
+ * /teams/{teamId}/folders:
+ *   post:
+ *     summary: Create folder in team
+ *     description: Create a new folder within a team's structure
+ *     tags: [Team Management, Folders]
+ *     parameters:
+ *       - in: path
+ *         name: teamId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Team ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 description: Folder name
+ *               parentFolderId:
+ *                 type: string
+ *                 nullable: true
+ *                 description: Parent folder ID (null for root level)
+ *             required:
+ *               - name
+ *     responses:
+ *       201:
+ *         description: Folder created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/TeamStructure'
+ *       400:
+ *         description: Invalid request data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       401:
+ *         description: Authentication required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       403:
+ *         description: Admin access required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: Team or parent folder not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.post('/:teamId/folders', TeamController.createFolder);
+
+/**
+ * @swagger
+ * /teams/{teamId}/folders/{folderId}:
+ *   put:
+ *     summary: Update folder
+ *     description: Update folder name or expanded state
+ *     tags: [Team Management, Folders]
+ *     parameters:
+ *       - in: path
+ *         name: teamId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Team ID
+ *       - in: path
+ *         name: folderId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Folder ID
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 description: New folder name
+ *               expanded:
+ *                 type: boolean
+ *                 description: Folder expanded state
+ *     responses:
+ *       200:
+ *         description: Folder updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/TeamStructure'
+ *       400:
+ *         description: Invalid request data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       401:
+ *         description: Authentication required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       403:
+ *         description: Admin access required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: Team or folder not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.put('/:teamId/folders/:folderId', TeamController.updateFolder);
+
+/**
+ * @swagger
+ * /teams/{teamId}/folders/{folderId}:
+ *   delete:
+ *     summary: Delete folder
+ *     description: Delete folder and move children to parent
+ *     tags: [Team Management, Folders]
+ *     parameters:
+ *       - in: path
+ *         name: teamId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Team ID
+ *       - in: path
+ *         name: folderId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Folder ID
+ *     responses:
+ *       200:
+ *         description: Folder deleted successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/TeamStructure'
+ *       401:
+ *         description: Authentication required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       403:
+ *         description: Admin access required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: Team or folder not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.delete('/:teamId/folders/:folderId', TeamController.deleteFolder);
+
+/**
+ * @swagger
+ * /teams/{teamId}/items/move:
+ *   post:
+ *     summary: Move item in tree
+ *     description: Move an item (analysis or folder) within the team structure
+ *     tags: [Team Management, Folders]
+ *     parameters:
+ *       - in: path
+ *         name: teamId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Team ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/MoveItemRequest'
+ *     responses:
+ *       200:
+ *         description: Item moved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/TeamStructure'
+ *       400:
+ *         description: Invalid move operation
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       401:
+ *         description: Authentication required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       403:
+ *         description: Admin access required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       404:
+ *         description: Team or item not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.post('/:teamId/items/move', TeamController.moveItem);
 
 export default router;

@@ -262,6 +262,90 @@ This API provides real-time updates via **Server-Sent Events (SSE)** for:
             },
           },
         },
+        Folder: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'string',
+              description: 'Unique folder identifier (UUID)',
+            },
+            name: {
+              type: 'string',
+              description: 'Folder name',
+            },
+            type: {
+              type: 'string',
+              enum: ['folder'],
+              description: 'Item type',
+            },
+            expanded: {
+              type: 'boolean',
+              description: 'Whether folder is expanded in UI',
+            },
+            items: {
+              type: 'array',
+              items: {
+                oneOf: [
+                  { $ref: '#/components/schemas/Folder' },
+                  { $ref: '#/components/schemas/TreeAnalysisItem' },
+                ],
+              },
+              description: 'Child items (folders and analyses)',
+            },
+          },
+        },
+        TreeAnalysisItem: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'string',
+              description: 'Unique item identifier (UUID)',
+            },
+            type: {
+              type: 'string',
+              enum: ['analysis'],
+              description: 'Item type',
+            },
+            analysisName: {
+              type: 'string',
+              description: 'Name of the analysis file',
+            },
+          },
+        },
+        TeamStructure: {
+          type: 'object',
+          properties: {
+            items: {
+              type: 'array',
+              items: {
+                oneOf: [
+                  { $ref: '#/components/schemas/Folder' },
+                  { $ref: '#/components/schemas/TreeAnalysisItem' },
+                ],
+              },
+              description: 'Root-level items in team structure',
+            },
+          },
+        },
+        MoveItemRequest: {
+          type: 'object',
+          properties: {
+            itemId: {
+              type: 'string',
+              description: 'ID of item to move',
+            },
+            targetParentId: {
+              type: 'string',
+              nullable: true,
+              description: 'Target parent folder ID (null for root level)',
+            },
+            targetIndex: {
+              type: 'number',
+              description: 'Index position in target location',
+            },
+          },
+          required: ['itemId', 'targetIndex'],
+        },
         AnalysisLogs: {
           type: 'object',
           properties: {

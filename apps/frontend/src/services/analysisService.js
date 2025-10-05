@@ -20,13 +20,15 @@ export const analysisService = {
     }
   },
 
-  async uploadAnalysis(file, type = 'listener', department = null) {
+  async uploadAnalysis(file, type = 'listener', teamId = null) {
     const formData = new FormData();
     formData.append('analysis', file);
     formData.append('type', type);
 
-    // Always add teamId - use 'uncategorized' as default if not provided
-    formData.append('teamId', department || 'uncategorized');
+    // Add teamId if provided (backend will default to Uncategorized if not)
+    if (teamId) {
+      formData.append('teamId', teamId);
+    }
 
     const response = await fetchWithHeaders('/analyses/upload', {
       method: 'POST',

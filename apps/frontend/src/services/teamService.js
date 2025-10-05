@@ -160,6 +160,110 @@ export const teamService = {
       return 0; // Return 0 on error rather than throwing
     }
   },
+
+  /**
+   * Create a folder in a team
+   * @param {string} teamId - Team ID
+   * @param {Object} data - Folder data
+   * @param {string} data.name - Folder name
+   * @param {string} [data.parentFolderId] - Parent folder ID (null for root)
+   * @returns {Promise<Object>} Created folder
+   */
+  async createFolder(teamId, { name, parentFolderId }) {
+    try {
+      console.log('Creating folder:', { teamId, name, parentFolderId });
+      const response = await fetchWithHeaders(`/teams/${teamId}/folders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, parentFolderId }),
+      });
+
+      return await handleResponse(response);
+    } catch (error) {
+      console.error('Failed to create folder:', error);
+      throw new Error(`Failed to create folder: ${error.message}`);
+    }
+  },
+
+  /**
+   * Update a folder
+   * @param {string} teamId - Team ID
+   * @param {string} folderId - Folder ID
+   * @param {Object} updates - Updates to apply
+   * @param {string} [updates.name] - New folder name
+   * @param {boolean} [updates.expanded] - Expanded state
+   * @returns {Promise<Object>} Updated folder
+   */
+  async updateFolder(teamId, folderId, updates) {
+    try {
+      console.log('Updating folder:', { teamId, folderId, updates });
+      const response = await fetchWithHeaders(
+        `/teams/${teamId}/folders/${folderId}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates),
+        },
+      );
+
+      return await handleResponse(response);
+    } catch (error) {
+      console.error('Failed to update folder:', error);
+      throw new Error(`Failed to update folder: ${error.message}`);
+    }
+  },
+
+  /**
+   * Delete a folder
+   * @param {string} teamId - Team ID
+   * @param {string} folderId - Folder ID
+   * @returns {Promise<Object>} Deletion result
+   */
+  async deleteFolder(teamId, folderId) {
+    try {
+      console.log('Deleting folder:', { teamId, folderId });
+      const response = await fetchWithHeaders(
+        `/teams/${teamId}/folders/${folderId}`,
+        {
+          method: 'DELETE',
+        },
+      );
+
+      return await handleResponse(response);
+    } catch (error) {
+      console.error('Failed to delete folder:', error);
+      throw new Error(`Failed to delete folder: ${error.message}`);
+    }
+  },
+
+  /**
+   * Move an item within team structure
+   * @param {string} teamId - Team ID
+   * @param {string} itemId - Item ID to move
+   * @param {string|null} targetParentId - Target parent folder ID (null for root)
+   * @param {number} targetIndex - Target index
+   * @returns {Promise<Object>} Move result
+   */
+  async moveItem(teamId, itemId, targetParentId, targetIndex) {
+    try {
+      console.log('Moving item:', {
+        teamId,
+        itemId,
+        targetParentId,
+        targetIndex,
+      });
+      const response = await fetchWithHeaders(`/teams/${teamId}/items/move`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemId, targetParentId, targetIndex }),
+      });
+
+      return await handleResponse(response);
+    } catch (error) {
+      console.error('Failed to move item:', error);
+      throw new Error(`Failed to move item: ${error.message}`);
+    }
+  },
 };
 
 export default teamService;

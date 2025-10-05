@@ -8,6 +8,7 @@ export function SSEProvider({ children }) {
   const { isAuthenticated } = useAuth();
   const [analyses, setAnalyses] = useState({});
   const [teams, setTeams] = useState({});
+  const [teamStructure, setTeamStructure] = useState({});
   const [loadingAnalyses, setLoadingAnalyses] = useState(new Set());
   const [connectionStatus, setConnectionStatus] = useState('connecting');
   const [backendStatus, setBackendStatus] = useState(null);
@@ -114,6 +115,7 @@ export function SSEProvider({ children }) {
 
             setAnalyses(analysesObj);
             setTeams(teamsObj);
+            setTeamStructure(data.teamStructure || {});
             setHasInitialData(true);
 
             // Initialize log sequences tracking
@@ -362,6 +364,21 @@ export function SSEProvider({ children }) {
                 teamsObj = data.teams;
               }
               setTeams(teamsObj);
+            }
+            break;
+
+          case 'folderCreated':
+          case 'folderUpdated':
+          case 'folderDeleted':
+            // Structure updates handled by teamStructureUpdated event
+            break;
+
+          case 'teamStructureUpdated':
+            if (data.teamId && data.items) {
+              setTeamStructure((prev) => ({
+                ...prev,
+                [data.teamId]: { items: data.items },
+              }));
             }
             break;
 
@@ -774,6 +791,7 @@ export function SSEProvider({ children }) {
   const value = {
     analyses,
     teams,
+    teamStructure,
     loadingAnalyses,
     addLoadingAnalysis,
     removeLoadingAnalysis,

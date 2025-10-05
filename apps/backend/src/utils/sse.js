@@ -220,11 +220,16 @@ class SSEManager {
         teams = filteredTeams;
       }
 
+      // Get team structure from config
+      const config = await analysisService.getConfig();
+      const teamStructure = config.teamStructure || {};
+
       const initData = {
         type: 'init',
         analyses,
         teams,
-        version: '3.0',
+        teamStructure,
+        version: '4.0',
       };
 
       const message = this.formatSSEMessage(initData);

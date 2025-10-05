@@ -13,6 +13,7 @@ export function useSSE() {
     // Core state
     analyses: context.analyses || {},
     teams: context.teams || {},
+    teamStructure: context.teamStructure || {},
 
     // DNS cache state
     dnsCache: context.dnsCache,
