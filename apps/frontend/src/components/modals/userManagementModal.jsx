@@ -45,6 +45,11 @@ import { useNotifications } from '../../hooks/useNotifications.jsx';
 import { userService } from '../../services/userService';
 import UserSessionsModal from './userSessionsModal';
 
+// Validation constants
+const USERNAME_REGEX = /^[a-zA-Z0-9_.-]+$/;
+const EMAIL_REGEX = /^\S+@\S+$/;
+const MIN_USERNAME_LENGTH = 3;
+
 // Generate a secure random password for new users
 function generateSecurePassword() {
   const length = 12;
@@ -114,20 +119,6 @@ export default function UserManagementModal({ opened, onClose }) {
     },
     validate: {
       name: (value) => (!value ? 'Name is required' : null),
-      email: (value) => {
-        // Basic validation only - live validation handles duplicates
-        if (!value) return 'Email is required';
-        if (!/^\S+@\S+$/.test(value)) return 'Invalid email format';
-        return null;
-      },
-      username: (value) => {
-        // Basic validation only - live validation handles duplicates
-        if (!value) return null; // Username is optional
-        if (value.length < 3) return 'Username must be at least 3 characters';
-        if (!/^[a-zA-Z0-9_-]+$/.test(value))
-          return 'Username can only contain letters, numbers, hyphens, and underscores';
-        return null;
-      },
     },
   });
 
@@ -219,27 +210,23 @@ export default function UserManagementModal({ opened, onClose }) {
     }
   }, []);
 
-  // Async username validation using Better Auth
+  // Consolidated username validation with Better Auth API check
   const validateUsername = useCallback(
     async (username) => {
       if (!username) return null; // Username is optional
-      if (username.length < 3) return 'Username must be at least 3 characters';
-      if (!/^[a-zA-Z0-9_-]+$/.test(username))
-        return 'Username can only contain letters, numbers, hyphens, and underscores';
+      if (username.length < MIN_USERNAME_LENGTH)
+        return `Username must be at least ${MIN_USERNAME_LENGTH} characters`;
+      if (!USERNAME_REGEX.test(username))
+        return 'Username can only contain letters, numbers, hyphens, underscores, and dots';
 
       // Skip availability check when editing existing user
       if (editingUser) return null;
 
       try {
-        const response = await authClient.isUsernameAvailable({
-          username: username,
-        });
-
-        if (response.data?.available) {
-          return null; // Username is available
-        } else {
-          return 'This username is already taken';
-        }
+        const response = await authClient.isUsernameAvailable({ username });
+        return response.data?.available
+          ? null
+          : 'This username is already taken';
       } catch (error) {
         console.error('Error checking username availability:', error);
         return 'Unable to verify username availability';
@@ -248,12 +235,13 @@ export default function UserManagementModal({ opened, onClose }) {
     [editingUser],
   );
 
+  // Consolidated email validation
   const validateEmail = useCallback(
     (email) => {
       if (!email) return 'Email is required';
-      if (!/^\S+@\S+$/.test(email)) return 'Invalid email format';
+      if (!EMAIL_REGEX.test(email)) return 'Invalid email format';
 
-      // Check against existing emails (case-insensitive, like analysis component)
+      // Check against existing emails (case-insensitive)
       if (
         !editingUser &&
         existingUserData.emails.includes(email.toLowerCase())
@@ -266,16 +254,11 @@ export default function UserManagementModal({ opened, onClose }) {
     [editingUser, existingUserData.emails],
   );
 
-  // Username validation using Better Auth API
   const handleUsernameChange = useCallback(
     async (value) => {
       form.setFieldValue('username', value);
       const error = await validateUsername(value);
-      if (error) {
-        form.setFieldError('username', error);
-      } else {
-        form.clearFieldError('username');
-      }
+      form.setFieldError('username', error || undefined);
     },
     [form, validateUsername],
   );
@@ -283,13 +266,8 @@ export default function UserManagementModal({ opened, onClose }) {
   const handleEmailChange = useCallback(
     (value) => {
       form.setFieldValue('email', value);
-      // Instant validation with local data
       const error = validateEmail(value);
-      if (error) {
-        form.setFieldError('email', error);
-      } else {
-        form.clearFieldError('email');
-      }
+      form.setFieldError('email', error || undefined);
     },
     [form, validateEmail],
   );
@@ -354,6 +332,23 @@ export default function UserManagementModal({ opened, onClose }) {
     try {
       setLoading(true);
       setError('');
+
+      // Validate email and username before submission
+      const emailError = validateEmail(values.email);
+      if (emailError) {
+        form.setFieldError('email', emailError);
+        setLoading(false);
+        return;
+      }
+
+      if (values.username) {
+        const usernameError = await validateUsername(values.username);
+        if (usernameError) {
+          form.setFieldError('username', usernameError);
+          setLoading(false);
+          return;
+        }
+      }
 
       if (editingUser) {
         // Handle user editing

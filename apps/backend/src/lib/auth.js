@@ -110,7 +110,12 @@ export const auth = betterAuth({
     },
   },
   plugins: [
-    username(),
+    username({
+      usernameValidator: (username) => {
+        // Allow alphanumeric, underscores, hyphens, and dots
+        return /^[a-zA-Z0-9_.-]+$/.test(username);
+      },
+    }),
     organization({
       allowUserToCreateOrganization: false, // Only admins can create organizations
       organizationLimit: 1, // Single organization for the app
