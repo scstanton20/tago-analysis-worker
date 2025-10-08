@@ -123,6 +123,9 @@ importers:
       '@codemirror/lang-javascript':
         specifier: ^6.2.4
         version: 6.2.4
+      '@codemirror/lint':
+        specifier: ^6.9.0
+        version: 6.9.0
       '@codemirror/merge':
         specifier: ^6.11.0
         version: 6.11.0
@@ -177,6 +180,15 @@ importers:
       diff:
         specifier: ^8.0.2
         version: 8.0.2
+      eslint:
+        specifier: ^9.36.0
+        version: 9.36.0(jiti@2.6.1)
+      eslint-linter-browserify:
+        specifier: ^9.37.0
+        version: 9.37.0
+      prettier:
+        specifier: 3.6.2
+        version: 3.6.2
       prop-types:
         specifier: ^15.8.1
         version: 15.8.1
@@ -1723,6 +1735,9 @@ packages:
     hasBin: true
     peerDependencies:
       eslint: '>=7.0.0'
+
+  eslint-linter-browserify@9.37.0:
+    resolution: {integrity: sha512-Wko9253V/vjQJt/R3tdUi5nsZZRS+G6Uyrlu/OCEdHitWI427jMo6jMFBmxuxHofbjd5gPx3WbrBEF1Qxfr9rw==}
 
   eslint-plugin-es-x@7.8.0:
     resolution: {integrity: sha512-7Ds8+wAAoV3T+LAKeu39Y5BzXCrGKrcISfgKEqTS4BDN8SFEDQd0S43jiQ8vIa3wUKD07qitZdfzlenSi8/0qQ==}
@@ -5040,6 +5055,8 @@ snapshots:
   eslint-config-prettier@10.1.8(eslint@9.36.0(jiti@2.6.1)):
     dependencies:
       eslint: 9.36.0(jiti@2.6.1)
+
+  eslint-linter-browserify@9.37.0: {}
 
   eslint-plugin-es-x@7.8.0(eslint@9.36.0(jiti@2.6.1)):
     dependencies:

@@ -266,7 +266,7 @@ export const createAnalysisLogger = (analysisName, additionalContext = {}) => {
         pid: undefined,
       }),
     },
-    timestamp: Date().toLocaleString(),
+    timestamp: pino.stdTimeFunctions.isoTime,
     base: childContext,
     transport:
       analysisTransports.length === 1

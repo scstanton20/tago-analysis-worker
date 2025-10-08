@@ -1,13 +1,18 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { basicSetup } from 'codemirror';
-import { EditorView, lineNumbers } from '@codemirror/view';
-import { EditorState } from '@codemirror/state';
+import { EditorView, lineNumbers, keymap } from '@codemirror/view';
+import { EditorState, EditorSelection } from '@codemirror/state';
 import { javascript } from '@codemirror/lang-javascript';
+import { linter, lintGutter } from '@codemirror/lint';
 import { unifiedMergeView } from '@codemirror/merge';
 import { useMantineColorScheme } from '@mantine/core';
 import { vsCodeDark } from '@fsegurai/codemirror-theme-vscode-dark';
 import { vsCodeLight } from '@fsegurai/codemirror-theme-vscode-light';
+import * as prettier from 'prettier';
+import prettierPluginBabel from 'prettier/plugins/babel';
+import prettierPluginEstree from 'prettier/plugins/estree';
+import { Linter } from 'eslint-linter-browserify';
 
 // Custom read-only setup with line numbers and syntax highlighting
 const readOnlySetup = [
@@ -16,6 +21,122 @@ const readOnlySetup = [
   EditorState.readOnly.of(true),
   EditorView.editable.of(false),
 ];
+
+// Format code using Prettier
+async function formatCode(view) {
+  try {
+    const code = view.state.doc.toString();
+    const formatted = await prettier.format(code, {
+      parser: 'babel',
+      plugins: [prettierPluginBabel, prettierPluginEstree],
+      semi: true,
+      singleQuote: true,
+      tabWidth: 2,
+      trailingComma: 'all',
+    });
+
+    // Replace entire document with formatted code
+    view.dispatch({
+      changes: {
+        from: 0,
+        to: view.state.doc.length,
+        insert: formatted,
+      },
+    });
+
+    return true;
+  } catch (error) {
+    console.error('Formatting error:', error);
+    return false;
+  }
+}
+
+// Create format command for keyboard shortcut
+const formatKeymap = keymap.of([
+  {
+    key: 'Mod-Shift-f', // Ctrl+Shift+F on Windows/Linux, Cmd+Shift+F on Mac
+    run: (view) => {
+      formatCode(view);
+      return true;
+    },
+  },
+]);
+
+// Create ESLint configuration for linting
+const eslintConfig = {
+  languageOptions: {
+    ecmaVersion: 2022,
+    sourceType: 'module',
+    parserOptions: {
+      ecmaFeatures: {
+        jsx: false,
+      },
+    },
+    globals: {
+      console: 'readonly',
+      process: 'readonly',
+      // Tago SDK globals available in analysis context
+      context: 'readonly',
+      account: 'readonly',
+      device: 'readonly',
+      analysis: 'readonly',
+      scope: 'readonly',
+    },
+  },
+  rules: {
+    'no-undef': 'warn',
+    'no-unused-vars': 'warn',
+    'no-redeclare': 'error',
+    'no-const-assign': 'error',
+    'no-dupe-keys': 'error',
+    'no-duplicate-case': 'error',
+    'no-unreachable': 'warn',
+    'no-empty': 'warn',
+    'no-debugger': 'warn',
+    semi: ['warn', 'always'],
+    quotes: ['warn', 'single'],
+  },
+};
+
+// Initialize ESLint linter for browser
+const eslintLinter = new Linter({ configType: 'flat' });
+
+// Create CodeMirror linter using ESLint with callback for diagnostics
+const createJavaScriptLinter = (onDiagnosticsChange) =>
+  linter((view) => {
+    const diagnostics = [];
+    const code = view.state.doc.toString();
+
+    try {
+      const messages = eslintLinter.verify(code, eslintConfig);
+
+      for (const message of messages) {
+        const line = view.state.doc.line(message.line);
+        const from = line.from + (message.column - 1);
+        const to = message.endLine
+          ? view.state.doc.line(message.endLine).from + (message.endColumn - 1)
+          : from + 1;
+
+        diagnostics.push({
+          from,
+          to,
+          severity: message.severity === 2 ? 'error' : 'warning',
+          message: message.message,
+          source: 'eslint',
+          line: message.line,
+        });
+      }
+    } catch (error) {
+      console.error('Linting error:', error);
+    }
+
+    // Notify parent of diagnostic changes
+    if (onDiagnosticsChange) {
+      onDiagnosticsChange(diagnostics);
+    }
+
+    return diagnostics;
+  });
 
 import { analysisService } from '../../services/analysisService.js';
 import {
@@ -30,6 +151,8 @@ import {
   ActionIcon,
   LoadingOverlay,
   Switch,
+  Badge,
+  Tooltip,
 } from '@mantine/core';
 import {
   IconEdit,
@@ -37,6 +160,11 @@ import {
   IconX,
   IconAlertCircle,
   IconGitCompare,
+  IconWand,
+  IconChevronUp,
+  IconChevronDown,
+  IconCircleXFilled,
+  IconAlertTriangleFilled,
 } from '@tabler/icons-react';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 
@@ -49,12 +177,17 @@ function CodeMirrorEditor({
   height = '100%',
   diffMode = false,
   originalContent = '',
+  onFormatReady, // Callback to expose format function to parent
+  onDiagnosticsChange, // Callback when lint diagnostics change
+  onViewReady, // Callback to expose editor view to parent
 }) {
   const editorRef = useRef(null);
   const viewRef = useRef(null);
   const onChangeRef = useRef(onChange);
   const readOnlyRef = useRef(readOnly);
   const languageRef = useRef(language);
+  const onDiagnosticsChangeRef = useRef(onDiagnosticsChange);
+  const onViewReadyRef = useRef(onViewReady);
   const { colorScheme } = useMantineColorScheme();
 
   // Keep refs current
@@ -62,6 +195,8 @@ function CodeMirrorEditor({
     onChangeRef.current = onChange;
     readOnlyRef.current = readOnly;
     languageRef.current = language;
+    onDiagnosticsChangeRef.current = onDiagnosticsChange;
+    onViewReadyRef.current = onViewReady;
   });
 
   // Create editor once on mount
@@ -102,6 +237,11 @@ function CodeMirrorEditor({
       });
 
       viewRef.current = view;
+
+      // Expose view to parent component
+      if (onViewReadyRef.current) {
+        onViewReadyRef.current(view);
+      }
     } else {
       // Create regular editor
       const extensions = [
@@ -124,6 +264,15 @@ function CodeMirrorEditor({
       // Add language support
       if (languageRef.current === 'javascript') {
         extensions.push(javascript());
+
+        // Add format keymap and linting for editable JavaScript editors
+        if (!readOnlyRef.current) {
+          extensions.push(formatKeymap);
+          extensions.push(lintGutter());
+          extensions.push(
+            createJavaScriptLinter(onDiagnosticsChangeRef.current),
+          );
+        }
       }
 
       const state = EditorState.create({
@@ -137,6 +286,21 @@ function CodeMirrorEditor({
       });
 
       viewRef.current = view;
+    }
+
+    // Expose format function to parent component
+    if (
+      onFormatReady &&
+      !readOnlyRef.current &&
+      languageRef.current === 'javascript' &&
+      !diffMode
+    ) {
+      onFormatReady(() => formatCode(viewRef.current));
+    }
+
+    // Expose view to parent component
+    if (onViewReadyRef.current && viewRef.current) {
+      onViewReadyRef.current(viewRef.current);
     }
 
     return () => {
@@ -194,6 +358,11 @@ function CodeMirrorEditor({
         });
 
         viewRef.current = view;
+
+        // Expose view to parent component
+        if (onViewReadyRef.current) {
+          onViewReadyRef.current(view);
+        }
       } else {
         // Recreate regular editor
         const extensions = [
@@ -215,6 +384,15 @@ function CodeMirrorEditor({
 
         if (languageRef.current === 'javascript') {
           extensions.push(javascript());
+
+          // Add format keymap and linting for editable JavaScript editors
+          if (!readOnlyRef.current) {
+            extensions.push(formatKeymap);
+            extensions.push(lintGutter());
+            extensions.push(
+              createJavaScriptLinter(onDiagnosticsChangeRef.current),
+            );
+          }
         }
 
         const state = EditorState.create({
@@ -228,6 +406,11 @@ function CodeMirrorEditor({
         });
 
         viewRef.current = view;
+
+        // Expose view to parent component
+        if (onViewReadyRef.current) {
+          onViewReadyRef.current(view);
+        }
       }
     }
   }, [colorScheme, diffMode, originalContent]);
@@ -273,6 +456,11 @@ function CodeMirrorEditor({
           });
 
           viewRef.current = view;
+
+          // Expose view to parent component
+          if (onViewReadyRef.current) {
+            onViewReadyRef.current(view);
+          }
         }
       } else {
         // Regular editor - just update content
@@ -309,6 +497,9 @@ CodeMirrorEditor.propTypes = {
   height: PropTypes.string,
   diffMode: PropTypes.bool,
   originalContent: PropTypes.string,
+  onFormatReady: PropTypes.func,
+  onDiagnosticsChange: PropTypes.func,
+  onViewReady: PropTypes.func,
 };
 
 export { CodeMirrorEditor };
@@ -330,9 +521,19 @@ export default function AnalysisEditModal({
   const [displayName, setDisplayName] = useState(currentAnalysis.name);
   const [diffMode, setDiffMode] = useState(false);
   const [currentContent, setCurrentContent] = useState('');
+  const [formatCodeFn, setFormatCodeFn] = useState(null);
+  const [diagnostics, setDiagnostics] = useState([]);
+  const [currentDiagnosticIndex, setCurrentDiagnosticIndex] = useState(0);
+  const [hasFormatChanges, setHasFormatChanges] = useState(false);
+  const editorViewRef = useRef(null);
 
   const notify = useNotifications();
   const isEnvMode = type === 'env';
+
+  const errorCount = diagnostics.filter((d) => d.severity === 'error').length;
+  const warningCount = diagnostics.filter(
+    (d) => d.severity === 'warning',
+  ).length;
 
   // Update analysis name when it changes via SSE (only for analysis mode)
   if (!isEnvMode && currentAnalysis.name !== newFileName && !isEditingName) {
@@ -344,6 +545,103 @@ export default function AnalysisEditModal({
     // Just update the content state directly, don't format in real-time
     setContent(newContent);
     setHasChanges(true);
+  }, []);
+
+  // Check if prettier would make changes to the current content
+  useEffect(() => {
+    if (isEnvMode || readOnly || !content) {
+      setHasFormatChanges(false);
+      return;
+    }
+
+    let isCancelled = false;
+
+    async function checkFormatChanges() {
+      try {
+        const formatted = await prettier.format(content, {
+          parser: 'babel',
+          plugins: [prettierPluginBabel, prettierPluginEstree],
+          semi: true,
+          singleQuote: true,
+          tabWidth: 2,
+          trailingComma: 'all',
+        });
+
+        if (!isCancelled) {
+          setHasFormatChanges(formatted !== content);
+        }
+      } catch {
+        // If formatting fails, disable format button
+        if (!isCancelled) {
+          setHasFormatChanges(false);
+        }
+      }
+    }
+
+    checkFormatChanges();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [content, isEnvMode, readOnly]);
+
+  const handleFormatReady = useCallback((formatFn) => {
+    setFormatCodeFn(() => formatFn);
+  }, []);
+
+  const handleFormat = useCallback(async () => {
+    if (formatCodeFn) {
+      await formatCodeFn();
+    }
+  }, [formatCodeFn]);
+
+  const handleDiagnosticsChange = useCallback((newDiagnostics) => {
+    setDiagnostics(newDiagnostics);
+    setCurrentDiagnosticIndex(0);
+  }, []);
+
+  const scrollToDiagnostic = useCallback(
+    (index) => {
+      if (!editorViewRef.current || !diagnostics[index]) {
+        return;
+      }
+
+      const diagnostic = diagnostics[index];
+      const view = editorViewRef.current;
+
+      // Scroll to diagnostic with positioning 2 rows from bottom
+      view.dispatch({
+        selection: EditorSelection.cursor(diagnostic.from),
+        effects: EditorView.scrollIntoView(diagnostic.from, {
+          y: 'end',
+          yMargin: view.defaultLineHeight * 2,
+        }),
+      });
+
+      view.focus();
+    },
+    [diagnostics],
+  );
+
+  const navigateToNextDiagnostic = useCallback(() => {
+    if (diagnostics.length === 0) return;
+    const nextIndex = (currentDiagnosticIndex + 1) % diagnostics.length;
+    setCurrentDiagnosticIndex(nextIndex);
+    scrollToDiagnostic(nextIndex);
+  }, [diagnostics.length, currentDiagnosticIndex, scrollToDiagnostic]);
+
+  const navigateToPrevDiagnostic = useCallback(() => {
+    if (diagnostics.length === 0) return;
+    const prevIndex =
+      currentDiagnosticIndex === 0
+        ? diagnostics.length - 1
+        : currentDiagnosticIndex - 1;
+    setCurrentDiagnosticIndex(prevIndex);
+    scrollToDiagnostic(prevIndex);
+  }, [diagnostics.length, currentDiagnosticIndex, scrollToDiagnostic]);
+
+  const handleViewReady = useCallback((view) => {
+    editorViewRef.current = view;
   }, []);
 
   const handleDiffToggle = useCallback(
@@ -451,6 +749,22 @@ export default function AnalysisEditModal({
           },
         );
       } else {
+        // Auto-format JavaScript before saving
+        try {
+          contentToSave = await prettier.format(content, {
+            parser: 'babel',
+            plugins: [prettierPluginBabel, prettierPluginEstree],
+            semi: true,
+            singleQuote: true,
+            tabWidth: 2,
+            trailingComma: 'all',
+          });
+        } catch (formatError) {
+          console.warn('Formatting failed, saving unformatted:', formatError);
+          // Continue with unformatted content if formatting fails
+          contentToSave = content;
+        }
+
         await notify.updateAnalysis(
           analysisService.updateAnalysis(displayName, contentToSave),
           displayName,
@@ -636,28 +950,101 @@ export default function AnalysisEditModal({
               height="100%"
               diffMode={diffMode}
               originalContent={currentContent}
+              onFormatReady={handleFormatReady}
+              onDiagnosticsChange={handleDiagnosticsChange}
+              onViewReady={handleViewReady}
             />
           )}
         </Box>
 
         <Group
-          justify="flex-end"
+          justify="space-between"
           pt="md"
           style={{ borderTop: '1px solid var(--mantine-color-gray-3)' }}
         >
-          <Button variant="default" onClick={onClose}>
-            {readOnly ? 'Close' : 'Cancel'}
-          </Button>
-          {!readOnly && (
-            <Button
-              onClick={handleSave}
-              disabled={!hasChanges}
-              loading={isLoading}
-              color="brand"
-            >
-              Save Changes
+          <Group>
+            {!readOnly && !isEnvMode && formatCodeFn && (
+              <Button
+                leftSection={<IconWand size={16} />}
+                variant="light"
+                onClick={handleFormat}
+                disabled={isLoading || !hasFormatChanges}
+              >
+                Format (Ctrl/CMD+Shift+F)
+              </Button>
+            )}
+            {!readOnly &&
+              !isEnvMode &&
+              (errorCount > 0 || warningCount > 0) && (
+                <Group gap="xs">
+                  <Group gap={4}>
+                    {errorCount > 0 && (
+                      <Tooltip
+                        label={`${errorCount} error${errorCount > 1 ? 's' : ''}`}
+                      >
+                        <Badge
+                          color="red"
+                          variant="filled"
+                          leftSection={<IconCircleXFilled size={12} />}
+                        >
+                          {errorCount}
+                        </Badge>
+                      </Tooltip>
+                    )}
+                    {warningCount > 0 && (
+                      <Tooltip
+                        label={`${warningCount} warning${warningCount > 1 ? 's' : ''}`}
+                      >
+                        <Badge
+                          color="yellow"
+                          variant="filled"
+                          leftSection={<IconAlertTriangleFilled size={12} />}
+                        >
+                          {warningCount}
+                        </Badge>
+                      </Tooltip>
+                    )}
+                  </Group>
+                  <Group gap={4}>
+                    <Tooltip label="Previous issue">
+                      <ActionIcon
+                        variant="subtle"
+                        onClick={navigateToPrevDiagnostic}
+                        disabled={diagnostics.length === 0}
+                        size="sm"
+                      >
+                        <IconChevronUp size={16} />
+                      </ActionIcon>
+                    </Tooltip>
+                    <Tooltip label="Next issue">
+                      <ActionIcon
+                        variant="subtle"
+                        onClick={navigateToNextDiagnostic}
+                        disabled={diagnostics.length === 0}
+                        size="sm"
+                      >
+                        <IconChevronDown size={16} />
+                      </ActionIcon>
+                    </Tooltip>
+                  </Group>
+                </Group>
+              )}
+          </Group>
+          <Group>
+            <Button variant="default" onClick={onClose}>
+              {readOnly ? 'Close' : 'Cancel'}
             </Button>
-          )}
+            {!readOnly && (
+              <Button
+                onClick={handleSave}
+                disabled={!hasChanges}
+                loading={isLoading}
+                color="brand"
+              >
+                Save Changes
+              </Button>
+            )}
+          </Group>
         </Group>
       </Stack>
     </Modal>
