@@ -405,6 +405,19 @@ class AnalysisProcess {
 
       this.setupProcessHandlers();
       this.updateStatus('running', true);
+
+      // Send SSE notification to frontend that analysis has started
+      sseManager.broadcastAnalysisUpdate(this.analysisName, {
+        type: 'analysisUpdate',
+        analysisName: this.analysisName,
+        update: {
+          status: 'running',
+          enabled: true,
+          startTime: new Date().toISOString(),
+          startSequence: Date.now(),
+        },
+      });
+
       // Config saving is handled by the service after start() completes
     } catch (error) {
       this.logger.error({ err: error }, `Failed to start analysis process`);
@@ -493,6 +506,21 @@ class AnalysisProcess {
     this.process = null;
 
     this.updateStatus('stopped', false);
+
+    // Send SSE notification to frontend that analysis has stopped
+    // Include timestamp to ensure each exit is treated as a unique event
+    sseManager.broadcastAnalysisUpdate(this.analysisName, {
+      type: 'analysisUpdate',
+      analysisName: this.analysisName,
+      update: {
+        status: 'stopped',
+        enabled: false,
+        exitCode: code,
+        exitTime: new Date().toISOString(),
+        exitSequence: Date.now(), // Unique sequence number for deduplication
+      },
+    });
+
     await this.saveConfig();
 
     // Auto-restart listeners that exit unexpectedly OR have connection errors

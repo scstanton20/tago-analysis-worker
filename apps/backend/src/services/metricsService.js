@@ -233,12 +233,31 @@ class MetricsService {
         }
       });
 
+      // Get network metrics (bytes)
+      const networkMetrics = parsedMetrics.filter(
+        (m) => m.name === 'tago_analysis_network_bytes',
+      );
+      networkMetrics.forEach((metric) => {
+        const name = metric.labels.analysis_name;
+        const direction = metric.labels.direction;
+        if (name && direction) {
+          if (!processes.has(name)) processes.set(name, {});
+          if (direction === 'rx') {
+            processes.get(name).networkRx = metric.value;
+          } else if (direction === 'tx') {
+            processes.get(name).networkTx = metric.value;
+          }
+        }
+      });
+
       // Convert to array format
       return Array.from(processes.entries()).map(([name, metrics]) => ({
         name,
         cpu: metrics.cpu || 0,
         memory: metrics.memory || 0,
         uptime: metrics.uptime || 0,
+        networkRx: metrics.networkRx || 0, // bytes
+        networkTx: metrics.networkTx || 0, // bytes
       }));
     } catch (error) {
       logger.error(

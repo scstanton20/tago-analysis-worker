@@ -120,13 +120,24 @@ export const useNotifications = () => {
         successIcon: <IconCheck size={16} />,
       }),
 
-    runAnalysis: (promise, analysisName) =>
-      executeWithNotification(promise, {
-        loading: `Starting ${analysisName}...`,
-        success: `${analysisName} started successfully.`,
-        loadingIcon: <IconLoader size={16} />,
-        successIcon: <IconCheck size={16} />,
-      }),
+    runAnalysis: async (promise, analysisName) => {
+      // Don't show success notification - SSE will handle actual start/fail notifications
+      // Just execute the promise and let errors bubble up
+      try {
+        const result = await promise;
+        return result;
+      } catch (err) {
+        // Show error notification only if API call fails
+        notifications.show({
+          title: 'Error',
+          message: err.message || 'Failed to start analysis',
+          icon: <IconX size={16} />,
+          color: 'red',
+          autoClose: 6000,
+        });
+        throw err;
+      }
+    },
 
     stopAnalysis: (promise, analysisName) =>
       executeWithNotification(promise, {

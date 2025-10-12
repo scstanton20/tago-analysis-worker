@@ -24,6 +24,8 @@ export function SSEProvider({ children }) {
   const mountedRef = useRef(true);
   const connectionStatusRef = useRef('connecting');
   const logSequences = useRef(new Map());
+  const analysisStartTimes = useRef(new Map()); // Track when analyses start
+  const analysisStartTimeouts = useRef(new Map()); // Track success notification timeouts
 
   const addLoadingAnalysis = useCallback((analysisName) => {
     setLoadingAnalyses((prev) => new Set([...prev, analysisName]));
@@ -157,6 +159,97 @@ export function SSEProvider({ children }) {
                   ...data.update,
                 },
               }));
+
+              // When analysis starts
+              if (data.update.status === 'running') {
+                const startTime = Date.now();
+                analysisStartTimes.current.set(data.analysisName, startTime);
+
+                // Show "Starting..." notification
+                import('@mantine/notifications').then(({ notifications }) => {
+                  const notifId = `${data.analysisName}-starting`;
+                  notifications.show({
+                    id: notifId,
+                    title: 'Starting...',
+                    message: `${data.analysisName}`,
+                    color: 'blue',
+                    loading: true,
+                    autoClose: false,
+                  });
+                });
+
+                // Schedule success notification after 1 second
+                const timeoutId = setTimeout(() => {
+                  const currentStartTime = analysisStartTimes.current.get(
+                    data.analysisName,
+                  );
+                  if (currentStartTime === startTime) {
+                    // Still running - show success
+                    import('@mantine/notifications').then(
+                      ({ notifications }) => {
+                        notifications.update({
+                          id: `${data.analysisName}-starting`,
+                          title: 'Started',
+                          message: `${data.analysisName} is running`,
+                          color: 'green',
+                          loading: false,
+                          autoClose: 3000,
+                        });
+                      },
+                    );
+                    analysisStartTimes.current.delete(data.analysisName);
+                    analysisStartTimeouts.current.delete(data.analysisName);
+                  }
+                }, 1000);
+
+                analysisStartTimeouts.current.set(data.analysisName, timeoutId);
+              }
+
+              // When analysis stops (any exit code)
+              if (
+                data.update.status === 'stopped' &&
+                data.update.exitCode !== undefined
+              ) {
+                const startTime = analysisStartTimes.current.get(
+                  data.analysisName,
+                );
+                if (startTime) {
+                  const runDuration = Date.now() - startTime;
+
+                  // IMMEDIATELY delete start time and clear timeout to prevent success notification
+                  analysisStartTimes.current.delete(data.analysisName);
+
+                  const timeoutId = analysisStartTimeouts.current.get(
+                    data.analysisName,
+                  );
+                  if (timeoutId) {
+                    clearTimeout(timeoutId);
+                    analysisStartTimeouts.current.delete(data.analysisName);
+                  }
+
+                  if (runDuration <= 1000) {
+                    // Exited within 1 second - this is always a failure for listeners
+                    // (they should stay running continuously)
+                    // Small delay to ensure the "Starting..." notification was created
+                    setTimeout(() => {
+                      import('@mantine/notifications').then(
+                        ({ notifications }) => {
+                          const exitCode = data.update.exitCode;
+
+                          notifications.update({
+                            id: `${data.analysisName}-starting`,
+                            title: 'Failed to Start',
+                            message: `${data.analysisName} exited with code ${exitCode} after ${runDuration}ms`,
+                            color: 'red',
+                            loading: false,
+                            autoClose: 5000,
+                          });
+                        },
+                      );
+                    }, 50); // 50ms delay to ensure notification was created
+                  }
+                }
+              }
             }
             break;
 

@@ -106,6 +106,12 @@ function StatusBadge({ isOnline, loading = false }) {
 
 // Process Table Component
 function ProcessTable({ processes, loading = false }) {
+  // Helper to convert bytes to Mbps
+  const bytesToMbps = (bytes) => {
+    if (!bytes || bytes === 0) return 0;
+    return (bytes * 8) / 1000000; // Convert to megabits per second
+  };
+
   if (loading) {
     return (
       <Box pos="relative" h={200}>
@@ -129,6 +135,8 @@ function ProcessTable({ processes, loading = false }) {
           <Table.Th>Process Name</Table.Th>
           <Table.Th>CPU %</Table.Th>
           <Table.Th>Memory (MB)</Table.Th>
+          <Table.Th>RX (Mbps)</Table.Th>
+          <Table.Th>TX (Mbps)</Table.Th>
           <Table.Th>Uptime (hrs)</Table.Th>
         </Table.Tr>
       </Table.Thead>
@@ -156,6 +164,16 @@ function ProcessTable({ processes, loading = false }) {
               </Group>
             </Table.Td>
             <Table.Td>{process.memory?.toFixed(0) || '0'}</Table.Td>
+            <Table.Td>
+              <Text c={bytesToMbps(process.networkRx) > 0 ? 'blue' : 'dimmed'}>
+                {bytesToMbps(process.networkRx).toFixed(2)}
+              </Text>
+            </Table.Td>
+            <Table.Td>
+              <Text c={bytesToMbps(process.networkTx) > 0 ? 'green' : 'dimmed'}>
+                {bytesToMbps(process.networkTx).toFixed(2)}
+              </Text>
+            </Table.Td>
             <Table.Td>{process.uptime?.toFixed(1) || '0.0'}</Table.Td>
           </Table.Tr>
         ))}
