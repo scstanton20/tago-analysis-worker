@@ -7,7 +7,7 @@ export const dnsService = {
     const response = await fetchWithHeaders('/settings/dns/config', {
       method: 'GET',
     });
-    return handleResponse(response, '/settings/dns/config', { method: 'GET' });
+    return handleResponse(response);
   },
 
   // Update DNS cache configuration
@@ -16,10 +16,7 @@ export const dnsService = {
       method: 'PUT',
       body: JSON.stringify(config),
     });
-    return handleResponse(response, '/settings/dns/config', {
-      method: 'PUT',
-      body: JSON.stringify(config),
-    });
+    return handleResponse(response);
   },
 
   // Get all cache entries
@@ -27,9 +24,7 @@ export const dnsService = {
     const response = await fetchWithHeaders('/settings/dns/entries', {
       method: 'GET',
     });
-    return handleResponse(response, '/settings/dns/entries', {
-      method: 'GET',
-    });
+    return handleResponse(response);
   },
 
   // Clear entire cache
@@ -37,9 +32,7 @@ export const dnsService = {
     const response = await fetchWithHeaders('/settings/dns/cache', {
       method: 'DELETE',
     });
-    return handleResponse(response, '/settings/dns/cache', {
-      method: 'DELETE',
-    });
+    return handleResponse(response);
   },
 
   // Delete specific cache entry
@@ -48,7 +41,7 @@ export const dnsService = {
     const response = await fetchWithHeaders(url, {
       method: 'DELETE',
     });
-    return handleResponse(response, url, { method: 'DELETE' });
+    return handleResponse(response);
   },
 
   // Reset statistics
@@ -57,9 +50,6 @@ export const dnsService = {
       method: 'POST',
       body: JSON.stringify({}),
     });
-    return handleResponse(response, '/settings/dns/stats/reset', {
-      method: 'POST',
-      body: JSON.stringify({}),
-    });
+    return handleResponse(response);
   },
 };

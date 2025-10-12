@@ -46,14 +46,23 @@ const processQueue = (error, success = false) => {
   refreshQueue = [];
 };
 
+/**
+ * Parse error response safely
+ * @param {Response} response - Fetch response object
+ * @param {string} defaultMessage - Default error message if parsing fails
+ * @returns {Promise<Object>} Error data object
+ */
+export async function parseErrorResponse(response, defaultMessage) {
+  try {
+    return await response.json();
+  } catch {
+    return { error: defaultMessage || response.statusText };
+  }
+}
+
 export async function handleResponse(response, originalUrl, originalOptions) {
   if (!response.ok) {
-    let errorData;
-    try {
-      errorData = await response.json();
-    } catch {
-      throw new Error(response.statusText);
-    }
+    const errorData = await parseErrorResponse(response, response.statusText);
 
     // Handle 428 Precondition Required - Password change required
     if (response.status === 428 && errorData.requiresPasswordChange) {
@@ -147,4 +156,42 @@ export async function handleResponse(response, originalUrl, originalOptions) {
     throw new Error(errorData.error || response.statusText);
   }
   return response.json();
+}
+
+/**
+ * Download a file from a blob response
+ * @param {string} fileName - Name for the downloaded file
+ * @param {Blob} blob - Blob data to download
+ * @param {string} extension - File extension (e.g., '.js', '.log')
+ */
+export function downloadBlob(fileName, blob, extension = '') {
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${fileName}${extension}`;
+  a.style.display = 'none';
+  a.rel = 'noopener noreferrer';
+
+  document.body.appendChild(a);
+  a.click();
+
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+}
+
+/**
+ * Service method wrapper with consistent error handling
+ * @param {Function} fn - Service function to wrap
+ * @param {string} operationName - Name of the operation for error messages
+ * @returns {Function} Wrapped function with error handling
+ */
+export function withErrorHandling(fn, operationName) {
+  return async function (...args) {
+    try {
+      return await fn.apply(this, args);
+    } catch (error) {
+      console.error(`Failed to ${operationName}:`, error);
+      throw new Error(`Failed to ${operationName}: ${error.message}`);
+    }
+  };
 }

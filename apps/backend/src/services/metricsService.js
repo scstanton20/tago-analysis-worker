@@ -3,7 +3,9 @@ import { register } from '../utils/metrics-enhanced.js';
 import { createChildLogger } from '../utils/logging/logger.js';
 import pidusage from 'pidusage';
 
-const logger = createChildLogger('metrics-service');
+// Module-level logger for background operations and helper methods
+// Public methods accept logger parameter for request-scoped logging
+const moduleLogger = createChildLogger('metrics-service');
 
 class MetricsService {
   constructor() {
@@ -11,7 +13,7 @@ class MetricsService {
   }
 
   // Get container (backend Node.js process) metrics
-  async getContainerMetrics(parsedMetrics = null) {
+  async getContainerMetrics(parsedMetrics = null, logger = moduleLogger) {
     try {
       const metrics =
         parsedMetrics || this.parsePrometheusMetrics(await register.metrics());
@@ -59,7 +61,7 @@ class MetricsService {
   }
 
   // Get children (analysis processes) metrics only
-  async getChildrenOnlyMetrics(parsedMetrics = null) {
+  async getChildrenOnlyMetrics(parsedMetrics = null, logger = moduleLogger) {
     try {
       const metrics =
         parsedMetrics || this.parsePrometheusMetrics(await register.metrics());
@@ -123,7 +125,7 @@ class MetricsService {
   }
 
   // Legacy method - now uses children metrics
-  async getSystemMetrics() {
+  async getSystemMetrics(logger = moduleLogger) {
     try {
       // Get metrics string from register
       const metricsString = await register.metrics();
@@ -191,7 +193,7 @@ class MetricsService {
   }
 
   // Get per-process metrics by parsing Prometheus string format
-  async getProcessMetrics() {
+  async getProcessMetrics(logger = moduleLogger) {
     try {
       const metricsString = await register.metrics();
       const parsedMetrics = this.parsePrometheusMetrics(metricsString);
@@ -273,15 +275,21 @@ class MetricsService {
   }
 
   // Get complete metrics data with all categories
-  async getAllMetrics() {
+  async getAllMetrics(logger = moduleLogger) {
     try {
       const metricsString = await register.metrics();
       const parsedMetrics = this.parsePrometheusMetrics(metricsString);
 
-      // Get all categories
-      const containerMetrics = await this.getContainerMetrics(parsedMetrics);
-      const processMetrics = await this.getProcessMetrics();
-      const childrenMetrics = await this.getChildrenOnlyMetrics(parsedMetrics);
+      // Get all categories - pass logger to sub-methods
+      const containerMetrics = await this.getContainerMetrics(
+        parsedMetrics,
+        logger,
+      );
+      const processMetrics = await this.getProcessMetrics(logger);
+      const childrenMetrics = await this.getChildrenOnlyMetrics(
+        parsedMetrics,
+        logger,
+      );
 
       // Calculate totals (container + children combined)
       const totalMetrics = this.calculateTotalMetrics(

@@ -118,6 +118,8 @@ router.get('/events', authenticateSSE, handleSSEConnection);
  *               $ref: '#/components/schemas/Error'
  */
 router.post('/logout-notification', authenticateSSE, (req, res) => {
+  const logger = req.logger?.child({ route: 'logout-notification' }) || console;
+
   try {
     const userId = req.user.id;
 
@@ -128,10 +130,16 @@ router.post('/logout-notification', authenticateSSE, (req, res) => {
       timestamp: new Date().toISOString(),
     });
 
-    console.log(`Sent logout notification to user ${userId}`);
+    logger.info(
+      { action: 'logoutNotification', userId },
+      'Sent logout notification',
+    );
     res.json({ success: true });
   } catch (error) {
-    console.error('Logout notification error:', error);
+    logger.error(
+      { action: 'logoutNotification', err: error, userId: req.user?.id },
+      'Logout notification error',
+    );
     res.status(500).json({ error: 'Failed to send logout notification' });
   }
 });

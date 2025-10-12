@@ -5,7 +5,9 @@ import {
 } from '../utils/authDatabase.js';
 import { createChildLogger } from '../utils/logging/logger.js';
 
-const logger = createChildLogger('team-service');
+// Module-level logger for background operations (initialization)
+// Public methods accept logger parameter for request-scoped logging
+const moduleLogger = createChildLogger('team-service');
 
 /**
  * Service class for managing teams using Better Auth organization plugin and their relationships with analyses
@@ -37,12 +39,12 @@ class TeamService {
       await this.loadOrganizationId();
 
       this.initialized = true;
-      logger.info(
+      moduleLogger.info(
         { organizationId: this.organizationId },
         'Team service initialized (using better-auth teams)',
       );
     } catch (error) {
-      logger.error({ error }, 'Failed to initialize team service');
+      moduleLogger.error({ error }, 'Failed to initialize team service');
       throw error;
     }
   }
@@ -64,23 +66,26 @@ class TeamService {
       }
 
       this.organizationId = org.id;
-      logger.info(
+      moduleLogger.info(
         { organizationId: this.organizationId },
         'Loaded organization ID',
       );
     } catch (error) {
-      logger.error({ error }, 'Failed to load organization ID');
+      moduleLogger.error({ error }, 'Failed to load organization ID');
       throw error;
     }
   }
 
   /**
    * Get all teams sorted by name
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<Array>} Array of team objects from better-auth
    * @throws {Error} If team retrieval fails
    */
-  async getAllTeams() {
+  async getAllTeams(logger = moduleLogger) {
     try {
+      logger.info({ action: 'getAllTeams' }, 'Getting all teams');
+
       const teams = executeQueryAll(
         'SELECT id, name, organizationId, createdAt, color, order_index, is_system FROM team WHERE organizationId = ? ORDER BY is_system DESC, order_index, name',
         [this.organizationId],
@@ -88,12 +93,21 @@ class TeamService {
       );
 
       // Convert is_system from integer to boolean for frontend
-      return teams.map((team) => ({
+      const result = teams.map((team) => ({
         ...team,
         isSystem: team.is_system === 1,
       }));
+
+      logger.info(
+        { action: 'getAllTeams', teamCount: result.length },
+        'Teams retrieved',
+      );
+      return result;
     } catch (error) {
-      logger.error({ error }, 'Failed to get teams');
+      logger.error(
+        { action: 'getAllTeams', err: error },
+        'Failed to get teams',
+      );
       throw error;
     }
   }
@@ -101,11 +115,14 @@ class TeamService {
   /**
    * Get a specific team by ID
    * @param {string} id - Team ID to retrieve
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<Object|undefined>} Team object or undefined if not found
    * @throws {Error} If team retrieval fails
    */
-  async getTeam(id) {
+  async getTeam(id, logger = moduleLogger) {
     try {
+      logger.info({ action: 'getTeam', teamId: id }, 'Getting team');
+
       const team = executeQuery(
         'SELECT id, name, organizationId, createdAt, color, order_index, is_system FROM team WHERE id = ? AND organizationId = ?',
         [id, this.organizationId],
@@ -115,11 +132,20 @@ class TeamService {
       if (team) {
         // Convert is_system from integer to boolean for frontend
         team.isSystem = team.is_system === 1;
+        logger.info(
+          { action: 'getTeam', teamId: id, teamName: team.name },
+          'Team retrieved',
+        );
+      } else {
+        logger.info({ action: 'getTeam', teamId: id }, 'Team not found');
       }
 
       return team || undefined;
     } catch (error) {
-      logger.error({ error, teamId: id }, 'Failed to get team');
+      logger.error(
+        { action: 'getTeam', err: error, teamId: id },
+        'Failed to get team',
+      );
       throw error;
     }
   }
@@ -130,11 +156,17 @@ class TeamService {
    * @param {string} data.name - Team name
    * @param {string} [data.id] - Custom team ID (generates UUID if not provided)
    * @param {Object} [headers] - Request headers for better-auth session context
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<Object>} Created team object
    * @throws {Error} If team creation fails
    */
-  async createTeam(data, headers = {}) {
+  async createTeam(data, headers = {}, logger = moduleLogger) {
     try {
+      logger.info(
+        { action: 'createTeam', teamName: data.name },
+        'Creating team',
+      );
+
       // Use better-auth API for normal team creation (leverages additional fields)
       // First check if team with same name already exists
       const existing = executeQuery(
@@ -181,12 +213,15 @@ class TeamService {
       };
 
       logger.info(
-        { teamId: team.id, teamName: team.name },
+        { action: 'createTeam', teamId: team.id, teamName: team.name },
         'Created team via better-auth API with additional fields',
       );
       return team;
     } catch (error) {
-      logger.error({ error }, 'Failed to create team');
+      logger.error(
+        { action: 'createTeam', err: error, teamName: data.name },
+        'Failed to create team',
+      );
       throw error;
     }
   }
@@ -196,11 +231,17 @@ class TeamService {
    * @param {string} id - Team ID to update
    * @param {Object} updates - Updates to apply
    * @param {string} [updates.name] - New team name
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<Object>} Updated team object
    * @throws {Error} If team not found or update fails
    */
-  async updateTeam(id, updates) {
+  async updateTeam(id, updates, logger = moduleLogger) {
     try {
+      logger.info(
+        { action: 'updateTeam', teamId: id, updates },
+        'Updating team',
+      );
+
       return executeTransaction((db) => {
         // Check if team exists first
         const existing = db
@@ -256,11 +297,17 @@ class TeamService {
           updatedTeam.isSystem = updatedTeam.is_system === 1;
         }
 
-        logger.info({ teamId: id, updates }, 'Updated team');
+        logger.info(
+          { action: 'updateTeam', teamId: id, updates },
+          'Team updated',
+        );
         return updatedTeam;
       }, `updating team ${id}`);
     } catch (error) {
-      logger.error({ error, teamId: id }, 'Failed to update team');
+      logger.error(
+        { action: 'updateTeam', err: error, teamId: id },
+        'Failed to update team',
+      );
       throw error;
     }
   }
@@ -269,19 +316,22 @@ class TeamService {
    * Delete a team (analysis migration handled automatically by beforeDeleteTeam hook)
    * @param {string} id - Team ID to delete
    * @param {Object} [headers] - Request headers for better-auth session context
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<Object>} Deletion result
    * @throws {Error} If team not found or deletion fails
    */
-  async deleteTeam(id, headers = {}) {
+  async deleteTeam(id, headers = {}, logger = moduleLogger) {
     try {
+      logger.info({ action: 'deleteTeam', teamId: id }, 'Deleting team');
+
       // Verify team exists and get details for better error messages
-      const team = await this.getTeam(id);
+      const team = await this.getTeam(id, logger);
       if (!team) {
         throw new Error(`Team ${id} not found`);
       }
 
       logger.info(
-        { teamId: id, teamName: team.name },
+        { action: 'deleteTeam', teamId: id, teamName: team.name },
         'Deleting team via better-auth API (beforeDeleteTeam hook will handle analysis migration)',
       );
 
@@ -303,8 +353,8 @@ class TeamService {
       }
 
       logger.info(
-        { deletedTeamId: id, teamName: team.name },
-        '✓ Team deleted successfully (analysis migration handled by hook)',
+        { action: 'deleteTeam', deletedTeamId: id, teamName: team.name },
+        'Team deleted successfully (analysis migration handled by hook)',
       );
 
       return {
@@ -313,7 +363,7 @@ class TeamService {
       };
     } catch (error) {
       logger.error(
-        { error: error.message, teamId: id },
+        { action: 'deleteTeam', err: error, teamId: id },
         'Failed to delete team',
       );
       throw error;
@@ -323,12 +373,18 @@ class TeamService {
   /**
    * Get all analyses belonging to a specific team
    * @param {string} teamId - Team ID to get analyses for
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<Array>} Array of analysis objects with name and metadata
    * @throws {Error} If team not found or config retrieval fails
    */
-  async getAnalysesByTeam(teamId) {
+  async getAnalysesByTeam(teamId, logger = moduleLogger) {
+    logger.info(
+      { action: 'getAnalysesByTeam', teamId },
+      'Getting analyses by team',
+    );
+
     // Verify team exists
-    const team = await this.getTeam(teamId);
+    const team = await this.getTeam(teamId, logger);
     if (!team) {
       throw new Error(`Team ${teamId} not found`);
     }
@@ -344,6 +400,10 @@ class TeamService {
       }
     }
 
+    logger.info(
+      { action: 'getAnalysesByTeam', teamId, analysisCount: analyses.length },
+      'Analyses retrieved',
+    );
     return analyses;
   }
 
@@ -351,10 +411,16 @@ class TeamService {
    * Move an analysis to a different team
    * @param {string} analysisName - Name of the analysis to move
    * @param {string} teamId - Target team ID
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<Object>} Move result with from/to team info
    * @throws {Error} If analysis or team not found, or move fails
    */
-  async moveAnalysisToTeam(analysisName, teamId) {
+  async moveAnalysisToTeam(analysisName, teamId, logger = moduleLogger) {
+    logger.info(
+      { action: 'moveAnalysisToTeam', analysisName, teamId },
+      'Moving analysis to team',
+    );
+
     const configData = await this.analysisService.getConfig();
 
     const analysis = configData.analyses?.[analysisName];
@@ -363,7 +429,7 @@ class TeamService {
     }
 
     // Verify target team exists
-    const team = await this.getTeam(teamId);
+    const team = await this.getTeam(teamId, logger);
     if (!team) {
       throw new Error(`Team ${teamId} not found`);
     }
@@ -376,11 +442,12 @@ class TeamService {
 
     logger.info(
       {
+        action: 'moveAnalysisToTeam',
         analysisName,
         fromTeamId: previousTeam,
         toTeamId: teamId,
       },
-      'Moved analysis to team',
+      'Analysis moved to team',
     );
 
     return {
@@ -410,7 +477,7 @@ class TeamService {
       if (uncategorizedTeam) {
         configData.analyses[analysisName].teamId = uncategorizedTeam.id;
         await this.analysisService.updateConfig(configData);
-        logger.info(
+        moduleLogger.info(
           {
             analysisName,
             teamId: uncategorizedTeam.id,
@@ -424,11 +491,17 @@ class TeamService {
   /**
    * Reorder teams by updating their order_index values
    * @param {string[]} orderedIds - Array of team IDs in desired order
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<Array>} Updated teams in new order
    * @throws {Error} If reordering fails
    */
-  async reorderTeams(orderedIds) {
+  async reorderTeams(orderedIds, logger = moduleLogger) {
     try {
+      logger.info(
+        { action: 'reorderTeams', teamCount: orderedIds.length },
+        'Reordering teams',
+      );
+
       return executeTransaction((db) => {
         // Update order_index for each team
         const updateStmt = db.prepare(
@@ -453,13 +526,16 @@ class TeamService {
         }));
 
         logger.info(
-          { teamCount: orderedIds.length, orderedIds },
-          'Reordered teams',
+          { action: 'reorderTeams', teamCount: orderedIds.length, orderedIds },
+          'Teams reordered',
         );
         return teamsWithBoolean;
       }, `reordering ${orderedIds.length} teams`);
     } catch (error) {
-      logger.error({ error }, 'Failed to reorder teams');
+      logger.error(
+        { action: 'reorderTeams', err: error },
+        'Failed to reorder teams',
+      );
       throw error;
     }
   }
@@ -467,14 +543,18 @@ class TeamService {
   /**
    * Get the count of analyses assigned to a specific team
    * @param {string} teamId - Team ID to count analyses for
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<number>} Number of analyses assigned to the team
    */
-  async getAnalysisCountByTeamId(teamId) {
+  async getAnalysisCountByTeamId(teamId, logger = moduleLogger) {
     try {
-      const analyses = await this.getAnalysesByTeam(teamId);
+      const analyses = await this.getAnalysesByTeam(teamId, logger);
       return analyses.length;
     } catch (error) {
-      logger.error({ error, teamId }, 'Error getting analysis count for team');
+      logger.error(
+        { action: 'getAnalysisCountByTeamId', err: error, teamId },
+        'Error getting analysis count for team',
+      );
       return 0;
     }
   }
@@ -522,9 +602,20 @@ class TeamService {
    * @param {string} teamId - Team ID
    * @param {Object} newItem - Item to add
    * @param {string|null} targetFolderId - Target folder ID (null = root)
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<void>}
    */
-  async addItemToTeamStructure(teamId, newItem, targetFolderId = null) {
+  async addItemToTeamStructure(
+    teamId,
+    newItem,
+    targetFolderId = null,
+    logger = moduleLogger,
+  ) {
+    logger.info(
+      { action: 'addItemToTeamStructure', teamId, targetFolderId },
+      'Adding item to team structure',
+    );
+
     const configData = await this.analysisService.getConfig();
 
     if (!configData.teamStructure) {
@@ -553,15 +644,29 @@ class TeamService {
     }
 
     await this.analysisService.updateConfig(configData);
+    logger.info(
+      { action: 'addItemToTeamStructure', teamId, targetFolderId },
+      'Item added to team structure',
+    );
   }
 
   /**
    * Remove an item from team structure by analysis name
    * @param {string} teamId - Team ID
    * @param {string} analysisName - Analysis name to remove
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<void>}
    */
-  async removeItemFromTeamStructure(teamId, analysisName) {
+  async removeItemFromTeamStructure(
+    teamId,
+    analysisName,
+    logger = moduleLogger,
+  ) {
+    logger.info(
+      { action: 'removeItemFromTeamStructure', teamId, analysisName },
+      'Removing item from team structure',
+    );
+
     const configData = await this.analysisService.getConfig();
 
     if (!configData.teamStructure?.[teamId]) {
@@ -584,8 +689,12 @@ class TeamService {
       return false;
     };
 
-    removeFromArray(configData.teamStructure[teamId].items);
+    const removed = removeFromArray(configData.teamStructure[teamId].items);
     await this.analysisService.updateConfig(configData);
+    logger.info(
+      { action: 'removeItemFromTeamStructure', teamId, analysisName, removed },
+      'Item removed from team structure',
+    );
   }
 
   /**
@@ -593,13 +702,19 @@ class TeamService {
    * @param {string} teamId - Team ID
    * @param {string|null} parentFolderId - Parent folder ID (null = root)
    * @param {string} name - Folder name
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<Object>} Created folder object
    */
-  async createFolder(teamId, parentFolderId, name) {
+  async createFolder(teamId, parentFolderId, name, logger = moduleLogger) {
+    logger.info(
+      { action: 'createFolder', teamId, parentFolderId, name },
+      'Creating folder',
+    );
+
     const configData = await this.analysisService.getConfig();
 
     // Verify team exists
-    const team = await this.getTeam(teamId);
+    const team = await this.getTeam(teamId, logger);
     if (!team) {
       throw new Error(`Team ${teamId} not found`);
     }
@@ -639,8 +754,14 @@ class TeamService {
     await this.analysisService.updateConfig(configData);
 
     logger.info(
-      { teamId, folderId: newFolder.id, name, parentFolderId },
-      'Created folder',
+      {
+        action: 'createFolder',
+        teamId,
+        folderId: newFolder.id,
+        name,
+        parentFolderId,
+      },
+      'Folder created',
     );
 
     return newFolder;
@@ -651,9 +772,15 @@ class TeamService {
    * @param {string} teamId - Team ID
    * @param {string} folderId - Folder ID to update
    * @param {Object} updates - Updates to apply
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<Object>} Updated folder
    */
-  async updateFolder(teamId, folderId, updates) {
+  async updateFolder(teamId, folderId, updates, logger = moduleLogger) {
+    logger.info(
+      { action: 'updateFolder', teamId, folderId, updates },
+      'Updating folder',
+    );
+
     const configData = await this.analysisService.getConfig();
 
     if (!configData.teamStructure?.[teamId]) {
@@ -679,7 +806,10 @@ class TeamService {
 
     await this.analysisService.updateConfig(configData);
 
-    logger.info({ teamId, folderId, updates }, 'Updated folder');
+    logger.info(
+      { action: 'updateFolder', teamId, folderId, updates },
+      'Folder updated',
+    );
 
     return folder;
   }
@@ -688,9 +818,15 @@ class TeamService {
    * Delete a folder (move children to parent or root)
    * @param {string} teamId - Team ID
    * @param {string} folderId - Folder ID to delete
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<Object>} Deletion result
    */
-  async deleteFolder(teamId, folderId) {
+  async deleteFolder(teamId, folderId, logger = moduleLogger) {
+    logger.info(
+      { action: 'deleteFolder', teamId, folderId },
+      'Deleting folder',
+    );
+
     const configData = await this.analysisService.getConfig();
 
     if (!configData.teamStructure?.[teamId]) {
@@ -721,8 +857,13 @@ class TeamService {
     await this.analysisService.updateConfig(configData);
 
     logger.info(
-      { teamId, folderId, childrenMoved: children.length },
-      'Deleted folder',
+      {
+        action: 'deleteFolder',
+        teamId,
+        folderId,
+        childrenMoved: children.length,
+      },
+      'Folder deleted',
     );
 
     return { deleted: folderId, childrenMoved: children.length };
@@ -734,9 +875,21 @@ class TeamService {
    * @param {string} itemId - Item ID to move
    * @param {string|null} targetParentId - Target parent folder ID (null = root)
    * @param {number} targetIndex - Target index in parent's items array
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<Object>} Move result
    */
-  async moveItem(teamId, itemId, targetParentId, targetIndex) {
+  async moveItem(
+    teamId,
+    itemId,
+    targetParentId,
+    targetIndex,
+    logger = moduleLogger,
+  ) {
+    logger.info(
+      { action: 'moveItem', teamId, itemId, targetParentId, targetIndex },
+      'Moving item in tree',
+    );
+
     const configData = await this.analysisService.getConfig();
 
     if (!configData.teamStructure?.[teamId]) {
@@ -799,8 +952,8 @@ class TeamService {
     await this.analysisService.updateConfig(configData);
 
     logger.info(
-      { teamId, itemId, targetParentId, targetIndex },
-      'Moved item in tree',
+      { action: 'moveItem', teamId, itemId, targetParentId, targetIndex },
+      'Item moved in tree',
     );
 
     return { moved: itemId, to: targetParentId || 'root' };

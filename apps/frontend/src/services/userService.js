@@ -10,23 +10,13 @@ export const userService = {
    * @returns {Promise<Object>} Result of adding user to organization
    */
   async addUserToOrganization(userId, organizationId, role = 'member') {
-    try {
-      console.log('Adding user to organization:', {
-        userId,
-        organizationId,
-        role,
-      });
-      const response = await fetchWithHeaders('/users/add-to-organization', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, organizationId, role }),
-      });
+    const response = await fetchWithHeaders('/users/add-to-organization', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, organizationId, role }),
+    });
 
-      return await handleResponse(response);
-    } catch (error) {
-      console.error('Failed to add user to organization:', error);
-      throw new Error(`Failed to add user to organization: ${error.message}`);
-    }
+    return handleResponse(response);
   },
 
   /**
@@ -36,19 +26,13 @@ export const userService = {
    * @returns {Promise<Object>} Result of team assignments
    */
   async assignUserToTeams(userId, teamAssignments) {
-    try {
-      console.log('Assigning user to teams:', { userId, teamAssignments });
-      const response = await fetchWithHeaders('/users/assign-teams', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, teamAssignments }),
-      });
+    const response = await fetchWithHeaders('/users/assign-teams', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, teamAssignments }),
+    });
 
-      return await handleResponse(response);
-    } catch (error) {
-      console.error('Failed to assign user to teams:', error);
-      throw new Error(`Failed to assign user to teams: ${error.message}`);
-    }
+    return handleResponse(response);
   },
 
   /**
@@ -58,27 +42,16 @@ export const userService = {
    * @returns {Promise<Object>} Result of updating team assignments
    */
   async updateUserTeamAssignments(userId, teamAssignments) {
-    try {
-      console.log('Updating user team assignments:', {
-        userId,
-        teamAssignments,
-      });
-      const response = await fetchWithHeaders(
-        `/users/${userId}/team-assignments`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ teamAssignments }),
-        },
-      );
+    const response = await fetchWithHeaders(
+      `/users/${userId}/team-assignments`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ teamAssignments }),
+      },
+    );
 
-      return await handleResponse(response);
-    } catch (error) {
-      console.error('Failed to update user team assignments:', error);
-      throw new Error(
-        `Failed to update user team assignments: ${error.message}`,
-      );
-    }
+    return handleResponse(response);
   },
 
   /**
@@ -87,20 +60,14 @@ export const userService = {
    * @returns {Promise<Object>} User's team memberships with permissions
    */
   async getUserTeamMemberships(userId) {
-    try {
-      console.log('Getting user team memberships:', { userId });
-      const response = await fetchWithHeaders(
-        `/users/${userId}/team-memberships`,
-        {
-          method: 'GET',
-        },
-      );
+    const response = await fetchWithHeaders(
+      `/users/${userId}/team-memberships`,
+      {
+        method: 'GET',
+      },
+    );
 
-      return await handleResponse(response);
-    } catch (error) {
-      console.error('Failed to get user team memberships:', error);
-      throw new Error(`Failed to get user team memberships: ${error.message}`);
-    }
+    return handleResponse(response);
   },
 
   /**
@@ -108,17 +75,11 @@ export const userService = {
    * @returns {Promise<Object>} Current session data
    */
   async getCurrentSession() {
-    try {
-      console.log('Getting current session');
-      const response = await fetchWithHeaders('/auth/get-session', {
-        method: 'GET',
-      });
+    const response = await fetchWithHeaders('/auth/get-session', {
+      method: 'GET',
+    });
 
-      return await handleResponse(response);
-    } catch (error) {
-      console.error('Failed to get current session:', error);
-      throw new Error(`Failed to get current session: ${error.message}`);
-    }
+    return handleResponse(response);
   },
 
   /**
@@ -145,17 +106,11 @@ export const userService = {
    * @returns {Promise<Object>} Session validation result
    */
   async validateSession() {
-    try {
-      console.log('Validating current session');
-      const response = await fetchWithHeaders('/auth/validate-session', {
-        method: 'GET',
-      });
+    const response = await fetchWithHeaders('/auth/validate-session', {
+      method: 'GET',
+    });
 
-      return await handleResponse(response);
-    } catch (error) {
-      console.error('Failed to validate session:', error);
-      throw new Error(`Failed to validate session: ${error.message}`);
-    }
+    return handleResponse(response);
   },
 
   /**
@@ -164,17 +119,11 @@ export const userService = {
    * @returns {Promise<Object>} User's active sessions
    */
   async getUserSessions(userId) {
-    try {
-      console.log('Getting user sessions:', { userId });
-      const response = await fetchWithHeaders(`/users/${userId}/sessions`, {
-        method: 'GET',
-      });
+    const response = await fetchWithHeaders(`/users/${userId}/sessions`, {
+      method: 'GET',
+    });
 
-      return await handleResponse(response);
-    } catch (error) {
-      console.error('Failed to get user sessions:', error);
-      throw new Error(`Failed to get user sessions: ${error.message}`);
-    }
+    return handleResponse(response);
   },
 
   /**
@@ -184,20 +133,14 @@ export const userService = {
    * @returns {Promise<Object>} Result of session revocation
    */
   async revokeUserSession(userId, sessionId) {
-    try {
-      console.log('Revoking user session:', { userId, sessionId });
-      const response = await fetchWithHeaders(
-        `/users/${userId}/sessions/${sessionId}`,
-        {
-          method: 'DELETE',
-        },
-      );
+    const response = await fetchWithHeaders(
+      `/users/${userId}/sessions/${sessionId}`,
+      {
+        method: 'DELETE',
+      },
+    );
 
-      return await handleResponse(response);
-    } catch (error) {
-      console.error('Failed to revoke user session:', error);
-      throw new Error(`Failed to revoke user session: ${error.message}`);
-    }
+    return handleResponse(response);
   },
 
   /**
@@ -206,17 +149,11 @@ export const userService = {
    * @returns {Promise<Object>} Result of revoking all sessions
    */
   async revokeAllUserSessions(userId) {
-    try {
-      console.log('Revoking all user sessions:', { userId });
-      const response = await fetchWithHeaders(`/users/${userId}/sessions`, {
-        method: 'DELETE',
-      });
+    const response = await fetchWithHeaders(`/users/${userId}/sessions`, {
+      method: 'DELETE',
+    });
 
-      return await handleResponse(response);
-    } catch (error) {
-      console.error('Failed to revoke all user sessions:', error);
-      throw new Error(`Failed to revoke all user sessions: ${error.message}`);
-    }
+    return handleResponse(response);
   },
 
   /**
@@ -227,28 +164,16 @@ export const userService = {
    * @returns {Promise<Object>} Result of updating organization role
    */
   async updateUserOrganizationRole(userId, organizationId, role) {
-    try {
-      console.log('Updating user organization role:', {
-        userId,
-        organizationId,
-        role,
-      });
-      const response = await fetchWithHeaders(
-        `/users/${userId}/organization-role`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ organizationId, userId, role }),
-        },
-      );
+    const response = await fetchWithHeaders(
+      `/users/${userId}/organization-role`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId, userId, role }),
+      },
+    );
 
-      return await handleResponse(response);
-    } catch (error) {
-      console.error('Failed to update user organization role:', error);
-      throw new Error(
-        `Failed to update user organization role: ${error.message}`,
-      );
-    }
+    return handleResponse(response);
   },
 
   /**
@@ -259,23 +184,12 @@ export const userService = {
    * @returns {Promise<Object>} Result of removing user from organization and deletion
    */
   async removeUserFromOrganization(userId, organizationId) {
-    try {
-      console.log('Removing user from organization:', {
-        userId,
-        organizationId,
-      });
-      const response = await fetchWithHeaders(`/users/${userId}/organization`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ organizationId, userId }),
-      });
+    const response = await fetchWithHeaders(`/users/${userId}/organization`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ organizationId, userId }),
+    });
 
-      return await handleResponse(response);
-    } catch (error) {
-      console.error('Failed to remove user from organization:', error);
-      throw new Error(
-        `Failed to remove user from organization: ${error.message}`,
-      );
-    }
+    return handleResponse(response);
   },
 };

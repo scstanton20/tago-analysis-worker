@@ -1,30 +1,50 @@
 // backend/src/controllers/teamController.js
 import teamService from '../services/teamService.js';
 import { sseManager } from '../utils/sse.js';
+import {
+  handleError,
+  broadcastTeamStructureUpdate,
+} from '../utils/responseHelpers.js';
 
 class TeamController {
   // Custom team operations that handle Better Auth team table with custom properties
 
   // Get all teams
-  static async getAllTeams(_req, res) {
+  static async getAllTeams(req, res) {
+    const logger =
+      req.logger?.child({ controller: 'TeamController' }) || console;
+
+    logger.info({ action: 'getAllTeams' }, 'Retrieving all teams');
+
     try {
-      const teams = await teamService.getAllTeams();
+      const teams = await teamService.getAllTeams(logger);
+      logger.info(
+        { action: 'getAllTeams', count: teams.length },
+        'Teams retrieved',
+      );
       res.json(teams);
     } catch (error) {
-      console.error('Error getting teams:', error);
-      res.status(500).json({ error: 'Failed to retrieve teams' });
+      handleError(res, error, 'retrieving teams');
     }
   }
 
   // Create new team
   static async createTeam(req, res) {
+    const logger =
+      req.logger?.child({ controller: 'TeamController' }) || console;
+    const { name, color, order } = req.body;
+
+    if (!name) {
+      logger.warn(
+        { action: 'createTeam' },
+        'Team creation failed: missing name',
+      );
+      return res.status(400).json({ error: 'Team name is required' });
+    }
+
+    logger.info({ action: 'createTeam', teamName: name }, 'Creating team');
+
     try {
-      const { name, color, order } = req.body;
-
-      if (!name) {
-        return res.status(400).json({ error: 'Team name is required' });
-      }
-
       const team = await teamService.createTeam(
         {
           name,
@@ -32,6 +52,12 @@ class TeamController {
           order,
         },
         req.headers,
+        logger,
+      );
+
+      logger.info(
+        { action: 'createTeam', teamId: team.id, teamName: name },
+        'Team created',
       );
 
       // Broadcast to admin users only (they manage teams)
@@ -42,22 +68,26 @@ class TeamController {
 
       res.status(201).json(team);
     } catch (error) {
-      console.error('Error creating team:', error);
-      if (error.message.includes('already exists')) {
-        res.status(409).json({ error: error.message });
-      } else {
-        res.status(500).json({ error: 'Failed to create team' });
-      }
+      handleError(res, error, 'creating team');
     }
   }
 
   // Update team
   static async updateTeam(req, res) {
-    try {
-      const { id } = req.params;
-      const updates = req.body;
+    const logger =
+      req.logger?.child({ controller: 'TeamController' }) || console;
+    const { id } = req.params;
+    const updates = req.body;
 
-      const team = await teamService.updateTeam(id, updates);
+    logger.info(
+      { action: 'updateTeam', teamId: id, fields: Object.keys(updates) },
+      'Updating team',
+    );
+
+    try {
+      const team = await teamService.updateTeam(id, updates, logger);
+
+      logger.info({ action: 'updateTeam', teamId: id }, 'Team updated');
 
       // Broadcast update to admin users only
       sseManager.broadcastToAdminUsers({
@@ -67,22 +97,23 @@ class TeamController {
 
       res.json(team);
     } catch (error) {
-      console.error('Error updating team:', error);
-      if (error.message.includes('not found')) {
-        res.status(404).json({ error: error.message });
-      } else {
-        res.status(500).json({ error: 'Failed to update team' });
-      }
+      handleError(res, error, 'updating team');
     }
   }
 
   // Delete team (analysis migration handled by hooks)
   static async deleteTeam(req, res) {
-    try {
-      const { id } = req.params;
+    const logger =
+      req.logger?.child({ controller: 'TeamController' }) || console;
+    const { id } = req.params;
 
+    logger.info({ action: 'deleteTeam', teamId: id }, 'Deleting team');
+
+    try {
       // Delete team (hooks handle analysis migration automatically)
-      const result = await teamService.deleteTeam(id, req.headers);
+      const result = await teamService.deleteTeam(id, req.headers, logger);
+
+      logger.info({ action: 'deleteTeam', teamId: id }, 'Team deleted');
 
       // Broadcast deletion to admin users only
       sseManager.broadcastToAdminUsers({
@@ -92,25 +123,33 @@ class TeamController {
 
       res.json(result);
     } catch (error) {
-      console.error('Error deleting team:', error);
-      if (error.message.includes('not found')) {
-        res.status(404).json({ error: error.message });
-      } else {
-        res.status(500).json({ error: 'Failed to delete team' });
-      }
+      handleError(res, error, 'deleting team');
     }
   }
 
   // Reorder teams
   static async reorderTeams(req, res) {
+    const logger =
+      req.logger?.child({ controller: 'TeamController' }) || console;
+    const { orderedIds } = req.body;
+
+    if (!Array.isArray(orderedIds)) {
+      logger.warn(
+        { action: 'reorderTeams' },
+        'Team reorder failed: orderedIds not an array',
+      );
+      return res.status(400).json({ error: 'orderedIds must be an array' });
+    }
+
+    logger.info(
+      { action: 'reorderTeams', count: orderedIds.length },
+      'Reordering teams',
+    );
+
     try {
-      const { orderedIds } = req.body;
+      const teams = await teamService.reorderTeams(orderedIds, logger);
 
-      if (!Array.isArray(orderedIds)) {
-        return res.status(400).json({ error: 'orderedIds must be an array' });
-      }
-
-      const teams = await teamService.reorderTeams(orderedIds);
+      logger.info({ action: 'reorderTeams' }, 'Teams reordered');
 
       // Broadcast reorder to admin users only
       sseManager.broadcastToAdminUsers({
@@ -120,66 +159,115 @@ class TeamController {
 
       res.json(teams);
     } catch (error) {
-      console.error('Error reordering teams:', error);
-      res.status(500).json({ error: 'Failed to reorder teams' });
+      handleError(res, error, 'reordering teams');
     }
   }
 
   // Move analysis to team
   static async moveAnalysisToTeam(req, res) {
+    const logger =
+      req.logger?.child({ controller: 'TeamController' }) || console;
+    const { name } = req.params;
+    const { teamId } = req.body;
+
+    if (!teamId) {
+      logger.warn(
+        { action: 'moveAnalysisToTeam', analysisName: name },
+        'Move analysis failed: missing teamId',
+      );
+      return res.status(400).json({ error: 'teamId is required' });
+    }
+
+    logger.info(
+      {
+        action: 'moveAnalysisToTeam',
+        analysisName: name,
+        targetTeamId: teamId,
+      },
+      'Moving analysis to team',
+    );
+
     try {
-      const { name } = req.params;
-      const { teamId } = req.body;
+      const result = await teamService.moveAnalysisToTeam(name, teamId, logger);
 
-      // Use teamId from request body
-      const targetTeamId = teamId;
-
-      if (!targetTeamId) {
-        return res.status(400).json({ error: 'teamId is required' });
-      }
-
-      const result = await teamService.moveAnalysisToTeam(name, targetTeamId);
+      logger.info(
+        {
+          action: 'moveAnalysisToTeam',
+          analysisName: name,
+          fromTeam: result.from,
+          toTeam: result.to,
+        },
+        'Analysis moved',
+      );
 
       // Broadcast move to users with access to involved teams
       sseManager.broadcastAnalysisMove(result.analysis, result.from, result.to);
 
       res.json(result);
     } catch (error) {
-      console.error('Error moving analysis:', error);
-      if (error.message.includes('not found')) {
-        res.status(404).json({ error: error.message });
-      } else {
-        res.status(500).json({ error: 'Failed to move analysis' });
-      }
+      handleError(res, error, 'moving analysis');
     }
   }
 
   // Get analysis count for a specific team/team
   static async getTeamAnalysisCount(req, res) {
+    const logger =
+      req.logger?.child({ controller: 'TeamController' }) || console;
+    const { id } = req.params;
+
+    logger.info(
+      { action: 'getTeamAnalysisCount', teamId: id },
+      'Getting team analysis count',
+    );
+
     try {
-      const { id } = req.params;
-      const count = await teamService.getAnalysisCountByTeamId(id);
+      const count = await teamService.getAnalysisCountByTeamId(id, logger);
+      logger.info(
+        { action: 'getTeamAnalysisCount', teamId: id, count },
+        'Analysis count retrieved',
+      );
       res.json({ count });
     } catch (error) {
-      console.error('Error getting analysis count:', error);
-      res.status(500).json({ error: 'Failed to get analysis count' });
+      handleError(res, error, 'getting analysis count');
     }
   }
 
   // Create folder in team
   static async createFolder(req, res) {
+    const logger =
+      req.logger?.child({ controller: 'TeamController' }) || console;
+    const { teamId } = req.params;
+    const { parentFolderId, name } = req.body;
+
+    if (!name) {
+      logger.warn(
+        { action: 'createFolder', teamId },
+        'Folder creation failed: missing name',
+      );
+      return res.status(400).json({ error: 'Folder name is required' });
+    }
+
+    logger.info(
+      { action: 'createFolder', teamId, folderName: name, parentFolderId },
+      'Creating folder',
+    );
+
     try {
-      const { teamId } = req.params;
-      const { parentFolderId, name } = req.body;
-
-      if (!name) {
-        return res.status(400).json({ error: 'Folder name is required' });
-      }
-
       const folder = await teamService.createFolder(
         teamId,
         parentFolderId,
         name,
+        logger,
+      );
+
+      logger.info(
+        {
+          action: 'createFolder',
+          teamId,
+          folderId: folder.id,
+          folderName: name,
+        },
+        'Folder created',
       );
 
       // Broadcast to team members
@@ -190,34 +278,43 @@ class TeamController {
       });
 
       // Broadcast structure update
-      const { analysisService } = await import(
-        '../services/analysisService.js'
-      );
-      const config = await analysisService.getConfig();
-      sseManager.broadcastToTeamUsers(teamId, {
-        type: 'teamStructureUpdated',
-        teamId,
-        items: config.teamStructure[teamId]?.items || [],
-      });
+      await broadcastTeamStructureUpdate(sseManager, teamId);
 
       res.status(201).json(folder);
     } catch (error) {
-      console.error('Error creating folder:', error);
-      if (error.message.includes('not found')) {
-        res.status(404).json({ error: error.message });
-      } else {
-        res.status(500).json({ error: 'Failed to create folder' });
-      }
+      handleError(res, error, 'creating folder');
     }
   }
 
   // Update folder
   static async updateFolder(req, res) {
-    try {
-      const { teamId, folderId } = req.params;
-      const updates = req.body;
+    const logger =
+      req.logger?.child({ controller: 'TeamController' }) || console;
+    const { teamId, folderId } = req.params;
+    const updates = req.body;
 
-      const folder = await teamService.updateFolder(teamId, folderId, updates);
+    logger.info(
+      {
+        action: 'updateFolder',
+        teamId,
+        folderId,
+        fields: Object.keys(updates),
+      },
+      'Updating folder',
+    );
+
+    try {
+      const folder = await teamService.updateFolder(
+        teamId,
+        folderId,
+        updates,
+        logger,
+      );
+
+      logger.info(
+        { action: 'updateFolder', teamId, folderId },
+        'Folder updated',
+      );
 
       // Broadcast to team members
       sseManager.broadcastToTeamUsers(teamId, {
@@ -227,33 +324,32 @@ class TeamController {
       });
 
       // Broadcast structure update
-      const { analysisService } = await import(
-        '../services/analysisService.js'
-      );
-      const config = await analysisService.getConfig();
-      sseManager.broadcastToTeamUsers(teamId, {
-        type: 'teamStructureUpdated',
-        teamId,
-        items: config.teamStructure[teamId]?.items || [],
-      });
+      await broadcastTeamStructureUpdate(sseManager, teamId);
 
       res.json(folder);
     } catch (error) {
-      console.error('Error updating folder:', error);
-      if (error.message.includes('not found')) {
-        res.status(404).json({ error: error.message });
-      } else {
-        res.status(500).json({ error: 'Failed to update folder' });
-      }
+      handleError(res, error, 'updating folder');
     }
   }
 
   // Delete folder
   static async deleteFolder(req, res) {
-    try {
-      const { teamId, folderId } = req.params;
+    const logger =
+      req.logger?.child({ controller: 'TeamController' }) || console;
+    const { teamId, folderId } = req.params;
 
-      const result = await teamService.deleteFolder(teamId, folderId);
+    logger.info(
+      { action: 'deleteFolder', teamId, folderId },
+      'Deleting folder',
+    );
+
+    try {
+      const result = await teamService.deleteFolder(teamId, folderId, logger);
+
+      logger.info(
+        { action: 'deleteFolder', teamId, folderId },
+        'Folder deleted',
+      );
 
       // Broadcast to team members
       sseManager.broadcastToTeamUsers(teamId, {
@@ -263,69 +359,53 @@ class TeamController {
       });
 
       // Broadcast structure update
-      const { analysisService } = await import(
-        '../services/analysisService.js'
-      );
-      const config = await analysisService.getConfig();
-      sseManager.broadcastToTeamUsers(teamId, {
-        type: 'teamStructureUpdated',
-        teamId,
-        items: config.teamStructure[teamId]?.items || [],
-      });
+      await broadcastTeamStructureUpdate(sseManager, teamId);
 
       res.json(result);
     } catch (error) {
-      console.error('Error deleting folder:', error);
-      if (error.message.includes('not found')) {
-        res.status(404).json({ error: error.message });
-      } else {
-        res.status(500).json({ error: 'Failed to delete folder' });
-      }
+      handleError(res, error, 'deleting folder');
     }
   }
 
   // Move item within team structure
   static async moveItem(req, res) {
+    const logger =
+      req.logger?.child({ controller: 'TeamController' }) || console;
+    const { teamId } = req.params;
+    const { itemId, targetParentId, targetIndex } = req.body;
+
+    if (!itemId || targetIndex === undefined) {
+      logger.warn(
+        { action: 'moveItem', teamId },
+        'Move item failed: missing itemId or targetIndex',
+      );
+      return res
+        .status(400)
+        .json({ error: 'itemId and targetIndex are required' });
+    }
+
+    logger.info(
+      { action: 'moveItem', teamId, itemId, targetParentId, targetIndex },
+      'Moving item',
+    );
+
     try {
-      const { teamId } = req.params;
-      const { itemId, targetParentId, targetIndex } = req.body;
-
-      if (!itemId || targetIndex === undefined) {
-        return res
-          .status(400)
-          .json({ error: 'itemId and targetIndex are required' });
-      }
-
       const result = await teamService.moveItem(
         teamId,
         itemId,
         targetParentId,
         targetIndex,
+        logger,
       );
+
+      logger.info({ action: 'moveItem', teamId, itemId }, 'Item moved');
 
       // Broadcast full structure update to team members
-      const { analysisService } = await import(
-        '../services/analysisService.js'
-      );
-      const config = await analysisService.getConfig();
-
-      sseManager.broadcastToTeamUsers(teamId, {
-        type: 'teamStructureUpdated',
-        teamId,
-        items: config.teamStructure[teamId]?.items || [],
-      });
+      await broadcastTeamStructureUpdate(sseManager, teamId);
 
       res.json(result);
     } catch (error) {
-      console.error('Error moving item:', error);
-      if (
-        error.message.includes('not found') ||
-        error.message.includes('Cannot move')
-      ) {
-        res.status(400).json({ error: error.message });
-      } else {
-        res.status(500).json({ error: 'Failed to move item' });
-      }
+      handleError(res, error, 'moving item');
     }
   }
 }

@@ -1,11 +1,17 @@
 // controllers/statusController.js
 import { createRequire } from 'module';
 import ms from 'ms';
+import { handleError } from '../utils/responseHelpers.js';
 
 const require = createRequire(import.meta.url);
 
 class StatusController {
-  static async getSystemStatus(_req, res) {
+  static async getSystemStatus(req, res) {
+    const logger =
+      req.logger?.child({ controller: 'StatusController' }) || console;
+
+    logger.info({ action: 'getSystemStatus' }, 'Getting system status');
+
     try {
       // Import analysisService directly instead of dependency injection
       const { analysisService } = await import(
@@ -49,7 +55,10 @@ class StatusController {
           tagoVersion = 'unknown';
         }
       } catch (error) {
-        console.error('Error reading tago SDK version:', error);
+        logger.warn(
+          { action: 'getSystemStatus', err: error },
+          'Failed to read Tago SDK version',
+        );
         tagoVersion = 'unknown';
       }
 
@@ -71,7 +80,10 @@ class StatusController {
           formattedUptime = '0 seconds';
         }
       } catch (msError) {
-        console.error('Error formatting uptime:', msError);
+        logger.warn(
+          { action: 'getSystemStatus', err: msError },
+          'Failed to format uptime',
+        );
         formattedUptime = `${uptimeSeconds} seconds`;
       }
 
@@ -94,6 +106,15 @@ class StatusController {
         serverTime: new Date().toString(),
       };
 
+      logger.info(
+        {
+          action: 'getSystemStatus',
+          containerStatus: currentContainerState.status,
+          runningAnalyses: runningAnalyses.length,
+        },
+        'System status retrieved',
+      );
+
       // Return appropriate HTTP status code based on container state
       const httpStatus =
         currentContainerState.status === 'ready'
@@ -104,11 +125,7 @@ class StatusController {
 
       res.status(httpStatus).json(status);
     } catch (error) {
-      console.error('Error in getSystemStatus:', error);
-      res.status(500).json({
-        error: 'Internal server error',
-        message: error.message,
-      });
+      handleError(res, error, 'getting system status');
     }
   }
 }
