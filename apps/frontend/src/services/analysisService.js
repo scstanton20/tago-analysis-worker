@@ -20,10 +20,9 @@ export const analysisService = {
     }
   },
 
-  async uploadAnalysis(file, type = 'listener', teamId = null) {
+  async uploadAnalysis(file, teamId = null) {
     const formData = new FormData();
     formData.append('analysis', file);
-    formData.append('type', type);
 
     // Add teamId if provided (backend will default to Uncategorized if not)
     if (teamId) {

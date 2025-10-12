@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useLayoutEffect } from 'react';
 
 /**
  * Custom hook for intervals that handles cleanup automatically
@@ -8,7 +8,9 @@ export function useInterval(callback, delay, immediate = false) {
   const savedCallback = useRef();
 
   // Remember the latest callback
-  savedCallback.current = callback;
+  useLayoutEffect(() => {
+    savedCallback.current = callback;
+  }, [callback]);
 
   useEffect(() => {
     if (delay === null) return;
@@ -44,7 +46,9 @@ export function usePolling(callback, interval = 30000, condition = true) {
 export function useTimeout(callback, delay) {
   const savedCallback = useRef();
 
-  savedCallback.current = callback;
+  useLayoutEffect(() => {
+    savedCallback.current = callback;
+  }, [callback]);
 
   useEffect(() => {
     if (delay === null) return;

@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 
 /**
  * Unified hook for state initialization patterns
@@ -12,7 +12,7 @@ import { useRef, useEffect } from 'react';
  * @returns {boolean} Whether initialization has occurred
  */
 export function useInitialState(setter, value, options = {}) {
-  const initialized = useRef(false);
+  const [initialized, setInitialized] = useState(false);
 
   // Handle parameter overloading
   const isMultiple = typeof setter === 'object' && !Array.isArray(setter);
@@ -27,13 +27,13 @@ export function useInitialState(setter, value, options = {}) {
   // Reset initialization when resetCondition changes
   useEffect(() => {
     if (resetCondition) {
-      initialized.current = false;
+      setInitialized(false);
     }
   }, [resetCondition]);
 
   // Handle initialization
   useEffect(() => {
-    if (condition && !initialized.current) {
+    if (condition && !initialized) {
       if (isMultiple) {
         // Multiple setters
         Object.values(settersObject).forEach(({ setter, value }) => {
@@ -47,11 +47,18 @@ export function useInitialState(setter, value, options = {}) {
           singleSetter(singleValue);
         }
       }
-      initialized.current = true;
+      setInitialized(true);
     }
-  }, [condition, isMultiple, settersObject, singleSetter, singleValue]);
+  }, [
+    condition,
+    initialized,
+    isMultiple,
+    settersObject,
+    singleSetter,
+    singleValue,
+  ]);
 
-  return initialized.current;
+  return initialized;
 }
 
 /**

@@ -2,10 +2,12 @@ import { useState, useCallback, useMemo, useContext } from 'react';
 import { authClient } from '../../lib/auth.js';
 import { fetchWithHeaders, handleResponse } from '../../utils/apiUtils.js';
 import { AuthContext } from '../AuthContext.jsx';
+import { SSEContext } from '../sseContext/context.js';
 import { PermissionsContext } from './context.js';
 
 export const PermissionsProvider = ({ children }) => {
   const authContext = useContext(AuthContext);
+  const sseContext = useContext(SSEContext);
 
   if (!authContext) {
     throw new Error('PermissionsProvider must be used within an AuthProvider');
@@ -206,23 +208,59 @@ export const PermissionsProvider = ({ children }) => {
       // Get teams where user has a specific permission
       getTeamsWithPermission: (permission) => {
         if (isAdmin) {
-          // Admin has access to all teams with full permissions
-          return userTeams.map((team) => ({
-            ...team,
-            permissions: [
-              'view_analyses',
-              'run_analyses',
-              'upload_analyses',
-              'download_analyses',
-              'edit_analyses',
-              'delete_analyses',
-            ],
-          }));
+          const sseTeamsObject = sseContext?.teams || {};
+          const sseTeamsArray = Object.values(sseTeamsObject);
+
+          if (sseTeamsArray.length > 0) {
+            return sseTeamsArray.map((sseTeam) => ({
+              id: sseTeam.id,
+              name: sseTeam.name,
+              color: sseTeam.color,
+              permissions: [
+                'view_analyses',
+                'run_analyses',
+                'upload_analyses',
+                'download_analyses',
+                'edit_analyses',
+                'delete_analyses',
+              ],
+            }));
+          } else {
+            return userTeams.map((team) => ({
+              ...team,
+              permissions: [
+                'view_analyses',
+                'run_analyses',
+                'upload_analyses',
+                'download_analyses',
+                'edit_analyses',
+                'delete_analyses',
+              ],
+            }));
+          }
         }
 
-        return userTeams.filter((team) =>
+        // For non-admin users, filter userTeams by permission and merge with SSE data
+        const teamsWithPermission = userTeams.filter((team) =>
           team.permissions?.includes(permission),
         );
+
+        // Merge permission data with real-time SSE team data
+        const sseTeamsObject = sseContext?.teams || {};
+        return teamsWithPermission.map((userTeam) => {
+          const sseTeam = sseTeamsObject[userTeam.id];
+          if (!sseTeam) {
+            // If SSE doesn't have this team yet, use userTeam data
+            return userTeam;
+          }
+          // Merge SSE team data with user permissions
+          return {
+            ...userTeam,
+            name: sseTeam.name,
+            color: sseTeam.color,
+            isSystem: sseTeam.isSystem,
+          };
+        });
       },
 
       // Get permissions for a specific team
@@ -242,7 +280,7 @@ export const PermissionsProvider = ({ children }) => {
         return team?.permissions || [];
       },
     }),
-    [isAuthenticated, user, isAdmin, userTeams],
+    [isAuthenticated, user, isAdmin, userTeams, sseContext?.teams],
   );
 
   // Memoize refresh functions

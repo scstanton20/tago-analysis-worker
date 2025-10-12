@@ -37,7 +37,6 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
   // Form state
   const [mode, setMode] = useState('upload');
   const [selectedFile, setSelectedFile] = useState(null);
-  const [analysisType] = useState('listener');
   const [analysisName, setAnalysisName] = useState('');
   const [editableFileName, setEditableFileName] = useState('');
   const [editorContent, setEditorContent] = useState(DEFAULT_EDITOR_CONTENT);
@@ -262,7 +261,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
       }
 
       await notify.uploadAnalysis(
-        analysisService.uploadAnalysis(file, analysisType, selectedTeamId),
+        analysisService.uploadAnalysis(file, selectedTeamId),
         finalFileName,
       );
 

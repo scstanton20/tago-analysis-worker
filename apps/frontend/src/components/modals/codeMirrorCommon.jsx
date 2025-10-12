@@ -1054,7 +1054,6 @@ export default function AnalysisEditModal({
 AnalysisEditModal.propTypes = {
   analysis: PropTypes.shape({
     name: PropTypes.string.isRequired,
-    type: PropTypes.oneOf(['listener']),
     status: PropTypes.string,
     enabled: PropTypes.bool,
     logs: PropTypes.arrayOf(

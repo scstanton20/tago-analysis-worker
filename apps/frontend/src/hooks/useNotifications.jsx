@@ -120,7 +120,7 @@ export const useNotifications = () => {
         successIcon: <IconCheck size={16} />,
       }),
 
-    runAnalysis: async (promise, analysisName) => {
+    runAnalysis: async (promise) => {
       // Don't show success notification - SSE will handle actual start/fail notifications
       // Just execute the promise and let errors bubble up
       try {

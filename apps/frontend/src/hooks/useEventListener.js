@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useLayoutEffect } from 'react';
 
 /**
  * Custom hook to handle event listeners without useEffect
@@ -13,7 +13,9 @@ export function useEventListener(
   const savedHandler = useRef();
 
   // Update ref whenever handler changes
-  savedHandler.current = handler;
+  useLayoutEffect(() => {
+    savedHandler.current = handler;
+  }, [handler]);
 
   useEffect(() => {
     const targetElement = element?.current || element;
@@ -30,6 +32,7 @@ export function useEventListener(
     return () => {
       targetElement.removeEventListener(eventName, eventListener, options);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventName, element, options.passive, options.once, options.capture]);
 }
 

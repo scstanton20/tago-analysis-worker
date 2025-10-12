@@ -13,6 +13,7 @@ import { useDisclosure } from '@mantine/hooks';
 import { useSSE } from './contexts/sseContext';
 import { SSEProvider } from './contexts/sseContext/provider';
 import { CombinedAuthProvider } from './contexts/CombinedAuthProvider';
+import { PermissionsProvider } from './contexts/PermissionsContext/index.js';
 import { useAuth } from './hooks/useAuth';
 import { usePermissions } from './hooks/usePermissions';
 // Import core components directly to avoid context timing issues
@@ -241,7 +242,9 @@ function AppContent() {
 function AuthenticatedApp() {
   return (
     <SSEProvider>
-      <AppContent />
+      <PermissionsProvider>
+        <AppContent />
+      </PermissionsProvider>
     </SSEProvider>
   );
 }

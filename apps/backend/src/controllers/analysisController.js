@@ -51,13 +51,11 @@ class AnalysisController {
       }
 
       const analysis = req.files.analysis;
-      const type = req.body.type || 'listener';
       const teamId = req.body.teamId;
       const targetFolderId = req.body.targetFolderId || null;
 
       const result = await analysisService.uploadAnalysis(
         analysis,
-        type,
         teamId,
         targetFolderId,
       );

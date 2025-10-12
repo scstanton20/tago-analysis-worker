@@ -1,5 +1,5 @@
 // frontend/src/components/metrics/metricsDashboard.jsx
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Grid,
   Card,
@@ -395,22 +395,16 @@ function MetricsTabContent({
 // Main Metrics Dashboard Component
 export default function MetricsDashboard() {
   const { metricsData, connectionStatus } = useSSE();
-  const [loading, setLoading] = useState(true);
-  const [lastUpdate, setLastUpdate] = useState(null);
   const [activeTab, setActiveTab] = useState('total');
 
-  // Update loading state and timestamp when metrics data changes
-  useEffect(() => {
-    if (metricsData) {
-      setLoading(false);
-      setLastUpdate(new Date(metricsData.timestamp || Date.now()));
-    }
-  }, [metricsData]);
+  // Derive loading state from metricsData availability
+  const loading = !metricsData;
 
-  const handleRefresh = () => {
-    // Refresh is handled automatically by SSE system
-    setLastUpdate(new Date());
-  };
+  // Derive lastUpdate from metricsData timestamp
+  const lastUpdate = useMemo(() => {
+    if (!metricsData?.timestamp) return null;
+    return new Date(metricsData.timestamp);
+  }, [metricsData]);
 
   const formatNumber = (value, decimals = 2) => {
     if (value === null || value === undefined) return '--';
@@ -446,10 +440,9 @@ export default function MetricsDashboard() {
             leftSection={<IconRefresh size={16} />}
             variant="light"
             size="sm"
-            onClick={handleRefresh}
-            disabled={connectionStatus !== 'connected'}
+            disabled
           >
-            Refresh
+            Auto-Refresh
           </Button>
         </Group>
       </Group>

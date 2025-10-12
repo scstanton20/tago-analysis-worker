@@ -1,10 +1,9 @@
 // Enhanced metrics collection for per-process monitoring
 import client from 'prom-client';
 import pidusage from 'pidusage';
-import { readFile } from 'fs/promises';
-import { existsSync } from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { safeReadFile, safeExistsSync } from './safePath.js';
 
 const execAsync = promisify(exec);
 
@@ -208,11 +207,11 @@ async function getProcessNetworkStats(pid) {
       // Per-process network I/O requires parsing /proc/net/tcp and matching file descriptors
       const netDevPath = `/proc/${pid}/net/dev`;
 
-      if (!existsSync(netDevPath)) {
+      if (!safeExistsSync(netDevPath)) {
         return null;
       }
 
-      const content = await readFile(netDevPath, 'utf8');
+      const content = await safeReadFile(netDevPath, 'utf8');
       const lines = content.split('\n');
 
       let rxBytes = 0;

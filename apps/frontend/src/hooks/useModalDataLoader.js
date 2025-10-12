@@ -21,7 +21,10 @@ export function useModalDataLoader(opened, loaders = [], condition = true) {
 
   useEffect(() => {
     if (opened && condition && !hasLoaded) {
-      setHasLoaded(true);
+      // Use a microtask to defer the state update, avoiding cascading renders
+      Promise.resolve().then(() => {
+        setHasLoaded(true);
+      });
       load();
     }
 

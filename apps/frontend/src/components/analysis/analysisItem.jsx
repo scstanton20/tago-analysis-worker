@@ -534,7 +534,6 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
 AnalysisItem.propTypes = {
   analysis: PropTypes.shape({
     name: PropTypes.string.isRequired,
-    type: PropTypes.oneOf(['listener']),
     status: PropTypes.string,
     team: PropTypes.string,
     logs: PropTypes.arrayOf(

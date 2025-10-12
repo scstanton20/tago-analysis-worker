@@ -24,9 +24,8 @@ const WRAPPER_SCRIPT = path.join(
 );
 
 class AnalysisProcess {
-  constructor(analysisName, type, service) {
+  constructor(analysisName, service) {
     this._analysisName = analysisName;
-    this.type = type;
     this.service = service;
     this.process = null;
     this.enabled = false;
@@ -58,7 +57,6 @@ class AnalysisProcess {
     // Create main logger for lifecycle events (not analysis output)
     this.logger = createChildLogger('analysis', {
       analysis: analysisName,
-      type: this.type,
     });
 
     // Create dedicated file logger for analysis output only
@@ -85,7 +83,6 @@ class AnalysisProcess {
     // Update logger with new analysis name
     this.logger = createChildLogger('analysis', {
       analysis: newName,
-      type: this.type,
     });
 
     // Recreate file logger with new path
@@ -434,15 +431,12 @@ class AnalysisProcess {
     // Update intended state when explicitly enabling/disabling
     if (status === 'running') {
       this.intendedState = 'running';
+      this.lastStartTime = new Date().toString();
     } else if (status === 'stopped' && !enabled) {
       // Only set intended state to stopped if not a connection error
       if (!this.connectionErrorDetected) {
         this.intendedState = 'stopped';
       }
-    }
-
-    if (this.type === 'listener' && status === 'running') {
-      this.lastStartTime = new Date().toString();
     }
 
     this.logger.debug(`Status updated from ${previousStatus} to ${status}`);
@@ -523,9 +517,8 @@ class AnalysisProcess {
 
     await this.saveConfig();
 
-    // Auto-restart listeners that exit unexpectedly OR have connection errors
+    // Auto-restart analyses that exit unexpectedly OR have connection errors
     const shouldRestart =
-      this.type === 'listener' &&
       this.intendedState === 'running' &&
       (code !== 0 || this.connectionErrorDetected);
 

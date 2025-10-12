@@ -497,17 +497,20 @@ export default function AnalysisTree({
 
   // Helper function to find item and its parent in tree
   const findItemWithParent = useCallback((items, itemId, parent = null) => {
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      if (item.id === itemId) {
-        return { item, parent, index: i };
+    const search = (itemsList, currentParent) => {
+      for (let i = 0; i < itemsList.length; i++) {
+        const item = itemsList[i];
+        if (item.id === itemId) {
+          return { item, parent: currentParent, index: i };
+        }
+        if (item.type === 'folder' && item.items) {
+          const found = search(item.items, item);
+          if (found) return found;
+        }
       }
-      if (item.type === 'folder' && item.items) {
-        const found = findItemWithParent(item.items, itemId, item);
-        if (found) return found;
-      }
-    }
-    return null;
+      return null;
+    };
+    return search(items, parent);
   }, []);
 
   // Helper to check if target is a descendant of source

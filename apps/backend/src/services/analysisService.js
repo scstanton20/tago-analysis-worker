@@ -85,7 +85,6 @@ class AnalysisService {
       this.analyses.forEach((analysis, name) => {
         if (config.analyses[name] && analysis instanceof AnalysisProcess) {
           // Update properties of existing AnalysisProcess instance
-          analysis.type = config.analyses[name].type;
           analysis.enabled = config.analyses[name].enabled;
           analysis.status = config.analyses[name].status;
           analysis.lastStartTime = config.analyses[name].lastStartTime;
@@ -103,7 +102,7 @@ class AnalysisService {
       Object.entries(config.analyses).forEach(([name, analysisConfig]) => {
         if (!this.analyses.has(name)) {
           // Create new AnalysisProcess instance with proper configuration
-          const analysis = new AnalysisProcess(name, analysisConfig.type, this);
+          const analysis = new AnalysisProcess(name, this);
           Object.assign(analysis, {
             enabled: analysisConfig.enabled,
             status: analysisConfig.status,
@@ -126,14 +125,13 @@ class AnalysisService {
    */
   async saveConfig() {
     const configuration = {
-      version: this.configCache?.version || '4.0',
+      version: this.configCache?.version || '4.1',
       analyses: {},
       teamStructure: this.configCache?.teamStructure || {},
     };
 
     this.analyses.forEach((analysis, analysisName) => {
       configuration.analyses[analysisName] = {
-        type: analysis.type,
         enabled: analysis.enabled,
         status: analysis.status,
         intendedState: analysis.intendedState || 'stopped',
@@ -162,13 +160,13 @@ class AnalysisService {
 
       // Version 4.0 migration: Convert flat teamId to nested structure
       const currentVersion = parseFloat(config.version) || 1.0;
-      const needsMigration =
+      const needsMigrationTo4_0 =
         currentVersion < 4.0 ||
         !config.teamStructure ||
         Object.keys(config.teamStructure).length === 0;
 
       if (
-        needsMigration &&
+        needsMigrationTo4_0 &&
         config.analyses &&
         Object.keys(config.analyses).length > 0
       ) {
@@ -210,6 +208,31 @@ class AnalysisService {
         );
       }
 
+      // Version 4.1 migration: Remove deprecated 'type' field from analyses
+      if (config.version === '4.0') {
+        logger.info('Migrating config from v4.0 to v4.1 (remove type field)');
+
+        let removedCount = 0;
+        for (const analysis of Object.values(config.analyses || {})) {
+          if ('type' in analysis) {
+            delete analysis.type;
+            removedCount++;
+          }
+        }
+
+        config.version = '4.1';
+
+        // Save migrated config
+        await safeWriteFile(this.configPath, JSON.stringify(config, null, 2));
+        logger.info(
+          {
+            analysisCount: Object.keys(config.analyses || {}).length,
+            removedTypeFields: removedCount,
+          },
+          'Successfully migrated config to v4.1',
+        );
+      }
+
       // Store the full config including departments
       this.configCache = config;
 
@@ -228,7 +251,7 @@ class AnalysisService {
       if (error.code === 'ENOENT') {
         logger.info('No existing config file, creating new one');
         this.configCache = {
-          version: '4.0',
+          version: '4.1',
           analyses: {},
           teamStructure: {},
         };
@@ -265,24 +288,18 @@ class AnalysisService {
    * @param {Object} file - File object with name and mv method
    * @param {string} file.name - Original filename
    * @param {Function} file.mv - Method to move file to destination
-   * @param {string} type - Type of analysis (e.g., 'listener')
    * @param {string|null} [targetDepartment=null] - Department to assign analysis to (null means uncategorized)
    * @param {string|null} [targetFolderId=null] - Target folder ID within team structure (null means root)
    * @returns {Promise<Object>} Object with analysisName property
    * @throws {Error} If upload or registration fails
    */
-  async uploadAnalysis(
-    file,
-    type,
-    targetDepartment = null,
-    targetFolderId = null,
-  ) {
+  async uploadAnalysis(file, targetDepartment = null, targetFolderId = null) {
     const analysisName = path.parse(file.name).name;
     const basePath = await this.createAnalysisDirectories(analysisName);
     const filePath = path.join(basePath, 'index.js');
 
     await file.mv(filePath);
-    const analysis = new AnalysisProcess(analysisName, type, this);
+    const analysis = new AnalysisProcess(analysisName, this);
 
     // Set team ID from parameter, or get Uncategorized team ID if not provided
     let teamId = targetDepartment;
@@ -323,7 +340,6 @@ class AnalysisService {
       {
         analysisName,
         teamId,
-        type,
         targetFolderId,
       },
       'Analysis uploaded successfully',
@@ -401,7 +417,6 @@ class AnalysisService {
             name: dirName,
             size: formatFileSize(stats.size),
             created: stats.birthtime,
-            type: 'listener',
             status: analysis?.status || 'stopped',
             enabled: analysis?.enabled || false,
             lastStartTime: analysis?.lastStartTime,
@@ -1445,7 +1460,6 @@ class AnalysisService {
    * Initialize an analysis instance with configuration
    * @param {string} analysisName - Name of the analysis
    * @param {Object} [analysisConfig={}] - Configuration object for the analysis
-   * @param {string} [analysisConfig.type='listener'] - Type of analysis
    * @param {boolean} [analysisConfig.enabled=false] - Whether analysis is enabled
    * @param {string} [analysisConfig.status='stopped'] - Current status
    * @param {string|null} [analysisConfig.lastStartTime=null] - Last start timestamp
@@ -1454,7 +1468,6 @@ class AnalysisService {
    */
   async initializeAnalysis(analysisName, analysisConfig = {}) {
     const defaultConfig = {
-      type: 'listener',
       enabled: false,
       status: 'stopped',
       intendedState: 'stopped',
@@ -1463,7 +1476,7 @@ class AnalysisService {
     };
 
     const fullConfig = { ...defaultConfig, ...analysisConfig };
-    const analysis = new AnalysisProcess(analysisName, fullConfig.type, this);
+    const analysis = new AnalysisProcess(analysisName, this);
 
     Object.assign(analysis, {
       enabled: fullConfig.enabled,
