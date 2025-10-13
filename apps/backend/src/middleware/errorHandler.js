@@ -1,6 +1,6 @@
 // backend/src/middleware/errorHandler.js
 const errorHandler = (err, req, res, next) => {
-  const logger = req.logger?.child({ middleware: 'errorHandler' }) || console;
+  const logger = req.log?.child({ middleware: 'errorHandler' }) || console;
 
   // Check if res has status method (Express response object)
   if (typeof res.status !== 'function') {
@@ -43,8 +43,9 @@ const errorHandler = (err, req, res, next) => {
       code: err.code,
       path: req.path,
       method: req.method,
+      message,
     },
-    `Error: ${message}`,
+    'Error occurred',
   );
 
   res.status(statusCode).json({

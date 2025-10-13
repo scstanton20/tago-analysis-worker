@@ -46,11 +46,8 @@ function sanitizeAndValidateFilename(filename) {
 
 class AnalysisController {
   static async uploadAnalysis(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'AnalysisController' }) || console;
-
     if (!req.files || !req.files.analysis) {
-      logger.warn(
+      req.log.warn(
         { action: 'uploadAnalysis' },
         'Upload failed: no file provided',
       );
@@ -61,7 +58,7 @@ class AnalysisController {
     const teamId = req.body.teamId;
     const targetFolderId = req.body.targetFolderId || null;
 
-    logger.info(
+    req.log.info(
       {
         action: 'uploadAnalysis',
         fileName: analysis.name,
@@ -78,7 +75,7 @@ class AnalysisController {
         targetFolderId,
       );
 
-      logger.info(
+      req.log.info(
         { action: 'uploadAnalysis', analysisName: result.analysisName, teamId },
         'Analysis uploaded',
       );
@@ -116,61 +113,54 @@ class AnalysisController {
   }
 
   static async getAnalyses(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'AnalysisController' }) || console;
-
-    logger.info(
+    req.log.info(
       { action: 'getAnalyses', userId: req.user.id, role: req.user.role },
       'Retrieving analyses',
     );
 
     try {
-      const allAnalyses = await analysisService.getAllAnalyses();
+      // Get analyses filtered at service layer for security
+      let analyses;
 
-      // Admin users can see all analyses
       if (req.user.role === 'admin') {
-        logger.info(
-          { action: 'getAnalyses', count: Object.keys(allAnalyses).length },
+        // Admin users see all analyses - no filter
+        analyses = await analysisService.getAllAnalyses(null, req.log);
+        req.log.info(
+          { action: 'getAnalyses', count: Object.keys(analyses).length },
           'All analyses retrieved (admin)',
         );
-        return res.json(allAnalyses);
+      } else {
+        // Get user's allowed team IDs for view_analyses permission
+        const { getUserTeamIds } = await import(
+          '../middleware/betterAuthMiddleware.js'
+        );
+
+        const allowedTeamIds = getUserTeamIds(req.user.id, 'view_analyses');
+
+        // Service filters by team ID before loading file stats (prevents timing attacks)
+        analyses = await analysisService.getAllAnalyses(
+          allowedTeamIds,
+          req.log,
+        );
+
+        req.log.info(
+          { action: 'getAnalyses', count: Object.keys(analyses).length },
+          'Filtered analyses retrieved',
+        );
       }
 
-      // Get user's allowed team IDs for view_analyses permission
-      const { getUserTeamIds } = await import(
-        '../middleware/betterAuthMiddleware.js'
-      );
-
-      const allowedTeamIds = getUserTeamIds(req.user.id, 'view_analyses');
-
-      // Filter analyses to only include those in allowed teams
-      const filteredAnalyses = {};
-      for (const [analysisName, analysis] of Object.entries(allAnalyses)) {
-        if (allowedTeamIds.includes(analysis.teamId)) {
-          filteredAnalyses[analysisName] = analysis;
-        }
-      }
-
-      logger.info(
-        { action: 'getAnalyses', count: Object.keys(filteredAnalyses).length },
-        'Filtered analyses retrieved',
-      );
-
-      res.json(filteredAnalyses);
+      res.json(analyses);
     } catch (error) {
       handleError(res, error, 'retrieving analyses');
     }
   }
 
   static async runAnalysis(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'AnalysisController' }) || console;
     const { fileName } = req.params;
-
     // Sanitize the fileName to prevent path traversal
     const sanitizedFileName = sanitizeAndValidateFilename(fileName);
 
-    logger.info(
+    req.log.info(
       { action: 'runAnalysis', fileName: sanitizedFileName },
       'Running analysis',
     );
@@ -178,7 +168,7 @@ class AnalysisController {
     try {
       const result = await analysisService.runAnalysis(sanitizedFileName);
 
-      logger.info(
+      req.log.info(
         { action: 'runAnalysis', fileName: sanitizedFileName },
         'Analysis started',
       );
@@ -199,14 +189,11 @@ class AnalysisController {
   }
 
   static async stopAnalysis(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'AnalysisController' }) || console;
     const { fileName } = req.params;
-
     // Sanitize the fileName to prevent path traversal
     const sanitizedFileName = sanitizeAndValidateFilename(fileName);
 
-    logger.info(
+    req.log.info(
       { action: 'stopAnalysis', fileName: sanitizedFileName },
       'Stopping analysis',
     );
@@ -214,7 +201,7 @@ class AnalysisController {
     try {
       const result = await analysisService.stopAnalysis(sanitizedFileName);
 
-      logger.info(
+      req.log.info(
         { action: 'stopAnalysis', fileName: sanitizedFileName },
         'Analysis stopped',
       );
@@ -235,14 +222,11 @@ class AnalysisController {
   }
 
   static async deleteAnalysis(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'AnalysisController' }) || console;
     const { fileName } = req.params;
-
     // Sanitize the fileName to prevent path traversal
     const sanitizedFileName = sanitizeAndValidateFilename(fileName);
 
-    logger.info(
+    req.log.info(
       { action: 'deleteAnalysis', fileName: sanitizedFileName },
       'Deleting analysis',
     );
@@ -254,7 +238,7 @@ class AnalysisController {
 
       await analysisService.deleteAnalysis(sanitizedFileName);
 
-      logger.info(
+      req.log.info(
         {
           action: 'deleteAnalysis',
           fileName: sanitizedFileName,
@@ -293,15 +277,12 @@ class AnalysisController {
   }
 
   static async getAnalysisContent(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'AnalysisController' }) || console;
     const { fileName } = req.params;
     const { version } = req.query;
-
     // Sanitize the fileName to prevent path traversal
     const sanitizedFileName = sanitizeAndValidateFilename(fileName);
 
-    logger.info(
+    req.log.info(
       { action: 'getAnalysisContent', fileName: sanitizedFileName, version },
       'Getting analysis content',
     );
@@ -313,7 +294,7 @@ class AnalysisController {
         // Get version-specific content
         const versionNumber = parseInt(version, 10);
         if (isNaN(versionNumber) || versionNumber < 0) {
-          logger.warn(
+          req.log.warn(
             {
               action: 'getAnalysisContent',
               fileName: sanitizedFileName,
@@ -332,7 +313,7 @@ class AnalysisController {
         content = await analysisService.getAnalysisContent(sanitizedFileName);
       }
 
-      logger.info(
+      req.log.info(
         { action: 'getAnalysisContent', fileName: sanitizedFileName, version },
         'Analysis content retrieved',
       );
@@ -341,7 +322,7 @@ class AnalysisController {
       res.send(content);
     } catch (error) {
       if (error.code === 'ENOENT') {
-        logger.warn(
+        req.log.warn(
           { action: 'getAnalysisContent', fileName: sanitizedFileName },
           'Analysis file not found',
         );
@@ -354,16 +335,13 @@ class AnalysisController {
   }
 
   static async updateAnalysis(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'AnalysisController' }) || console;
     const { fileName } = req.params;
     const { content } = req.body;
-
     // Sanitize the fileName to prevent path traversal
     const sanitizedFileName = sanitizeAndValidateFilename(fileName);
 
     if (!content) {
-      logger.warn(
+      req.log.warn(
         { action: 'updateAnalysis', fileName: sanitizedFileName },
         'Update failed: no content provided',
       );
@@ -373,7 +351,7 @@ class AnalysisController {
     }
 
     if (typeof content !== 'string') {
-      logger.warn(
+      req.log.warn(
         {
           action: 'updateAnalysis',
           fileName: sanitizedFileName,
@@ -386,7 +364,7 @@ class AnalysisController {
       });
     }
 
-    logger.info(
+    req.log.info(
       { action: 'updateAnalysis', fileName: sanitizedFileName },
       'Updating analysis',
     );
@@ -396,7 +374,7 @@ class AnalysisController {
         content,
       });
 
-      logger.info(
+      req.log.info(
         {
           action: 'updateAnalysis',
           fileName: sanitizedFileName,
@@ -431,16 +409,13 @@ class AnalysisController {
   }
 
   static async renameAnalysis(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'AnalysisController' }) || console;
     const { fileName } = req.params;
     const { newFileName } = req.body;
-
     // Sanitize both filenames to prevent path traversal
     const sanitizedFileName = sanitizeAndValidateFilename(fileName);
 
     if (!newFileName) {
-      logger.warn(
+      req.log.warn(
         { action: 'renameAnalysis', fileName: sanitizedFileName },
         'Rename failed: no new filename provided',
       );
@@ -450,7 +425,7 @@ class AnalysisController {
     }
 
     if (typeof newFileName !== 'string') {
-      logger.warn(
+      req.log.warn(
         {
           action: 'renameAnalysis',
           fileName: sanitizedFileName,
@@ -465,7 +440,7 @@ class AnalysisController {
 
     const sanitizedNewFileName = sanitizeAndValidateFilename(newFileName);
 
-    logger.info(
+    req.log.info(
       {
         action: 'renameAnalysis',
         oldFileName: sanitizedFileName,
@@ -480,7 +455,7 @@ class AnalysisController {
         sanitizedNewFileName,
       );
 
-      logger.info(
+      req.log.info(
         {
           action: 'renameAnalysis',
           oldFileName: sanitizedFileName,
@@ -517,16 +492,13 @@ class AnalysisController {
   }
 
   static async getLogs(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'AnalysisController' }) || console;
     const { fileName } = req.params;
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 100;
-
     // Sanitize the fileName to prevent path traversal
     const sanitizedFileName = sanitizeAndValidateFilename(fileName);
 
-    logger.info(
+    req.log.info(
       { action: 'getLogs', fileName: sanitizedFileName, page, limit },
       'Getting analysis logs',
     );
@@ -538,7 +510,7 @@ class AnalysisController {
         limit,
       );
 
-      logger.info(
+      req.log.info(
         {
           action: 'getLogs',
           fileName: sanitizedFileName,
@@ -554,13 +526,10 @@ class AnalysisController {
   }
 
   static async downloadLogs(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'AnalysisController' }) || console;
     const { fileName } = req.params;
     const { timeRange } = req.query;
-
     if (!fileName) {
-      logger.warn(
+      req.log.warn(
         { action: 'downloadLogs' },
         'Download failed: missing fileName',
       );
@@ -568,7 +537,7 @@ class AnalysisController {
     }
 
     if (!timeRange) {
-      logger.warn(
+      req.log.warn(
         { action: 'downloadLogs', fileName },
         'Download failed: missing timeRange',
       );
@@ -580,7 +549,7 @@ class AnalysisController {
 
     // Validate time range
     if (!analysisService.validateTimeRange(timeRange)) {
-      logger.warn(
+      req.log.warn(
         { action: 'downloadLogs', fileName: sanitizedFileName, timeRange },
         'Download failed: invalid time range',
       );
@@ -589,7 +558,7 @@ class AnalysisController {
       });
     }
 
-    logger.info(
+    req.log.info(
       { action: 'downloadLogs', fileName: sanitizedFileName, timeRange },
       'Downloading logs',
     );
@@ -619,7 +588,7 @@ class AnalysisController {
           await fs.access(expectedLogFile);
         } catch (error) {
           if (error.code === 'ENOENT') {
-            logger.warn(
+            req.log.warn(
               { action: 'downloadLogs', fileName: sanitizedFileName },
               'Log file not found',
             );
@@ -638,7 +607,7 @@ class AnalysisController {
         );
         res.setHeader('Content-Type', 'text/plain');
 
-        logger.info(
+        req.log.info(
           { action: 'downloadLogs', fileName: sanitizedFileName, timeRange },
           'Streaming log file',
         );
@@ -646,7 +615,7 @@ class AnalysisController {
         // Stream the file directly - no memory loading
         return res.sendFile(expectedLogFile, (err) => {
           if (err && !res.headersSent) {
-            logger.error(
+            req.log.error(
               { action: 'downloadLogs', fileName: sanitizedFileName, err },
               'Error streaming log file',
             );
@@ -688,7 +657,7 @@ class AnalysisController {
         );
         res.setHeader('Content-Type', 'text/plain');
 
-        logger.info(
+        req.log.info(
           { action: 'downloadLogs', fileName: sanitizedFileName, timeRange },
           'Sending filtered log file',
         );
@@ -697,7 +666,7 @@ class AnalysisController {
         res.sendFile(tempLogFile, (err) => {
           // Clean up temp file using the already validated tempLogFile path
           safeUnlink(tempLogFile).catch((unlinkError) => {
-            logger.error(
+            req.log.error(
               {
                 action: 'downloadLogs',
                 fileName: sanitizedFileName,
@@ -708,7 +677,7 @@ class AnalysisController {
           });
 
           if (err && !res.headersSent) {
-            logger.error(
+            req.log.error(
               { action: 'downloadLogs', fileName: sanitizedFileName, err },
               'Error sending file',
             );
@@ -716,7 +685,7 @@ class AnalysisController {
           }
         });
       } catch (writeError) {
-        logger.error(
+        req.log.error(
           {
             action: 'downloadLogs',
             fileName: sanitizedFileName,
@@ -730,7 +699,7 @@ class AnalysisController {
       }
     } catch (error) {
       if (error.message.includes('Log file not found')) {
-        logger.warn(
+        req.log.warn(
           { action: 'downloadLogs', fileName: sanitizedFileName },
           'Log file not found',
         );
@@ -741,7 +710,7 @@ class AnalysisController {
         error.message.includes('Path traversal') ||
         error.message.includes('Invalid filename')
       ) {
-        logger.warn(
+        req.log.warn(
           { action: 'downloadLogs', fileName: sanitizedFileName },
           'Invalid file path',
         );
@@ -753,14 +722,11 @@ class AnalysisController {
   }
 
   static async clearLogs(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'AnalysisController' }) || console;
     const { fileName } = req.params;
-
     // Sanitize the fileName to prevent path traversal
     const sanitizedFileName = sanitizeAndValidateFilename(fileName);
 
-    logger.info(
+    req.log.info(
       { action: 'clearLogs', fileName: sanitizedFileName },
       'Clearing analysis logs',
     );
@@ -768,7 +734,7 @@ class AnalysisController {
     try {
       const result = await analysisService.clearLogs(sanitizedFileName);
 
-      logger.info(
+      req.log.info(
         { action: 'clearLogs', fileName: sanitizedFileName },
         'Logs cleared',
       );
@@ -794,15 +760,12 @@ class AnalysisController {
   }
 
   static async downloadAnalysis(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'AnalysisController' }) || console;
     const { fileName } = req.params;
     const { version } = req.query;
-
     // Sanitize the fileName to prevent path traversal
     const sanitizedFileName = sanitizeAndValidateFilename(fileName);
 
-    logger.info(
+    req.log.info(
       { action: 'downloadAnalysis', fileName: sanitizedFileName, version },
       'Downloading analysis',
     );
@@ -813,7 +776,7 @@ class AnalysisController {
         // Download specific version
         const versionNumber = parseInt(version, 10);
         if (isNaN(versionNumber) || versionNumber < 1) {
-          logger.warn(
+          req.log.warn(
             {
               action: 'downloadAnalysis',
               fileName: sanitizedFileName,
@@ -832,7 +795,7 @@ class AnalysisController {
         content = await analysisService.getAnalysisContent(sanitizedFileName);
       }
 
-      logger.info(
+      req.log.info(
         { action: 'downloadAnalysis', fileName: sanitizedFileName, version },
         'Analysis download prepared',
       );
@@ -853,14 +816,11 @@ class AnalysisController {
   }
 
   static async getVersions(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'AnalysisController' }) || console;
     const { fileName } = req.params;
-
     // Sanitize the fileName to prevent path traversal
     const sanitizedFileName = sanitizeAndValidateFilename(fileName);
 
-    logger.info(
+    req.log.info(
       { action: 'getVersions', fileName: sanitizedFileName },
       'Getting analysis versions',
     );
@@ -868,7 +828,7 @@ class AnalysisController {
     try {
       const versions = await analysisService.getVersions(sanitizedFileName);
 
-      logger.info(
+      req.log.info(
         {
           action: 'getVersions',
           fileName: sanitizedFileName,
@@ -884,16 +844,13 @@ class AnalysisController {
   }
 
   static async rollbackToVersion(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'AnalysisController' }) || console;
     const { fileName } = req.params;
     const { version } = req.body;
-
     // Sanitize the fileName to prevent path traversal
     const sanitizedFileName = sanitizeAndValidateFilename(fileName);
 
     if (!version || isNaN(parseInt(version, 10))) {
-      logger.warn(
+      req.log.warn(
         { action: 'rollbackToVersion', fileName: sanitizedFileName, version },
         'Rollback failed: invalid version number',
       );
@@ -904,7 +861,7 @@ class AnalysisController {
 
     const versionNumber = parseInt(version, 10);
 
-    logger.info(
+    req.log.info(
       {
         action: 'rollbackToVersion',
         fileName: sanitizedFileName,
@@ -919,7 +876,7 @@ class AnalysisController {
         versionNumber,
       );
 
-      logger.info(
+      req.log.info(
         {
           action: 'rollbackToVersion',
           fileName: sanitizedFileName,
@@ -957,16 +914,13 @@ class AnalysisController {
   }
 
   static async updateEnvironment(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'AnalysisController' }) || console;
     const { fileName } = req.params;
     const { env } = req.body;
-
     // Sanitize the fileName to prevent path traversal
     const sanitizedFileName = sanitizeAndValidateFilename(fileName);
 
     if (!env || typeof env !== 'object') {
-      logger.warn(
+      req.log.warn(
         { action: 'updateEnvironment', fileName: sanitizedFileName },
         'Update failed: invalid environment variables',
       );
@@ -975,7 +929,7 @@ class AnalysisController {
       });
     }
 
-    logger.info(
+    req.log.info(
       { action: 'updateEnvironment', fileName: sanitizedFileName },
       'Updating environment variables',
     );
@@ -986,7 +940,7 @@ class AnalysisController {
         env,
       );
 
-      logger.info(
+      req.log.info(
         {
           action: 'updateEnvironment',
           fileName: sanitizedFileName,
@@ -1021,14 +975,11 @@ class AnalysisController {
   }
 
   static async getEnvironment(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'AnalysisController' }) || console;
     const { fileName } = req.params;
-
     // Sanitize the fileName to prevent path traversal
     const sanitizedFileName = sanitizeAndValidateFilename(fileName);
 
-    logger.info(
+    req.log.info(
       { action: 'getEnvironment', fileName: sanitizedFileName },
       'Getting environment variables',
     );
@@ -1036,7 +987,7 @@ class AnalysisController {
     try {
       const env = await analysisService.getEnvironment(sanitizedFileName);
 
-      logger.info(
+      req.log.info(
         { action: 'getEnvironment', fileName: sanitizedFileName },
         'Environment variables retrieved',
       );

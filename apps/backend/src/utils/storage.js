@@ -2,6 +2,10 @@
 import { promises as fs } from 'fs';
 import config from '../config/default.js';
 import { safeMkdir, safeWriteFile } from './safePath.js';
+import { createChildLogger } from './logging/logger.js';
+
+// Module-level logger for storage operations
+const logger = createChildLogger('storage');
 
 async function initializeStorage() {
   if (!config.storage.createDirs) return;
@@ -31,7 +35,7 @@ async function initializeStorage() {
       );
     }
   } catch (error) {
-    console.error('Failed to initialize storage:', error);
+    logger.error({ err: error }, 'Failed to initialize storage');
     throw error;
   }
 }

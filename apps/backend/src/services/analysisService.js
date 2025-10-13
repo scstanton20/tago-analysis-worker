@@ -151,6 +151,105 @@ class AnalysisService {
   }
 
   /**
+   * Migrate configuration from pre-v4.0 to v4.0 (nested folder structure)
+   * Converts flat teamId structure to nested teamStructure with items
+   * @param {Object} config - Configuration object to migrate
+   * @returns {Promise<boolean>} True if migration was performed, false if not needed
+   * @private
+   */
+  async migrateConfigToV4_0(config) {
+    const currentVersion = parseFloat(config.version) || 1.0;
+    const needsMigration =
+      currentVersion < 4.0 ||
+      !config.teamStructure ||
+      Object.keys(config.teamStructure).length === 0;
+
+    if (
+      !needsMigration ||
+      !config.analyses ||
+      Object.keys(config.analyses).length === 0
+    ) {
+      return false;
+    }
+
+    moduleLogger.info(
+      `Migrating config from v${config.version} to v4.0 (nested folder structure)`,
+    );
+    config.version = '4.0';
+    config.teamStructure = {};
+
+    // Group analyses by team
+    const teamGroups = {};
+    for (const [analysisName, analysis] of Object.entries(
+      config.analyses || {},
+    )) {
+      const teamId = analysis.teamId || 'uncategorized';
+      if (!teamGroups[teamId]) teamGroups[teamId] = [];
+      teamGroups[teamId].push(analysisName);
+    }
+
+    // Create flat items structure for each team (no folders initially)
+    for (const [teamId, analysisNames] of Object.entries(teamGroups)) {
+      config.teamStructure[teamId] = {
+        items: analysisNames.map((name) => ({
+          id: crypto.randomUUID(),
+          type: 'analysis',
+          analysisName: name,
+        })),
+      };
+    }
+
+    // Save migrated config
+    await safeWriteFile(this.configPath, JSON.stringify(config, null, 2));
+    moduleLogger.info(
+      {
+        teamsCount: Object.keys(config.teamStructure).length,
+        analysisCount: Object.keys(config.analyses || {}).length,
+      },
+      'Successfully migrated config to v4.0',
+    );
+
+    return true;
+  }
+
+  /**
+   * Migrate configuration from v4.0 to v4.1 (remove deprecated type field)
+   * Removes the deprecated 'type' field from analysis configurations
+   * @param {Object} config - Configuration object to migrate
+   * @returns {Promise<boolean>} True if migration was performed, false if not needed
+   * @private
+   */
+  async migrateConfigToV4_1(config) {
+    if (config.version !== '4.0') {
+      return false;
+    }
+
+    moduleLogger.info('Migrating config from v4.0 to v4.1 (remove type field)');
+
+    let removedCount = 0;
+    for (const analysis of Object.values(config.analyses || {})) {
+      if ('type' in analysis) {
+        delete analysis.type;
+        removedCount++;
+      }
+    }
+
+    config.version = '4.1';
+
+    // Save migrated config
+    await safeWriteFile(this.configPath, JSON.stringify(config, null, 2));
+    moduleLogger.info(
+      {
+        analysisCount: Object.keys(config.analyses || {}).length,
+        removedTypeFields: removedCount,
+      },
+      'Successfully migrated config to v4.1',
+    );
+
+    return true;
+  }
+
+  /**
    * Load configuration from file or create default if not exists
    * @returns {Promise<Object>} Loaded configuration object
    * @throws {Error} If file read fails (except ENOENT)
@@ -160,82 +259,9 @@ class AnalysisService {
       const data = await safeReadFile(this.configPath, 'utf8');
       const config = JSON.parse(data);
 
-      // Version 4.0 migration: Convert flat teamId to nested structure
-      const currentVersion = parseFloat(config.version) || 1.0;
-      const needsMigrationTo4_0 =
-        currentVersion < 4.0 ||
-        !config.teamStructure ||
-        Object.keys(config.teamStructure).length === 0;
-
-      if (
-        needsMigrationTo4_0 &&
-        config.analyses &&
-        Object.keys(config.analyses).length > 0
-      ) {
-        moduleLogger.info(
-          `Migrating config from v${config.version} to v4.0 (nested folder structure)`,
-        );
-        config.version = '4.0';
-        config.teamStructure = {};
-
-        // Group analyses by team
-        const teamGroups = {};
-        for (const [analysisName, analysis] of Object.entries(
-          config.analyses || {},
-        )) {
-          const teamId = analysis.teamId || 'uncategorized';
-          if (!teamGroups[teamId]) teamGroups[teamId] = [];
-          teamGroups[teamId].push(analysisName);
-        }
-
-        // Create flat items structure for each team (no folders initially)
-        for (const [teamId, analysisNames] of Object.entries(teamGroups)) {
-          config.teamStructure[teamId] = {
-            items: analysisNames.map((name) => ({
-              id: crypto.randomUUID(),
-              type: 'analysis',
-              analysisName: name,
-            })),
-          };
-        }
-
-        // Save migrated config
-        await safeWriteFile(this.configPath, JSON.stringify(config, null, 2));
-        moduleLogger.info(
-          {
-            teamsCount: Object.keys(config.teamStructure).length,
-            analysisCount: Object.keys(config.analyses || {}).length,
-          },
-          'Successfully migrated config to v4.0',
-        );
-      }
-
-      // Version 4.1 migration: Remove deprecated 'type' field from analyses
-      if (config.version === '4.0') {
-        moduleLogger.info(
-          'Migrating config from v4.0 to v4.1 (remove type field)',
-        );
-
-        let removedCount = 0;
-        for (const analysis of Object.values(config.analyses || {})) {
-          if ('type' in analysis) {
-            delete analysis.type;
-            removedCount++;
-          }
-        }
-
-        config.version = '4.1';
-
-        // Save migrated config
-        await safeWriteFile(this.configPath, JSON.stringify(config, null, 2));
-        moduleLogger.info(
-          {
-            analysisCount: Object.keys(config.analyses || {}).length,
-            removedTypeFields: removedCount,
-          },
-          'Successfully migrated config to v4.1',
-        );
-      }
+      // Run migrations in sequence
+      await this.migrateConfigToV4_0(config);
+      await this.migrateConfigToV4_1(config);
 
       // Store the full config including departments
       this.configCache = config;
@@ -406,21 +432,29 @@ class AnalysisService {
 
   /**
    * Get all analyses with their metadata and department information
+   * @param {Array<string>} [allowedTeamIds=null] - Optional array of team IDs to filter by (for permission filtering)
    * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<Object>} Object mapping analysis names to their metadata
    * @throws {Error} If directory read or file stat fails
    */
-  async getAllAnalyses(logger = moduleLogger) {
-    logger.info({ action: 'getAllAnalyses' }, 'Getting all analyses');
-
+  async getAllAnalyses(allowedTeamIds = null) {
     const analysisDirectories = await safeReaddir(config.paths.analysis);
 
     const results = await Promise.all(
       analysisDirectories.map(async (dirName) => {
         const indexPath = path.join(config.paths.analysis, dirName, 'index.js');
         try {
-          const stats = await safeStat(indexPath);
           const analysis = this.analyses.get(dirName);
+
+          // Early filtering: Skip analyses not in allowed teams (if filter is provided)
+          if (
+            allowedTeamIds !== null &&
+            !allowedTeamIds.includes(analysis?.teamId)
+          ) {
+            return null;
+          }
+
+          const stats = await safeStat(indexPath);
 
           if (!this.analyses.has(dirName)) {
             this.analyses.set(dirName, analysis);
@@ -447,11 +481,6 @@ class AnalysisService {
     results.filter(Boolean).forEach((analysis) => {
       analysesObj[analysis.name] = analysis;
     });
-
-    logger.info(
-      { action: 'getAllAnalyses', count: Object.keys(analysesObj).length },
-      'Analyses retrieved',
-    );
     return analysesObj;
   }
 
@@ -826,6 +855,8 @@ class AnalysisService {
 
     if (analysis) {
       await analysis.stop();
+      // Clean up all resources to prevent memory leaks
+      await analysis.cleanup();
     }
 
     const analysisPath = path.join(config.paths.analysis, analysisName);

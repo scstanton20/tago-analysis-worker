@@ -13,6 +13,7 @@ import * as prettier from 'prettier';
 import prettierPluginBabel from 'prettier/plugins/babel';
 import prettierPluginEstree from 'prettier/plugins/estree';
 import { Linter } from 'eslint-linter-browserify';
+import logger from '../../utils/logger';
 
 // Custom read-only setup with line numbers and syntax highlighting
 const readOnlySetup = [
@@ -46,7 +47,7 @@ async function formatCode(view) {
 
     return true;
   } catch (error) {
-    console.error('Formatting error:', error);
+    logger.error('Formatting error:', error);
     return false;
   }
 }
@@ -127,7 +128,7 @@ const createJavaScriptLinter = (onDiagnosticsChange) =>
         });
       }
     } catch (error) {
-      console.error('Linting error:', error);
+      logger.error('Linting error:', error);
     }
 
     // Notify parent of diagnostic changes
@@ -657,7 +658,7 @@ export default function AnalysisEditModal({
           setCurrentContent(current);
           setDiffMode(true);
         } catch (error) {
-          console.error('Failed to fetch current content for diff:', error);
+          logger.error('Failed to fetch current content for diff:', error);
           setError('Failed to load current version for comparison');
           return;
         } finally {
@@ -694,7 +695,7 @@ export default function AnalysisEditModal({
           setHasChanges(false);
         }
       } catch (error) {
-        console.error(`Failed to load analysis ${type} content:`, error);
+        logger.error(`Failed to load analysis ${type} content:`, error);
         if (!isCancelled) {
           setError(error.message);
         }
@@ -760,7 +761,7 @@ export default function AnalysisEditModal({
             trailingComma: 'all',
           });
         } catch (formatError) {
-          console.warn('Formatting failed, saving unformatted:', formatError);
+          logger.warn('Formatting failed, saving unformatted:', formatError);
           // Continue with unformatted content if formatting fails
           contentToSave = content;
         }
@@ -774,7 +775,7 @@ export default function AnalysisEditModal({
       setHasChanges(false);
       onClose();
     } catch (error) {
-      console.error('Save failed:', error);
+      logger.error('Save failed:', error);
       setError(error.message || `Failed to update analysis ${type} content.`);
     } finally {
       setIsLoading(false);
@@ -808,7 +809,7 @@ export default function AnalysisEditModal({
       setDisplayName(newFileName);
       setIsEditingName(false);
     } catch (error) {
-      console.error('Rename failed:', error);
+      logger.error('Rename failed:', error);
       setError(error.message || 'Failed to rename analysis.');
       // Reset the filename input to the current name if rename fails
       setNewFileName(displayName);
@@ -826,9 +827,10 @@ export default function AnalysisEditModal({
       opened
       onClose={onClose}
       size="90%"
+      aria-labelledby="code-editor-modal-title"
       title={
         <Group gap="xs">
-          <Text fw={600}>
+          <Text fw={600} id="code-editor-modal-title">
             {readOnly ? 'Viewing' : 'Editing'} {modalTitle}:
           </Text>
           {!isEnvMode && !readOnly && isEditingName ? (
@@ -837,7 +839,6 @@ export default function AnalysisEditModal({
                 value={newFileName}
                 onChange={(e) => setNewFileName(e.target.value)}
                 size="xs"
-                autoFocus
                 style={{ width: 200 }}
               />
               <ActionIcon
@@ -845,8 +846,9 @@ export default function AnalysisEditModal({
                 size="sm"
                 onClick={handleRename}
                 disabled={isLoading}
+                aria-label="Confirm rename"
               >
-                <IconCheck size={16} />
+                <IconCheck size={16} aria-hidden="true" />
               </ActionIcon>
               <ActionIcon
                 color="red"
@@ -856,8 +858,9 @@ export default function AnalysisEditModal({
                   setNewFileName(displayName);
                 }}
                 disabled={isLoading}
+                aria-label="Cancel rename"
               >
-                <IconX size={16} />
+                <IconX size={16} aria-hidden="true" />
               </ActionIcon>
             </Group>
           ) : (
@@ -872,8 +875,9 @@ export default function AnalysisEditModal({
                   size="sm"
                   onClick={() => setIsEditingName(true)}
                   disabled={isLoading}
+                  aria-label="Rename analysis"
                 >
-                  <IconEdit size={14} />
+                  <IconEdit size={14} aria-hidden="true" />
                 </ActionIcon>
               )}
             </Group>

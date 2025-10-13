@@ -4,7 +4,7 @@
  * Standardized error response handler for all controllers.
  *
  * This function provides consistent error handling across the application by:
- * - Automatically logging errors to console
+ * - Automatically logging errors with structured logging
  * - Determining appropriate HTTP status codes based on error type
  * - Returning standardized JSON error responses
  *
@@ -12,7 +12,8 @@
  * @param {Error} error - Error object thrown by service or controller
  * @param {string} operation - Operation being performed in gerund form (e.g., 'creating team', 'updating analysis')
  * @param {Object} options - Optional configuration
- * @param {boolean} options.logError - Whether to log the error to console (default: true)
+ * @param {boolean} options.logError - Whether to log the error (default: true)
+ * @param {Object} options.logger - Logger instance for structured logging (defaults to console)
  *
  * @returns {Response} JSON response with appropriate status code
  *
@@ -22,7 +23,7 @@
  *   const team = await teamService.createTeam(data);
  *   res.status(201).json(team);
  * } catch (error) {
- *   handleError(res, error, 'creating team');
+ *   handleError(res, error, 'creating team', { logger });
  * }
  *
  * @example
@@ -38,10 +39,10 @@
  * - 500: All other errors (default)
  */
 export function handleError(res, error, operation, options = {}) {
-  const { logError = true } = options;
+  const { logError = true, logger = console } = options;
 
   if (logError) {
-    console.error(`Error ${operation}:`, error);
+    logger.error({ err: error, operation }, `Error ${operation}`);
   }
 
   // Handle specific error types with appropriate status codes

@@ -1,4 +1,6 @@
 // frontend/src/services/utils.js
+import logger from './logger';
+
 const getBaseUrl = () => {
   if (import.meta.env.DEV && import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL; // Use Docker URL in Docker dev
@@ -34,6 +36,10 @@ let refreshPromise = null;
 
 // Queue for pending requests during refresh
 let refreshQueue = [];
+
+// Protection against request accumulation
+const MAX_QUEUE_SIZE = 50;
+const REFRESH_TIMEOUT = 30000; // 30 seconds
 
 const processQueue = (error, success = false) => {
   refreshQueue.forEach(({ resolve, reject }) => {
@@ -89,6 +95,18 @@ export async function handleResponse(response, originalUrl, originalOptions) {
       if (hasRefreshToken) {
         // If already refreshing, queue this request
         if (isRefreshing) {
+          // Protect against request accumulation on slow networks
+          if (refreshQueue.length >= MAX_QUEUE_SIZE) {
+            logger.warn(
+              `Token refresh queue full (${refreshQueue.length} requests), rejecting new request`,
+            );
+            return Promise.reject(
+              new Error(
+                'Too many pending requests. Please wait and try again.',
+              ),
+            );
+          }
+
           return new Promise((resolve, reject) => {
             refreshQueue.push({
               resolve: () => {
@@ -112,21 +130,32 @@ export async function handleResponse(response, originalUrl, originalOptions) {
           throw new Error('Auth service not available');
         }
 
-        refreshPromise = window.authService
+        // Create timeout promise to prevent stuck refreshes
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => {
+            logger.error('Token refresh timeout after 30 seconds');
+            reject(new Error('Token refresh timeout'));
+          }, REFRESH_TIMEOUT);
+        });
+
+        // Race between actual refresh and timeout
+        const actualRefresh = window.authService
           .refreshToken()
+          .then((result) => {
+            // Handle rate limited responses (still successful)
+            if (result && result.rateLimited) {
+              return true;
+            }
+            return true;
+          });
+
+        refreshPromise = Promise.race([actualRefresh, timeoutPromise])
           .then((result) => {
             // Reset the refresh state on success
             isRefreshing = false;
             refreshPromise = null;
-
-            // Handle rate limited responses (still successful)
-            if (result && result.rateLimited) {
-              processQueue(null, true);
-              return true;
-            }
-
             processQueue(null, true);
-            return true;
+            return result;
           })
           .catch((error) => {
             // Reset the refresh state on failure
@@ -190,7 +219,7 @@ export function withErrorHandling(fn, operationName) {
     try {
       return await fn.apply(this, args);
     } catch (error) {
-      console.error(`Failed to ${operationName}:`, error);
+      logger.error(`Failed to ${operationName}:`, error);
       throw new Error(`Failed to ${operationName}: ${error.message}`);
     }
   };

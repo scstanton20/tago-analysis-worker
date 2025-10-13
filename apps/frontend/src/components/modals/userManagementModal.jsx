@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from 'react';
+import PropTypes from 'prop-types';
 import { useModalDataLoader } from '../../hooks/useModalDataLoader';
 import {
   Modal,
@@ -44,6 +45,7 @@ import { admin, organization, authClient } from '../../lib/auth';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import { userService } from '../../services/userService';
 import UserSessionsModal from './userSessionsModal';
+import logger from '../../utils/logger.js';
 
 // Validation constants
 const USERNAME_REGEX = /^[a-zA-Z0-9_.-]+$/;
@@ -139,7 +141,7 @@ export default function UserManagementModal({ opened, onClose }) {
 
       setUsers(result.data.users || result.data || []);
     } catch (err) {
-      console.error('Error loading users:', err);
+      logger.error('Error loading users:', err);
       setError(err.message || 'Failed to load users');
     } finally {
       setLoading(false);
@@ -149,7 +151,7 @@ export default function UserManagementModal({ opened, onClose }) {
   // Load available teams for assignment
   const loadTeams = useCallback(async () => {
     if (!organizationId) {
-      console.warn('No organization ID available for loading teams');
+      logger.warn('No organization ID available for loading teams');
       setAvailableTeams([]);
       return;
     }
@@ -182,11 +184,11 @@ export default function UserManagementModal({ opened, onClose }) {
           })),
         );
       } else {
-        console.error('Failed to load teams:', result.error);
+        logger.error('Failed to load teams:', result.error);
         setAvailableTeams([]);
       }
     } catch (error) {
-      console.error('Error loading teams:', error);
+      logger.error('Error loading teams:', error);
       setAvailableTeams([]);
     } finally {
       setTeamsLoading(false);
@@ -201,11 +203,11 @@ export default function UserManagementModal({ opened, onClose }) {
       if (result.success && result.data) {
         setActions(result.data);
       } else {
-        console.error('Failed to load permissions:', result.error);
+        logger.error('Failed to load permissions:', result.error);
         setActions([]);
       }
     } catch (error) {
-      console.error('Error loading actions:', error);
+      logger.error('Error loading actions:', error);
       setActions([]);
     }
   }, []);
@@ -228,7 +230,7 @@ export default function UserManagementModal({ opened, onClose }) {
           ? null
           : 'This username is already taken';
       } catch (error) {
-        console.error('Error checking username availability:', error);
+        logger.error('Error checking username availability:', error);
         return 'Unable to verify username availability';
       }
     },
@@ -368,7 +370,7 @@ export default function UserManagementModal({ opened, onClose }) {
           }
 
           // Handle role changes between admin and user manually
-          console.log(`Role change from ${editingUser.role} to ${values.role}`);
+          logger.log(`Role change from ${editingUser.role} to ${values.role}`);
 
           // Update the editingUser state to reflect the new role
           setEditingUser((prev) => ({
@@ -380,11 +382,11 @@ export default function UserManagementModal({ opened, onClose }) {
           if (values.role === 'admin' && editingUser.role !== 'admin') {
             // Promoting to admin - clear team assignments (admins have global access)
             try {
-              console.log('Clearing team assignments for new admin...');
+              logger.log('Clearing team assignments for new admin...');
               await userService.updateUserTeamAssignments(editingUser.id, []);
-              console.log('✓ Team assignments cleared for new admin');
+              logger.log('✓ Team assignments cleared for new admin');
             } catch (teamError) {
-              console.warn('Error clearing team assignments:', teamError);
+              logger.warn('Error clearing team assignments:', teamError);
               // Don't throw error here as role update was successful
             }
           }
@@ -427,7 +429,7 @@ export default function UserManagementModal({ opened, onClose }) {
                 permissions: config.permissions || ['view_analyses'],
               }));
 
-            console.log(
+            logger.log(
               `Updating team assignments for user ${editingUser.id}...`,
             );
 
@@ -436,7 +438,7 @@ export default function UserManagementModal({ opened, onClose }) {
                 editingUser.id,
                 teamAssignments,
               );
-              console.log('✓ Team assignments updated successfully');
+              logger.log('✓ Team assignments updated successfully');
 
               // Show notification for permission updates
               const assignedTeams = teamAssignments.length;
@@ -451,11 +453,11 @@ export default function UserManagementModal({ opened, onClose }) {
                 color: assignedTeams > 0 ? 'blue' : 'orange',
               });
             } catch (teamError) {
-              console.warn('Failed to update team assignments:', teamError);
+              logger.warn('Failed to update team assignments:', teamError);
               // Don't throw error here as other updates were successful
             }
           } catch (teamError) {
-            console.warn('Error updating team assignments:', teamError);
+            logger.warn('Error updating team assignments:', teamError);
             // Don't throw error here as other updates were successful
           }
         }
@@ -469,7 +471,7 @@ export default function UserManagementModal({ opened, onClose }) {
 
           // If the current user was updated, refresh their data
           if (editingUser.id === currentUser?.id) {
-            console.log('Refreshing current user data after update');
+            logger.log('Refreshing current user data after update');
             await refreshUserData();
           }
         }
@@ -478,7 +480,7 @@ export default function UserManagementModal({ opened, onClose }) {
         const autoPassword = generateSecurePassword();
 
         // Create user using Better Auth admin createUser to avoid auto-login
-        console.log('Creating user with values:', {
+        logger.log('Creating user with values:', {
           name: values.name,
           email: values.email,
           username: values.username,
@@ -501,11 +503,11 @@ export default function UserManagementModal({ opened, onClose }) {
           };
         }
 
-        console.log('Creating user with data:', createUserData);
-        console.log('Username provided:', values.username);
+        logger.log('Creating user with data:', createUserData);
+        logger.log('Username provided:', values.username);
         const result = await admin.createUser(createUserData);
-        console.log('Create user result:', result);
-        console.log('Created user data:', result.data?.user);
+        logger.log('Create user result:', result);
+        logger.log('Created user data:', result.data?.user);
 
         if (result.error) {
           // Handle specific duplicate errors with user-friendly messages
@@ -539,7 +541,7 @@ export default function UserManagementModal({ opened, onClose }) {
           if (values.role === 'admin') {
             // Admin users need organization membership for admin privileges
             try {
-              console.log('Adding admin user to main organization...');
+              logger.log('Adding admin user to main organization...');
               const memberResult = await userService.addUserToOrganization(
                 result.data.user.id,
                 organizationId,
@@ -547,15 +549,15 @@ export default function UserManagementModal({ opened, onClose }) {
               );
 
               if (memberResult.error) {
-                console.warn(
+                logger.warn(
                   'Failed to add admin to organization:',
                   memberResult.error,
                 );
               } else {
-                console.log('✓ Admin user added to organization successfully');
+                logger.log('✓ Admin user added to organization successfully');
               }
             } catch (orgError) {
-              console.warn('Error adding admin to organization:', orgError);
+              logger.warn('Error adding admin to organization:', orgError);
             }
           } else {
             // Non-admin users: only add to organization if they have teams
@@ -570,7 +572,7 @@ export default function UserManagementModal({ opened, onClose }) {
 
             if (teamAssignments.length > 0) {
               try {
-                console.log('Adding user to organization with teams...');
+                logger.log('Adding user to organization with teams...');
                 const memberResult = await userService.addUserToOrganization(
                   result.data.user.id,
                   organizationId,
@@ -578,28 +580,28 @@ export default function UserManagementModal({ opened, onClose }) {
                 );
 
                 if (memberResult.error) {
-                  console.warn(
+                  logger.warn(
                     'Failed to add user to organization:',
                     memberResult.error,
                   );
                 } else {
-                  console.log('✓ User added to organization successfully');
+                  logger.log('✓ User added to organization successfully');
                 }
 
                 // Now assign teams
-                console.log(
+                logger.log(
                   `Assigning user to ${teamAssignments.length} teams...`,
                 );
                 await userService.assignUserToTeams(
                   result.data.user.id,
                   teamAssignments,
                 );
-                console.log('✓ User assigned to teams successfully');
+                logger.log('✓ User assigned to teams successfully');
               } catch (error) {
-                console.warn('Error in team assignment process:', error);
+                logger.warn('Error in team assignment process:', error);
               }
             } else {
-              console.log(
+              logger.log(
                 'No teams selected for non-admin user - no organization membership needed',
               );
             }
@@ -650,14 +652,14 @@ export default function UserManagementModal({ opened, onClose }) {
                 permissions: team.permissions || ['view_analyses'], // Use actual permissions from database
               };
             });
-            console.log(
+            logger.log(
               `✓ Loaded ${teamMembershipsData.data.teams.length} team assignments for user ${user.id}`,
             );
           } else {
-            console.warn('Failed to fetch user team memberships for editing');
+            logger.warn('Failed to fetch user team memberships for editing');
           }
         } catch (error) {
-          console.warn('Error fetching user team memberships:', error);
+          logger.warn('Error fetching user team memberships:', error);
         }
       }
 
@@ -671,7 +673,7 @@ export default function UserManagementModal({ opened, onClose }) {
       });
       setShowCreateForm(true);
     } catch (error) {
-      console.error('Error loading user data for editing:', error);
+      logger.error('Error loading user data for editing:', error);
       setError('Failed to load user data for editing');
     } finally {
       setLoading(false);
@@ -741,8 +743,9 @@ export default function UserManagementModal({ opened, onClose }) {
         color: 'blue',
       });
 
-      // Refresh the page to update the auth context
-      window.location.reload();
+      // Refresh user data and permissions to update the context
+      await refreshUserData();
+      logger.log('✓ User data refreshed after impersonation');
     } catch (err) {
       setError(err.message || 'Failed to impersonate user');
     } finally {
@@ -869,11 +872,14 @@ export default function UserManagementModal({ opened, onClose }) {
     <Modal
       opened={opened}
       onClose={handleModalClose}
+      aria-labelledby="user-management-modal-title"
       title={
         <Group gap="xs" justify="space-between" style={{ width: '100%' }}>
           <Group gap="xs">
-            <IconUser size={20} />
-            <Text fw={600}>User Management</Text>
+            <IconUser size={20} aria-hidden="true" />
+            <Text fw={600} id="user-management-modal-title">
+              User Management
+            </Text>
           </Group>
           {showCreateForm && (
             <Text size="sm" c="dimmed">
@@ -926,11 +932,14 @@ export default function UserManagementModal({ opened, onClose }) {
                               color={copied ? 'teal' : 'gray'}
                               variant="subtle"
                               onClick={copy}
+                              aria-label={
+                                copied ? 'Password copied' : 'Copy password'
+                              }
                             >
                               {copied ? (
-                                <IconCheck size={16} />
+                                <IconCheck size={16} aria-hidden="true" />
                               ) : (
-                                <IconCopy size={16} />
+                                <IconCopy size={16} aria-hidden="true" />
                               )}
                             </ActionIcon>
                           </Tooltip>
@@ -1081,8 +1090,12 @@ export default function UserManagementModal({ opened, onClose }) {
                                 variant="subtle"
                                 size="lg"
                                 color="brand"
+                                aria-label={`Actions for ${user.name || user.email}`}
                               >
-                                <IconDotsVertical size={20} />
+                                <IconDotsVertical
+                                  size={20}
+                                  aria-hidden="true"
+                                />
                               </ActionIcon>
                             </Menu.Target>
 
@@ -1430,3 +1443,8 @@ export default function UserManagementModal({ opened, onClose }) {
     </Modal>
   );
 }
+
+UserManagementModal.propTypes = {
+  opened: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+};

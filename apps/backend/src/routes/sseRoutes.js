@@ -118,7 +118,7 @@ router.get('/events', authenticateSSE, handleSSEConnection);
  *               $ref: '#/components/schemas/Error'
  */
 router.post('/logout-notification', authenticateSSE, (req, res) => {
-  const logger = req.logger?.child({ route: 'logout-notification' }) || console;
+  const logger = req.log?.child({ route: 'logout-notification' }) || console;
 
   try {
     const userId = req.user.id;

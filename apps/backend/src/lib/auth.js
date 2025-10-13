@@ -26,7 +26,7 @@ const dbDir = path.dirname(dbPath);
 
 try {
   if (!safeExistsSync(dbDir)) {
-    authLogger.info(`Creating auth storage directory: ${dbDir}`);
+    authLogger.info({ dbDir }, 'Creating auth storage directory');
     safeMkdirSync(dbDir, { recursive: true });
   }
 
@@ -35,11 +35,9 @@ try {
   safeWriteFileSync(testFile, 'test');
   safeUnlinkSync(testFile);
 
-  authLogger.info(`Auth storage initialized at: ${dbPath}`);
+  authLogger.info({ dbPath }, 'Auth storage initialized');
 } catch (error) {
-  authLogger.error(
-    `Failed to initialize auth storage at ${dbDir}: ${error.message}`,
-  );
+  authLogger.error({ dbDir, err: error }, 'Failed to initialize auth storage');
   authLogger.error(
     'Check STORAGE_BASE permissions and ensure volume is mounted correctly',
   );

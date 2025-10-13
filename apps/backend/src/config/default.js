@@ -1,5 +1,6 @@
 // config/default.js
 import path from 'path';
+import { ANALYSIS_PROCESS } from '../constants.js';
 
 function determineStorageBase() {
   // If explicitly set through environment variable, use that
@@ -34,9 +35,9 @@ const config = {
     createDirs: true,
   },
   analysis: {
-    maxLogsInMemory: 100,
-    forceKillTimeout: 3000,
-    autoRestartDelay: 1000,
+    maxLogsInMemory: ANALYSIS_PROCESS.MAX_MEMORY_LOGS_DEFAULT,
+    forceKillTimeout: ANALYSIS_PROCESS.FORCE_KILL_TIMEOUT_MS,
+    autoRestartDelay: ANALYSIS_PROCESS.AUTO_RESTART_DELAY_MS,
   },
 };
 

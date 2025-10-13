@@ -33,6 +33,9 @@ import logger, { createChildLogger } from './utils/logging/logger.js';
 // Metrics
 import { metricsMiddleware } from './utils/metrics-enhanced.js';
 
+// Rate limiting
+import { authLimiter } from './middleware/rateLimiter.js';
+
 // Api prefix
 const API_PREFIX = '/api';
 
@@ -234,9 +237,9 @@ async function startServer() {
     app.use(express.json());
     app.use(metricsMiddleware);
 
-    // Better Auth routes using toNodeHandler approach
-    app.all('/api/auth/*splat', toNodeHandler(auth));
-    serverLogger.info('✓ Better Auth routes mounted');
+    // Better Auth routes with rate limiting using toNodeHandler approach
+    app.all('/api/auth/*splat', authLimiter, toNodeHandler(auth));
+    serverLogger.info('✓ Better Auth routes mounted with rate limiting');
 
     app.use(`${API_PREFIX}/status`, routes.statusRoutes);
     serverLogger.info('✓ Status routes mounted');

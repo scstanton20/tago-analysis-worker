@@ -1,5 +1,6 @@
 // frontend/src/components/modals/teamManagementModal.jsx
 import { useState, useMemo, useRef, useCallback } from 'react';
+import PropTypes from 'prop-types';
 import { useKeyPress } from '../../hooks/useEventListener';
 import {
   DndContext,
@@ -31,6 +32,7 @@ import {
 import { IconEdit, IconTrash, IconX } from '@tabler/icons-react';
 import { teamService } from '../../services/teamService';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
+import logger from '../../utils/logger';
 
 const PREDEFINED_COLORS = [
   '#3b82f6', // blue
@@ -156,7 +158,7 @@ export default function TeamManagementModal({ opened, onClose, teams }) {
       setNewTeamName('');
       setNewTeamColor('');
     } catch (error) {
-      console.error('Error creating team:', error);
+      logger.error('Error creating team:', error);
     } finally {
       setIsLoading(false);
     }
@@ -193,7 +195,7 @@ export default function TeamManagementModal({ opened, onClose, teams }) {
       );
       setEditingId(null);
     } catch (error) {
-      console.error('Error updating team name:', error);
+      logger.error('Error updating team name:', error);
     } finally {
       setIsLoading(false);
     }
@@ -224,7 +226,7 @@ export default function TeamManagementModal({ opened, onClose, teams }) {
       setEditingId(null);
       setEditingColor('');
     } catch (error) {
-      console.error('Error updating team color:', error);
+      logger.error('Error updating team color:', error);
     } finally {
       setIsLoading(false);
     }
@@ -242,7 +244,7 @@ export default function TeamManagementModal({ opened, onClose, teams }) {
       );
       setDeletingId(null);
     } catch (error) {
-      console.error('Error deleting team:', error);
+      logger.error('Error deleting team:', error);
     } finally {
       setIsLoading(false);
     }
@@ -266,7 +268,7 @@ export default function TeamManagementModal({ opened, onClose, teams }) {
           },
         );
       } catch (error) {
-        console.error('Error reordering teams:', error);
+        logger.error('Error reordering teams:', error);
       } finally {
         setIsLoading(false);
       }
@@ -300,8 +302,13 @@ export default function TeamManagementModal({ opened, onClose, teams }) {
     <Modal
       opened={opened}
       onClose={handleModalClose}
-      title="Manage Teams"
+      title={
+        <Text fw={600} id="team-management-modal-title">
+          Manage Teams
+        </Text>
+      }
       size="lg"
+      aria-labelledby="team-management-modal-title"
     >
       <Stack>
         {/* Create New Team */}
@@ -416,7 +423,6 @@ export default function TeamManagementModal({ opened, onClose, teams }) {
                             }
                           }}
                           size="sm"
-                          autoFocus
                           disabled={isLoading}
                           error={(() => {
                             const trimmed = editingName.toLowerCase().trim();
@@ -552,8 +558,9 @@ export default function TeamManagementModal({ opened, onClose, teams }) {
                               size="sm"
                               onClick={() => startEditingColor(team)}
                               disabled={isLoading}
+                              aria-label={`Edit ${team.name}`}
                             >
-                              <IconEdit size={16} />
+                              <IconEdit size={16} aria-hidden="true" />
                             </ActionIcon>
                             <ActionIcon
                               variant="subtle"
@@ -561,8 +568,9 @@ export default function TeamManagementModal({ opened, onClose, teams }) {
                               color="red"
                               onClick={() => setDeletingId(team.id)}
                               disabled={isLoading}
+                              aria-label={`Delete ${team.name}`}
                             >
-                              <IconTrash size={16} />
+                              <IconTrash size={16} aria-hidden="true" />
                             </ActionIcon>
                           </Group>
                         )}
@@ -578,3 +586,9 @@ export default function TeamManagementModal({ opened, onClose, teams }) {
     </Modal>
   );
 }
+
+TeamManagementModal.propTypes = {
+  opened: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+  teams: PropTypes.object.isRequired,
+};

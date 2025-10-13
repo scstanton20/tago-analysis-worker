@@ -11,14 +11,11 @@ class TeamController {
 
   // Get all teams
   static async getAllTeams(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'TeamController' }) || console;
-
-    logger.info({ action: 'getAllTeams' }, 'Retrieving all teams');
+    req.log.info({ action: 'getAllTeams' }, 'Retrieving all teams');
 
     try {
-      const teams = await teamService.getAllTeams(logger);
-      logger.info(
+      const teams = await teamService.getAllTeams(req.log);
+      req.log.info(
         { action: 'getAllTeams', count: teams.length },
         'Teams retrieved',
       );
@@ -30,19 +27,16 @@ class TeamController {
 
   // Create new team
   static async createTeam(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'TeamController' }) || console;
     const { name, color, order } = req.body;
-
     if (!name) {
-      logger.warn(
+      req.log.warn(
         { action: 'createTeam' },
         'Team creation failed: missing name',
       );
       return res.status(400).json({ error: 'Team name is required' });
     }
 
-    logger.info({ action: 'createTeam', teamName: name }, 'Creating team');
+    req.log.info({ action: 'createTeam', teamName: name }, 'Creating team');
 
     try {
       const team = await teamService.createTeam(
@@ -52,10 +46,10 @@ class TeamController {
           order,
         },
         req.headers,
-        logger,
+        req.log,
       );
 
-      logger.info(
+      req.log.info(
         { action: 'createTeam', teamId: team.id, teamName: name },
         'Team created',
       );
@@ -74,20 +68,17 @@ class TeamController {
 
   // Update team
   static async updateTeam(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'TeamController' }) || console;
     const { id } = req.params;
     const updates = req.body;
-
-    logger.info(
+    req.log.info(
       { action: 'updateTeam', teamId: id, fields: Object.keys(updates) },
       'Updating team',
     );
 
     try {
-      const team = await teamService.updateTeam(id, updates, logger);
+      const team = await teamService.updateTeam(id, updates, req.log);
 
-      logger.info({ action: 'updateTeam', teamId: id }, 'Team updated');
+      req.log.info({ action: 'updateTeam', teamId: id }, 'Team updated');
 
       // Broadcast update to admin users only
       sseManager.broadcastToAdminUsers({
@@ -103,17 +94,14 @@ class TeamController {
 
   // Delete team (analysis migration handled by hooks)
   static async deleteTeam(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'TeamController' }) || console;
     const { id } = req.params;
-
-    logger.info({ action: 'deleteTeam', teamId: id }, 'Deleting team');
+    req.log.info({ action: 'deleteTeam', teamId: id }, 'Deleting team');
 
     try {
       // Delete team (hooks handle analysis migration automatically)
-      const result = await teamService.deleteTeam(id, req.headers, logger);
+      const result = await teamService.deleteTeam(id, req.headers, req.log);
 
-      logger.info({ action: 'deleteTeam', teamId: id }, 'Team deleted');
+      req.log.info({ action: 'deleteTeam', teamId: id }, 'Team deleted');
 
       // Broadcast deletion to admin users only
       sseManager.broadcastToAdminUsers({
@@ -129,27 +117,24 @@ class TeamController {
 
   // Reorder teams
   static async reorderTeams(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'TeamController' }) || console;
     const { orderedIds } = req.body;
-
     if (!Array.isArray(orderedIds)) {
-      logger.warn(
+      req.log.warn(
         { action: 'reorderTeams' },
         'Team reorder failed: orderedIds not an array',
       );
       return res.status(400).json({ error: 'orderedIds must be an array' });
     }
 
-    logger.info(
+    req.log.info(
       { action: 'reorderTeams', count: orderedIds.length },
       'Reordering teams',
     );
 
     try {
-      const teams = await teamService.reorderTeams(orderedIds, logger);
+      const teams = await teamService.reorderTeams(orderedIds, req.log);
 
-      logger.info({ action: 'reorderTeams' }, 'Teams reordered');
+      req.log.info({ action: 'reorderTeams' }, 'Teams reordered');
 
       // Broadcast reorder to admin users only
       sseManager.broadcastToAdminUsers({
@@ -165,20 +150,17 @@ class TeamController {
 
   // Move analysis to team
   static async moveAnalysisToTeam(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'TeamController' }) || console;
     const { name } = req.params;
     const { teamId } = req.body;
-
     if (!teamId) {
-      logger.warn(
+      req.log.warn(
         { action: 'moveAnalysisToTeam', analysisName: name },
         'Move analysis failed: missing teamId',
       );
       return res.status(400).json({ error: 'teamId is required' });
     }
 
-    logger.info(
+    req.log.info(
       {
         action: 'moveAnalysisToTeam',
         analysisName: name,
@@ -188,9 +170,13 @@ class TeamController {
     );
 
     try {
-      const result = await teamService.moveAnalysisToTeam(name, teamId, logger);
+      const result = await teamService.moveAnalysisToTeam(
+        name,
+        teamId,
+        req.log,
+      );
 
-      logger.info(
+      req.log.info(
         {
           action: 'moveAnalysisToTeam',
           analysisName: name,
@@ -211,18 +197,15 @@ class TeamController {
 
   // Get analysis count for a specific team/team
   static async getTeamAnalysisCount(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'TeamController' }) || console;
     const { id } = req.params;
-
-    logger.info(
+    req.log.info(
       { action: 'getTeamAnalysisCount', teamId: id },
       'Getting team analysis count',
     );
 
     try {
-      const count = await teamService.getAnalysisCountByTeamId(id, logger);
-      logger.info(
+      const count = await teamService.getAnalysisCountByTeamId(id, req.log);
+      req.log.info(
         { action: 'getTeamAnalysisCount', teamId: id, count },
         'Analysis count retrieved',
       );
@@ -234,20 +217,17 @@ class TeamController {
 
   // Create folder in team
   static async createFolder(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'TeamController' }) || console;
     const { teamId } = req.params;
     const { parentFolderId, name } = req.body;
-
     if (!name) {
-      logger.warn(
+      req.log.warn(
         { action: 'createFolder', teamId },
         'Folder creation failed: missing name',
       );
       return res.status(400).json({ error: 'Folder name is required' });
     }
 
-    logger.info(
+    req.log.info(
       { action: 'createFolder', teamId, folderName: name, parentFolderId },
       'Creating folder',
     );
@@ -257,10 +237,10 @@ class TeamController {
         teamId,
         parentFolderId,
         name,
-        logger,
+        req.log,
       );
 
-      logger.info(
+      req.log.info(
         {
           action: 'createFolder',
           teamId,
@@ -288,12 +268,9 @@ class TeamController {
 
   // Update folder
   static async updateFolder(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'TeamController' }) || console;
     const { teamId, folderId } = req.params;
     const updates = req.body;
-
-    logger.info(
+    req.log.info(
       {
         action: 'updateFolder',
         teamId,
@@ -308,10 +285,10 @@ class TeamController {
         teamId,
         folderId,
         updates,
-        logger,
+        req.log,
       );
 
-      logger.info(
+      req.log.info(
         { action: 'updateFolder', teamId, folderId },
         'Folder updated',
       );
@@ -334,19 +311,20 @@ class TeamController {
 
   // Delete folder
   static async deleteFolder(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'TeamController' }) || console;
     const { teamId, folderId } = req.params;
-
-    logger.info(
+    req.log.info(
       { action: 'deleteFolder', teamId, folderId },
       'Deleting folder',
     );
 
     try {
-      const result = await teamService.deleteFolder(teamId, folderId, logger);
+      const result = await teamService.deleteFolder(
+        teamId,
+        folderId,
+        req.log,
+      );
 
-      logger.info(
+      req.log.info(
         { action: 'deleteFolder', teamId, folderId },
         'Folder deleted',
       );
@@ -369,13 +347,10 @@ class TeamController {
 
   // Move item within team structure
   static async moveItem(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'TeamController' }) || console;
     const { teamId } = req.params;
     const { itemId, targetParentId, targetIndex } = req.body;
-
     if (!itemId || targetIndex === undefined) {
-      logger.warn(
+      req.log.warn(
         { action: 'moveItem', teamId },
         'Move item failed: missing itemId or targetIndex',
       );
@@ -384,7 +359,7 @@ class TeamController {
         .json({ error: 'itemId and targetIndex are required' });
     }
 
-    logger.info(
+    req.log.info(
       { action: 'moveItem', teamId, itemId, targetParentId, targetIndex },
       'Moving item',
     );
@@ -395,10 +370,10 @@ class TeamController {
         itemId,
         targetParentId,
         targetIndex,
-        logger,
+        req.log,
       );
 
-      logger.info({ action: 'moveItem', teamId, itemId }, 'Item moved');
+      req.log.info({ action: 'moveItem', teamId, itemId }, 'Item moved');
 
       // Broadcast full structure update to team members
       await broadcastTeamStructureUpdate(sseManager, teamId);

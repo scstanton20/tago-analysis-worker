@@ -9,6 +9,8 @@ import {
   resetDNSStats,
 } from '../controllers/settingsController.js';
 import { authMiddleware } from '../middleware/betterAuthMiddleware.js';
+import { validateRequest } from '../middleware/validateRequest.js';
+import { settingsValidationSchemas } from '../validation/settingsSchemas.js';
 
 const router = Router();
 
@@ -80,7 +82,11 @@ router.get('/dns/config', getDNSConfig);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.put('/dns/config', updateDNSConfig);
+router.put(
+  '/dns/config',
+  validateRequest(settingsValidationSchemas.updateDNSConfig),
+  updateDNSConfig,
+);
 
 /**
  * @swagger
@@ -187,7 +193,11 @@ router.delete('/dns/cache', clearDNSCache);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.delete('/dns/cache/:key', deleteDNSCacheEntry);
+router.delete(
+  '/dns/cache/:key',
+  validateRequest(settingsValidationSchemas.deleteDNSCacheEntry),
+  deleteDNSCacheEntry,
+);
 
 /**
  * @swagger

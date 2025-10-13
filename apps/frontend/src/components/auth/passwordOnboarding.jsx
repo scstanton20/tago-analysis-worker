@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import PropTypes from 'prop-types';
 import {
   PasswordInput,
   Button,
@@ -193,3 +194,9 @@ export default function PasswordOnboarding({
     </Box>
   );
 }
+
+PasswordOnboarding.propTypes = {
+  username: PropTypes.string.isRequired,
+  onSuccess: PropTypes.func.isRequired,
+  passwordOnboarding: PropTypes.func.isRequired,
+};

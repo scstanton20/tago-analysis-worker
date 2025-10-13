@@ -5,16 +5,13 @@ import { handleError } from '../utils/responseHelpers.js';
 
 // DNS Cache Settings
 export const getDNSConfig = async (req, res) => {
-  const logger =
-    req.logger?.child({ controller: 'SettingsController' }) || console;
-
-  logger.info({ action: 'getDNSConfig' }, 'Getting DNS configuration');
+  req.log.info({ action: 'getDNSConfig' }, 'Getting DNS configuration');
 
   try {
     const config = dnsCache.getConfig();
     const stats = dnsCache.getStats();
 
-    logger.info(
+    req.log.info(
       { action: 'getDNSConfig', cacheSize: stats.size },
       'DNS configuration retrieved',
     );
@@ -29,13 +26,10 @@ export const getDNSConfig = async (req, res) => {
 };
 
 export const updateDNSConfig = async (req, res) => {
-  const logger =
-    req.logger?.child({ controller: 'SettingsController' }) || console;
   const { enabled, ttl, maxEntries } = req.body;
-
   // Validate input
   if (enabled !== undefined && typeof enabled !== 'boolean') {
-    logger.warn(
+    req.log.warn(
       { action: 'updateDNSConfig' },
       'Update failed: enabled must be boolean',
     );
@@ -43,7 +37,7 @@ export const updateDNSConfig = async (req, res) => {
   }
   if (ttl !== undefined) {
     if (typeof ttl !== 'number' || ttl < 1000 || ttl > 86400000) {
-      logger.warn(
+      req.log.warn(
         { action: 'updateDNSConfig', ttl },
         'Update failed: invalid ttl value',
       );
@@ -58,7 +52,7 @@ export const updateDNSConfig = async (req, res) => {
       maxEntries < 10 ||
       maxEntries > 10000
     ) {
-      logger.warn(
+      req.log.warn(
         { action: 'updateDNSConfig', maxEntries },
         'Update failed: invalid maxEntries value',
       );
@@ -73,7 +67,7 @@ export const updateDNSConfig = async (req, res) => {
   if (ttl !== undefined) newConfig.ttl = ttl;
   if (maxEntries !== undefined) newConfig.maxEntries = maxEntries;
 
-  logger.info(
+  req.log.info(
     { action: 'updateDNSConfig', updates: Object.keys(newConfig) },
     'Updating DNS configuration',
   );
@@ -84,7 +78,10 @@ export const updateDNSConfig = async (req, res) => {
     const config = dnsCache.getConfig();
     const stats = dnsCache.getStats();
 
-    logger.info({ action: 'updateDNSConfig', config }, 'DNS config updated');
+    req.log.info(
+      { action: 'updateDNSConfig', config },
+      'DNS config updated',
+    );
 
     // Broadcast DNS cache config update via SSE
     sseManager.broadcast({
@@ -106,15 +103,15 @@ export const updateDNSConfig = async (req, res) => {
 };
 
 export const getDNSCacheEntries = async (req, res) => {
-  const logger =
-    req.logger?.child({ controller: 'SettingsController' }) || console;
-
-  logger.info({ action: 'getDNSCacheEntries' }, 'Getting DNS cache entries');
+  req.log.info(
+    { action: 'getDNSCacheEntries' },
+    'Getting DNS cache entries',
+  );
 
   try {
     const entries = dnsCache.getCacheEntries();
 
-    logger.info(
+    req.log.info(
       { action: 'getDNSCacheEntries', count: entries.length },
       'DNS cache entries retrieved',
     );
@@ -129,16 +126,13 @@ export const getDNSCacheEntries = async (req, res) => {
 };
 
 export const clearDNSCache = async (req, res) => {
-  const logger =
-    req.logger?.child({ controller: 'SettingsController' }) || console;
-
-  logger.info({ action: 'clearDNSCache' }, 'Clearing DNS cache');
+  req.log.info({ action: 'clearDNSCache' }, 'Clearing DNS cache');
 
   try {
     const entriesCleared = dnsCache.clearCache();
     const stats = dnsCache.getStats();
 
-    logger.info(
+    req.log.info(
       { action: 'clearDNSCache', entriesCleared },
       'DNS cache cleared',
     );
@@ -163,19 +157,16 @@ export const clearDNSCache = async (req, res) => {
 };
 
 export const deleteDNSCacheEntry = async (req, res) => {
-  const logger =
-    req.logger?.child({ controller: 'SettingsController' }) || console;
   const { key } = req.params;
-
   if (!key) {
-    logger.warn(
+    req.log.warn(
       { action: 'deleteDNSCacheEntry' },
       'Delete failed: missing cache key',
     );
     return res.status(400).json({ error: 'Cache key is required' });
   }
 
-  logger.info(
+  req.log.info(
     { action: 'deleteDNSCacheEntry', key },
     'Deleting DNS cache entry',
   );
@@ -184,7 +175,7 @@ export const deleteDNSCacheEntry = async (req, res) => {
     const deleted = dnsCache.cache.delete(key);
 
     if (deleted) {
-      logger.info(
+      req.log.info(
         { action: 'deleteDNSCacheEntry', key },
         'DNS cache entry deleted',
       );
@@ -193,7 +184,7 @@ export const deleteDNSCacheEntry = async (req, res) => {
         key,
       });
     } else {
-      logger.warn(
+      req.log.warn(
         { action: 'deleteDNSCacheEntry', key },
         'Cache entry not found',
       );
@@ -205,16 +196,16 @@ export const deleteDNSCacheEntry = async (req, res) => {
 };
 
 export const resetDNSStats = async (req, res) => {
-  const logger =
-    req.logger?.child({ controller: 'SettingsController' }) || console;
-
-  logger.info({ action: 'resetDNSStats' }, 'Resetting DNS cache statistics');
+  req.log.info(
+    { action: 'resetDNSStats' },
+    'Resetting DNS cache statistics',
+  );
 
   try {
     dnsCache.resetStats();
     const stats = dnsCache.getStats();
 
-    logger.info({ action: 'resetDNSStats' }, 'DNS cache stats reset');
+    req.log.info({ action: 'resetDNSStats' }, 'DNS cache stats reset');
 
     // Broadcast DNS cache stats reset via SSE
     sseManager.broadcast({

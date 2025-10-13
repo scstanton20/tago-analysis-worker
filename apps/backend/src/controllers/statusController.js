@@ -7,10 +7,7 @@ const require = createRequire(import.meta.url);
 
 class StatusController {
   static async getSystemStatus(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'StatusController' }) || console;
-
-    logger.info({ action: 'getSystemStatus' }, 'Getting system status');
+    req.log.info({ action: 'getSystemStatus' }, 'Getting system status');
 
     try {
       // Import analysisService directly instead of dependency injection
@@ -55,7 +52,7 @@ class StatusController {
           tagoVersion = 'unknown';
         }
       } catch (error) {
-        logger.warn(
+        req.log.warn(
           { action: 'getSystemStatus', err: error },
           'Failed to read Tago SDK version',
         );
@@ -80,7 +77,7 @@ class StatusController {
           formattedUptime = '0 seconds';
         }
       } catch (msError) {
-        logger.warn(
+        req.log.warn(
           { action: 'getSystemStatus', err: msError },
           'Failed to format uptime',
         );
@@ -106,7 +103,7 @@ class StatusController {
         serverTime: new Date().toString(),
       };
 
-      logger.info(
+      req.log.info(
         {
           action: 'getSystemStatus',
           containerStatus: currentContainerState.status,

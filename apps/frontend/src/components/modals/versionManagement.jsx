@@ -14,6 +14,7 @@ import {
   Divider,
   LoadingOverlay,
 } from '@mantine/core';
+import { modals } from '@mantine/modals';
 import {
   IconHistory,
   IconDownload,
@@ -26,6 +27,7 @@ import {
 } from '@tabler/icons-react';
 import { analysisService } from '../../services/analysisService';
 import { useNotifications } from '../../hooks/useNotifications';
+import logger from '../../utils/logger';
 const AnalysisEditModal = lazy(() => import('../modals/codeMirrorCommon'));
 
 export default function VersionManagementModal({
@@ -51,7 +53,7 @@ export default function VersionManagementModal({
       const data = await analysisService.getVersions(analysis.name);
       setVersionData(data);
     } catch (error) {
-      console.error('Failed to load versions:', error);
+      logger.error('Failed to load versions:', error);
       const errorMessage = error.message || 'Failed to load version history';
       notify.error(errorMessage);
     } finally {
@@ -82,35 +84,35 @@ export default function VersionManagementModal({
   }
 
   const handleRollback = async (version) => {
-    if (
-      !window.confirm(
-        `Are you sure you want to rollback to version ${version}? This will clear the current logs and restart the analysis if it's running.`,
-      )
-    ) {
-      return;
-    }
+    modals.openConfirmModal({
+      title: 'Rollback to Previous Version',
+      children: `Are you sure you want to rollback "${analysis.name}" to version ${version}? This will clear the current logs and restart the analysis if it's running.`,
+      labels: { confirm: 'Rollback', cancel: 'Cancel' },
+      confirmProps: { color: 'orange' },
+      onConfirm: async () => {
+        setRollbackLoading(version);
+        try {
+          await notify.executeWithNotification(
+            analysisService.rollbackToVersion(analysis.name, version),
+            {
+              loading: `Rolling back ${analysis.name} to version ${version}...`,
+              success: `Successfully rolled back to version ${version}`,
+            },
+          );
 
-    setRollbackLoading(version);
-    try {
-      await notify.executeWithNotification(
-        analysisService.rollbackToVersion(analysis.name, version),
-        {
-          loading: `Rolling back ${analysis.name} to version ${version}...`,
-          success: `Successfully rolled back to version ${version}`,
-        },
-      );
+          if (onVersionRollback) {
+            onVersionRollback(version);
+          }
 
-      if (onVersionRollback) {
-        onVersionRollback(version);
-      }
-
-      // Reload versions to update current version indicator
-      await loadVersions();
-    } catch (error) {
-      console.error('Failed to rollback:', error);
-    } finally {
-      setRollbackLoading(null);
-    }
+          // Reload versions to update current version indicator
+          await loadVersions();
+        } catch (error) {
+          logger.error('Failed to rollback:', error);
+        } finally {
+          setRollbackLoading(null);
+        }
+      },
+    });
   };
 
   const handleDownloadVersion = async (version) => {
@@ -123,7 +125,7 @@ export default function VersionManagementModal({
         },
       );
     } catch (error) {
-      console.error('Failed to download version:', error);
+      logger.error('Failed to download version:', error);
     }
   };
 
@@ -148,10 +150,13 @@ export default function VersionManagementModal({
     <Modal
       opened={isOpen}
       onClose={onClose}
+      aria-labelledby="version-management-modal-title"
       title={
         <Group gap="sm">
-          <IconHistory size={20} />
-          <Text fw={600}>Version History - {analysis?.name}</Text>
+          <IconHistory size={20} aria-hidden="true" />
+          <Text fw={600} id="version-management-modal-title">
+            Version History - {analysis?.name}
+          </Text>
         </Group>
       }
       size="lg"
@@ -243,9 +248,9 @@ export default function VersionManagementModal({
                         color="green"
                         size="sm"
                         onClick={() => handleDownloadVersion(0)}
-                        title="Download current version"
+                        aria-label="Download current version"
                       >
-                        <IconDownload size={14} />
+                        <IconDownload size={14} aria-hidden="true" />
                       </ActionIcon>
                       <ActionIcon
                         variant="light"
@@ -255,9 +260,9 @@ export default function VersionManagementModal({
                           setSelectedVersion(0);
                           setShowContentModal(true);
                         }}
-                        title="View current version content"
+                        aria-label="View current version content"
                       >
-                        <IconEyeCode size={14} />
+                        <IconEyeCode size={14} aria-hidden="true" />
                       </ActionIcon>
                     </Group>
                   </Table.Td>
@@ -283,9 +288,9 @@ export default function VersionManagementModal({
                           color="green"
                           size="sm"
                           onClick={() => handleDownloadVersion(version.version)}
-                          title={`Download version ${version.version}`}
+                          aria-label={`Download version ${version.version}`}
                         >
-                          <IconDownload size={14} />
+                          <IconDownload size={14} aria-hidden="true" />
                         </ActionIcon>
                         <ActionIcon
                           variant="light"
@@ -293,9 +298,9 @@ export default function VersionManagementModal({
                           size="sm"
                           onClick={() => handleRollback(version.version)}
                           loading={rollbackLoading === version.version}
-                          title={`Rollback to version ${version.version}`}
+                          aria-label={`Rollback to version ${version.version}`}
                         >
-                          <IconPlayerPlay size={14} />
+                          <IconPlayerPlay size={14} aria-hidden="true" />
                         </ActionIcon>
                         <ActionIcon
                           variant="light"
@@ -306,9 +311,9 @@ export default function VersionManagementModal({
                             setShowContentModal(true);
                           }}
                           loading={loading}
-                          title={`View this version's content`}
+                          aria-label={`View this version's content`}
                         >
-                          <IconEyeCode />
+                          <IconEyeCode aria-hidden="true" />
                         </ActionIcon>
                       </Group>
                     </Table.Td>

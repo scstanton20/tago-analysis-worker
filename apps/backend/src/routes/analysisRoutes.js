@@ -14,6 +14,8 @@ import {
   deletionLimiter,
   versionOperationLimiter,
 } from '../middleware/rateLimiter.js';
+import { validateRequest } from '../middleware/validateRequest.js';
+import { analysisValidationSchemas } from '../validation/analysisSchemas.js';
 
 const router = Router();
 
@@ -75,6 +77,7 @@ const asyncHandler = (fn) => (req, res, next) => {
 router.post(
   '/upload',
   uploadLimiter,
+  validateRequest(analysisValidationSchemas.uploadAnalysis),
   requireTeamPermission('upload_analyses'),
   asyncHandler(AnalysisController.uploadAnalysis),
 );
@@ -168,6 +171,7 @@ router.get(
 router.post(
   '/:fileName/run',
   analysisRunLimiter,
+  validateRequest(analysisValidationSchemas.runAnalysis),
   extractAnalysisTeam,
   requireTeamPermission('run_analyses'),
   asyncHandler(AnalysisController.runAnalysis),
@@ -212,6 +216,7 @@ router.post(
 router.post(
   '/:fileName/stop',
   analysisRunLimiter,
+  validateRequest(analysisValidationSchemas.stopAnalysis),
   extractAnalysisTeam,
   requireTeamPermission('run_analyses'),
   asyncHandler(AnalysisController.stopAnalysis),
@@ -253,6 +258,7 @@ router.post(
 router.delete(
   '/:fileName',
   deletionLimiter,
+  validateRequest(analysisValidationSchemas.deleteAnalysis),
   extractAnalysisTeam,
   requireTeamPermission('delete_analyses'),
   asyncHandler(AnalysisController.deleteAnalysis),
@@ -295,6 +301,7 @@ router.delete(
 router.get(
   '/:fileName/content',
   fileOperationLimiter,
+  validateRequest(analysisValidationSchemas.getAnalysisContent),
   extractAnalysisTeam,
   requireTeamPermission('view_analyses'),
   asyncHandler(AnalysisController.getAnalysisContent),
@@ -364,6 +371,7 @@ router.get(
 router.put(
   '/:fileName',
   fileOperationLimiter,
+  validateRequest(analysisValidationSchemas.updateAnalysis),
   extractAnalysisTeam,
   requireTeamPermission('edit_analyses'),
   asyncHandler(AnalysisController.updateAnalysis),
@@ -433,6 +441,7 @@ router.put(
 router.put(
   '/:fileName/rename',
   fileOperationLimiter,
+  validateRequest(analysisValidationSchemas.renameAnalysis),
   extractAnalysisTeam,
   requireTeamPermission('edit_analyses'),
   asyncHandler(AnalysisController.renameAnalysis),
@@ -494,6 +503,7 @@ router.put(
 router.get(
   '/:fileName/download',
   fileOperationLimiter,
+  validateRequest(analysisValidationSchemas.downloadAnalysis),
   extractAnalysisTeam,
   requireTeamPermission('download_analyses'),
   asyncHandler(AnalysisController.downloadAnalysis),
@@ -537,6 +547,7 @@ router.get(
 router.get(
   '/:fileName/environment',
   fileOperationLimiter,
+  validateRequest(analysisValidationSchemas.getEnvironment),
   extractAnalysisTeam,
   requireTeamPermission('view_analyses'),
   asyncHandler(AnalysisController.getEnvironment),
@@ -605,6 +616,7 @@ router.get(
 router.put(
   '/:fileName/environment',
   fileOperationLimiter,
+  validateRequest(analysisValidationSchemas.updateEnvironment),
   extractAnalysisTeam,
   requireTeamPermission('edit_analyses'),
   asyncHandler(AnalysisController.updateEnvironment),
@@ -662,6 +674,7 @@ router.put(
  */
 router.get(
   '/:fileName/logs',
+  validateRequest(analysisValidationSchemas.getLogs),
   extractAnalysisTeam,
   requireTeamPermission('view_analyses'),
   asyncHandler(AnalysisController.getLogs),
@@ -723,6 +736,7 @@ router.get(
 router.get(
   '/:fileName/logs/download',
   fileOperationLimiter,
+  validateRequest(analysisValidationSchemas.downloadLogs),
   extractAnalysisTeam,
   requireTeamPermission('view_analyses'),
   asyncHandler(AnalysisController.downloadLogs),
@@ -764,6 +778,7 @@ router.get(
 router.delete(
   '/:fileName/logs',
   deletionLimiter,
+  validateRequest(analysisValidationSchemas.clearLogs),
   extractAnalysisTeam,
   requireTeamPermission('edit_analyses'),
   asyncHandler(AnalysisController.clearLogs),
@@ -826,6 +841,7 @@ router.delete(
 router.get(
   '/:fileName/versions',
   versionOperationLimiter,
+  validateRequest(analysisValidationSchemas.getVersions),
   extractAnalysisTeam,
   requireTeamPermission('view_analyses'),
   asyncHandler(AnalysisController.getVersions),
@@ -900,6 +916,7 @@ router.get(
 router.post(
   '/:fileName/rollback',
   versionOperationLimiter,
+  validateRequest(analysisValidationSchemas.rollbackToVersion),
   extractAnalysisTeam,
   requireTeamPermission('edit_analyses'),
   asyncHandler(AnalysisController.rollbackToVersion),

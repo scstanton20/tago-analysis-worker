@@ -1,4 +1,5 @@
 // frontend/src/components/Logo.jsx
+import PropTypes from 'prop-types';
 import { Box } from '@mantine/core';
 
 const Logo = ({ size = 32, className = '', ...props }) => {
@@ -19,6 +20,11 @@ const Logo = ({ size = 32, className = '', ...props }) => {
       {...props}
     />
   );
+};
+
+Logo.propTypes = {
+  size: PropTypes.number,
+  className: PropTypes.string,
 };
 
 export default Logo;

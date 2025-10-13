@@ -1,5 +1,6 @@
 // frontend/src/components/metrics/metricsDashboard.jsx
 import { useState, useMemo } from 'react';
+import PropTypes from 'prop-types';
 import {
   Grid,
   Card,
@@ -83,6 +84,16 @@ function MetricCard({
   );
 }
 
+MetricCard.propTypes = {
+  title: PropTypes.string.isRequired,
+  value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  unit: PropTypes.string,
+  icon: PropTypes.elementType,
+  color: PropTypes.string,
+  trend: PropTypes.number,
+  loading: PropTypes.bool,
+};
+
 // Status Badge Component
 function StatusBadge({ isOnline, loading = false }) {
   if (loading) {
@@ -103,6 +114,11 @@ function StatusBadge({ isOnline, loading = false }) {
     </Badge>
   );
 }
+
+StatusBadge.propTypes = {
+  isOnline: PropTypes.bool.isRequired,
+  loading: PropTypes.bool,
+};
 
 // Process Table Component
 function ProcessTable({ processes, loading = false }) {
@@ -181,6 +197,20 @@ function ProcessTable({ processes, loading = false }) {
     </Table>
   );
 }
+
+ProcessTable.propTypes = {
+  processes: PropTypes.arrayOf(
+    PropTypes.shape({
+      name: PropTypes.string,
+      cpu: PropTypes.number,
+      memory: PropTypes.number,
+      networkRx: PropTypes.number,
+      networkTx: PropTypes.number,
+      uptime: PropTypes.number,
+    }),
+  ),
+  loading: PropTypes.bool,
+};
 
 // Metrics Tab Content Component for specific tab types
 function MetricsTabContent({
@@ -391,6 +421,28 @@ function MetricsTabContent({
     </>
   );
 }
+
+MetricsTabContent.propTypes = {
+  data: PropTypes.shape({
+    backendUp: PropTypes.number,
+    analysisProcesses: PropTypes.number,
+    processCount: PropTypes.number,
+    eventLoopLag: PropTypes.number,
+    requestRate: PropTypes.number,
+    errorRate: PropTypes.number,
+    dnsHitRate: PropTypes.number,
+    p95Latency: PropTypes.number,
+    p99Latency: PropTypes.number,
+    memoryUsage: PropTypes.number,
+    containerCPU: PropTypes.number,
+    childrenCPU: PropTypes.number,
+    cpuUsage: PropTypes.number,
+  }),
+  processes: PropTypes.array,
+  loading: PropTypes.bool.isRequired,
+  formatNumber: PropTypes.func.isRequired,
+  tabType: PropTypes.oneOf(['total', 'container', 'children']).isRequired,
+};
 
 // Main Metrics Dashboard Component
 export default function MetricsDashboard() {

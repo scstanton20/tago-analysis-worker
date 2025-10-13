@@ -14,6 +14,7 @@ import {
   LoadingOverlay,
   Portal,
 } from '@mantine/core';
+import { modals } from '@mantine/modals';
 import {
   IconPlayerPlay,
   IconPlayerStop,
@@ -32,6 +33,7 @@ import { useNotifications } from '../../hooks/useNotifications.jsx';
 import AnalysisLogs from './analysisLogs';
 import StatusBadge from './statusBadge';
 import Logo from '../logo';
+import logger from '../../utils/logger';
 
 // Lazy load all modal components
 const AnalysisEditModal = lazy(() => import('../modals/codeMirrorCommon'));
@@ -130,7 +132,7 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
         analysis.name,
       );
     } catch (error) {
-      console.error('Failed to run analysis:', error);
+      logger.error('Failed to run analysis:', error);
       removeLoadingAnalysis(analysis.name);
     }
   };
@@ -143,24 +145,28 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
         analysis.name,
       );
     } catch (error) {
-      console.error('Failed to stop analysis:', error);
+      logger.error('Failed to stop analysis:', error);
       removeLoadingAnalysis(analysis.name);
     }
   };
 
   const handleDeleteAnalysis = async () => {
-    if (!window.confirm('Are you sure you want to delete this analysis?')) {
-      return;
-    }
-
-    try {
-      await notify.deleteAnalysis(
-        analysisService.deleteAnalysis(analysis.name),
-        analysis.name,
-      );
-    } catch (error) {
-      console.error('Failed to delete analysis:', error);
-    }
+    modals.openConfirmModal({
+      title: 'Delete Analysis',
+      children: `Are you sure you want to delete "${analysis.name}"? This action cannot be undone.`,
+      labels: { confirm: 'Delete', cancel: 'Cancel' },
+      confirmProps: { color: 'red' },
+      onConfirm: async () => {
+        try {
+          await notify.deleteAnalysis(
+            analysisService.deleteAnalysis(analysis.name),
+            analysis.name,
+          );
+        } catch (error) {
+          logger.error('Failed to delete analysis:', error);
+        }
+      },
+    });
   };
 
   const handleEditAnalysis = async () => {
@@ -187,32 +193,32 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
         },
       );
     } catch (error) {
-      console.error('Failed to download logs:', error);
+      logger.error('Failed to download logs:', error);
     }
   };
 
   const handleDeleteLogs = async () => {
-    if (
-      !window.confirm(
-        'Are you sure you want to delete all logs for this analysis?',
-      )
-    ) {
-      return;
-    }
+    modals.openConfirmModal({
+      title: 'Delete All Logs',
+      children: `Are you sure you want to delete all logs for "${analysis.name}"? This action cannot be undone.`,
+      labels: { confirm: 'Delete', cancel: 'Cancel' },
+      confirmProps: { color: 'red' },
+      onConfirm: async () => {
+        try {
+          await notify.executeWithNotification(
+            analysisService.deleteLogs(analysis.name),
+            {
+              loading: `Deleting logs for ${analysis.name}...`,
+              success: 'All logs deleted successfully.',
+            },
+          );
 
-    try {
-      await notify.executeWithNotification(
-        analysisService.deleteLogs(analysis.name),
-        {
-          loading: `Deleting logs for ${analysis.name}...`,
-          success: 'All logs deleted successfully.',
-        },
-      );
-
-      // SSE will automatically update the logs component with empty logs
-    } catch (error) {
-      console.error('Failed to delete logs:', error);
-    }
+          // SSE will automatically update the logs component with empty logs
+        } catch (error) {
+          logger.error('Failed to delete logs:', error);
+        }
+      },
+    });
   };
 
   const handleDownloadAnalysis = async () => {
@@ -225,7 +231,7 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
         },
       );
     } catch (error) {
-      console.error('Failed to download analysis:', error);
+      logger.error('Failed to download analysis:', error);
     }
   };
 
@@ -240,14 +246,14 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
       );
       setShowTeamModal(false);
     } catch (error) {
-      console.error('Error moving analysis:', error);
+      logger.error('Error moving analysis:', error);
     }
   };
 
   const handleVersionRollback = (version) => {
     // The rollback operation is handled by the modal
     // This callback can be used for additional UI updates if needed
-    console.log(`Analysis ${analysis.name} rolled back to version ${version}`);
+    logger.log(`Analysis ${analysis.name} rolled back to version ${version}`);
   };
 
   return (
@@ -350,8 +356,13 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
                 closeOnItemClick={true}
               >
                 <Menu.Target>
-                  <ActionIcon variant="subtle" size="lg" color="brand">
-                    <IconDotsVertical size={20} />
+                  <ActionIcon
+                    variant="subtle"
+                    size="lg"
+                    color="brand"
+                    aria-label={`Actions for ${analysis.name}`}
+                  >
+                    <IconDotsVertical size={20} aria-hidden="true" />
                   </ActionIcon>
                 </Menu.Target>
 

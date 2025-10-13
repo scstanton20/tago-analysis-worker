@@ -1,6 +1,8 @@
 // frontend/src/components/analysis/uploadAnalysis.jsx
 import { useState, useMemo, useCallback } from 'react';
+import PropTypes from 'prop-types';
 import { analysisService } from '../../services/analysisService';
+import logger from '../../utils/logger';
 import { useSSE } from '../../contexts/sseContext/index';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import { usePermissions } from '../../hooks/usePermissions.js';
@@ -273,7 +275,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
       }
     } catch (error) {
       setError(error.message || 'Failed to save analysis');
-      console.error('Save failed:', error);
+      logger.error('Save failed:', error);
     } finally {
       setIsUploading(false);
     }
@@ -572,3 +574,8 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
     </Paper>
   );
 }
+
+AnalysisCreator.propTypes = {
+  targetTeam: PropTypes.string,
+  onClose: PropTypes.func,
+};

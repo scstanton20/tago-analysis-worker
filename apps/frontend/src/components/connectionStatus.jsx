@@ -1,5 +1,6 @@
 // frontend/src/components/connectionStatus.jsx
 import { useState, lazy, Suspense } from 'react';
+import PropTypes from 'prop-types';
 import { useSSE } from '../contexts/sseContext';
 import {
   ActionIcon,
@@ -59,6 +60,13 @@ function AppLoadingOverlay({ message, submessage, error, showRetry }) {
     </Portal>
   );
 }
+
+AppLoadingOverlay.propTypes = {
+  message: PropTypes.string.isRequired,
+  submessage: PropTypes.string,
+  error: PropTypes.bool,
+  showRetry: PropTypes.bool,
+};
 
 const ConnectionStatus = () => {
   const [isExpanded, setIsExpanded] = useState(false);

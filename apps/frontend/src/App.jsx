@@ -28,6 +28,7 @@ import ConnectionStatus from './components/connectionStatus';
 import Logo from './components/logo';
 import ImpersonationBanner from './components/impersonationBanner';
 import ThemeSelector from './components/themeSelector';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // Reusable loading overlay component
 function AppLoadingOverlay({ message, submessage, error, showRetry }) {
@@ -251,9 +252,11 @@ function AuthenticatedApp() {
 
 export default function App() {
   return (
-    <CombinedAuthProvider>
-      <AppRouter />
-    </CombinedAuthProvider>
+    <ErrorBoundary>
+      <CombinedAuthProvider>
+        <AppRouter />
+      </CombinedAuthProvider>
+    </ErrorBoundary>
   );
 }
 

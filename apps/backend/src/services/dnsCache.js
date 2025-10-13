@@ -6,6 +6,12 @@ import config from '../config/default.js';
 import { safeReadFile, safeWriteFile } from '../utils/safePath.js';
 import { createChildLogger } from '../utils/logging/logger.js';
 import { dnsCacheHits, dnsCacheMisses } from '../utils/metrics-enhanced.js';
+import {
+  validateHostname,
+  validateResolvedAddress,
+  validateResolvedAddresses,
+} from '../utils/ssrfProtection.js';
+import { DNS_CACHE } from '../constants.js';
 
 const logger = createChildLogger('dns-cache');
 const DNS_CONFIG_FILE = path.join(config.paths.config, 'dns-cache-config.json');
@@ -19,8 +25,8 @@ class DNSCacheService {
     this.cache = new Map();
     this.config = {
       enabled: false,
-      ttl: 300000, // Default 5 minutes in milliseconds
-      maxEntries: 1000,
+      ttl: DNS_CACHE.DEFAULT_TTL_MS,
+      maxEntries: DNS_CACHE.DEFAULT_MAX_ENTRIES,
     };
     this.stats = {
       hits: 0,
@@ -96,6 +102,17 @@ class DNSCacheService {
         options = {};
       }
 
+      // SSRF Protection: Validate hostname before resolution
+      const hostnameValidation = validateHostname(hostname);
+      if (!hostnameValidation.allowed) {
+        this.stats.errors++;
+        const error = new Error(
+          `SSRF Protection: ${hostnameValidation.reason}`,
+        );
+        error.code = 'ENOTFOUND';
+        return process.nextTick(() => callback(error, null, null));
+      }
+
       const family = options?.family || 4;
       const cacheKey = `${hostname}:${family}`;
 
@@ -121,6 +138,21 @@ class DNSCacheService {
         options,
         (err, address, family) => {
           if (!err && address) {
+            // SSRF Protection: Validate resolved address
+            const addressValidation = validateResolvedAddress(
+              hostname,
+              address,
+              family,
+            );
+            if (!addressValidation.allowed) {
+              this.stats.errors++;
+              const error = new Error(
+                `SSRF Protection: ${addressValidation.reason}`,
+              );
+              error.code = 'ENOTFOUND';
+              return callback(error, null, null);
+            }
+
             this.addToCache(cacheKey, { address, family });
             logger.debug({ hostname, address, family }, 'DNS result cached');
           } else if (err) {
@@ -133,6 +165,17 @@ class DNSCacheService {
 
     // Override dnsPromises.resolve4
     dnsPromises.resolve4 = async (hostname) => {
+      // SSRF Protection: Validate hostname before resolution
+      const hostnameValidation = validateHostname(hostname);
+      if (!hostnameValidation.allowed) {
+        this.stats.errors++;
+        const error = new Error(
+          `SSRF Protection: ${hostnameValidation.reason}`,
+        );
+        error.code = 'ENOTFOUND';
+        throw error;
+      }
+
       const cacheKey = `resolve4:${hostname}`;
 
       const cached = this.getFromCache(cacheKey);
@@ -152,9 +195,30 @@ class DNSCacheService {
           dnsPromises,
           hostname,
         );
-        this.addToCache(cacheKey, { addresses });
-        logger.debug({ hostname, addresses }, 'DNS resolve4 result cached');
-        return addresses;
+
+        // SSRF Protection: Validate resolved addresses
+        const addressesValidation = validateResolvedAddresses(
+          hostname,
+          addresses,
+        );
+        if (!addressesValidation.allowed) {
+          this.stats.errors++;
+          const error = new Error(
+            `SSRF Protection: ${addressesValidation.reason}`,
+          );
+          error.code = 'ENOTFOUND';
+          throw error;
+        }
+
+        // Use filtered addresses if some were blocked
+        const safeAddresses =
+          addressesValidation.filteredAddresses || addresses;
+        this.addToCache(cacheKey, { addresses: safeAddresses });
+        logger.debug(
+          { hostname, addresses: safeAddresses },
+          'DNS resolve4 result cached',
+        );
+        return safeAddresses;
       } catch (error) {
         this.stats.errors++;
         throw error;
@@ -163,6 +227,17 @@ class DNSCacheService {
 
     // Override dnsPromises.resolve6
     dnsPromises.resolve6 = async (hostname) => {
+      // SSRF Protection: Validate hostname before resolution
+      const hostnameValidation = validateHostname(hostname);
+      if (!hostnameValidation.allowed) {
+        this.stats.errors++;
+        const error = new Error(
+          `SSRF Protection: ${hostnameValidation.reason}`,
+        );
+        error.code = 'ENOTFOUND';
+        throw error;
+      }
+
       const cacheKey = `resolve6:${hostname}`;
 
       const cached = this.getFromCache(cacheKey);
@@ -182,9 +257,30 @@ class DNSCacheService {
           dnsPromises,
           hostname,
         );
-        this.addToCache(cacheKey, { addresses });
-        logger.debug({ hostname, addresses }, 'DNS resolve6 result cached');
-        return addresses;
+
+        // SSRF Protection: Validate resolved addresses
+        const addressesValidation = validateResolvedAddresses(
+          hostname,
+          addresses,
+        );
+        if (!addressesValidation.allowed) {
+          this.stats.errors++;
+          const error = new Error(
+            `SSRF Protection: ${addressesValidation.reason}`,
+          );
+          error.code = 'ENOTFOUND';
+          throw error;
+        }
+
+        // Use filtered addresses if some were blocked
+        const safeAddresses =
+          addressesValidation.filteredAddresses || addresses;
+        this.addToCache(cacheKey, { addresses: safeAddresses });
+        logger.debug(
+          { hostname, addresses: safeAddresses },
+          'DNS resolve6 result cached',
+        );
+        return safeAddresses;
       } catch (error) {
         this.stats.errors++;
         throw error;
@@ -212,6 +308,17 @@ class DNSCacheService {
 
   // Handle IPC DNS lookup requests from child processes
   async handleDNSLookupRequest(hostname, options = {}) {
+    // SSRF Protection: Validate hostname before resolution
+    const hostnameValidation = validateHostname(hostname);
+    if (!hostnameValidation.allowed) {
+      this.stats.errors++;
+      logger.warn(
+        { hostname, reason: hostnameValidation.reason },
+        'SSRF: Blocked DNS lookup from child process',
+      );
+      return { success: false, error: hostnameValidation.reason };
+    }
+
     const family = options.family || 4;
     const cacheKey = `${hostname}:${family}`;
 
@@ -236,6 +343,27 @@ class DNSCacheService {
         options,
         (err, address, family) => {
           if (!err && address) {
+            // SSRF Protection: Validate resolved address
+            const addressValidation = validateResolvedAddress(
+              hostname,
+              address,
+              family,
+            );
+            if (!addressValidation.allowed) {
+              this.stats.errors++;
+              logger.warn(
+                {
+                  hostname,
+                  address,
+                  family,
+                  reason: addressValidation.reason,
+                },
+                'SSRF: Blocked resolved address from child process',
+              );
+              resolve({ success: false, error: addressValidation.reason });
+              return;
+            }
+
             const result = { address, family };
             this.addToCache(cacheKey, result);
             logger.debug(
@@ -255,6 +383,17 @@ class DNSCacheService {
 
   // Handle IPC DNS resolve4 requests
   async handleDNSResolve4Request(hostname) {
+    // SSRF Protection: Validate hostname before resolution
+    const hostnameValidation = validateHostname(hostname);
+    if (!hostnameValidation.allowed) {
+      this.stats.errors++;
+      logger.warn(
+        { hostname, reason: hostnameValidation.reason },
+        'SSRF: Blocked DNS resolve4 from child process',
+      );
+      return { success: false, error: hostnameValidation.reason };
+    }
+
     const cacheKey = `resolve4:${hostname}`;
 
     // Check cache first
@@ -272,9 +411,33 @@ class DNSCacheService {
       this.stats.misses++;
       dnsCacheMisses.inc(); // Update Prometheus metrics
       const addresses = await this.originalResolve4.call(dnsPromises, hostname);
-      this.addToCache(cacheKey, { addresses });
-      logger.debug({ hostname, addresses }, 'DNS resolve4 result cached (IPC)');
-      return { success: true, addresses };
+
+      // SSRF Protection: Validate resolved addresses
+      const addressesValidation = validateResolvedAddresses(
+        hostname,
+        addresses,
+      );
+      if (!addressesValidation.allowed) {
+        this.stats.errors++;
+        logger.warn(
+          {
+            hostname,
+            addresses,
+            reason: addressesValidation.reason,
+          },
+          'SSRF: Blocked resolved addresses from child process',
+        );
+        return { success: false, error: addressesValidation.reason };
+      }
+
+      // Use filtered addresses if some were blocked
+      const safeAddresses = addressesValidation.filteredAddresses || addresses;
+      this.addToCache(cacheKey, { addresses: safeAddresses });
+      logger.debug(
+        { hostname, addresses: safeAddresses },
+        'DNS resolve4 result cached (IPC)',
+      );
+      return { success: true, addresses: safeAddresses };
     } catch (error) {
       this.stats.errors++;
       logger.debug(
@@ -287,6 +450,17 @@ class DNSCacheService {
 
   // Handle IPC DNS resolve6 requests
   async handleDNSResolve6Request(hostname) {
+    // SSRF Protection: Validate hostname before resolution
+    const hostnameValidation = validateHostname(hostname);
+    if (!hostnameValidation.allowed) {
+      this.stats.errors++;
+      logger.warn(
+        { hostname, reason: hostnameValidation.reason },
+        'SSRF: Blocked DNS resolve6 from child process',
+      );
+      return { success: false, error: hostnameValidation.reason };
+    }
+
     const cacheKey = `resolve6:${hostname}`;
 
     // Check cache first
@@ -304,9 +478,33 @@ class DNSCacheService {
       this.stats.misses++;
       dnsCacheMisses.inc(); // Update Prometheus metrics
       const addresses = await this.originalResolve6.call(dnsPromises, hostname);
-      this.addToCache(cacheKey, { addresses });
-      logger.debug({ hostname, addresses }, 'DNS resolve6 result cached (IPC)');
-      return { success: true, addresses };
+
+      // SSRF Protection: Validate resolved addresses
+      const addressesValidation = validateResolvedAddresses(
+        hostname,
+        addresses,
+      );
+      if (!addressesValidation.allowed) {
+        this.stats.errors++;
+        logger.warn(
+          {
+            hostname,
+            addresses,
+            reason: addressesValidation.reason,
+          },
+          'SSRF: Blocked resolved addresses from child process',
+        );
+        return { success: false, error: addressesValidation.reason };
+      }
+
+      // Use filtered addresses if some were blocked
+      const safeAddresses = addressesValidation.filteredAddresses || addresses;
+      this.addToCache(cacheKey, { addresses: safeAddresses });
+      logger.debug(
+        { hostname, addresses: safeAddresses },
+        'DNS resolve6 result cached (IPC)',
+      );
+      return { success: true, addresses: safeAddresses };
     } catch (error) {
       this.stats.errors++;
       logger.debug(
@@ -536,10 +734,10 @@ class DNSCacheService {
       clearInterval(this.statsBroadcastTimer);
     }
 
-    // Broadcast stats every 10 seconds if they changed
+    // Broadcast stats periodically if they changed
     this.statsBroadcastTimer = setInterval(() => {
       this.checkAndBroadcastStats();
-    }, 10000);
+    }, DNS_CACHE.STATS_BROADCAST_INTERVAL_MS);
   }
 
   // Stop periodic stats broadcasting

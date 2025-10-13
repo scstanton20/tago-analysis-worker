@@ -4,6 +4,8 @@ import {
   requireAdmin,
 } from '../middleware/betterAuthMiddleware.js';
 import UserController from '../controllers/userController.js';
+import { validateRequest } from '../middleware/validateRequest.js';
+import { userValidationSchemas } from '../validation/userSchemas.js';
 
 const router = Router();
 
@@ -61,7 +63,11 @@ router.use(authMiddleware);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/:userId/team-memberships', UserController.getUserTeamMemberships);
+router.get(
+  '/:userId/team-memberships',
+  validateRequest(userValidationSchemas.getUserTeamMemberships),
+  UserController.getUserTeamMemberships,
+);
 
 /**
  * @swagger
@@ -110,7 +116,11 @@ router.get('/:userId/team-memberships', UserController.getUserTeamMemberships);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post('/set-initial-password', UserController.setInitialPassword);
+router.post(
+  '/set-initial-password',
+  validateRequest(userValidationSchemas.setInitialPassword),
+  UserController.setInitialPassword,
+);
 
 // Admin-only routes
 router.use(requireAdmin);
@@ -176,7 +186,11 @@ router.use(requireAdmin);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post('/add-to-organization', UserController.addToOrganization);
+router.post(
+  '/add-to-organization',
+  validateRequest(userValidationSchemas.addToOrganization),
+  UserController.addToOrganization,
+);
 
 /**
  * @swagger
@@ -255,7 +269,11 @@ router.post('/add-to-organization', UserController.addToOrganization);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post('/assign-teams', UserController.assignUserToTeams);
+router.post(
+  '/assign-teams',
+  validateRequest(userValidationSchemas.assignUserToTeams),
+  UserController.assignUserToTeams,
+);
 
 /**
  * @swagger
@@ -339,6 +357,7 @@ router.post('/assign-teams', UserController.assignUserToTeams);
  */
 router.put(
   '/:userId/team-assignments',
+  validateRequest(userValidationSchemas.updateUserTeamAssignments),
   UserController.updateUserTeamAssignments,
 );
 
@@ -408,6 +427,7 @@ router.put(
  */
 router.put(
   '/:userId/organization-role',
+  validateRequest(userValidationSchemas.updateUserOrganizationRole),
   UserController.updateUserOrganizationRole,
 );
 
@@ -477,6 +497,7 @@ router.put(
  */
 router.delete(
   '/:userId/organization',
+  validateRequest(userValidationSchemas.removeUserFromOrganization),
   UserController.removeUserFromOrganization,
 );
 

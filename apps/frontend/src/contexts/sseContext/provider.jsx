@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { SSEContext } from './context';
 import { useAuth } from '../../hooks/useAuth';
+import logger from '../../utils/logger';
 
 export function SSEProvider({ children }) {
   const { isAuthenticated } = useAuth();
@@ -67,7 +68,7 @@ export function SSEProvider({ children }) {
         setBackendStatus(data);
       }
     } catch (error) {
-      console.error('Error requesting status update:', error);
+      logger.error('Error requesting status update:', error);
     }
   }, [isAuthenticated]);
 
@@ -255,7 +256,7 @@ export function SSEProvider({ children }) {
 
           case 'refresh':
             // Refresh data via SSE instead of page reload
-            console.log(
+            logger.log(
               'Received refresh event - data will be updated via other SSE events',
             );
             break;
@@ -277,7 +278,10 @@ export function SSEProvider({ children }) {
                   [data.data.analysis]: newAnalysis,
                 }));
               } else {
-                window.location.reload();
+                logger.error(
+                  'SSE: Analysis created but no analysis data received',
+                  data.data,
+                );
               }
             }
             break;
@@ -406,7 +410,7 @@ export function SSEProvider({ children }) {
 
           case 'teamDeleted':
             if (data.deleted) {
-              console.log('SSE: Team deleted:', data);
+              logger.log('SSE: Team deleted:', data);
               setTeams((prev) => {
                 const newTeams = { ...prev };
                 delete newTeams[data.deleted];
@@ -421,7 +425,7 @@ export function SSEProvider({ children }) {
                     // Move analyses from deleted team to target team
                     const targetTeamId =
                       data.analysesMovedTo || 'uncategorized';
-                    console.log(
+                    logger.log(
                       `SSE: Moving analysis ${name} from deleted team ${data.deleted} to ${targetTeamId}`,
                     );
                     newAnalyses[name] = { ...analysis, teamId: targetTeamId };
@@ -489,16 +493,18 @@ export function SSEProvider({ children }) {
               });
             }
 
-            // When user's team assignments change, reload to refresh all data
-            console.log('SSE: User teams updated, reloading page...');
+            // When user's team assignments change, trigger auth refresh
+            logger.log(
+              'SSE: User teams updated, triggering permissions refresh...',
+            );
             setTimeout(() => {
-              window.location.reload();
+              window.dispatchEvent(new CustomEvent('auth-change'));
             }, 1000); // Small delay to let notification show
             break;
 
           case 'userRemoved':
             // When user is removed from organization, log them out
-            console.log('SSE: User account removed, logging out...');
+            logger.log('SSE: User account removed, logging out...');
             window.location.href = '/login';
             break;
 
@@ -516,10 +522,12 @@ export function SSEProvider({ children }) {
               });
             }
 
-            // When user's role changes, reload to refresh permissions
-            console.log('SSE: User role updated, reloading page...');
+            // When user's role changes, trigger auth refresh
+            logger.log(
+              'SSE: User role updated, triggering permissions refresh...',
+            );
             setTimeout(() => {
-              window.location.reload();
+              window.dispatchEvent(new CustomEvent('auth-change'));
             }, 1000); // Small delay to let notification show
             break;
 
@@ -553,7 +561,7 @@ export function SSEProvider({ children }) {
           case 'logsCleared':
             if (data.data?.fileName) {
               const fileName = data.data.fileName;
-              console.log(
+              logger.log(
                 `Clearing logs for ${fileName}, previous log count:`,
                 analyses[fileName]?.logs?.length || 0,
               );
@@ -595,14 +603,14 @@ export function SSEProvider({ children }) {
                 },
               }));
 
-              console.log(
+              logger.log(
                 `Analysis ${fileName} rolled back to version ${version}${restarted ? ' and restarted' : ''}`,
               );
             }
             break;
 
           case 'sessionInvalidated':
-            console.log('Session invalidated:', data.reason);
+            logger.log('Session invalidated:', data.reason);
 
             if (data.reason?.includes('Server is shutting down')) {
               setServerShutdown(true);
@@ -610,17 +618,18 @@ export function SSEProvider({ children }) {
               return;
             }
 
-            // Force logout on session invalidation - Better Auth will handle this
-            window.location.reload();
+            // Redirect to login on session invalidation
+            logger.log('SSE: Session invalidated, redirecting to login...');
+            window.location.href = '/login';
             break;
 
           case 'userLogout': {
-            console.log('User logout event received via SSE, data:', data);
+            logger.log('User logout event received via SSE, data:', data);
             // Dispatch custom event for AuthProvider to handle
             const customEvent = new CustomEvent('sse-user-logout', {
               detail: { type: 'user-logout', userId: data.userId },
             });
-            console.log(
+            logger.log(
               'Dispatching sse-user-logout event:',
               customEvent.detail,
             );
@@ -679,11 +688,11 @@ export function SSEProvider({ children }) {
             break;
 
           default:
-            console.log('Unhandled SSE message type:', data.type);
+            logger.log('Unhandled SSE message type:', data.type);
             break;
         }
       } catch (error) {
-        console.error('Error handling SSE message:', error);
+        logger.error('Error handling SSE message:', error);
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -694,7 +703,7 @@ export function SSEProvider({ children }) {
     if (!mountedRef.current) return;
 
     if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
-      console.log(
+      logger.log(
         `SSE max reconnection attempts reached (${maxReconnectAttempts})`,
       );
       setConnectionStatus('failed');
@@ -708,7 +717,7 @@ export function SSEProvider({ children }) {
     );
     reconnectAttemptsRef.current++;
 
-    console.log(
+    logger.log(
       `SSE reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`,
     );
 
@@ -720,7 +729,7 @@ export function SSEProvider({ children }) {
       try {
         await createConnection();
       } catch (error) {
-        console.error('SSE reconnection failed:', error);
+        logger.error('SSE reconnection failed:', error);
         if (mountedRef.current) {
           setConnectionStatus('disconnected');
           connectionStatusRef.current = 'disconnected';
@@ -752,14 +761,14 @@ export function SSEProvider({ children }) {
       eventSourceRef.current = eventSource;
 
       const connectionTimeout = setTimeout(() => {
-        console.log('SSE connection timeout');
+        logger.log('SSE connection timeout');
         eventSource.close();
         reject(new Error('Connection timeout'));
       }, 5000);
 
       eventSource.onopen = () => {
         clearTimeout(connectionTimeout);
-        console.log('SSE connection established');
+        logger.log('SSE connection established');
 
         if (mountedRef.current) {
           setConnectionStatus('connected');
@@ -772,7 +781,7 @@ export function SSEProvider({ children }) {
 
       eventSource.onerror = (error) => {
         clearTimeout(connectionTimeout);
-        console.error('SSE connection error', error);
+        logger.error('SSE connection error', error);
 
         if (mountedRef.current) {
           if (eventSource.readyState === EventSource.CLOSED) {
@@ -808,11 +817,11 @@ export function SSEProvider({ children }) {
       try {
         setConnectionStatus('connecting');
         connectionStatusRef.current = 'connecting';
-        console.log('Starting SSE connection...');
+        logger.log('Starting SSE connection...');
 
         await createConnection();
       } catch (error) {
-        console.error('SSE initial connection failed:', error);
+        logger.error('SSE initial connection failed:', error);
         if (mountedRef.current) {
           setConnectionStatus('disconnected');
           connectionStatusRef.current = 'disconnected';
@@ -829,7 +838,7 @@ export function SSEProvider({ children }) {
           !eventSourceRef.current ||
           eventSourceRef.current.readyState !== EventSource.OPEN
         ) {
-          console.log('Page became visible, attempting SSE reconnection...');
+          logger.log('Page became visible, attempting SSE reconnection...');
           connect();
         }
       }
@@ -842,7 +851,7 @@ export function SSEProvider({ children }) {
           !eventSourceRef.current ||
           eventSourceRef.current.readyState !== EventSource.OPEN
         ) {
-          console.log('Window gained focus, attempting SSE reconnection...');
+          logger.log('Window gained focus, attempting SSE reconnection...');
           connect();
         }
       }
@@ -854,16 +863,22 @@ export function SSEProvider({ children }) {
     window.addEventListener('focus', handleFocus);
 
     return () => {
-      console.log('SSE client cleanup starting');
+      logger.log('SSE client cleanup starting');
       mountedRef.current = false;
 
       clearTimeout(timeoutId);
+
+      // Clear all pending analysis start timeouts to prevent memory leaks
+      analysisStartTimeouts.current.forEach((timeoutId) =>
+        clearTimeout(timeoutId),
+      );
+      analysisStartTimeouts.current.clear();
 
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleFocus);
 
       if (eventSourceRef.current) {
-        console.log('SSE closing connection');
+        logger.log('SSE closing connection');
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }

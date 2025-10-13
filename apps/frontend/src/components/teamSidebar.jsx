@@ -1,5 +1,6 @@
 // frontend/src/components/teamSidebar.jsx
 import { useState, useMemo, lazy, Suspense } from 'react';
+import PropTypes from 'prop-types';
 import {
   DndContext,
   closestCenter,
@@ -82,10 +83,19 @@ function AppLoadingOverlay({ message, submessage, error, showRetry }) {
     </Portal>
   );
 }
+
+AppLoadingOverlay.propTypes = {
+  message: PropTypes.string.isRequired,
+  submessage: PropTypes.string,
+  error: PropTypes.bool,
+  showRetry: PropTypes.bool,
+};
+
 import { teamService } from '../services/teamService';
 import { useAuth } from '../hooks/useAuth';
 import { usePermissions } from '../hooks/usePermissions';
 import Logo from './logo';
+import logger from '../utils/logger';
 
 // Sortable Team Item
 const SortableTeamItem = ({ team, isSelected, onClick, analysisCount }) => {
@@ -205,6 +215,18 @@ const SortableTeamItem = ({ team, isSelected, onClick, analysisCount }) => {
   );
 };
 
+SortableTeamItem.propTypes = {
+  team: PropTypes.shape({
+    id: PropTypes.string.isRequired,
+    name: PropTypes.string.isRequired,
+    color: PropTypes.string.isRequired,
+    isSystem: PropTypes.bool,
+  }).isRequired,
+  isSelected: PropTypes.bool.isRequired,
+  onClick: PropTypes.func.isRequired,
+  analysisCount: PropTypes.number.isRequired,
+};
+
 // Main Team Sidebar Component
 export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
   const { teams, getTeamAnalysisCount, hasInitialData } = useSSE();
@@ -270,9 +292,9 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
 
     try {
       await teamService.moveAnalysisToTeam(draggedAnalysis, teamId);
-      console.log(`Moved analysis ${draggedAnalysis} to team ${teamId}`);
+      logger.log(`Moved analysis ${draggedAnalysis} to team ${teamId}`);
     } catch (error) {
-      console.error('Error moving analysis:', error);
+      logger.error('Error moving analysis:', error);
     }
 
     setDraggedAnalysis(null);
@@ -291,7 +313,7 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
         try {
           await teamService.reorderTeams(newOrder.map((t) => t.id));
         } catch (error) {
-          console.error('Error reordering teams:', error);
+          logger.error('Error reordering teams:', error);
         }
       }
     }
@@ -340,8 +362,9 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
                 color="brand"
                 size="lg"
                 onClick={() => setShowManageModal(true)}
+                aria-label="Manage teams"
               >
-                <IconBrandAsana size={18} />
+                <IconBrandAsana size={18} aria-hidden="true" />
               </ActionIcon>
             </Tooltip>
           )}
@@ -352,8 +375,9 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
                 color="accent"
                 size="lg"
                 onClick={() => setShowUserModal(true)}
+                aria-label="Manage users"
               >
-                <IconUserPlus size={18} />
+                <IconUserPlus size={18} aria-hidden="true" />
               </ActionIcon>
             </Tooltip>
           )}
@@ -448,8 +472,9 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
                 color="brand"
                 size="sm"
                 onClick={() => setShowProfileModal(true)}
+                aria-label="Profile Settings"
               >
-                <IconUserEdit size={14} />
+                <IconUserEdit size={14} aria-hidden="true" />
               </ActionIcon>
             </Tooltip>
             <Tooltip label="Logout">
@@ -458,8 +483,9 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
                 color="red"
                 size="sm"
                 onClick={logout}
+                aria-label="Logout"
               >
-                <IconLogout size={14} />
+                <IconLogout size={14} aria-hidden="true" />
               </ActionIcon>
             </Tooltip>
           </Group>
@@ -503,3 +529,8 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
     </Stack>
   );
 }
+
+TeamSidebar.propTypes = {
+  selectedTeam: PropTypes.string,
+  onTeamSelect: PropTypes.func,
+};

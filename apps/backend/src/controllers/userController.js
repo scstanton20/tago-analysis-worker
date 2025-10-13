@@ -13,12 +13,9 @@ class UserController {
    * Add user to organization
    */
   static async addToOrganization(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'UserController' }) || console;
     const { userId, organizationId, role = 'member' } = req.body;
-
     if (!userId || !organizationId) {
-      logger.warn(
+      req.log.warn(
         { action: 'addToOrganization' },
         'Add failed: missing userId or organizationId',
       );
@@ -27,7 +24,7 @@ class UserController {
         .json({ error: 'userId and organizationId are required' });
     }
 
-    logger.info(
+    req.log.info(
       { action: 'addToOrganization', userId, organizationId, role },
       'Adding user to organization',
     );
@@ -43,7 +40,7 @@ class UserController {
       });
 
       if (result.error) {
-        logger.error(
+        req.log.error(
           {
             action: 'addToOrganization',
             userId,
@@ -55,7 +52,7 @@ class UserController {
         return res.status(400).json({ error: result.error.message });
       }
 
-      logger.info(
+      req.log.info(
         { action: 'addToOrganization', userId, organizationId, role },
         'User added to organization',
       );
@@ -69,12 +66,9 @@ class UserController {
    * Assign user to teams with permissions
    */
   static async assignUserToTeams(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'UserController' }) || console;
     const { userId, teamAssignments } = req.body;
-
     if (!userId || !Array.isArray(teamAssignments)) {
-      logger.warn(
+      req.log.warn(
         { action: 'assignUserToTeams' },
         'Assign failed: missing userId or teamAssignments',
       );
@@ -85,7 +79,7 @@ class UserController {
 
     // Don't create member entries if no teams are being assigned
     if (teamAssignments.length === 0) {
-      logger.info(
+      req.log.info(
         { action: 'assignUserToTeams', userId },
         'No teams to assign - skipping',
       );
@@ -98,7 +92,7 @@ class UserController {
       });
     }
 
-    logger.info(
+    req.log.info(
       {
         action: 'assignUserToTeams',
         userId,
@@ -130,7 +124,7 @@ class UserController {
       );
 
       if (!existingOrgMember) {
-        logger.info(
+        req.log.info(
           { action: 'assignUserToTeams', userId, organizationId: org.id },
           'Adding user to organization',
         );
@@ -147,7 +141,7 @@ class UserController {
             `Failed to add user to organization: ${addMemberResult.error.message}`,
           );
         }
-        logger.info(
+        req.log.info(
           { action: 'assignUserToTeams', userId },
           'Added user to organization',
         );
@@ -187,7 +181,7 @@ class UserController {
               permissions,
               status: 'updated_permissions',
             });
-            logger.info(
+            req.log.info(
               { action: 'assignUserToTeams', userId, teamId },
               'Updated team permissions',
             );
@@ -216,7 +210,7 @@ class UserController {
               permissions,
               status: 'success',
             });
-            logger.info(
+            req.log.info(
               { action: 'assignUserToTeams', userId, teamId },
               'Added user to team',
             );
@@ -228,14 +222,14 @@ class UserController {
         }
       }
     } catch (outerError) {
-      logger.error(
+      req.log.error(
         { action: 'assignUserToTeams', userId, err: outerError },
         'Error in team assignment process',
       );
       errors.push(`Process error: ${outerError.message}`);
     }
 
-    logger.info(
+    req.log.info(
       {
         action: 'assignUserToTeams',
         userId,
@@ -281,12 +275,9 @@ class UserController {
    * Get user team memberships
    */
   static async getUserTeamMemberships(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'UserController' }) || console;
     const { userId } = req.params;
-
     if (!userId) {
-      logger.warn(
+      req.log.warn(
         { action: 'getUserTeamMemberships' },
         'Get failed: missing userId',
       );
@@ -299,7 +290,7 @@ class UserController {
     const isOwnRequest = currentUser?.id === userId;
 
     if (!isAdmin && !isOwnRequest) {
-      logger.warn(
+      req.log.warn(
         {
           action: 'getUserTeamMemberships',
           userId,
@@ -312,7 +303,7 @@ class UserController {
       });
     }
 
-    logger.info(
+    req.log.info(
       { action: 'getUserTeamMemberships', userId },
       'Getting team memberships',
     );
@@ -330,7 +321,7 @@ class UserController {
         `getting team memberships for user ${userId}`,
       );
 
-      logger.info(
+      req.log.info(
         { action: 'getUserTeamMemberships', userId, count: memberships.length },
         'Team memberships retrieved',
       );
@@ -356,13 +347,10 @@ class UserController {
    * Update user team assignments
    */
   static async updateUserTeamAssignments(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'UserController' }) || console;
     const { userId } = req.params;
     const { teamAssignments } = req.body;
-
     if (!userId || !Array.isArray(teamAssignments)) {
-      logger.warn(
+      req.log.warn(
         { action: 'updateUserTeamAssignments' },
         'Update failed: missing userId or teamAssignments',
       );
@@ -371,7 +359,7 @@ class UserController {
       });
     }
 
-    logger.info(
+    req.log.info(
       {
         action: 'updateUserTeamAssignments',
         userId,
@@ -412,7 +400,7 @@ class UserController {
       );
 
       if (!existingOrgMember) {
-        logger.info(
+        req.log.info(
           {
             action: 'updateUserTeamAssignments',
             userId,
@@ -433,7 +421,7 @@ class UserController {
             `Failed to add user to organization: ${addMemberResult.error.message}`,
           );
         }
-        logger.info(
+        req.log.info(
           { action: 'updateUserTeamAssignments', userId },
           'Added user to organization',
         );
@@ -446,7 +434,7 @@ class UserController {
           [userId, teamId],
           `removing user ${userId} from team ${teamId}`,
         );
-        logger.info(
+        req.log.info(
           { action: 'updateUserTeamAssignments', userId, teamId },
           'Removed user from team',
         );
@@ -488,7 +476,7 @@ class UserController {
               `adding user ${userId} to team ${teamId}`,
             );
 
-            logger.info(
+            req.log.info(
               { action: 'updateUserTeamAssignments', userId, teamId },
               'Added user to team',
             );
@@ -506,7 +494,7 @@ class UserController {
               `updating permissions for user ${userId} in team ${teamId}`,
             );
 
-            logger.info(
+            req.log.info(
               { action: 'updateUserTeamAssignments', userId, teamId },
               'Updated team permissions',
             );
@@ -541,7 +529,7 @@ class UserController {
         },
       });
 
-      logger.info(
+      req.log.info(
         {
           action: 'updateUserTeamAssignments',
           userId,
@@ -567,13 +555,10 @@ class UserController {
    * Update user's organization role
    */
   static async updateUserOrganizationRole(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'UserController' }) || console;
     const { userId } = req.params;
     const { organizationId, role } = req.body;
-
     if (!userId || !organizationId || !role) {
-      logger.warn(
+      req.log.warn(
         { action: 'updateUserOrganizationRole' },
         'Update failed: missing userId, organizationId, or role',
       );
@@ -582,7 +567,7 @@ class UserController {
       });
     }
 
-    logger.info(
+    req.log.info(
       { action: 'updateUserOrganizationRole', userId, role, organizationId },
       'Updating organization role',
     );
@@ -599,7 +584,7 @@ class UserController {
       });
 
       if (result.error) {
-        logger.error(
+        req.log.error(
           {
             action: 'updateUserOrganizationRole',
             err: result.error,
@@ -613,7 +598,7 @@ class UserController {
         return res.status(statusCode).json({ error: result.error.message });
       }
 
-      logger.info(
+      req.log.info(
         { action: 'updateUserOrganizationRole', userId, role, organizationId },
         'Organization role updated',
       );
@@ -642,13 +627,10 @@ class UserController {
    * Remove user from organization
    */
   static async removeUserFromOrganization(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'UserController' }) || console;
     const { userId } = req.params;
     const { organizationId } = req.body;
-
     if (!userId || !organizationId) {
-      logger.warn(
+      req.log.warn(
         { action: 'removeUserFromOrganization' },
         'Remove failed: missing userId or organizationId',
       );
@@ -657,7 +639,7 @@ class UserController {
       });
     }
 
-    logger.info(
+    req.log.info(
       { action: 'removeUserFromOrganization', userId, organizationId },
       'Removing user from organization',
     );
@@ -671,7 +653,7 @@ class UserController {
       );
 
       if (!existingMember) {
-        logger.warn(
+        req.log.warn(
           { action: 'removeUserFromOrganization', userId, organizationId },
           'User is not a member - nothing to remove',
         );
@@ -691,7 +673,7 @@ class UserController {
       });
 
       if (result.error) {
-        logger.error(
+        req.log.error(
           {
             action: 'removeUserFromOrganization',
             err: result.error,
@@ -704,7 +686,7 @@ class UserController {
         return res.status(statusCode).json({ error: result.error.message });
       }
 
-      logger.info(
+      req.log.info(
         { action: 'removeUserFromOrganization', userId, organizationId },
         'User removed from organization',
       );
@@ -729,12 +711,9 @@ class UserController {
    * Set new password for first-time users (password onboarding)
    */
   static async setInitialPassword(req, res) {
-    const logger =
-      req.logger?.child({ controller: 'UserController' }) || console;
     const { newPassword } = req.body;
-
     if (!newPassword) {
-      logger.warn(
+      req.log.warn(
         { action: 'setInitialPassword' },
         'Set failed: missing newPassword',
       );
@@ -742,7 +721,7 @@ class UserController {
     }
 
     if (newPassword.length < 6) {
-      logger.warn(
+      req.log.warn(
         { action: 'setInitialPassword' },
         'Set failed: password too short',
       );
@@ -753,14 +732,14 @@ class UserController {
 
     // Get current user from session
     if (!req.user?.id) {
-      logger.warn(
+      req.log.warn(
         { action: 'setInitialPassword' },
         'Set failed: user not authenticated',
       );
       return res.status(401).json({ error: 'User not authenticated' });
     }
 
-    logger.info(
+    req.log.info(
       { action: 'setInitialPassword', userId: req.user.id },
       'Setting initial password',
     );
@@ -771,12 +750,12 @@ class UserController {
         const ctx = await auth.$context;
         const hashedPassword = await ctx.password.hash(newPassword);
         await ctx.internalAdapter.updatePassword(req.user.id, hashedPassword);
-        logger.info(
+        req.log.info(
           { action: 'setInitialPassword', userId: req.user.id },
           'Password updated successfully',
         );
       } catch (passwordError) {
-        logger.error(
+        req.log.error(
           {
             action: 'setInitialPassword',
             err: passwordError,
@@ -797,18 +776,18 @@ class UserController {
       );
 
       if (updateResult.changes === 0) {
-        logger.warn(
+        req.log.warn(
           { action: 'setInitialPassword', userId: req.user.id },
           'No user found to clear password flag',
         );
       } else {
-        logger.info(
+        req.log.info(
           { action: 'setInitialPassword', userId: req.user.id },
           'Cleared requiresPasswordChange flag',
         );
       }
 
-      logger.info(
+      req.log.info(
         { action: 'setInitialPassword', userId: req.user.id },
         'Password onboarding completed',
       );

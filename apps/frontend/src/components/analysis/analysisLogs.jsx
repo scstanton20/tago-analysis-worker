@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useMountedRef } from '../../hooks/useMountedRef';
 import { analysisService } from '../../services/analysisService';
+import logger from '../../utils/logger';
 import {
   Paper,
   ScrollArea,
@@ -75,7 +76,7 @@ const AnalysisLogs = ({ analysis }) => {
       }
       hasLoadedInitial.current = true;
     } catch (error) {
-      console.error('Failed to fetch initial logs:', error);
+      logger.error('Failed to fetch initial logs:', error);
       if (isMountedRef.current) {
         setHasMore(false);
       }
@@ -133,7 +134,7 @@ const AnalysisLogs = ({ analysis }) => {
         setPage(nextPage);
       }
     } catch (error) {
-      console.error('Failed to fetch more logs:', error);
+      logger.error('Failed to fetch more logs:', error);
     } finally {
       isLoadingMore.current = false;
     }
@@ -168,7 +169,7 @@ const AnalysisLogs = ({ analysis }) => {
   const handleBottomReached = useCallback(() => {
     // Only load more if we're not already loading and there are more logs
     if (!isLoadingMore.current && hasMore && isMountedRef.current) {
-      console.log('Bottom reached - triggering loadMoreLogs');
+      logger.log('Bottom reached - triggering loadMoreLogs');
       loadMoreLogs();
     }
   }, [hasMore, loadMoreLogs, isMountedRef]);
@@ -201,7 +202,7 @@ const AnalysisLogs = ({ analysis }) => {
         (sseLogs.length === 1 && sseLogs[0]?.message?.includes('cleared')));
 
     if (logsWereCleared) {
-      console.log('Logs cleared, resetting all state and reloading');
+      logger.log('Logs cleared, resetting all state and reloading');
       setInitialLogs([]);
       setAdditionalLogs([]);
       setPage(1);

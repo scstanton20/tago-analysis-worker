@@ -4,6 +4,8 @@ import { fetchWithHeaders, handleResponse } from '../../utils/apiUtils.js';
 import { AuthContext } from '../AuthContext.jsx';
 import { SSEContext } from '../sseContext/context.js';
 import { PermissionsContext } from './context.js';
+import { useInitialState } from '../../hooks/useInitialState.js';
+import logger from '../../utils/logger.js';
 
 export const PermissionsProvider = ({ children }) => {
   const authContext = useContext(AuthContext);
@@ -39,12 +41,12 @@ export const PermissionsProvider = ({ children }) => {
 
       if (activeOrgResult.data) {
         setOrganizationId(activeOrgResult.data.id);
-        console.log(
+        logger.log(
           '✓ Set active organization and ID:',
           activeOrgResult.data.id,
         );
       } else {
-        console.warn('Could not set active organization or get its data');
+        logger.warn('Could not set active organization or get its data');
         setOrganizationId(null);
       }
 
@@ -70,7 +72,7 @@ export const PermissionsProvider = ({ children }) => {
                 role: 'owner',
               })),
             );
-            console.log(
+            logger.log(
               `✓ Loaded ${teamsResult.data.length} teams for admin user`,
             );
           } else {
@@ -94,23 +96,23 @@ export const PermissionsProvider = ({ children }) => {
               teamMembershipsData.data?.teams
             ) {
               setUserTeams(teamMembershipsData.data.teams);
-              console.log(
+              logger.log(
                 `✓ Loaded ${teamMembershipsData.data.teams.length} team memberships for user`,
               );
             } else {
               setUserTeams([]);
             }
           } catch (fetchError) {
-            console.warn('Error fetching user team memberships:', fetchError);
+            logger.warn('Error fetching user team memberships:', fetchError);
             setUserTeams([]);
           }
         }
       } catch (teamsError) {
-        console.warn('Error loading team memberships:', teamsError);
+        logger.warn('Error loading team memberships:', teamsError);
         setUserTeams([]);
       }
     } catch (error) {
-      console.error('Error setting active organization:', error);
+      logger.error('Error setting active organization:', error);
       setOrganizationMembership(null);
       setOrganizationId(null);
       setUserTeams([]);
@@ -120,20 +122,11 @@ export const PermissionsProvider = ({ children }) => {
   }, [isAuthenticated, user]);
 
   // Load organization data when authentication state changes
-  const [hasLoadedOrgData, setHasLoadedOrgData] = useState(false);
-  const shouldLoadOrgData = isAuthenticated && user && !hasLoadedOrgData;
-
-  if (shouldLoadOrgData) {
-    setHasLoadedOrgData(true);
-    loadOrganizationData();
-  }
-
-  // Reset loaded flag when user changes
-  if (!isAuthenticated || !user) {
-    if (hasLoadedOrgData) {
-      setHasLoadedOrgData(false);
-    }
-  }
+  // Uses custom useInitialState hook to handle initialization pattern
+  useInitialState(loadOrganizationData, null, {
+    condition: isAuthenticated && user,
+    resetCondition: !isAuthenticated || !user,
+  });
 
   // Memoize team helper functions to prevent recreating on every render
   const teamHelpers = useMemo(
@@ -292,7 +285,7 @@ export const PermissionsProvider = ({ children }) => {
 
       refreshUserData: async () => {
         try {
-          console.log('Refreshing permissions and team data');
+          logger.log('Refreshing permissions and team data');
 
           // Clear and reload organization data
           setOrganizationMembership(null);
@@ -302,7 +295,7 @@ export const PermissionsProvider = ({ children }) => {
           // Reload organization data
           await loadOrganizationData();
         } catch (error) {
-          console.error('Error refreshing permissions data:', error);
+          logger.error('Error refreshing permissions data:', error);
         }
       },
     }),

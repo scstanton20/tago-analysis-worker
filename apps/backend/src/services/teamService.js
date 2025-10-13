@@ -231,9 +231,11 @@ class TeamService {
    * @param {string} id - Team ID to update
    * @param {Object} updates - Updates to apply
    * @param {string} [updates.name] - New team name
+   * @param {string} [updates.color] - Team color
+   * @param {number} [updates.order] - Team order index
    * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<Object>} Updated team object
-   * @throws {Error} If team not found or update fails
+   * @throws {Error} If team not found, no valid fields provided, or update fails
    */
   async updateTeam(id, updates, logger = moduleLogger) {
     try {
@@ -241,6 +243,16 @@ class TeamService {
         { action: 'updateTeam', teamId: id, updates },
         'Updating team',
       );
+
+      // Field mapping: input field name -> database column name
+      const FIELD_MAPPING = {
+        name: 'name',
+        color: 'color',
+        order: 'order_index',
+      };
+
+      // Whitelist of allowed update fields
+      const ALLOWED_UPDATE_FIELDS = Object.keys(FIELD_MAPPING);
 
       return executeTransaction((db) => {
         // Check if team exists first
@@ -254,36 +266,30 @@ class TeamService {
           throw new Error(`Team ${id} not found`);
         }
 
-        // Update team
-        const updatedAt = new Date().toISOString();
+        // Build update fields using whitelist
         const updateFields = [];
         const updateValues = [];
 
-        if (updates.name) {
-          updateFields.push('name = ?');
-          updateValues.push(updates.name);
+        for (const field of ALLOWED_UPDATE_FIELDS) {
+          if (updates[field] !== undefined) {
+            const columnName = FIELD_MAPPING[field];
+            updateFields.push(`${columnName} = ?`);
+            updateValues.push(updates[field]);
+          }
         }
 
-        if (updates.color) {
-          updateFields.push('color = ?');
-          updateValues.push(updates.color);
-        }
-
-        if (updates.order !== undefined) {
-          updateFields.push('order_index = ?');
-          updateValues.push(updates.order);
+        if (updateFields.length === 0) {
+          throw new Error('No valid fields to update');
         }
 
         updateFields.push('updatedAt = ?');
+        const updatedAt = new Date().toISOString();
         updateValues.push(updatedAt);
         updateValues.push(id, this.organizationId);
 
-        if (updateFields.length > 1) {
-          // More than just updatedAt
-          db.prepare(
-            `UPDATE team SET ${updateFields.join(', ')} WHERE id = ? AND organizationId = ?`,
-          ).run(...updateValues);
-        }
+        db.prepare(
+          `UPDATE team SET ${updateFields.join(', ')} WHERE id = ? AND organizationId = ?`,
+        ).run(...updateValues);
 
         // Return updated team
         const updatedTeam = db

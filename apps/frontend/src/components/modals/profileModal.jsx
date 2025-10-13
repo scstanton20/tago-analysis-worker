@@ -20,6 +20,7 @@ import {
   Center,
   Loader,
 } from '@mantine/core';
+import { modals } from '@mantine/modals';
 import { useForm } from '@mantine/form';
 import {
   IconUser,
@@ -34,6 +35,7 @@ import {
 import { useAuth } from '../../hooks/useAuth';
 import { addPasskey, passkey } from '../../lib/auth';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
+import logger from '../../utils/logger';
 
 export default function ProfileModal({ opened, onClose }) {
   const { user, changeProfilePassword, updateProfile } = useAuth();
@@ -139,11 +141,11 @@ export default function ProfileModal({ opened, onClose }) {
         setPasskeys(result.data || []);
       } else {
         // Fallback if listing is not available - set empty array
-        console.warn('Passkey listing not available');
+        logger.warn('Passkey listing not available');
         setPasskeys([]);
       }
     } catch (error) {
-      console.error('Error loading passkeys:', error);
+      logger.error('Error loading passkeys:', error);
       setPasskeysError(error.message || 'Failed to load passkeys');
       setPasskeys([]);
     } finally {
@@ -252,7 +254,7 @@ export default function ProfileModal({ opened, onClose }) {
       await loadPasskeys();
       passkeyForm.reset();
     } catch (error) {
-      console.error('Passkey registration error:', error);
+      logger.error('Passkey registration error:', error);
       setPasskeysError(error.message || 'Failed to register passkey');
       notify.error(
         'Failed to register passkey: ' + (error.message || 'Unknown error'),
@@ -263,39 +265,40 @@ export default function ProfileModal({ opened, onClose }) {
   };
 
   const handleDeletePasskey = async (credentialId) => {
-    if (
-      !window.confirm(
+    modals.openConfirmModal({
+      title: 'Delete Passkey',
+      children:
         'Are you sure you want to delete this passkey? You may lose access to your account if this is your only authentication method.',
-      )
-    ) {
-      return;
-    }
+      labels: { confirm: 'Delete', cancel: 'Cancel' },
+      confirmProps: { color: 'red' },
+      onConfirm: async () => {
+        try {
+          setPasskeysError('');
 
-    try {
-      setPasskeysError('');
+          // Use Better Auth passkey deletion
+          if (passkey && passkey.deletePasskey) {
+            const result = await passkey.deletePasskey({
+              id: credentialId,
+            });
 
-      // Use Better Auth passkey deletion
-      if (passkey && passkey.deletePasskey) {
-        const result = await passkey.deletePasskey({
-          id: credentialId,
-        });
+            if (result.error) {
+              throw new Error(result.error.message);
+            }
 
-        if (result.error) {
-          throw new Error(result.error.message);
+            notify.success('Passkey deleted successfully!');
+
+            // Reload passkeys list
+            await loadPasskeys();
+          } else {
+            throw new Error('Passkey deletion not available');
+          }
+        } catch (error) {
+          logger.error('Error deleting passkey:', error);
+          setPasskeysError(error.message || 'Failed to delete passkey');
+          notify.error('Failed to delete passkey: ' + error.message);
         }
-
-        notify.success('Passkey deleted successfully!');
-
-        // Reload passkeys list
-        await loadPasskeys();
-      } else {
-        throw new Error('Passkey deletion not available');
-      }
-    } catch (error) {
-      console.error('Error deleting passkey:', error);
-      setPasskeysError(error.message || 'Failed to delete passkey');
-      notify.error('Failed to delete passkey: ' + error.message);
-    }
+      },
+    });
   };
 
   const handleClose = () => {
@@ -314,12 +317,15 @@ export default function ProfileModal({ opened, onClose }) {
       onClose={handleClose}
       title={
         <Group gap="xs">
-          <IconUser size={20} />
-          <Text fw={600}>Profile Settings</Text>
+          <IconUser size={20} aria-hidden="true" />
+          <Text fw={600} id="profile-modal-title">
+            Profile Settings
+          </Text>
         </Group>
       }
       size="lg"
       centered
+      aria-labelledby="profile-modal-title"
     >
       <Tabs value={activeTab} onChange={setActiveTab}>
         <Tabs.List>
@@ -653,9 +659,10 @@ export default function ProfileModal({ opened, onClose }) {
                                 variant="light"
                                 size="sm"
                                 onClick={() => handleDeletePasskey(passkey.id)}
+                                aria-label={`Delete ${passkey.name || 'passkey'}`}
                                 title="Delete passkey"
                               >
-                                <IconTrash size={14} />
+                                <IconTrash size={14} aria-hidden="true" />
                               </ActionIcon>
                             </Group>
                           </Paper>

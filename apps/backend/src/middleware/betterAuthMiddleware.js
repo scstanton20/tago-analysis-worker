@@ -4,7 +4,7 @@ import { executeQuery, executeQueryAll } from '../utils/authDatabase.js';
 
 // Authentication middleware using Better Auth
 export const authMiddleware = async (req, res, next) => {
-  const logger = req.logger?.child({ middleware: 'authMiddleware' }) || console;
+  const logger = req.log?.child({ middleware: 'authMiddleware' }) || console;
 
   try {
     const session = await auth.api.getSession({
@@ -40,7 +40,7 @@ export const authMiddleware = async (req, res, next) => {
 
 // Admin role requirement middleware
 export const requireAdmin = async (req, res, next) => {
-  const logger = req.logger?.child({ middleware: 'requireAdmin' }) || console;
+  const logger = req.log?.child({ middleware: 'requireAdmin' }) || console;
 
   try {
     if (!req.user) {
@@ -207,7 +207,7 @@ export function getUsersWithTeamAccess(teamId, permission, logger = console) {
 // Middleware to extract team information from analysis and add to request
 export const extractAnalysisTeam = async (req, _res, next) => {
   const logger =
-    req.logger?.child({ middleware: 'extractAnalysisTeam' }) || console;
+    req.log?.child({ middleware: 'extractAnalysisTeam' }) || console;
 
   try {
     const fileName = req.params?.fileName;
@@ -253,7 +253,7 @@ export const extractAnalysisTeam = async (req, _res, next) => {
 export const requireTeamPermission = (permission) => {
   return async (req, res, next) => {
     const logger =
-      req.logger?.child({ middleware: 'requireTeamPermission' }) || console;
+      req.log?.child({ middleware: 'requireTeamPermission' }) || console;
 
     try {
       if (!req.user) {
@@ -335,7 +335,7 @@ export const requireTeamPermission = (permission) => {
 export const requireAnyTeamPermission = (permission) => {
   return async (req, res, next) => {
     const logger =
-      req.logger?.child({ middleware: 'requireAnyTeamPermission' }) || console;
+      req.log?.child({ middleware: 'requireAnyTeamPermission' }) || console;
 
     try {
       if (!req.user) {

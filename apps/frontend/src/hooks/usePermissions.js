@@ -2,6 +2,7 @@ import { useContext, useMemo } from 'react';
 import { PermissionsContext } from '../contexts/PermissionsContext/index.js';
 import { useAuth } from './useAuth';
 import { authClient } from '../lib/auth.js';
+import logger from '../utils/logger';
 
 export const usePermissions = () => {
   const { user, isAuthenticated, isAdmin } = useAuth();
@@ -42,7 +43,7 @@ export const usePermissions = () => {
       });
       return result.success && result.data;
     } catch (error) {
-      console.warn('Error checking permission:', error);
+      logger.warn('Error checking permission:', error);
       return false;
     }
   };

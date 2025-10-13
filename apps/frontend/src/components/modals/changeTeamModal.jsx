@@ -14,6 +14,7 @@ import {
   ScrollArea,
 } from '@mantine/core';
 import { IconFolder, IconCheck, IconInfoCircle } from '@tabler/icons-react';
+import logger from '../../utils/logger';
 
 const ChangeTeamModal = ({
   isOpen,
@@ -36,7 +37,7 @@ const ChangeTeamModal = ({
     try {
       await onSelect(selectedTeam);
     } catch (error) {
-      console.error('Error changing team:', error);
+      logger.error('Error changing team:', error);
     } finally {
       setIsSubmitting(false);
     }

@@ -3,6 +3,11 @@
  * Core functionality for interacting with MachineQ API
  */
 
+import { createChildLogger } from './logging/logger.js';
+
+// Module-level logger for MachineQ API operations
+const logger = createChildLogger('mq-api');
+
 // MachineQ API configuration
 const MQ_CONFIG = {
   tokenUrl: 'https://oauth.machineq.net/oauth2/token',
@@ -40,7 +45,7 @@ async function getToken(clientId, clientSecret) {
       );
     }
   } catch (error) {
-    console.error(`Error in login: ${error.message}`);
+    logger.error({ err: error, clientId }, `Error in login: ${error.message}`);
     throw error;
   }
 }
@@ -57,7 +62,7 @@ async function getAPIVersion() {
       return { Semantic: '0.4.0', Major: '0', Minor: '4', Patch: '0' };
     }
   } catch (error) {
-    console.error(`Error getting API version: ${error.message}`);
+    logger.warn({ err: error }, `Error getting API version: ${error.message}`);
     return { Semantic: '0.4.0', Major: '0', Minor: '4', Patch: '0' };
   }
 }
@@ -78,7 +83,10 @@ async function getAPICall(endpoint, token) {
       return { status: response.status, error: response.statusText };
     }
   } catch (error) {
-    console.error(`Error in API call to ${finalUrl}: ${error.message}`);
+    logger.error(
+      { err: error, endpoint, url: finalUrl },
+      `Error in API call to ${finalUrl}: ${error.message}`,
+    );
     return { status: 500, error: error.message };
   }
 }
@@ -139,7 +147,10 @@ async function createDevice(token, deviceData) {
       return { status: response.status, error: errorData };
     }
   } catch (error) {
-    console.error(`Error creating device: ${error.message}`);
+    logger.error(
+      { err: error, deviceData: finalDeviceData },
+      `Error creating device: ${error.message}`,
+    );
     return { status: 500, error: error.message };
   }
 }

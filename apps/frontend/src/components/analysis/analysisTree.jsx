@@ -1,6 +1,7 @@
 // frontend/src/components/analysis/analysisTree.jsx
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import PropTypes from 'prop-types';
+import logger from '../../utils/logger';
 import {
   Stack,
   Group,
@@ -598,7 +599,7 @@ export default function AnalysisTree({
                 color: 'green',
               });
             } catch (error) {
-              console.error('Failed to move item:', error);
+              logger.error('Failed to move item:', error);
               notifications.show({
                 title: 'Error',
                 message: error.message || 'Failed to move item',
@@ -678,7 +679,7 @@ export default function AnalysisTree({
             color: 'green',
           });
         } catch (error) {
-          console.error('Failed to move item:', error);
+          logger.error('Failed to move item:', error);
           notifications.show({
             title: 'Error',
             message: error.message || 'Failed to move item',

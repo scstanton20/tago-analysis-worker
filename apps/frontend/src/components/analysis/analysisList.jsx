@@ -1,7 +1,10 @@
 // frontend/src/components/analysis/analysisList.jsx
 import { useState, useMemo, useCallback } from 'react';
+import PropTypes from 'prop-types';
+import { produce } from 'immer';
 import { useSSE } from '../../contexts/sseContext';
 import { usePermissions } from '../../hooks/usePermissions';
+import logger from '../../utils/logger';
 import AnalysisItem from './analysisItem';
 import AnalysisTree from './analysisTree';
 import CreateFolderModal from '../modals/createFolderModal';
@@ -79,33 +82,32 @@ export default function AnalysisList({
       ]);
 
       // Add to local structure
-      setLocalStructure((prev) => {
-        const newStructure = JSON.parse(JSON.stringify(prev));
-        const teamItems = newStructure[selectedTeam]?.items || [];
+      setLocalStructure((prev) =>
+        produce(prev, (draft) => {
+          const teamItems = draft[selectedTeam]?.items || [];
 
-        if (folderInfo.parentFolderId) {
-          // Add to parent folder
-          const findAndAdd = (items) => {
-            for (const item of items) {
-              if (item.id === folderInfo.parentFolderId) {
-                item.items = item.items || [];
-                item.items.push(newFolder);
-                return true;
+          if (folderInfo.parentFolderId) {
+            // Add to parent folder
+            const findAndAdd = (items) => {
+              for (const item of items) {
+                if (item.id === folderInfo.parentFolderId) {
+                  item.items = item.items || [];
+                  item.items.push(newFolder);
+                  return true;
+                }
+                if (item.type === 'folder' && item.items) {
+                  if (findAndAdd(item.items)) return true;
+                }
               }
-              if (item.type === 'folder' && item.items) {
-                if (findAndAdd(item.items)) return true;
-              }
-            }
-            return false;
-          };
-          findAndAdd(teamItems);
-        } else {
-          // Add to root
-          teamItems.push(newFolder);
-        }
-
-        return newStructure;
-      });
+              return false;
+            };
+            findAndAdd(teamItems);
+          } else {
+            // Add to root
+            teamItems.push(newFolder);
+          }
+        }),
+      );
 
       // Restart animations
       setReorderModeKey((prev) => prev + 1);
@@ -171,7 +173,7 @@ export default function AnalysisList({
     }
 
     // Fallback for missing teams
-    console.warn(`Team ${teamId} not found`);
+    logger.warn(`Team ${teamId} not found`);
     return { name: 'Unknown Team', color: '#ef4444' };
   };
 
@@ -245,7 +247,7 @@ export default function AnalysisList({
           break;
 
         default:
-          console.warn('Unknown folder action:', action);
+          logger.warn('Unknown folder action:', action);
       }
     },
     [selectedTeam, handleCreateFolder],
@@ -272,59 +274,55 @@ export default function AnalysisList({
   // Apply a single reorder to a structure (returns new structure)
   const applyReorderToStructure = useCallback(
     (structure, reorder) => {
-      const items = structure?.[selectedTeam]?.items || [];
-      const newItems = JSON.parse(JSON.stringify(items)); // Deep clone
+      return produce(structure, (draft) => {
+        const items = draft?.[selectedTeam]?.items || [];
 
-      // Find the item to move
-      const activeInfo = findItemWithParent(newItems, reorder.itemId);
-      if (!activeInfo) return structure;
+        // Find the item to move
+        const activeInfo = findItemWithParent(items, reorder.itemId);
+        if (!activeInfo) return;
 
-      // Remove item from its current location
-      const removeFromParent = (items, itemId) => {
-        for (let i = 0; i < items.length; i++) {
-          if (items[i].id === itemId) {
-            return items.splice(i, 1)[0];
-          }
-          if (items[i].type === 'folder' && items[i].items) {
-            const removed = removeFromParent(items[i].items, itemId);
-            if (removed) return removed;
-          }
-        }
-        return null;
-      };
-
-      const itemToMove = removeFromParent(newItems, reorder.itemId);
-      if (!itemToMove) return structure;
-
-      // Insert item at new location
-      if (reorder.targetParentId) {
-        // Find target folder and insert
-        const findAndInsert = (items) => {
-          for (const item of items) {
-            if (item.id === reorder.targetParentId && item.type === 'folder') {
-              item.items = item.items || [];
-              item.items.splice(reorder.targetIndex, 0, itemToMove);
-              return true;
+        // Remove item from its current location
+        const removeFromParent = (items, itemId) => {
+          for (let i = 0; i < items.length; i++) {
+            if (items[i].id === itemId) {
+              return items.splice(i, 1)[0];
             }
-            if (item.type === 'folder' && item.items) {
-              if (findAndInsert(item.items)) return true;
+            if (items[i].type === 'folder' && items[i].items) {
+              const removed = removeFromParent(items[i].items, itemId);
+              if (removed) return removed;
             }
           }
-          return false;
+          return null;
         };
-        findAndInsert(newItems);
-      } else {
-        // Insert at root level
-        newItems.splice(reorder.targetIndex, 0, itemToMove);
-      }
 
-      return {
-        ...structure,
-        [selectedTeam]: {
-          ...structure[selectedTeam],
-          items: newItems,
-        },
-      };
+        const itemToMove = removeFromParent(items, reorder.itemId);
+        if (!itemToMove) return;
+
+        // Insert item at new location
+        if (reorder.targetParentId) {
+          // Find target folder and insert
+          const findAndInsert = (itemsList) => {
+            for (const item of itemsList) {
+              if (
+                item.id === reorder.targetParentId &&
+                item.type === 'folder'
+              ) {
+                item.items = item.items || [];
+                item.items.splice(reorder.targetIndex, 0, itemToMove);
+                return true;
+              }
+              if (item.type === 'folder' && item.items) {
+                if (findAndInsert(item.items)) return true;
+              }
+            }
+            return false;
+          };
+          findAndInsert(items);
+        } else {
+          // Insert at root level
+          items.splice(reorder.targetIndex, 0, itemToMove);
+        }
+      });
     },
     [selectedTeam, findItemWithParent],
   );
@@ -392,7 +390,7 @@ export default function AnalysisList({
       setReorderModeKey(0);
       setLocalStructure(null);
     } catch (error) {
-      console.error('Failed to apply changes:', error);
+      logger.error('Failed to apply changes:', error);
       notifications.show({
         title: 'Error',
         message: error.message || 'Failed to apply changes',
@@ -545,9 +543,7 @@ export default function AnalysisList({
                       leftSection={<IconArrowsSort size={16} />}
                       onClick={() => {
                         // Capture current structure for local editing
-                        setLocalStructure(
-                          JSON.parse(JSON.stringify(teamStructure)),
-                        );
+                        setLocalStructure(structuredClone(teamStructure));
                         setReorderMode(true);
                         setReorderModeKey((prev) => prev + 1);
                       }}
@@ -718,3 +714,9 @@ export default function AnalysisList({
     </Paper>
   );
 }
+
+AnalysisList.propTypes = {
+  analyses: PropTypes.object,
+  showTeamLabels: PropTypes.bool,
+  selectedTeam: PropTypes.string,
+};
