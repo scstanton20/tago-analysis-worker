@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import { promises as fs } from 'fs';
 import config from '../config/default.js';
@@ -145,6 +146,7 @@ class AnalysisService {
     await safeWriteFile(
       this.configPath,
       JSON.stringify(configuration, null, 2),
+      config.paths.config,
     );
 
     this.configCache = configuration;
@@ -192,7 +194,7 @@ class AnalysisService {
     for (const [teamId, analysisNames] of Object.entries(teamGroups)) {
       config.teamStructure[teamId] = {
         items: analysisNames.map((name) => ({
-          id: crypto.randomUUID(),
+          id: uuidv4(),
           type: 'analysis',
           analysisName: name,
         })),
@@ -200,7 +202,11 @@ class AnalysisService {
     }
 
     // Save migrated config
-    await safeWriteFile(this.configPath, JSON.stringify(config, null, 2));
+    await safeWriteFile(
+      this.configPath,
+      JSON.stringify(config, null, 2),
+      config.paths.config,
+    );
     moduleLogger.info(
       {
         teamsCount: Object.keys(config.teamStructure).length,
@@ -237,7 +243,11 @@ class AnalysisService {
     config.version = '4.1';
 
     // Save migrated config
-    await safeWriteFile(this.configPath, JSON.stringify(config, null, 2));
+    await safeWriteFile(
+      this.configPath,
+      JSON.stringify(config, null, 2),
+      config.paths.config,
+    );
     moduleLogger.info(
       {
         analysisCount: Object.keys(config.analyses || {}).length,
@@ -256,27 +266,31 @@ class AnalysisService {
    */
   async loadConfig() {
     try {
-      const data = await safeReadFile(this.configPath, 'utf8');
-      const config = JSON.parse(data);
+      const data = await safeReadFile(
+        this.configPath,
+        config.paths.config,
+        'utf8',
+      );
+      const configData = JSON.parse(data);
 
       // Run migrations in sequence
-      await this.migrateConfigToV4_0(config);
-      await this.migrateConfigToV4_1(config);
+      await this.migrateConfigToV4_0(configData);
+      await this.migrateConfigToV4_1(configData);
 
       // Store the full config including departments
-      this.configCache = config;
+      this.configCache = configData;
 
       // Don't load analyses here - they will be properly initialized
       // as AnalysisProcess instances in initializeAnalysis method
 
       moduleLogger.info(
         {
-          configVersion: config.version,
-          analysisCount: Object.keys(config.analyses || {}).length,
+          configVersion: configData.version,
+          analysisCount: Object.keys(configData.analyses || {}).length,
         },
         'Configuration loaded',
       );
-      return config;
+      return configData;
     } catch (error) {
       if (error.code === 'ENOENT') {
         moduleLogger.info('No existing config file, creating new one');
@@ -305,10 +319,16 @@ class AnalysisService {
     }
     const basePath = getAnalysisPath(analysisName);
     await Promise.all([
-      safeMkdir(basePath, { recursive: true }),
-      safeMkdir(path.join(basePath, 'env'), { recursive: true }),
-      safeMkdir(path.join(basePath, 'logs'), { recursive: true }),
-      safeMkdir(path.join(basePath, 'versions'), { recursive: true }),
+      safeMkdir(basePath, config.paths.analysis, { recursive: true }),
+      safeMkdir(path.join(basePath, 'env'), config.paths.analysis, {
+        recursive: true,
+      }),
+      safeMkdir(path.join(basePath, 'logs'), config.paths.analysis, {
+        recursive: true,
+      }),
+      safeMkdir(path.join(basePath, 'versions'), config.paths.analysis, {
+        recursive: true,
+      }),
     ]);
     return basePath;
   }
@@ -349,7 +369,7 @@ class AnalysisService {
     this.analyses.set(analysisName, analysis);
 
     const envFile = path.join(basePath, 'env', '.env');
-    await safeWriteFile(envFile, '', 'utf8');
+    await safeWriteFile(envFile, '', config.paths.analysis, 'utf8');
 
     await this.saveConfig();
 
@@ -362,7 +382,7 @@ class AnalysisService {
     }
 
     const newItem = {
-      id: crypto.randomUUID(),
+      id: uuidv4(),
       type: 'analysis',
       analysisName: analysisName,
     };
@@ -403,12 +423,16 @@ class AnalysisService {
     );
 
     // Create versions directory
-    await safeMkdir(versionsDir, { recursive: true });
+    await safeMkdir(versionsDir, config.paths.analysis, { recursive: true });
 
     // Read the uploaded content and save it as v1
-    const uploadedContent = await safeReadFile(currentFilePath, 'utf8');
+    const uploadedContent = await safeReadFile(
+      currentFilePath,
+      config.paths.analysis,
+      'utf8',
+    );
     const v1Path = path.join(versionsDir, 'v1.js');
-    await safeWriteFile(v1Path, uploadedContent, 'utf8');
+    await safeWriteFile(v1Path, uploadedContent, config.paths.analysis, 'utf8');
 
     // Create metadata - uploaded file is version 1
     const metadata = {
@@ -426,6 +450,7 @@ class AnalysisService {
     await safeWriteFile(
       metadataPath,
       JSON.stringify(metadata, null, 2),
+      config.paths.analysis,
       'utf8',
     );
   }
@@ -454,7 +479,7 @@ class AnalysisService {
             return null;
           }
 
-          const stats = await safeStat(indexPath);
+          const stats = await safeStat(indexPath, config.paths.analysis);
 
           if (!this.analyses.has(dirName)) {
             this.analyses.set(dirName, analysis);
@@ -526,7 +551,7 @@ class AnalysisService {
       }
 
       // Perform the rename
-      await safeRename(oldFilePath, newFilePath);
+      await safeRename(oldFilePath, newFilePath, config.paths.analysis);
 
       // Update the analysis object and maps
       this.analyses.delete(analysisName);
@@ -625,7 +650,7 @@ class AnalysisService {
       );
 
       // Clear file (logs are stored in NDJSON format: one JSON object per line)
-      await safeWriteFile(logFilePath, '', 'utf8');
+      await safeWriteFile(logFilePath, '', config.paths.analysis, 'utf8');
 
       // Reset in-memory state
       analysis.logs = [];
@@ -937,7 +962,7 @@ class AnalysisService {
             dirName,
             'index.js',
           );
-          const stats = await safeStat(indexPath);
+          const stats = await safeStat(indexPath, config.paths.analysis);
           if (stats.isFile()) {
             await this.initializeAnalysis(
               dirName,
@@ -974,7 +999,11 @@ class AnalysisService {
         analysisName,
         'index.js',
       );
-      const content = await safeReadFile(filePath, 'utf8');
+      const content = await safeReadFile(
+        filePath,
+        config.paths.analysis,
+        'utf8',
+      );
       return content;
     } catch (error) {
       logger.error({ error, analysisName }, 'Error reading analysis content');
@@ -1001,13 +1030,17 @@ class AnalysisService {
     );
 
     // Ensure versions directory exists
-    await safeMkdir(versionsDir, { recursive: true });
+    await safeMkdir(versionsDir, config.paths.analysis, { recursive: true });
 
     // Load or create metadata
     let metadata = { versions: [], nextVersionNumber: 1, currentVersion: 0 };
     let isFirstVersionSave = false;
     try {
-      const metadataContent = await safeReadFile(metadataPath, 'utf8');
+      const metadataContent = await safeReadFile(
+        metadataPath,
+        config.paths.analysis,
+        'utf8',
+      );
       metadata = JSON.parse(metadataContent);
       // Ensure currentVersion exists for backward compatibility
       if (metadata.currentVersion === undefined) {
@@ -1026,7 +1059,11 @@ class AnalysisService {
     }
 
     // Read current content
-    const currentContent = await safeReadFile(currentFilePath, 'utf8');
+    const currentContent = await safeReadFile(
+      currentFilePath,
+      config.paths.analysis,
+      'utf8',
+    );
 
     // Check if current content matches ANY existing saved version
     for (const version of metadata.versions) {
@@ -1035,7 +1072,11 @@ class AnalysisService {
           versionsDir,
           `v${version.version}.js`,
         );
-        const versionContent = await safeReadFile(versionFilePath, 'utf8');
+        const versionContent = await safeReadFile(
+          versionFilePath,
+          config.paths.analysis,
+          'utf8',
+        );
         if (currentContent === versionContent) {
           // Content already exists as a saved version, no need to save again
           return null;
@@ -1051,7 +1092,12 @@ class AnalysisService {
       ? 1
       : metadata.nextVersionNumber;
     const versionFilePath = path.join(versionsDir, `v${newVersionNumber}.js`);
-    await safeWriteFile(versionFilePath, currentContent, 'utf8');
+    await safeWriteFile(
+      versionFilePath,
+      currentContent,
+      config.paths.analysis,
+      'utf8',
+    );
 
     // Update metadata - add the new version and increment counter
     metadata.versions.push({
@@ -1072,6 +1118,7 @@ class AnalysisService {
     await safeWriteFile(
       metadataPath,
       JSON.stringify(metadata, null, 2),
+      config.paths.analysis,
       'utf8',
     );
 
@@ -1100,7 +1147,11 @@ class AnalysisService {
     );
 
     try {
-      const metadataContent = await safeReadFile(metadataPath, 'utf8');
+      const metadataContent = await safeReadFile(
+        metadataPath,
+        config.paths.analysis,
+        'utf8',
+      );
       const metadata = JSON.parse(metadataContent);
       // Ensure currentVersion exists for backward compatibility
       if (metadata.currentVersion === undefined) {
@@ -1109,7 +1160,11 @@ class AnalysisService {
 
       // Check if the current index.js content matches any saved version
       try {
-        const currentContent = await safeReadFile(currentFilePath, 'utf8');
+        const currentContent = await safeReadFile(
+          currentFilePath,
+          config.paths.analysis,
+          'utf8',
+        );
         let currentContentMatchesVersion = false;
 
         // Check against all saved versions
@@ -1121,7 +1176,11 @@ class AnalysisService {
               'versions',
               `v${version.version}.js`,
             );
-            const versionContent = await safeReadFile(versionFilePath, 'utf8');
+            const versionContent = await safeReadFile(
+              versionFilePath,
+              config.paths.analysis,
+              'utf8',
+            );
             if (currentContent === versionContent) {
               // Current content matches this saved version
               metadata.currentVersion = version.version;
@@ -1204,8 +1263,17 @@ class AnalysisService {
     await this.saveVersion(analysisName);
 
     // Replace current file with the target version content
-    const versionContent = await safeReadFile(versionFilePath, 'utf8');
-    await safeWriteFile(currentFilePath, versionContent, 'utf8');
+    const versionContent = await safeReadFile(
+      versionFilePath,
+      config.paths.analysis,
+      'utf8',
+    );
+    await safeWriteFile(
+      currentFilePath,
+      versionContent,
+      config.paths.analysis,
+      'utf8',
+    );
 
     // Update metadata to track current version after rollback
     const metadata = await this.getVersions(analysisName);
@@ -1213,6 +1281,7 @@ class AnalysisService {
     await safeWriteFile(
       metadataPath,
       JSON.stringify(metadata, null, 2),
+      config.paths.analysis,
       'utf8',
     );
 
@@ -1264,7 +1333,7 @@ class AnalysisService {
         analysisName,
         'index.js',
       );
-      return safeReadFile(currentFilePath, 'utf8');
+      return safeReadFile(currentFilePath, config.paths.analysis, 'utf8');
     }
 
     const versionFilePath = path.join(
@@ -1274,7 +1343,7 @@ class AnalysisService {
       `v${version}.js`,
     );
     try {
-      return await safeReadFile(versionFilePath, 'utf8');
+      return await safeReadFile(versionFilePath, config.paths.analysis, 'utf8');
     } catch (error) {
       if (error.code === 'ENOENT') {
         throw new Error(`Version ${version} not found`);
@@ -1327,7 +1396,12 @@ class AnalysisService {
           analysisName,
           'index.js',
         );
-        await safeWriteFile(filePath, updates.content, 'utf8');
+        await safeWriteFile(
+          filePath,
+          updates.content,
+          config.paths.analysis,
+          'utf8',
+        );
 
         // Update currentVersion based on what happened
         if (savedVersion !== null) {
@@ -1345,6 +1419,7 @@ class AnalysisService {
               );
               const versionContent = await safeReadFile(
                 versionFilePath,
+                config.paths.analysis,
                 'utf8',
               );
               if (updates.content === versionContent) {
@@ -1359,6 +1434,7 @@ class AnalysisService {
                 await safeWriteFile(
                   metadataPath,
                   JSON.stringify(metadata, null, 2),
+                  config.paths.analysis,
                   'utf8',
                 );
                 break;
@@ -1423,7 +1499,11 @@ class AnalysisService {
       // Ensure the log file exists
       await fs.access(logFile);
 
-      const content = await safeReadFile(logFile, 'utf8');
+      const content = await safeReadFile(
+        logFile,
+        config.paths.analysis,
+        'utf8',
+      );
       const lines = content
         .trim()
         .split('\n')
@@ -1498,7 +1578,11 @@ class AnalysisService {
     );
 
     try {
-      const envContent = await safeReadFile(envFile, 'utf8');
+      const envContent = await safeReadFile(
+        envFile,
+        config.paths.analysis,
+        'utf8',
+      );
       const envVariables = {};
       envContent.split('\n').forEach((line) => {
         const [key, encryptedValue] = line.split('=');
@@ -1547,7 +1631,7 @@ class AnalysisService {
         .map(([key, value]) => `${key}=${encrypt(value)}`)
         .join('\n');
 
-      await safeWriteFile(envFile, envContent, 'utf8');
+      await safeWriteFile(envFile, envContent, config.paths.analysis, 'utf8');
 
       // If it was running before, restart it
       if (wasRunning) {

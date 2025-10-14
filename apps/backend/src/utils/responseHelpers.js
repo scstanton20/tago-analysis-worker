@@ -1,5 +1,9 @@
 // backend/src/utils/responseHelpers.js
 
+import { createChildLogger } from './logging/logger.js';
+
+const defaultLogger = createChildLogger('response-helpers');
+
 /**
  * Standardized error response handler for all controllers.
  *
@@ -39,7 +43,7 @@
  * - 500: All other errors (default)
  */
 export function handleError(res, error, operation, options = {}) {
-  const { logError = true, logger = console } = options;
+  const { logError = true, logger = defaultLogger } = options;
 
   if (logError) {
     logger.error({ err: error, operation }, `Error ${operation}`);
@@ -105,7 +109,8 @@ export function asyncHandler(controllerFn, operation) {
     try {
       await controllerFn(req, res, next);
     } catch (error) {
-      handleError(res, error, operation);
+      const logger = req.logger || defaultLogger;
+      handleError(res, error, operation, { logger });
     }
   };
 }
@@ -131,11 +136,23 @@ export function asyncHandler(controllerFn, operation) {
  * await broadcastTeamStructureUpdate(sseManager, teamId);
  */
 export async function broadcastTeamStructureUpdate(sseManager, teamId) {
-  const { analysisService } = await import('../services/analysisService.js');
-  const config = await analysisService.getConfig();
-  sseManager.broadcastToTeamUsers(teamId, {
-    type: 'teamStructureUpdated',
-    teamId,
-    items: config.teamStructure[teamId]?.items || [],
-  });
+  const logger = createChildLogger('broadcast');
+  logger.debug({ teamId }, 'Broadcasting team structure update');
+
+  try {
+    const { analysisService } = await import('../services/analysisService.js');
+    const config = await analysisService.getConfig();
+    sseManager.broadcastToTeamUsers(teamId, {
+      type: 'teamStructureUpdated',
+      teamId,
+      items: config.teamStructure[teamId]?.items || [],
+    });
+    logger.debug({ teamId }, 'Team structure update broadcast complete');
+  } catch (error) {
+    logger.error(
+      { err: error, teamId },
+      'Failed to broadcast team structure update',
+    );
+    throw error;
+  }
 }

@@ -27,6 +27,7 @@ import {
 } from '@tabler/icons-react';
 import { analysisService } from '../../services/analysisService';
 import { useNotifications } from '../../hooks/useNotifications';
+import { useModalDataLoader } from '../../hooks/useModalDataLoader';
 import logger from '../../utils/logger';
 const AnalysisEditModal = lazy(() => import('../modals/codeMirrorCommon'));
 
@@ -62,26 +63,8 @@ export default function VersionManagementModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysis.name]);
 
-  // Load versions when modal opens (derived state)
-  const [hasLoadedVersionData, setHasLoadedVersionData] = useState(false);
-  const [currentAnalysisName, setCurrentAnalysisName] = useState(
-    analysis?.name,
-  );
-
-  if (
-    isOpen &&
-    analysis?.name &&
-    (!hasLoadedVersionData || analysis.name !== currentAnalysisName)
-  ) {
-    setHasLoadedVersionData(true);
-    setCurrentAnalysisName(analysis.name);
-    loadVersions();
-  }
-
-  // Reset loaded flag when modal closes
-  if (!isOpen && hasLoadedVersionData) {
-    setHasLoadedVersionData(false);
-  }
+  // Load versions when modal opens using existing hook pattern
+  useModalDataLoader(isOpen, loadVersions, !!analysis?.name);
 
   const handleRollback = async (version) => {
     modals.openConfirmModal({

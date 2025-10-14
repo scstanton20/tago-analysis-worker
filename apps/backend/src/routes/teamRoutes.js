@@ -7,6 +7,8 @@ import {
 } from '../middleware/betterAuthMiddleware.js';
 import { validateRequest } from '../middleware/validateRequest.js';
 import { teamValidationSchemas } from '../validation/teamSchemas.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
+import { teamOperationLimiter } from '../middleware/rateLimiter.js';
 
 const router = Router();
 
@@ -46,7 +48,7 @@ router.use(requireAdmin);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/', TeamController.getAllTeams);
+router.get('/', asyncHandler(TeamController.getAllTeams));
 
 /**
  * @swagger
@@ -95,8 +97,9 @@ router.get('/', TeamController.getAllTeams);
  */
 router.post(
   '/',
+  teamOperationLimiter,
   validateRequest(teamValidationSchemas.createTeam),
-  TeamController.createTeam,
+  asyncHandler(TeamController.createTeam),
 );
 
 /**
@@ -143,8 +146,9 @@ router.post(
  */
 router.put(
   '/reorder',
+  teamOperationLimiter,
   validateRequest(teamValidationSchemas.reorderTeams),
-  TeamController.reorderTeams,
+  asyncHandler(TeamController.reorderTeams),
 );
 
 /**
@@ -201,8 +205,9 @@ router.put(
  */
 router.put(
   '/:id',
+  teamOperationLimiter,
   validateRequest(teamValidationSchemas.updateTeam),
-  TeamController.updateTeam,
+  asyncHandler(TeamController.updateTeam),
 );
 
 /**
@@ -268,8 +273,9 @@ router.put(
  */
 router.delete(
   '/:id',
+  teamOperationLimiter,
   validateRequest(teamValidationSchemas.deleteTeam),
-  TeamController.deleteTeam,
+  asyncHandler(TeamController.deleteTeam),
 );
 
 /**
@@ -319,7 +325,7 @@ router.delete(
 router.get(
   '/:id/count',
   validateRequest(teamValidationSchemas.getTeamAnalysisCount),
-  TeamController.getTeamAnalysisCount,
+  asyncHandler(TeamController.getTeamAnalysisCount),
 );
 
 // Analysis-team routes
@@ -396,8 +402,9 @@ router.get(
  */
 router.put(
   '/analyses/:name/team',
+  teamOperationLimiter,
   validateRequest(teamValidationSchemas.moveAnalysisToTeam),
-  TeamController.moveAnalysisToTeam,
+  asyncHandler(TeamController.moveAnalysisToTeam),
 );
 
 // Folder management routes
@@ -465,8 +472,9 @@ router.put(
  */
 router.post(
   '/:teamId/folders',
+  teamOperationLimiter,
   validateRequest(teamValidationSchemas.createFolder),
-  TeamController.createFolder,
+  asyncHandler(TeamController.createFolder),
 );
 
 /**
@@ -535,8 +543,9 @@ router.post(
  */
 router.put(
   '/:teamId/folders/:folderId',
+  teamOperationLimiter,
   validateRequest(teamValidationSchemas.updateFolder),
-  TeamController.updateFolder,
+  asyncHandler(TeamController.updateFolder),
 );
 
 /**
@@ -587,8 +596,9 @@ router.put(
  */
 router.delete(
   '/:teamId/folders/:folderId',
+  teamOperationLimiter,
   validateRequest(teamValidationSchemas.deleteFolder),
-  TeamController.deleteFolder,
+  asyncHandler(TeamController.deleteFolder),
 );
 
 /**
@@ -645,8 +655,9 @@ router.delete(
  */
 router.post(
   '/:teamId/items/move',
+  teamOperationLimiter,
   validateRequest(teamValidationSchemas.moveItem),
-  TeamController.moveItem,
+  asyncHandler(TeamController.moveItem),
 );
 
 export default router;

@@ -100,7 +100,9 @@ class AnalysisProcess {
     try {
       // Create directory if it doesn't exist
       const logsDir = path.dirname(this.logFile);
-      safeMkdir(logsDir, { recursive: true }).catch(() => {}); // Don't await, let it happen async
+      safeMkdir(logsDir, config.paths.analysis, { recursive: true }).catch(
+        () => {},
+      ); // Don't await, let it happen async
 
       // Create Pino write stream for this analysis log file
       const fileStream = pino.destination({
@@ -188,7 +190,7 @@ class AnalysisProcess {
     this.initializeFileLogger();
 
     try {
-      const stats = await safeStat(this.logFile);
+      const stats = await safeStat(this.logFile, config.paths.analysis);
 
       // Check if file is too large (> 50MB)
       const maxFileSize = ANALYSIS_PROCESS.MAX_LOG_FILE_SIZE_BYTES;
@@ -204,7 +206,7 @@ class AnalysisProcess {
         });
 
         // Delete the oversized log file
-        await safeUnlink(this.logFile);
+        await safeUnlink(this.logFile, config.paths.analysis);
 
         // Start fresh
         this.totalLogCount = 0;
@@ -220,7 +222,11 @@ class AnalysisProcess {
         );
       } else {
         // For normal-sized files, read as usual
-        const content = await safeReadFile(this.logFile, 'utf8');
+        const content = await safeReadFile(
+          this.logFile,
+          config.paths.analysis,
+          'utf8',
+        );
         const lines = content
           .trim()
           .split('\n')

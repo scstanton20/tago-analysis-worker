@@ -1,11 +1,68 @@
+/**
+ * Custom hook for managing user permissions and team access
+ * Provides comprehensive permission checking, team filtering, and access control
+ * @module hooks/usePermissions
+ */
 import { useContext, useMemo } from 'react';
 import { PermissionsContext } from '../contexts/PermissionsContext/index.js';
 import { useAuth } from './useAuth';
-import { authClient } from '../lib/auth.js';
-import logger from '../utils/logger';
 
+/**
+ * Hook for accessing permission checking functions and team access control
+ * Must be used within a PermissionsProvider context
+ *
+ * @returns {Object} Permission checking functions and user access data
+ * @throws {Error} If used outside PermissionsProvider
+ *
+ * @property {Array} userTeams - Teams the user belongs to with their permissions
+ * @property {Object} organizationMembership - User's organization membership details
+ * @property {boolean} isAdmin - Whether the user has admin privileges
+ *
+ * @property {Function} checkUserPermission - Check if user has a specific permission (optionally for a team)
+ * @property {Function} canAccessTeam - Check if user can access a specific team
+ * @property {Function} isTeamMember - Check if user is member of a specific team
+ *
+ * @property {Function} canRunAnalyses - Check if user can run analyses (team-specific or global)
+ * @property {Function} canDownloadAnalyses - Check if user can download analyses
+ * @property {Function} canViewAnalyses - Check if user can view analyses
+ * @property {Function} canEditAnalyses - Check if user can edit analyses
+ * @property {Function} canUploadAnalyses - Check if user can upload analyses
+ * @property {Function} canDeleteAnalyses - Check if user can delete analyses
+ *
+ * @property {Function} canUploadToAnyTeam - Check if user can upload to any team
+ * @property {Function} hasAnyRunPermission - Check if user has run permission in any team
+ * @property {Function} hasAnyViewPermission - Check if user has view permission in any team
+ * @property {Function} hasAnyEditPermission - Check if user has edit permission in any team
+ * @property {Function} hasAnyDeletePermission - Check if user has delete permission in any team
+ * @property {Function} hasAnyDownloadPermission - Check if user has download permission in any team
+ *
+ * @property {Function} getUploadableTeams - Get teams where user can upload
+ * @property {Function} getEditableTeams - Get teams where user can edit
+ * @property {Function} getViewableTeams - Get teams where user can view
+ * @property {Function} getRunableTeams - Get teams where user can run
+ * @property {Function} getDeletableTeams - Get teams where user can delete
+ * @property {Function} getDownloadableTeams - Get teams where user can download
+ *
+ * @property {Function} getAccessibleTeams - Get all teams user can access
+ * @property {Array} accessibleTeams - Current accessible teams (alias for userTeams)
+ * @property {Function} getTeamsWithPermission - Get teams with specific permission
+ * @property {Function} getTeamPermissions - Get all permissions for a specific team
+ *
+ * @example
+ * function AnalysisComponent({ analysis }) {
+ *   const { canEditAnalyses, getEditableTeams } = usePermissions();
+ *
+ *   // Check if user can edit this specific analysis
+ *   const canEdit = canEditAnalyses(analysis);
+ *
+ *   // Get all teams where user can edit
+ *   const editableTeams = getEditableTeams();
+ *
+ *   return canEdit ? <EditButton /> : null;
+ * }
+ */
 export const usePermissions = () => {
-  const { user, isAuthenticated, isAdmin } = useAuth();
+  const { isAdmin } = useAuth();
   const permissionsContext = useContext(PermissionsContext);
 
   if (!permissionsContext) {
@@ -21,32 +78,6 @@ export const usePermissions = () => {
     getTeamsWithPermission,
     getTeamPermissions,
   } = permissionsContext;
-
-  // Memoize async permission checking function
-  const hasPermission = async (permission, teamId = null) => {
-    if (!isAuthenticated || !user) return false;
-
-    // Admin has all permissions
-    if (user.role === 'admin') return true;
-
-    // If a specific team is requested, check if user has access to that team
-    if (teamId && !isTeamMember(teamId)) {
-      return false;
-    }
-
-    try {
-      // Use Better Auth's hasPermission API to check analysis permissions
-      const result = await authClient.organization.hasPermission({
-        permissions: {
-          analysis: [permission.replace('analysis.', '')], // Remove prefix for API call
-        },
-      });
-      return result.success && result.data;
-    } catch (error) {
-      logger.warn('Error checking permission:', error);
-      return false;
-    }
-  };
 
   // Memoize permission checking functions to avoid recalculation
   const permissionCheckers = useMemo(() => {
@@ -249,9 +280,6 @@ export const usePermissions = () => {
     userTeams,
     organizationMembership,
     isAdmin,
-
-    // Async permission checking
-    hasPermission,
 
     // Permission checking using stored permissions
     checkUserPermission,

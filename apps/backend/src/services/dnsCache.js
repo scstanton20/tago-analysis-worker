@@ -64,7 +64,11 @@ class DNSCacheService {
 
   async loadConfig() {
     try {
-      const data = await safeReadFile(DNS_CONFIG_FILE, 'utf-8');
+      const data = await safeReadFile(
+        DNS_CONFIG_FILE,
+        config.paths.config,
+        'utf-8',
+      );
       const savedConfig = JSON.parse(data);
       this.config = { ...this.config, ...savedConfig };
     } catch (error) {
@@ -81,6 +85,7 @@ class DNSCacheService {
       await safeWriteFile(
         DNS_CONFIG_FILE,
         JSON.stringify(this.config, null, 2),
+        config.paths.config,
       );
       logger.debug('DNS cache config saved');
     } catch (error) {
@@ -597,11 +602,14 @@ class DNSCacheService {
     process.env.DNS_CACHE_TTL = this.config.ttl.toString();
     process.env.DNS_CACHE_MAX_ENTRIES = this.config.maxEntries.toString();
 
-    logger.debug('Updated environment variables for child processes:', {
-      DNS_CACHE_ENABLED: process.env.DNS_CACHE_ENABLED,
-      DNS_CACHE_TTL: process.env.DNS_CACHE_TTL,
-      DNS_CACHE_MAX_ENTRIES: process.env.DNS_CACHE_MAX_ENTRIES,
-    });
+    logger.debug(
+      {
+        DNS_CACHE_ENABLED: process.env.DNS_CACHE_ENABLED,
+        DNS_CACHE_TTL: process.env.DNS_CACHE_TTL,
+        DNS_CACHE_MAX_ENTRIES: process.env.DNS_CACHE_MAX_ENTRIES,
+      },
+      'Updated environment variables for child processes',
+    );
   }
 
   clearCache() {

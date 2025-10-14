@@ -2,7 +2,9 @@
 // This module provides shared DNS caching via IPC to the main process
 import dns from 'dns';
 import { promises as dnsPromises } from 'dns';
+import { createChildLogger } from './logging/logger.js';
 
+const logger = createChildLogger('shared-dns-cache');
 let requestId = 0;
 const pendingRequests = new Map();
 
@@ -21,9 +23,9 @@ export function initializeSharedDNSCache() {
     // Listen for responses from parent process
     process.on('message', handleIPCResponse);
 
-    console.log('[DNS-CACHE] Shared DNS cache initialized in child process');
+    logger.info('Shared DNS cache initialized in child process');
   } catch (error) {
-    console.error('[DNS-CACHE] Failed to initialize shared DNS cache:', error);
+    logger.error({ err: error }, 'Failed to initialize shared DNS cache');
   }
 }
 

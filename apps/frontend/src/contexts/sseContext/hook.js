@@ -14,6 +14,7 @@ export function useSSE() {
     analyses: context.analyses || {},
     teams: context.teams || {},
     teamStructure: context.teamStructure || {},
+    teamStructureVersion: context.teamStructureVersion || 0,
 
     // DNS cache state
     dnsCache: context.dnsCache,

@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid';
 import {
   executeQuery,
   executeQueryAll,
@@ -352,7 +353,8 @@ class TeamService {
         headers,
       });
 
-      if (result.error) {
+      // Handle error response - null result means success for removeTeam
+      if (result?.error) {
         throw new Error(
           `Failed to delete team via better-auth: ${result.error.message}`,
         );
@@ -441,10 +443,42 @@ class TeamService {
     }
 
     const previousTeam = analysis.teamId;
+
+    // Skip if moving to same team
+    if (previousTeam === teamId) {
+      logger.info(
+        { action: 'moveAnalysisToTeam', analysisName, teamId },
+        'Analysis already in target team, no move needed',
+      );
+      return {
+        analysis: analysisName,
+        from: previousTeam,
+        to: teamId,
+      };
+    }
+
+    // Update analysis teamId
     analysis.teamId = teamId;
     analysis.lastModified = new Date().toISOString();
 
     await this.analysisService.updateConfig(configData);
+
+    // Update team structure: remove from old team and add to new team
+    if (previousTeam) {
+      await this.removeItemFromTeamStructure(
+        previousTeam,
+        analysisName,
+        logger,
+      );
+    }
+
+    // Add to new team structure at root level
+    const newItem = {
+      id: uuidv4(),
+      type: 'analysis',
+      analysisName: analysisName,
+    };
+    await this.addItemToTeamStructure(teamId, newItem, null, logger);
 
     logger.info(
       {
@@ -453,7 +487,7 @@ class TeamService {
         fromTeamId: previousTeam,
         toTeamId: teamId,
       },
-      'Analysis moved to team',
+      'Analysis moved to team and team structure updated',
     );
 
     return {
@@ -734,7 +768,7 @@ class TeamService {
     }
 
     const newFolder = {
-      id: crypto.randomUUID(),
+      id: uuidv4(),
       type: 'folder',
       name: name,
       items: [],

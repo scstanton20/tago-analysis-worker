@@ -6,6 +6,8 @@ import {
 import UserController from '../controllers/userController.js';
 import { validateRequest } from '../middleware/validateRequest.js';
 import { userValidationSchemas } from '../validation/userSchemas.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
+import { userOperationLimiter } from '../middleware/rateLimiter.js';
 
 const router = Router();
 
@@ -66,7 +68,7 @@ router.use(authMiddleware);
 router.get(
   '/:userId/team-memberships',
   validateRequest(userValidationSchemas.getUserTeamMemberships),
-  UserController.getUserTeamMemberships,
+  asyncHandler(UserController.getUserTeamMemberships),
 );
 
 /**
@@ -118,8 +120,9 @@ router.get(
  */
 router.post(
   '/set-initial-password',
+  userOperationLimiter,
   validateRequest(userValidationSchemas.setInitialPassword),
-  UserController.setInitialPassword,
+  asyncHandler(UserController.setInitialPassword),
 );
 
 // Admin-only routes
@@ -188,8 +191,9 @@ router.use(requireAdmin);
  */
 router.post(
   '/add-to-organization',
+  userOperationLimiter,
   validateRequest(userValidationSchemas.addToOrganization),
-  UserController.addToOrganization,
+  asyncHandler(UserController.addToOrganization),
 );
 
 /**
@@ -271,8 +275,9 @@ router.post(
  */
 router.post(
   '/assign-teams',
+  userOperationLimiter,
   validateRequest(userValidationSchemas.assignUserToTeams),
-  UserController.assignUserToTeams,
+  asyncHandler(UserController.assignUserToTeams),
 );
 
 /**
@@ -357,8 +362,9 @@ router.post(
  */
 router.put(
   '/:userId/team-assignments',
+  userOperationLimiter,
   validateRequest(userValidationSchemas.updateUserTeamAssignments),
-  UserController.updateUserTeamAssignments,
+  asyncHandler(UserController.updateUserTeamAssignments),
 );
 
 /**
@@ -427,8 +433,9 @@ router.put(
  */
 router.put(
   '/:userId/organization-role',
+  userOperationLimiter,
   validateRequest(userValidationSchemas.updateUserOrganizationRole),
-  UserController.updateUserOrganizationRole,
+  asyncHandler(UserController.updateUserOrganizationRole),
 );
 
 /**
@@ -497,8 +504,9 @@ router.put(
  */
 router.delete(
   '/:userId/organization',
+  userOperationLimiter,
   validateRequest(userValidationSchemas.removeUserFromOrganization),
-  UserController.removeUserFromOrganization,
+  asyncHandler(UserController.removeUserFromOrganization),
 );
 
 export default router;

@@ -1,5 +1,8 @@
 // frontend/src/services/teamService.js
 import { fetchWithHeaders, handleResponse } from '../utils/apiUtils';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('teamService');
 
 export const teamService = {
   /**
@@ -9,13 +12,20 @@ export const teamService = {
    * @returns {Promise<Object>} Created team data
    */
   async createTeam(name, color) {
-    const response = await fetchWithHeaders('/teams', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, color }),
-    });
-
-    return handleResponse(response);
+    logger.debug('Creating new team', { name, color });
+    try {
+      const response = await fetchWithHeaders('/teams', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, color }),
+      });
+      const result = await handleResponse(response);
+      logger.info('Team created successfully', { name, teamId: result?.id });
+      return result;
+    } catch (error) {
+      logger.error('Failed to create team', { error, name });
+      throw error;
+    }
   },
 
   /**
@@ -27,19 +37,28 @@ export const teamService = {
    * @returns {Promise<Object>} Updated team data
    */
   async updateTeam(id, updates) {
+    logger.debug('Updating team', { id, updates });
+
     if (!updates.name && !updates.color) {
+      logger.error('No fields provided for team update', { id });
       throw new Error(
         'At least one field (name or color) must be provided for update',
       );
     }
 
-    const response = await fetchWithHeaders(`/teams/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updates),
-    });
-
-    return handleResponse(response);
+    try {
+      const response = await fetchWithHeaders(`/teams/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      const result = await handleResponse(response);
+      logger.info('Team updated successfully', { id, updates });
+      return result;
+    } catch (error) {
+      logger.error('Failed to update team', { error, id, updates });
+      throw error;
+    }
   },
 
   /**
@@ -49,13 +68,20 @@ export const teamService = {
    * @returns {Promise<Object>} Deletion result
    */
   async deleteTeam(id, moveAnalysesTo = 'uncategorized') {
-    const response = await fetchWithHeaders(`/teams/${id}`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ moveAnalysesTo }),
-    });
-
-    return handleResponse(response);
+    logger.debug('Deleting team', { id, moveAnalysesTo });
+    try {
+      const response = await fetchWithHeaders(`/teams/${id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ moveAnalysesTo }),
+      });
+      const result = await handleResponse(response);
+      logger.info('Team deleted successfully', { id, moveAnalysesTo });
+      return result;
+    } catch (error) {
+      logger.error('Failed to delete team', { error, id, moveAnalysesTo });
+      throw error;
+    }
   },
 
   /**
@@ -64,13 +90,22 @@ export const teamService = {
    * @returns {Promise<Object>} Reorder result
    */
   async reorderTeams(orderedIds) {
-    const response = await fetchWithHeaders('/teams/reorder', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orderedIds }),
-    });
-
-    return handleResponse(response);
+    logger.debug('Reordering teams', { count: orderedIds?.length });
+    try {
+      const response = await fetchWithHeaders('/teams/reorder', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderedIds }),
+      });
+      const result = await handleResponse(response);
+      logger.info('Teams reordered successfully', {
+        count: orderedIds?.length,
+      });
+      return result;
+    } catch (error) {
+      logger.error('Failed to reorder teams', { error });
+      throw error;
+    }
   },
 
   /**
@@ -80,16 +115,30 @@ export const teamService = {
    * @returns {Promise<Object>} Move result
    */
   async moveAnalysisToTeam(analysisId, teamId) {
-    const response = await fetchWithHeaders(
-      `/teams/analyses/${analysisId}/team`,
-      {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ teamId }),
-      },
-    );
-
-    return handleResponse(response);
+    logger.debug('Moving analysis to team', { analysisId, teamId });
+    try {
+      const response = await fetchWithHeaders(
+        `/teams/analyses/${analysisId}/team`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ teamId }),
+        },
+      );
+      const result = await handleResponse(response);
+      logger.info('Analysis moved to team successfully', {
+        analysisId,
+        teamId,
+      });
+      return result;
+    } catch (error) {
+      logger.error('Failed to move analysis to team', {
+        error,
+        analysisId,
+        teamId,
+      });
+      throw error;
+    }
   },
 
   /**
@@ -97,28 +146,19 @@ export const teamService = {
    * @returns {Promise<Object>} Teams data
    */
   async getTeams() {
-    const response = await fetchWithHeaders('/teams', {
-      method: 'GET',
-    });
-
-    return handleResponse(response);
-  },
-
-  /**
-   * Get analysis count for a specific team
-   * @param {string} teamId - Team ID
-   * @returns {Promise<number>} Analysis count
-   */
-  async getTeamAnalysisCount(teamId) {
+    logger.debug('Fetching teams list');
     try {
-      const response = await fetchWithHeaders(`/teams/${teamId}/count`, {
+      const response = await fetchWithHeaders('/teams', {
         method: 'GET',
       });
-
       const result = await handleResponse(response);
-      return result.count || 0;
-    } catch {
-      return 0; // Return 0 on error rather than throwing
+      logger.info('Teams list fetched successfully', {
+        count: result?.teams?.length,
+      });
+      return result;
+    } catch (error) {
+      logger.error('Failed to fetch teams list', { error });
+      throw error;
     }
   },
 
@@ -131,13 +171,24 @@ export const teamService = {
    * @returns {Promise<Object>} Created folder
    */
   async createFolder(teamId, { name, parentFolderId }) {
-    const response = await fetchWithHeaders(`/teams/${teamId}/folders`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, parentFolderId }),
-    });
-
-    return handleResponse(response);
+    logger.debug('Creating folder', { teamId, name, parentFolderId });
+    try {
+      const response = await fetchWithHeaders(`/teams/${teamId}/folders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, parentFolderId }),
+      });
+      const result = await handleResponse(response);
+      logger.info('Folder created successfully', {
+        teamId,
+        name,
+        folderId: result?.id,
+      });
+      return result;
+    } catch (error) {
+      logger.error('Failed to create folder', { error, teamId, name });
+      throw error;
+    }
   },
 
   /**
@@ -150,16 +201,23 @@ export const teamService = {
    * @returns {Promise<Object>} Updated folder
    */
   async updateFolder(teamId, folderId, updates) {
-    const response = await fetchWithHeaders(
-      `/teams/${teamId}/folders/${folderId}`,
-      {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates),
-      },
-    );
-
-    return handleResponse(response);
+    logger.debug('Updating folder', { teamId, folderId, updates });
+    try {
+      const response = await fetchWithHeaders(
+        `/teams/${teamId}/folders/${folderId}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates),
+        },
+      );
+      const result = await handleResponse(response);
+      logger.info('Folder updated successfully', { teamId, folderId });
+      return result;
+    } catch (error) {
+      logger.error('Failed to update folder', { error, teamId, folderId });
+      throw error;
+    }
   },
 
   /**
@@ -169,14 +227,21 @@ export const teamService = {
    * @returns {Promise<Object>} Deletion result
    */
   async deleteFolder(teamId, folderId) {
-    const response = await fetchWithHeaders(
-      `/teams/${teamId}/folders/${folderId}`,
-      {
-        method: 'DELETE',
-      },
-    );
-
-    return handleResponse(response);
+    logger.debug('Deleting folder', { teamId, folderId });
+    try {
+      const response = await fetchWithHeaders(
+        `/teams/${teamId}/folders/${folderId}`,
+        {
+          method: 'DELETE',
+        },
+      );
+      const result = await handleResponse(response);
+      logger.info('Folder deleted successfully', { teamId, folderId });
+      return result;
+    } catch (error) {
+      logger.error('Failed to delete folder', { error, teamId, folderId });
+      throw error;
+    }
   },
 
   /**
@@ -188,13 +253,38 @@ export const teamService = {
    * @returns {Promise<Object>} Move result
    */
   async moveItem(teamId, itemId, targetParentId, targetIndex) {
-    const response = await fetchWithHeaders(`/teams/${teamId}/items/move`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ itemId, targetParentId, targetIndex }),
+    logger.debug('Moving item', {
+      teamId,
+      itemId,
+      targetParentId,
+      targetIndex,
     });
-
-    return handleResponse(response);
+    try {
+      const response = await fetchWithHeaders(`/teams/${teamId}/items/move`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          itemId,
+          newParentId: targetParentId,
+          newIndex: targetIndex,
+        }),
+      });
+      const result = await handleResponse(response);
+      logger.info('Item moved successfully', {
+        teamId,
+        itemId,
+        targetParentId,
+      });
+      return result;
+    } catch (error) {
+      logger.error('Failed to move item', {
+        error,
+        teamId,
+        itemId,
+        targetParentId,
+      });
+      throw error;
+    }
   },
 };
 

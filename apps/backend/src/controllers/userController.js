@@ -14,16 +14,8 @@ class UserController {
    */
   static async addToOrganization(req, res) {
     const { userId, organizationId, role = 'member' } = req.body;
-    if (!userId || !organizationId) {
-      req.log.warn(
-        { action: 'addToOrganization' },
-        'Add failed: missing userId or organizationId',
-      );
-      return res
-        .status(400)
-        .json({ error: 'userId and organizationId are required' });
-    }
 
+    // Validation handled by middleware
     req.log.info(
       { action: 'addToOrganization', userId, organizationId, role },
       'Adding user to organization',
@@ -58,7 +50,9 @@ class UserController {
       );
       res.json({ success: true, data: result.data });
     } catch (error) {
-      handleError(res, error, 'adding user to organization');
+      handleError(res, error, 'adding user to organization', {
+        logger: req.logger,
+      });
     }
   }
 
@@ -67,16 +61,8 @@ class UserController {
    */
   static async assignUserToTeams(req, res) {
     const { userId, teamAssignments } = req.body;
-    if (!userId || !Array.isArray(teamAssignments)) {
-      req.log.warn(
-        { action: 'assignUserToTeams' },
-        'Assign failed: missing userId or teamAssignments',
-      );
-      return res.status(400).json({
-        error: 'userId and teamAssignments array are required',
-      });
-    }
 
+    // Validation handled by middleware
     // Don't create member entries if no teams are being assigned
     if (teamAssignments.length === 0) {
       req.log.info(
@@ -276,14 +262,8 @@ class UserController {
    */
   static async getUserTeamMemberships(req, res) {
     const { userId } = req.params;
-    if (!userId) {
-      req.log.warn(
-        { action: 'getUserTeamMemberships' },
-        'Get failed: missing userId',
-      );
-      return res.status(400).json({ error: 'userId is required' });
-    }
 
+    // Validation handled by middleware
     // Check authorization: users can only get their own memberships, admins can get any
     const currentUser = req.user;
     const isAdmin = currentUser?.role === 'admin';
@@ -339,7 +319,9 @@ class UserController {
         },
       });
     } catch (error) {
-      handleError(res, error, 'getting user team memberships');
+      handleError(res, error, 'getting user team memberships', {
+        logger: req.logger,
+      });
     }
   }
 
@@ -349,16 +331,8 @@ class UserController {
   static async updateUserTeamAssignments(req, res) {
     const { userId } = req.params;
     const { teamAssignments } = req.body;
-    if (!userId || !Array.isArray(teamAssignments)) {
-      req.log.warn(
-        { action: 'updateUserTeamAssignments' },
-        'Update failed: missing userId or teamAssignments',
-      );
-      return res.status(400).json({
-        error: 'userId and teamAssignments array are required',
-      });
-    }
 
+    // Validation handled by middleware
     req.log.info(
       {
         action: 'updateUserTeamAssignments',
@@ -547,7 +521,9 @@ class UserController {
         },
       });
     } catch (error) {
-      handleError(res, error, 'updating user team assignments');
+      handleError(res, error, 'updating user team assignments', {
+        logger: req.logger,
+      });
     }
   }
 
@@ -557,16 +533,8 @@ class UserController {
   static async updateUserOrganizationRole(req, res) {
     const { userId } = req.params;
     const { organizationId, role } = req.body;
-    if (!userId || !organizationId || !role) {
-      req.log.warn(
-        { action: 'updateUserOrganizationRole' },
-        'Update failed: missing userId, organizationId, or role',
-      );
-      return res.status(400).json({
-        error: 'userId, organizationId, and role are required',
-      });
-    }
 
+    // Validation handled by middleware
     req.log.info(
       { action: 'updateUserOrganizationRole', userId, role, organizationId },
       'Updating organization role',
@@ -619,7 +587,9 @@ class UserController {
 
       res.json({ success: true, data: result.data });
     } catch (error) {
-      handleError(res, error, 'updating user organization role');
+      handleError(res, error, 'updating user organization role', {
+        logger: req.logger,
+      });
     }
   }
 
@@ -629,16 +599,8 @@ class UserController {
   static async removeUserFromOrganization(req, res) {
     const { userId } = req.params;
     const { organizationId } = req.body;
-    if (!userId || !organizationId) {
-      req.log.warn(
-        { action: 'removeUserFromOrganization' },
-        'Remove failed: missing userId or organizationId',
-      );
-      return res.status(400).json({
-        error: 'userId and organizationId are required',
-      });
-    }
 
+    // Validation handled by middleware
     req.log.info(
       { action: 'removeUserFromOrganization', userId, organizationId },
       'Removing user from organization',
@@ -703,7 +665,9 @@ class UserController {
 
       res.json({ success: true, message: 'User removed from organization' });
     } catch (error) {
-      handleError(res, error, 'removing user from organization');
+      handleError(res, error, 'removing user from organization', {
+        logger: req.logger,
+      });
     }
   }
 
@@ -712,24 +676,8 @@ class UserController {
    */
   static async setInitialPassword(req, res) {
     const { newPassword } = req.body;
-    if (!newPassword) {
-      req.log.warn(
-        { action: 'setInitialPassword' },
-        'Set failed: missing newPassword',
-      );
-      return res.status(400).json({ error: 'newPassword is required' });
-    }
 
-    if (newPassword.length < 6) {
-      req.log.warn(
-        { action: 'setInitialPassword' },
-        'Set failed: password too short',
-      );
-      return res
-        .status(400)
-        .json({ error: 'Password must be at least 6 characters long' });
-    }
-
+    // Validation handled by middleware
     // Get current user from session
     if (!req.user?.id) {
       req.log.warn(
@@ -796,7 +744,9 @@ class UserController {
         message: 'Password set successfully',
       });
     } catch (error) {
-      handleError(res, error, 'setting initial password');
+      handleError(res, error, 'setting initial password', {
+        logger: req.logger,
+      });
     }
   }
 }

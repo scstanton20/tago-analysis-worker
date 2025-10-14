@@ -3,13 +3,16 @@
 // Wrapper script that initializes DNS cache before running analysis
 
 import path from 'path';
+import { createChildLogger } from './logging/logger.js';
 import './sharedDNSCache.js'; // This auto-initializes shared DNS cache if enabled
+
+const logger = createChildLogger('analysis-wrapper');
 
 // Get the analysis file path from command line arguments
 const analysisFile = process.argv[2];
 
 if (!analysisFile) {
-  console.error('[WRAPPER] Error: Analysis file path not provided');
+  logger.error('Analysis file path not provided');
   process.exit(1);
 }
 
@@ -23,6 +26,6 @@ try {
   // Don't log "completed" here - the analysis stays running
   // Only log completion if the process actually exits
 } catch (error) {
-  console.error(`[WRAPPER] Analysis failed to start: ${fullPath}`, error);
+  logger.error({ err: error, path: fullPath }, 'Analysis failed to start');
   process.exit(1);
 }

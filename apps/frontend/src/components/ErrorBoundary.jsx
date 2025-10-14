@@ -33,7 +33,7 @@ function ErrorFallback({ error, reset }) {
           </Text>
 
           {error && (
-            <Paper bg="gray.0" p="md" radius="sm" w="100%">
+            <Paper p="md" radius="sm" w="100%">
               <Text size="sm" fw={600} mb="xs">
                 Error Details:
               </Text>

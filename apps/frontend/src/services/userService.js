@@ -1,5 +1,8 @@
 // frontend/src/services/userService.js
 import { fetchWithHeaders, handleResponse } from '../utils/apiUtils';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('userService');
 
 export const userService = {
   /**
@@ -10,13 +13,31 @@ export const userService = {
    * @returns {Promise<Object>} Result of adding user to organization
    */
   async addUserToOrganization(userId, organizationId, role = 'member') {
-    const response = await fetchWithHeaders('/users/add-to-organization', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, organizationId, role }),
+    logger.debug('Adding user to organization', {
+      userId,
+      organizationId,
+      role,
     });
-
-    return handleResponse(response);
+    try {
+      const response = await fetchWithHeaders('/users/add-to-organization', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, organizationId, role }),
+      });
+      const result = await handleResponse(response);
+      logger.info('User added to organization successfully', {
+        userId,
+        role,
+      });
+      return result;
+    } catch (error) {
+      logger.error('Failed to add user to organization', {
+        error,
+        userId,
+        role,
+      });
+      throw error;
+    }
   },
 
   /**
@@ -75,11 +96,18 @@ export const userService = {
    * @returns {Promise<Object>} Current session data
    */
   async getCurrentSession() {
-    const response = await fetchWithHeaders('/auth/get-session', {
-      method: 'GET',
-    });
-
-    return handleResponse(response);
+    logger.debug('Fetching current session');
+    try {
+      const response = await fetchWithHeaders('/auth/get-session', {
+        method: 'GET',
+      });
+      const result = await handleResponse(response);
+      logger.info('Current session fetched successfully');
+      return result;
+    } catch (error) {
+      logger.error('Failed to fetch current session', { error });
+      throw error;
+    }
   },
 
   /**

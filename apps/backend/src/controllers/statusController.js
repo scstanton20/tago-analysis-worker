@@ -122,7 +122,7 @@ class StatusController {
 
       res.status(httpStatus).json(status);
     } catch (error) {
-      handleError(res, error, 'getting system status');
+      handleError(res, error, 'getting system status', { logger: req.logger });
     }
   }
 }

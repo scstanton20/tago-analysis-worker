@@ -21,16 +21,16 @@ export function useModalDataLoader(opened, loaders = [], condition = true) {
 
   useEffect(() => {
     if (opened && condition && !hasLoaded) {
-      // Use a microtask to defer the state update, avoiding cascading renders
+      // Load data and defer state update to avoid cascading renders
+      load();
       Promise.resolve().then(() => {
         setHasLoaded(true);
       });
-      load();
-    }
-
-    // Reset loaded flag when modal closes
-    if (!opened && hasLoaded) {
-      setHasLoaded(false);
+    } else if (!opened && hasLoaded) {
+      // Reset loaded flag when modal closes (deferred to avoid cascading renders)
+      Promise.resolve().then(() => {
+        setHasLoaded(false);
+      });
     }
   }, [opened, condition, hasLoaded, load]);
 

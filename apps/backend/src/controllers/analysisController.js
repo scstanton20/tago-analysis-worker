@@ -108,7 +108,7 @@ class AnalysisController {
 
       res.json(result);
     } catch (error) {
-      handleError(res, error, 'uploading analysis');
+      handleError(res, error, 'uploading analysis', { logger: req.logger });
     }
   }
 
@@ -151,7 +151,7 @@ class AnalysisController {
 
       res.json(analyses);
     } catch (error) {
-      handleError(res, error, 'retrieving analyses');
+      handleError(res, error, 'retrieving analyses', { logger: req.logger });
     }
   }
 
@@ -184,7 +184,7 @@ class AnalysisController {
 
       res.json(result);
     } catch (error) {
-      handleError(res, error, 'running analysis');
+      handleError(res, error, 'running analysis', { logger: req.logger });
     }
   }
 
@@ -217,7 +217,7 @@ class AnalysisController {
 
       res.json(result);
     } catch (error) {
-      handleError(res, error, 'stopping analysis');
+      handleError(res, error, 'stopping analysis', { logger: req.logger });
     }
   }
 
@@ -272,7 +272,7 @@ class AnalysisController {
 
       res.json({ success: true });
     } catch (error) {
-      handleError(res, error, 'deleting analysis');
+      handleError(res, error, 'deleting analysis', { logger: req.logger });
     }
   }
 
@@ -330,7 +330,9 @@ class AnalysisController {
           error: `Analysis file ${sanitizedFileName} not found`,
         });
       }
-      handleError(res, error, 'getting analysis content');
+      handleError(res, error, 'getting analysis content', {
+        logger: req.logger,
+      });
     }
   }
 
@@ -340,30 +342,7 @@ class AnalysisController {
     // Sanitize the fileName to prevent path traversal
     const sanitizedFileName = sanitizeAndValidateFilename(fileName);
 
-    if (!content) {
-      req.log.warn(
-        { action: 'updateAnalysis', fileName: sanitizedFileName },
-        'Update failed: no content provided',
-      );
-      return res.status(400).json({
-        error: 'Content is required',
-      });
-    }
-
-    if (typeof content !== 'string') {
-      req.log.warn(
-        {
-          action: 'updateAnalysis',
-          fileName: sanitizedFileName,
-          contentType: typeof content,
-        },
-        'Update failed: invalid content type',
-      );
-      return res.status(400).json({
-        error: 'Content must be a string',
-      });
-    }
-
+    // Validation handled by middleware
     req.log.info(
       { action: 'updateAnalysis', fileName: sanitizedFileName },
       'Updating analysis',
@@ -404,7 +383,7 @@ class AnalysisController {
         restarted: result.restarted,
       });
     } catch (error) {
-      handleError(res, error, 'updating analysis');
+      handleError(res, error, 'updating analysis', { logger: req.logger });
     }
   }
 
@@ -413,33 +392,9 @@ class AnalysisController {
     const { newFileName } = req.body;
     // Sanitize both filenames to prevent path traversal
     const sanitizedFileName = sanitizeAndValidateFilename(fileName);
-
-    if (!newFileName) {
-      req.log.warn(
-        { action: 'renameAnalysis', fileName: sanitizedFileName },
-        'Rename failed: no new filename provided',
-      );
-      return res.status(400).json({
-        error: 'newFileName is required',
-      });
-    }
-
-    if (typeof newFileName !== 'string') {
-      req.log.warn(
-        {
-          action: 'renameAnalysis',
-          fileName: sanitizedFileName,
-          newFileNameType: typeof newFileName,
-        },
-        'Rename failed: invalid newFileName type',
-      );
-      return res.status(400).json({
-        error: 'newFileName must be a string',
-      });
-    }
-
     const sanitizedNewFileName = sanitizeAndValidateFilename(newFileName);
 
+    // Validation handled by middleware
     req.log.info(
       {
         action: 'renameAnalysis',
@@ -487,7 +442,7 @@ class AnalysisController {
         restarted: result.restarted,
       });
     } catch (error) {
-      handleError(res, error, 'renaming analysis');
+      handleError(res, error, 'renaming analysis', { logger: req.logger });
     }
   }
 
@@ -521,43 +476,17 @@ class AnalysisController {
 
       res.json(logs);
     } catch (error) {
-      handleError(res, error, 'getting logs');
+      handleError(res, error, 'getting logs', { logger: req.logger });
     }
   }
 
   static async downloadLogs(req, res) {
     const { fileName } = req.params;
     const { timeRange } = req.query;
-    if (!fileName) {
-      req.log.warn(
-        { action: 'downloadLogs' },
-        'Download failed: missing fileName',
-      );
-      return res.status(400).json({ error: 'fileName is required' });
-    }
-
-    if (!timeRange) {
-      req.log.warn(
-        { action: 'downloadLogs', fileName },
-        'Download failed: missing timeRange',
-      );
-      return res.status(400).json({ error: 'timeRange is required' });
-    }
-
     // Sanitize the fileName to prevent path traversal
     const sanitizedFileName = sanitizeAndValidateFilename(fileName);
 
-    // Validate time range
-    if (!analysisService.validateTimeRange(timeRange)) {
-      req.log.warn(
-        { action: 'downloadLogs', fileName: sanitizedFileName, timeRange },
-        'Download failed: invalid time range',
-      );
-      return res.status(400).json({
-        error: 'Invalid time range. Must be one of: 1h, 24h, 7d, 30d, all',
-      });
-    }
-
+    // Validation handled by middleware
     req.log.info(
       { action: 'downloadLogs', fileName: sanitizedFileName, timeRange },
       'Downloading logs',
@@ -647,7 +576,7 @@ class AnalysisController {
       validatePath(tempLogFile, analysisLogsDir);
 
       try {
-        await safeWriteFile(tempLogFile, content);
+        await safeWriteFile(tempLogFile, content, config.paths.analysis);
 
         // Set the download filename using headers with sanitized name
         const downloadFilename = `${sanitize(path.parse(sanitizedFileName).name)}.log`;
@@ -665,16 +594,18 @@ class AnalysisController {
         // Send the file using the full tempLogFile path
         res.sendFile(tempLogFile, (err) => {
           // Clean up temp file using the already validated tempLogFile path
-          safeUnlink(tempLogFile).catch((unlinkError) => {
-            req.log.error(
-              {
-                action: 'downloadLogs',
-                fileName: sanitizedFileName,
-                err: unlinkError,
-              },
-              'Error cleaning up temporary file',
-            );
-          });
+          safeUnlink(tempLogFile, config.paths.analysis).catch(
+            (unlinkError) => {
+              req.log.error(
+                {
+                  action: 'downloadLogs',
+                  fileName: sanitizedFileName,
+                  err: unlinkError,
+                },
+                'Error cleaning up temporary file',
+              );
+            },
+          );
 
           if (err && !res.headersSent) {
             req.log.error(
@@ -717,7 +648,7 @@ class AnalysisController {
         return res.status(400).json({ error: 'Invalid file path' });
       }
 
-      handleError(res, error, 'downloading logs');
+      handleError(res, error, 'downloading logs', { logger: req.logger });
     }
   }
 
@@ -755,7 +686,7 @@ class AnalysisController {
 
       res.json(result);
     } catch (error) {
-      handleError(res, error, 'clearing logs');
+      handleError(res, error, 'clearing logs', { logger: req.logger });
     }
   }
 
@@ -811,7 +742,7 @@ class AnalysisController {
 
       res.send(content);
     } catch (error) {
-      handleError(res, error, 'downloading analysis');
+      handleError(res, error, 'downloading analysis', { logger: req.logger });
     }
   }
 
@@ -839,7 +770,7 @@ class AnalysisController {
 
       res.json(versions);
     } catch (error) {
-      handleError(res, error, 'getting versions');
+      handleError(res, error, 'getting versions', { logger: req.logger });
     }
   }
 
@@ -849,17 +780,8 @@ class AnalysisController {
     // Sanitize the fileName to prevent path traversal
     const sanitizedFileName = sanitizeAndValidateFilename(fileName);
 
-    if (!version || isNaN(parseInt(version, 10))) {
-      req.log.warn(
-        { action: 'rollbackToVersion', fileName: sanitizedFileName, version },
-        'Rollback failed: invalid version number',
-      );
-      return res
-        .status(400)
-        .json({ error: 'Valid version number is required' });
-    }
-
-    const versionNumber = parseInt(version, 10);
+    // Validation handled by middleware (version is transformed to number)
+    const versionNumber = version;
 
     req.log.info(
       {
@@ -909,7 +831,7 @@ class AnalysisController {
         restarted: result.restarted,
       });
     } catch (error) {
-      handleError(res, error, 'rolling back analysis');
+      handleError(res, error, 'rolling back analysis', { logger: req.logger });
     }
   }
 
@@ -919,16 +841,7 @@ class AnalysisController {
     // Sanitize the fileName to prevent path traversal
     const sanitizedFileName = sanitizeAndValidateFilename(fileName);
 
-    if (!env || typeof env !== 'object') {
-      req.log.warn(
-        { action: 'updateEnvironment', fileName: sanitizedFileName },
-        'Update failed: invalid environment variables',
-      );
-      return res.status(400).json({
-        error: 'Environment variables must be provided as an object',
-      });
-    }
-
+    // Validation handled by middleware
     req.log.info(
       { action: 'updateEnvironment', fileName: sanitizedFileName },
       'Updating environment variables',
@@ -970,7 +883,7 @@ class AnalysisController {
         restarted: result.restarted,
       });
     } catch (error) {
-      handleError(res, error, 'updating environment');
+      handleError(res, error, 'updating environment', { logger: req.logger });
     }
   }
 
@@ -994,7 +907,7 @@ class AnalysisController {
 
       res.json(env);
     } catch (error) {
-      handleError(res, error, 'getting environment');
+      handleError(res, error, 'getting environment', { logger: req.logger });
     }
   }
 }

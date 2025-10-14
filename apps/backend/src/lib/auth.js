@@ -23,17 +23,18 @@ const authLogger = createChildLogger('auth');
 // Ensure the storage directory exists
 const dbPath = path.join(config.storage.base, 'auth.db');
 const dbDir = path.dirname(dbPath);
+const storageBase = config.storage.base;
 
 try {
-  if (!safeExistsSync(dbDir)) {
+  if (!safeExistsSync(dbDir, storageBase)) {
     authLogger.info({ dbDir }, 'Creating auth storage directory');
-    safeMkdirSync(dbDir, { recursive: true });
+    safeMkdirSync(dbDir, storageBase, { recursive: true });
   }
 
   // Test write permissions
   const testFile = path.join(dbDir, '.write-test');
-  safeWriteFileSync(testFile, 'test');
-  safeUnlinkSync(testFile);
+  safeWriteFileSync(testFile, 'test', storageBase);
+  safeUnlinkSync(testFile, storageBase);
 
   authLogger.info({ dbPath }, 'Auth storage initialized');
 } catch (error) {
@@ -247,6 +248,46 @@ export const auth = betterAuth({
                   '✓ Migrated analyses to uncategorized team',
                 );
               }
+            }
+
+            // Clean up team structure: move items to uncategorized team and remove deleted team entry
+            if (configData.teamStructure?.[team.id]) {
+              authLogger.info(
+                { teamId: team.id },
+                'Moving team structure items to uncategorized team',
+              );
+
+              const deletedTeamItems =
+                configData.teamStructure[team.id].items || [];
+
+              // Initialize uncategorized team structure if it doesn't exist
+              if (!configData.teamStructure[uncategorizedTeam.id]) {
+                configData.teamStructure[uncategorizedTeam.id] = { items: [] };
+              }
+
+              // Move all items from deleted team to uncategorized team
+              if (deletedTeamItems.length > 0) {
+                configData.teamStructure[uncategorizedTeam.id].items.push(
+                  ...deletedTeamItems,
+                );
+                authLogger.info(
+                  {
+                    itemCount: deletedTeamItems.length,
+                    fromTeam: team.id,
+                    toTeam: uncategorizedTeam.id,
+                  },
+                  'Moved team structure items to uncategorized team',
+                );
+              }
+
+              // Remove deleted team's structure entry
+              delete configData.teamStructure[team.id];
+              await analysisService.updateConfig(configData);
+
+              authLogger.info(
+                { teamId: team.id },
+                '✓ Cleaned up team structure entry',
+              );
             }
           } catch (error) {
             authLogger.error(

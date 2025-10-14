@@ -45,7 +45,7 @@ async function getToken(clientId, clientSecret) {
       );
     }
   } catch (error) {
-    logger.error({ err: error, clientId }, `Error in login: ${error.message}`);
+    logger.error({ err: error, clientId }, 'Error in login');
     throw error;
   }
 }
@@ -62,7 +62,7 @@ async function getAPIVersion() {
       return { Semantic: '0.4.0', Major: '0', Minor: '4', Patch: '0' };
     }
   } catch (error) {
-    logger.warn({ err: error }, `Error getting API version: ${error.message}`);
+    logger.warn({ err: error }, 'Error getting API version');
     return { Semantic: '0.4.0', Major: '0', Minor: '4', Patch: '0' };
   }
 }
@@ -83,10 +83,7 @@ async function getAPICall(endpoint, token) {
       return { status: response.status, error: response.statusText };
     }
   } catch (error) {
-    logger.error(
-      { err: error, endpoint, url: finalUrl },
-      `Error in API call to ${finalUrl}: ${error.message}`,
-    );
+    logger.error({ err: error, endpoint, url: finalUrl }, 'Error in API call');
     return { status: 500, error: error.message };
   }
 }
@@ -149,7 +146,7 @@ async function createDevice(token, deviceData) {
   } catch (error) {
     logger.error(
       { err: error, deviceData: finalDeviceData },
-      `Error creating device: ${error.message}`,
+      'Error creating device',
     );
     return { status: 500, error: error.message };
   }

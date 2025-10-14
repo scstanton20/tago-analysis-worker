@@ -1,11 +1,15 @@
 // utils/cryptoUtils.js
 import crypto from 'crypto';
 import config from '../config/default.js';
+import { createChildLogger } from './logging/logger.js';
 
+const logger = createChildLogger('crypto-utils');
 const SECRET_KEY = config.secretKey;
 
 if (!SECRET_KEY) {
-  throw new Error('SECRET_KEY is missing from config!');
+  const error = new Error('SECRET_KEY is missing from config!');
+  logger.error({ err: error }, 'Crypto initialization failed');
+  throw error;
 }
 
 function deriveKey(secret, salt) {
@@ -25,15 +29,17 @@ function encrypt(text) {
   const authTag = cipher.getAuthTag();
 
   // Store salt + iv + authTag + encrypted data
-  return (
+  const result =
     salt.toString('hex') +
     ':' +
     iv.toString('hex') +
     ':' +
     authTag.toString('hex') +
     ':' +
-    encrypted
-  );
+    encrypted;
+
+  logger.debug('Data encrypted successfully');
+  return result;
 }
 
 function decrypt(encryptedText) {
@@ -54,12 +60,15 @@ function decrypt(encryptedText) {
   try {
     let decrypted = decipher.update(encrypted, 'hex', 'utf8');
     decrypted += decipher.final('utf8');
+    logger.debug('Data decrypted successfully');
     return decrypted;
   } catch (error) {
-    throw new Error(
+    logger.error({ err: error }, 'Decryption failed - possible data tampering');
+    const decryptError = new Error(
       'Authentication failed - data may have been tampered with',
-      error,
     );
+    decryptError.cause = error;
+    throw decryptError;
   }
 }
 

@@ -11,13 +11,13 @@ async function initializeStorage() {
   if (!config.storage.createDirs) return;
 
   try {
-    // Create base storage directory first
-    await safeMkdir(config.storage.base, { recursive: true });
+    // Create base storage directory first - no basePath validation needed for root
+    await safeMkdir(config.storage.base, null, { recursive: true });
 
-    // Create all directory paths
+    // Create all directory paths - they're all under storage.base
     await Promise.all(
       Object.values(config.paths).map((dir) =>
-        safeMkdir(dir, { recursive: true }),
+        safeMkdir(dir, config.storage.base, { recursive: true }),
       ),
     );
 
@@ -32,6 +32,7 @@ async function initializeStorage() {
           null,
           2,
         ),
+        config.storage.base,
       );
     }
   } catch (error) {

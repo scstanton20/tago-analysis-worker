@@ -178,8 +178,9 @@ export const PermissionsProvider = ({ children }) => {
     [user?.role, userTeams, organizationMembership],
   );
 
-  // Memoize permission calculation functions for better performance
-  const permissionHelpers = useMemo(
+  // Memoize base permission functions that don't depend on SSE data
+  // This prevents unnecessary re-computation when SSE teams update
+  const basePermissionHelpers = useMemo(
     () => ({
       // Check if user has a specific permission based on their team memberships
       checkUserPermission: (permission, teamId = null) => {
@@ -198,7 +199,30 @@ export const PermissionsProvider = ({ children }) => {
         return userTeams.some((team) => team.permissions?.includes(permission));
       },
 
-      // Get teams where user has a specific permission
+      // Get permissions for a specific team
+      getTeamPermissions: (teamId) => {
+        if (isAdmin) {
+          return [
+            'view_analyses',
+            'run_analyses',
+            'upload_analyses',
+            'download_analyses',
+            'edit_analyses',
+            'delete_analyses',
+          ];
+        }
+
+        const team = userTeams.find((t) => t.id === teamId);
+        return team?.permissions || [];
+      },
+    }),
+    [isAuthenticated, user, isAdmin, userTeams],
+  );
+
+  // Memoize SSE-dependent helper separately to avoid re-computing all helpers on SSE updates
+  const sseEnhancedHelpers = useMemo(
+    () => ({
+      // Get teams where user has a specific permission (merges with SSE data for latest team info)
       getTeamsWithPermission: (permission) => {
         if (isAdmin) {
           const sseTeamsObject = sseContext?.teams || {};
@@ -255,25 +279,17 @@ export const PermissionsProvider = ({ children }) => {
           };
         });
       },
-
-      // Get permissions for a specific team
-      getTeamPermissions: (teamId) => {
-        if (isAdmin) {
-          return [
-            'view_analyses',
-            'run_analyses',
-            'upload_analyses',
-            'download_analyses',
-            'edit_analyses',
-            'delete_analyses',
-          ];
-        }
-
-        const team = userTeams.find((t) => t.id === teamId);
-        return team?.permissions || [];
-      },
     }),
-    [isAuthenticated, user, isAdmin, userTeams, sseContext?.teams],
+    [isAdmin, userTeams, sseContext?.teams],
+  );
+
+  // Combine base helpers with SSE-enhanced helpers
+  const permissionHelpers = useMemo(
+    () => ({
+      ...basePermissionHelpers,
+      ...sseEnhancedHelpers,
+    }),
+    [basePermissionHelpers, sseEnhancedHelpers],
   );
 
   // Memoize refresh functions

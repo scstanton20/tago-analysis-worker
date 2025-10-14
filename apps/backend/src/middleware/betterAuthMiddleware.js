@@ -1,6 +1,9 @@
 import { auth } from '../lib/auth.js';
 import { fromNodeHeaders } from 'better-auth/node';
 import { executeQuery, executeQueryAll } from '../utils/authDatabase.js';
+import { createChildLogger } from '../utils/logging/logger.js';
+
+const moduleLogger = createChildLogger('auth-middleware');
 
 // Authentication middleware using Better Auth
 export const authMiddleware = async (req, res, next) => {
@@ -86,7 +89,7 @@ const globalRolePermissions = {
 };
 
 // Helper function to check if user has permission for a specific team
-function hasTeamPermission(userId, teamId, permission, logger = console) {
+function hasTeamPermission(userId, teamId, permission, logger = moduleLogger) {
   try {
     const membership = executeQuery(
       'SELECT permissions FROM teamMember WHERE userId = ? AND teamId = ?',
@@ -109,7 +112,7 @@ function hasTeamPermission(userId, teamId, permission, logger = console) {
 }
 
 // Helper function to check if user has permission in any team
-function hasAnyTeamPermission(userId, permission, logger = console) {
+function hasAnyTeamPermission(userId, permission, logger = moduleLogger) {
   try {
     const memberships = executeQueryAll(
       'SELECT permissions FROM teamMember WHERE userId = ?',
@@ -136,7 +139,7 @@ function hasAnyTeamPermission(userId, permission, logger = console) {
 }
 
 // Helper function to get user's team IDs with specific permission
-export function getUserTeamIds(userId, permission, logger = console) {
+export function getUserTeamIds(userId, permission, logger = moduleLogger) {
   try {
     const memberships = executeQueryAll(
       'SELECT teamId, permissions FROM teamMember WHERE userId = ?',
@@ -161,7 +164,11 @@ export function getUserTeamIds(userId, permission, logger = console) {
 }
 
 // Helper function to get all users who have access to a specific team with a given permission
-export function getUsersWithTeamAccess(teamId, permission, logger = console) {
+export function getUsersWithTeamAccess(
+  teamId,
+  permission,
+  logger = moduleLogger,
+) {
   try {
     // Get all admin users (they have global access)
     const adminUsers = executeQueryAll(

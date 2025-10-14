@@ -21,21 +21,15 @@ class TeamController {
       );
       res.json(teams);
     } catch (error) {
-      handleError(res, error, 'retrieving teams');
+      handleError(res, error, 'retrieving teams', { logger: req.logger });
     }
   }
 
   // Create new team
   static async createTeam(req, res) {
     const { name, color, order } = req.body;
-    if (!name) {
-      req.log.warn(
-        { action: 'createTeam' },
-        'Team creation failed: missing name',
-      );
-      return res.status(400).json({ error: 'Team name is required' });
-    }
 
+    // Validation handled by middleware
     req.log.info({ action: 'createTeam', teamName: name }, 'Creating team');
 
     try {
@@ -62,7 +56,7 @@ class TeamController {
 
       res.status(201).json(team);
     } catch (error) {
-      handleError(res, error, 'creating team');
+      handleError(res, error, 'creating team', { logger: req.logger });
     }
   }
 
@@ -88,7 +82,7 @@ class TeamController {
 
       res.json(team);
     } catch (error) {
-      handleError(res, error, 'updating team');
+      handleError(res, error, 'updating team', { logger: req.logger });
     }
   }
 
@@ -111,21 +105,15 @@ class TeamController {
 
       res.json(result);
     } catch (error) {
-      handleError(res, error, 'deleting team');
+      handleError(res, error, 'deleting team', { logger: req.logger });
     }
   }
 
   // Reorder teams
   static async reorderTeams(req, res) {
     const { orderedIds } = req.body;
-    if (!Array.isArray(orderedIds)) {
-      req.log.warn(
-        { action: 'reorderTeams' },
-        'Team reorder failed: orderedIds not an array',
-      );
-      return res.status(400).json({ error: 'orderedIds must be an array' });
-    }
 
+    // Validation handled by middleware
     req.log.info(
       { action: 'reorderTeams', count: orderedIds.length },
       'Reordering teams',
@@ -144,7 +132,7 @@ class TeamController {
 
       res.json(teams);
     } catch (error) {
-      handleError(res, error, 'reordering teams');
+      handleError(res, error, 'reordering teams', { logger: req.logger });
     }
   }
 
@@ -152,14 +140,8 @@ class TeamController {
   static async moveAnalysisToTeam(req, res) {
     const { name } = req.params;
     const { teamId } = req.body;
-    if (!teamId) {
-      req.log.warn(
-        { action: 'moveAnalysisToTeam', analysisName: name },
-        'Move analysis failed: missing teamId',
-      );
-      return res.status(400).json({ error: 'teamId is required' });
-    }
 
+    // Validation handled by middleware
     req.log.info(
       {
         action: 'moveAnalysisToTeam',
@@ -186,12 +168,20 @@ class TeamController {
         'Analysis moved',
       );
 
-      // Broadcast move to users with access to involved teams
+      // Broadcast move notification to users with access to involved teams
       sseManager.broadcastAnalysisMove(result.analysis, result.from, result.to);
+
+      // Broadcast structure updates for both teams so tree updates in real-time
+      if (result.from) {
+        await broadcastTeamStructureUpdate(sseManager, result.from);
+      }
+      if (result.to) {
+        await broadcastTeamStructureUpdate(sseManager, result.to);
+      }
 
       res.json(result);
     } catch (error) {
-      handleError(res, error, 'moving analysis');
+      handleError(res, error, 'moving analysis', { logger: req.logger });
     }
   }
 
@@ -211,7 +201,7 @@ class TeamController {
       );
       res.json({ count });
     } catch (error) {
-      handleError(res, error, 'getting analysis count');
+      handleError(res, error, 'getting analysis count', { logger: req.logger });
     }
   }
 
@@ -219,14 +209,8 @@ class TeamController {
   static async createFolder(req, res) {
     const { teamId } = req.params;
     const { parentFolderId, name } = req.body;
-    if (!name) {
-      req.log.warn(
-        { action: 'createFolder', teamId },
-        'Folder creation failed: missing name',
-      );
-      return res.status(400).json({ error: 'Folder name is required' });
-    }
 
+    // Validation handled by middleware
     req.log.info(
       { action: 'createFolder', teamId, folderName: name, parentFolderId },
       'Creating folder',
@@ -262,7 +246,7 @@ class TeamController {
 
       res.status(201).json(folder);
     } catch (error) {
-      handleError(res, error, 'creating folder');
+      handleError(res, error, 'creating folder', { logger: req.logger });
     }
   }
 
@@ -305,7 +289,7 @@ class TeamController {
 
       res.json(folder);
     } catch (error) {
-      handleError(res, error, 'updating folder');
+      handleError(res, error, 'updating folder', { logger: req.logger });
     }
   }
 
@@ -318,11 +302,7 @@ class TeamController {
     );
 
     try {
-      const result = await teamService.deleteFolder(
-        teamId,
-        folderId,
-        req.log,
-      );
+      const result = await teamService.deleteFolder(teamId, folderId, req.log);
 
       req.log.info(
         { action: 'deleteFolder', teamId, folderId },
@@ -341,26 +321,18 @@ class TeamController {
 
       res.json(result);
     } catch (error) {
-      handleError(res, error, 'deleting folder');
+      handleError(res, error, 'deleting folder', { logger: req.logger });
     }
   }
 
   // Move item within team structure
   static async moveItem(req, res) {
     const { teamId } = req.params;
-    const { itemId, targetParentId, targetIndex } = req.body;
-    if (!itemId || targetIndex === undefined) {
-      req.log.warn(
-        { action: 'moveItem', teamId },
-        'Move item failed: missing itemId or targetIndex',
-      );
-      return res
-        .status(400)
-        .json({ error: 'itemId and targetIndex are required' });
-    }
+    const { itemId, newParentId, newIndex } = req.body;
 
+    // Validation handled by middleware
     req.log.info(
-      { action: 'moveItem', teamId, itemId, targetParentId, targetIndex },
+      { action: 'moveItem', teamId, itemId, newParentId, newIndex },
       'Moving item',
     );
 
@@ -368,8 +340,8 @@ class TeamController {
       const result = await teamService.moveItem(
         teamId,
         itemId,
-        targetParentId,
-        targetIndex,
+        newParentId,
+        newIndex,
         req.log,
       );
 
@@ -380,7 +352,7 @@ class TeamController {
 
       res.json(result);
     } catch (error) {
-      handleError(res, error, 'moving item');
+      handleError(res, error, 'moving item', { logger: req.logger });
     }
   }
 }

@@ -1,6 +1,7 @@
 // backend/src/routes/statusRoutes.js
 import { Router } from 'express';
 import StatusController from '../controllers/statusController.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
 
 const router = Router();
 
@@ -89,6 +90,6 @@ const router = Router();
  *                   type: string
  *                   example: "Detailed error message"
  */
-router.get('/', StatusController.getSystemStatus);
+router.get('/', asyncHandler(StatusController.getSystemStatus));
 
 export default router;

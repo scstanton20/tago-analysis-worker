@@ -214,7 +214,7 @@ export const AuthProvider = ({ children }) => {
         }
       },
     }),
-    [authData.user?.email],
+    [authData.user?.email, authData.user?.username, refetchSession],
   );
 
   // Memoize the complete context value

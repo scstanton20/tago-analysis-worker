@@ -37,10 +37,19 @@ export function isAnalysisNameSafe(name) {
 /**
  * Safe wrapper for fs.mkdir with path validation
  * @param {string} dirPath - Directory path to create
- * @param {Object} options - mkdir options
+ * @param {string} [basePath=config.paths.analysis] - Base path for validation
+ * @param {Object} [options={}] - mkdir options
  * @returns {Promise<void>}
+ * @throws {Error} If path traversal attempt is detected
  */
-export async function safeMkdir(dirPath, options = {}) {
+export async function safeMkdir(
+  dirPath,
+  basePath = config.paths.analysis,
+  options = {},
+) {
+  if (basePath && !isPathSafe(dirPath, basePath)) {
+    throw new Error('Path traversal attempt detected');
+  }
   return fs.mkdir(dirPath, options);
 }
 
@@ -48,48 +57,86 @@ export async function safeMkdir(dirPath, options = {}) {
  * Safe wrapper for fs.writeFile with path validation
  * @param {string} filePath - File path to write
  * @param {string|Buffer} data - Data to write
- * @param {Object|string} options - writeFile options
+ * @param {string} [basePath=config.paths.analysis] - Base path for validation
+ * @param {Object|string} [options={}] - writeFile options
  * @returns {Promise<void>}
+ * @throws {Error} If path traversal attempt is detected
  */
-export async function safeWriteFile(filePath, data, options = {}) {
+export async function safeWriteFile(
+  filePath,
+  data,
+  basePath = config.paths.analysis,
+  options = {},
+) {
+  if (basePath && !isPathSafe(filePath, basePath)) {
+    throw new Error('Path traversal attempt detected');
+  }
   return fs.writeFile(filePath, data, options);
 }
 
 /**
  * Safe wrapper for fs.readFile with path validation
  * @param {string} filePath - File path to read
+ * @param {string} [basePath=config.paths.analysis] - Base path for validation
  * @param {Object|string} options - readFile options
  * @returns {Promise<Buffer|string>}
+ * @throws {Error} If path traversal attempt is detected
  */
-export async function safeReadFile(filePath, options = {}) {
+export async function safeReadFile(
+  filePath,
+  basePath = config.paths.analysis,
+  options = {},
+) {
+  if (basePath && !isPathSafe(filePath, basePath)) {
+    throw new Error('Path traversal attempt detected');
+  }
   return fs.readFile(filePath, options);
 }
 
 /**
  * Safe wrapper for fs.unlink with path validation
  * @param {string} filePath - File path to delete
+ * @param {string} [basePath=config.paths.analysis] - Base path for validation
  * @returns {Promise<void>}
+ * @throws {Error} If path traversal attempt is detected
  */
-export async function safeUnlink(filePath) {
+export async function safeUnlink(filePath, basePath = config.paths.analysis) {
+  if (basePath && !isPathSafe(filePath, basePath)) {
+    throw new Error('Path traversal attempt detected');
+  }
   return fs.unlink(filePath);
 }
 
 /**
  * Safe wrapper for fs.readdir with path validation
  * @param {string} dirPath - Directory path to read
+ * @param {string} [basePath=config.paths.analysis] - Base path for validation
  * @param {Object} options - readdir options
  * @returns {Promise<string[]>}
+ * @throws {Error} If path traversal attempt is detected
  */
-export async function safeReaddir(dirPath, options = {}) {
+export async function safeReaddir(
+  dirPath,
+  basePath = config.paths.analysis,
+  options = {},
+) {
+  if (basePath && !isPathSafe(dirPath, basePath)) {
+    throw new Error('Path traversal attempt detected');
+  }
   return fs.readdir(dirPath, options);
 }
 
 /**
  * Safe wrapper for fs.stat with path validation
  * @param {string} filePath - Path to stat
+ * @param {string} [basePath=config.paths.analysis] - Base path for validation
  * @returns {Promise<fs.Stats>}
+ * @throws {Error} If path traversal attempt is detected
  */
-export async function safeStat(filePath) {
+export async function safeStat(filePath, basePath = config.paths.analysis) {
+  if (basePath && !isPathSafe(filePath, basePath)) {
+    throw new Error('Path traversal attempt detected');
+  }
   return fs.stat(filePath);
 }
 
@@ -97,9 +144,21 @@ export async function safeStat(filePath) {
  * Safe wrapper for fs.rename with path validation
  * @param {string} oldPath - Current path
  * @param {string} newPath - New path
+ * @param {string} [basePath=config.paths.analysis] - Base path for validation
  * @returns {Promise<void>}
+ * @throws {Error} If path traversal attempt is detected
  */
-export async function safeRename(oldPath, newPath) {
+export async function safeRename(
+  oldPath,
+  newPath,
+  basePath = config.paths.analysis,
+) {
+  if (
+    basePath &&
+    (!isPathSafe(oldPath, basePath) || !isPathSafe(newPath, basePath))
+  ) {
+    throw new Error('Path traversal attempt detected');
+  }
   return fs.rename(oldPath, newPath);
 }
 
@@ -140,19 +199,33 @@ export function getAnalysisFilePath(analysisName, ...segments) {
 /**
  * Safe wrapper for fs.existsSync
  * @param {string} filePath - Path to check
+ * @param {string} [basePath=null] - Base path for validation (optional for exists check)
  * @returns {boolean}
+ * @throws {Error} If path traversal attempt is detected
  */
-export function safeExistsSync(filePath) {
+export function safeExistsSync(filePath, basePath = null) {
+  if (basePath && !isPathSafe(filePath, basePath)) {
+    throw new Error('Path traversal attempt detected');
+  }
   return fsSync.existsSync(filePath);
 }
 
 /**
  * Safe wrapper for fs.mkdirSync
  * @param {string} dirPath - Directory path to create
- * @param {Object} options - mkdirSync options
+ * @param {string} [basePath=config.paths.analysis] - Base path for validation
+ * @param {Object} [options={}] - mkdirSync options
  * @returns {void}
+ * @throws {Error} If path traversal attempt is detected
  */
-export function safeMkdirSync(dirPath, options = {}) {
+export function safeMkdirSync(
+  dirPath,
+  basePath = config.paths.analysis,
+  options = {},
+) {
+  if (basePath && !isPathSafe(dirPath, basePath)) {
+    throw new Error('Path traversal attempt detected');
+  }
   return fsSync.mkdirSync(dirPath, options);
 }
 
@@ -160,28 +233,52 @@ export function safeMkdirSync(dirPath, options = {}) {
  * Safe wrapper for fs.writeFileSync
  * @param {string} filePath - File path to write
  * @param {string|Buffer} data - Data to write
- * @param {Object|string} options - writeFileSync options
+ * @param {string} [basePath=config.paths.analysis] - Base path for validation
+ * @param {Object|string} [options={}] - writeFileSync options
  * @returns {void}
+ * @throws {Error} If path traversal attempt is detected
  */
-export function safeWriteFileSync(filePath, data, options = {}) {
+export function safeWriteFileSync(
+  filePath,
+  data,
+  basePath = config.paths.analysis,
+  options = {},
+) {
+  if (basePath && !isPathSafe(filePath, basePath)) {
+    throw new Error('Path traversal attempt detected');
+  }
   return fsSync.writeFileSync(filePath, data, options);
 }
 
 /**
  * Safe wrapper for fs.unlinkSync
  * @param {string} filePath - File path to delete
+ * @param {string} [basePath=config.paths.analysis] - Base path for validation
  * @returns {void}
+ * @throws {Error} If path traversal attempt is detected
  */
-export function safeUnlinkSync(filePath) {
+export function safeUnlinkSync(filePath, basePath = config.paths.analysis) {
+  if (basePath && !isPathSafe(filePath, basePath)) {
+    throw new Error('Path traversal attempt detected');
+  }
   return fsSync.unlinkSync(filePath);
 }
 
 /**
  * Safe wrapper for fs.readFileSync
  * @param {string} filePath - File path to read
+ * @param {string} [basePath=config.paths.analysis] - Base path for validation
  * @param {Object|string} options - readFileSync options
  * @returns {Buffer|string}
+ * @throws {Error} If path traversal attempt is detected
  */
-export function safeReadFileSync(filePath, options = {}) {
+export function safeReadFileSync(
+  filePath,
+  basePath = config.paths.analysis,
+  options = {},
+) {
+  if (basePath && !isPathSafe(filePath, basePath)) {
+    throw new Error('Path traversal attempt detected');
+  }
   return fsSync.readFileSync(filePath, options);
 }

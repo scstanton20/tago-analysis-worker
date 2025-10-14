@@ -11,13 +11,13 @@ export const settingsValidationSchemas = {
       ttl: z
         .number()
         .int()
-        .min(0, 'TTL must be a non-negative integer')
-        .max(86400, 'TTL must not exceed 24 hours (86400 seconds)')
+        .min(1000, 'TTL must be at least 1000ms (1 second)')
+        .max(86400000, 'TTL must not exceed 86400000ms (24 hours)')
         .optional(),
       maxEntries: z
         .number()
         .int()
-        .min(1, 'Max entries must be at least 1')
+        .min(10, 'Max entries must be at least 10')
         .max(10000, 'Max entries must not exceed 10000')
         .optional(),
     }),

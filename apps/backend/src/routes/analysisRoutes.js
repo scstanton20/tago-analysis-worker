@@ -16,16 +16,12 @@ import {
 } from '../middleware/rateLimiter.js';
 import { validateRequest } from '../middleware/validateRequest.js';
 import { analysisValidationSchemas } from '../validation/analysisSchemas.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
 
 const router = Router();
 
 // Apply authentication to all analysis routes
 router.use(authMiddleware);
-
-// Add error handling middleware specifically for this router
-const asyncHandler = (fn) => (req, res, next) => {
-  Promise.resolve(fn(req, res, next)).catch(next);
-};
 
 // Analysis management routes
 /**
