@@ -60,8 +60,7 @@ export default function VersionManagementModal({
     } finally {
       setLoading(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [analysis.name]);
+  }, [analysis.name, notify]);
 
   // Load versions when modal opens using existing hook pattern
   useModalDataLoader(isOpen, loadVersions, !!analysis?.name);

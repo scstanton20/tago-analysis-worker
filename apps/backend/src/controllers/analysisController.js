@@ -5,44 +5,13 @@ import path from 'path';
 import config from '../config/default.js';
 import { promises as fs } from 'fs';
 import sanitize from 'sanitize-filename';
-import { safeWriteFile, safeUnlink } from '../utils/safePath.js';
+import {
+  safeWriteFile,
+  safeUnlink,
+  isPathSafe,
+  sanitizeAndValidateFilename,
+} from '../utils/safePath.js';
 import { handleError } from '../utils/responseHelpers.js';
-
-// Helper function to validate that a path is within the expected directory
-function validatePath(targetPath, allowedBasePath) {
-  const resolvedTarget = path.resolve(targetPath);
-  const resolvedBase = path.resolve(allowedBasePath);
-
-  // Check if the resolved target path starts with the resolved base path
-  if (
-    !resolvedTarget.startsWith(resolvedBase + path.sep) &&
-    resolvedTarget !== resolvedBase
-  ) {
-    throw new Error('Path traversal attempt detected');
-  }
-
-  return resolvedTarget;
-}
-
-// Helper function to sanitize and validate filename
-function sanitizeAndValidateFilename(filename) {
-  if (!filename || typeof filename !== 'string') {
-    throw new Error('Invalid filename');
-  }
-
-  const sanitized = sanitize(filename, { replacement: '_' });
-
-  if (
-    !sanitized ||
-    sanitized.length === 0 ||
-    sanitized === '.' ||
-    sanitized === '..'
-  ) {
-    throw new Error('Filename cannot be empty or invalid after sanitization');
-  }
-
-  return sanitized;
-}
 
 class AnalysisController {
   static async uploadAnalysis(req, res) {
@@ -510,7 +479,9 @@ class AnalysisController {
         );
 
         // Validate that our expected path is within allowed directory
-        validatePath(expectedLogFile, config.paths.analysis);
+        if (!isPathSafe(expectedLogFile, config.paths.analysis)) {
+          throw new Error('Path traversal attempt detected');
+        }
 
         // Verify the file exists before attempting to serve it
         try {
@@ -564,7 +535,9 @@ class AnalysisController {
       );
 
       // Validate that the logs directory is within the expected analysis path
-      validatePath(analysisLogsDir, config.paths.analysis);
+      if (!isPathSafe(analysisLogsDir, config.paths.analysis)) {
+        throw new Error('Path traversal attempt detected');
+      }
 
       // Create a temporary file in the correct logs directory with sanitized filename
       const tempLogFile = path.join(
@@ -573,7 +546,9 @@ class AnalysisController {
       );
 
       // Validate that the temp file path is within the expected directory
-      validatePath(tempLogFile, analysisLogsDir);
+      if (!isPathSafe(tempLogFile, analysisLogsDir)) {
+        throw new Error('Path traversal attempt detected');
+      }
 
       try {
         await safeWriteFile(tempLogFile, content, config.paths.analysis);

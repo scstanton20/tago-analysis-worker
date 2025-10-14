@@ -2,6 +2,7 @@
 import path from 'path';
 import { promises as fs } from 'fs';
 import fsSync from 'fs';
+import sanitize from 'sanitize-filename';
 import config from '../config/default.js';
 
 /**
@@ -281,4 +282,37 @@ export function safeReadFileSync(
     throw new Error('Path traversal attempt detected');
   }
   return fsSync.readFileSync(filePath, options);
+}
+
+/**
+ * Sanitizes and validates a filename to prevent path traversal and invalid characters.
+ * Uses the sanitize-filename package to replace invalid characters with underscores.
+ *
+ * @param {string} filename - The filename to sanitize and validate
+ * @returns {string} The sanitized filename
+ * @throws {Error} If the filename is invalid or becomes empty after sanitization
+ *
+ * @example
+ * sanitizeAndValidateFilename('my-script.js'); // Returns 'my-script.js'
+ * sanitizeAndValidateFilename('../../../etc/passwd'); // Returns sanitized version
+ * sanitizeAndValidateFilename(''); // Throws Error
+ * sanitizeAndValidateFilename('.'); // Throws Error
+ */
+export function sanitizeAndValidateFilename(filename) {
+  if (!filename || typeof filename !== 'string') {
+    throw new Error('Invalid filename');
+  }
+
+  const sanitized = sanitize(filename, { replacement: '_' });
+
+  if (
+    !sanitized ||
+    sanitized.length === 0 ||
+    sanitized === '.' ||
+    sanitized === '..'
+  ) {
+    throw new Error('Filename cannot be empty or invalid after sanitization');
+  }
+
+  return sanitized;
 }

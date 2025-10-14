@@ -170,9 +170,13 @@ export function CodeMirrorEditor({
         viewRef.current = null;
       }
     };
-    // ESLint wants dependencies, but including them would cause recreation
+    // This effect intentionally runs once on mount to create the editor.
+    // It captures initial prop values (value, colorScheme, diffMode, originalContent).
+    // Subsequent updates are handled by separate effects (lines 177-277, 279-339)
+    // and refs (onChangeRef, readOnlyRef, etc.) to avoid expensive editor recreation.
+    // This is a valid performance optimization pattern for expensive initialization.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Create only once
+  }, []); // Create only once on mount
 
   // Update theme when colorScheme changes
   useEffect(() => {

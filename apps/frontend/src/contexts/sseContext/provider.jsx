@@ -4,6 +4,7 @@ import PropTypes from 'prop-types';
 import { SSEContext } from './context';
 import { useAuth } from '../../hooks/useAuth';
 import logger from '../../utils/logger';
+import { isDevelopment, API_URL } from '../../config/env.js';
 
 export function SSEProvider({ children }) {
   const { isAuthenticated } = useAuth();
@@ -46,8 +47,8 @@ export function SSEProvider({ children }) {
     if (!isAuthenticated) return null;
 
     let baseUrl;
-    if (import.meta.env.DEV && import.meta.env.VITE_API_URL) {
-      baseUrl = `${import.meta.env.VITE_API_URL}/sse/events`;
+    if (isDevelopment && API_URL) {
+      baseUrl = `${API_URL}/sse/events`;
     } else {
       const protocol =
         window.location.protocol === 'https:' ? 'https:' : 'http:';

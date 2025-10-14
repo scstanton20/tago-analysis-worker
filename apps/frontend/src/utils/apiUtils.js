@@ -4,6 +4,7 @@
  * @module utils/apiUtils
  */
 import logger from './logger';
+import { isDevelopment, API_URL } from '../config/env.js';
 
 /**
  * Get the base URL for API requests based on environment
@@ -11,8 +12,8 @@ import logger from './logger';
  * @returns {string} Base URL for API requests
  */
 const getBaseUrl = () => {
-  if (import.meta.env.DEV && import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL; // Use Docker URL in Docker dev
+  if (isDevelopment && API_URL) {
+    return API_URL; // Use Docker URL in Docker dev
   }
   return '/api'; // Use /api prefix for local dev and production
 };

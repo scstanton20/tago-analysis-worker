@@ -1,8 +1,8 @@
 # Refactoring Roadmap
 
-**Last Updated:** 2025-10-13 (Phase 9 Complete)
-**Version:** 4.0
-**Status:** Active - Phase 9 COMPLETED ✅ - All medium priority issues resolved
+**Last Updated:** 2025-10-13 (Phase 10 In Progress)
+**Version:** 4.1
+**Status:** Active - Phase 10 ONGOING 🔄 - 2 of 7 low priority tasks completed
 
 ---
 
@@ -953,30 +953,77 @@ return res.status(400).json({
 
 ---
 
-#### NLP-4: Extract Helper Functions 🔵
+#### ✅ NLP-4: Extract Helper Functions 🔵
 
 **Effort:** 2 hours
+**Status:** ✅ COMPLETED (2025-10-13)
 
-Extract path security utilities from analysisController.js to `/apps/backend/src/utils/pathSecurity.js`.
+**Resolution:**
+
+- Added `sanitizeAndValidateFilename()` function to `/apps/backend/src/utils/safePath.js` with comprehensive JSDoc
+- Updated `analysisController.js` to import and use `isPathSafe()` and `sanitizeAndValidateFilename()` from safePath.js
+- Replaced duplicate `validatePath()` helper function with existing `isPathSafe()` utility
+- Removed duplicate helper functions from controller (lines 12-45)
+- All 3 usages of validatePath updated to use isPathSafe() with proper error handling
+- **Impact:** Better code reusability, centralized path security utilities, eliminated 33 lines of duplicate code
 
 ---
 
 ### Frontend Low Priority
 
-#### NLP-5: Hook Dependency Warnings 🔵
+#### ✅ NLP-5: Hook Dependency Warnings 🔵
 
-**Files:** Multiple
+**Files:** Multiple hooks and components
 **Effort:** 2 hours
+**Status:** ✅ COMPLETED (2025-10-13)
 
-Fix `eslint-disable` comments for `react-hooks/exhaustive-deps`.
+**Issue:** 4 files had `eslint-disable` comments for `react-hooks/exhaustive-deps` violations
+
+**Resolution:**
+Fixed all hook dependency warnings in 4 files:
+
+1. **useEventListener.js** - Added useMemo to create stable options reference, preventing unnecessary effect re-runs
+2. **useFormSync.js** - Added `form`, `values`, and `trigger` to dependencies with JSON.stringify comparison to avoid unnecessary syncs
+3. **CodeMirrorEditor.jsx** - Improved comment to explain intentional mount-only pattern (valid performance optimization)
+4. **versionManagement.jsx** - Added `notify` to useCallback dependencies
+
+**Impact:**
+- ✅ Zero exhaustive-deps violations remaining (verified with linter)
+- ✅ Prevents stale closures and React bugs
+- ✅ Frontend builds successfully with no errors
+- ✅ Better code reliability and maintainability
 
 ---
 
-#### NLP-6: Centralize Environment Variables 🔵
+#### ✅ NLP-6: Centralize Environment Variables 🔵
 
 **Effort:** 1 hour
+**Status:** ✅ COMPLETED (2025-10-13)
 
-Create `config/env.js` to centralize `import.meta.env` access.
+**Resolution:**
+Created `/apps/frontend/src/config/env.js` with comprehensive JSDoc documentation and centralized environment variable access:
+
+**Exported constants:**
+
+- `MODE` - Application mode (development/production)
+- `isDevelopment` - Boolean flag for dev mode
+- `isProduction` - Boolean flag for prod mode
+- `API_URL` - Custom API URL override (Docker dev)
+- `LOG_LEVEL` - Configurable log level
+- `config` - Object containing all env vars
+
+**Updated 3 files to use centralized config:**
+
+- `logger.js` - now uses `LOG_LEVEL` and `isDevelopment`
+- `apiUtils.js` - now uses `isDevelopment` and `API_URL`
+- `sseContext/provider.jsx` - now uses `isDevelopment` and `API_URL`
+
+**Impact:**
+
+- All `import.meta.env` access centralized in one module
+- Easier testing and mocking of environment variables
+- Better documentation of available environment variables
+- Consistent env var handling across the application
 
 ---
 
@@ -1103,11 +1150,25 @@ Extract complex functions from components:
 
 ### Phase 10: Low Priority & Polish (ONGOING)
 
-**Effort:** 33 hours
+**Effort:** 33 hours total → 30 hours remaining
 **Priority:** LOW
+**Status:** 🔄 IN PROGRESS - 2 of 7 tasks completed (6% complete)
 
-**Backend:** 26 hours (JSDoc, async/await standardization, error codes, helper extraction)
-**Frontend:** 7 hours (hook dependencies, env centralization, logic extraction)
+**Completed (3 hours):**
+
+- ✅ NLP-4: Extract helper functions (2h) - COMPLETED
+- ✅ NLP-6: Centralize environment variables (1h) - COMPLETED
+
+**Remaining Backend:** 24 hours
+
+- NLP-1: Add JSDoc documentation to backend (16h)
+- NLP-2: Standardize async/await usage (4h)
+- NLP-3: Add machine-readable error codes (4h)
+
+**Remaining Frontend:** 6 hours
+
+- NLP-5: Fix hook dependency warnings (2h)
+- NLP-7: Extract complex logic from components (4h)
 
 ---
 
@@ -1202,9 +1263,64 @@ find apps/frontend/src/components -name "*.jsx" -exec wc -l {} \; | sort -rn | h
 
 ## 🚀 NEXT STEPS FOR IMPLEMENTATION
 
-**Current Status:** Phase 9 Backend COMPLETED ✅ - Frontend tasks remaining
+**Current Status:** Phase 10 IN PROGRESS 🔄 - 2 of 7 tasks completed
 
-**Recommended Starting Point:** Phase 9 Frontend - Medium Priority Fixes (32-33 hours total)
+**Progress:** 3 hours completed / 33 hours total (9% complete)
+
+**Recommended Next Task:** NLP-5: Fix hook dependency warnings (2h) - Quick win
+
+### ✅ Completed Phase 10 Tasks:
+
+**Backend (3 hours completed):**
+
+1. ✅ **NLP-4: Extract path security helper functions** (2h) - COMPLETED
+   - File: analysisController.js
+   - Added `sanitizeAndValidateFilename()` to safePath.js
+   - Replaced duplicate `validatePath()` with existing `isPathSafe()`
+   - Eliminated 33 lines of duplicate code
+   - Impact: Centralized path security utilities, better reusability
+
+**Frontend (1 hour completed):**
+
+2. ✅ **NLP-6: Centralize environment variables** (1h) - COMPLETED
+   - Created: `/apps/frontend/src/config/env.js`
+   - Updated 3 files: logger.js, apiUtils.js, sseContext/provider.jsx
+   - All `import.meta.env` access now centralized
+   - Impact: Easier testing, better documentation, consistent env handling
+
+### Remaining Phase 10 Tasks (30 hours):
+
+**Quick Wins (2 hours):**
+
+1. **NLP-5: Fix hook dependency warnings** (2h) - RECOMMENDED NEXT
+   - Files: Multiple components with eslint-disable comments
+   - Fix remaining `react-hooks/exhaustive-deps` violations
+   - Impact: Prevents stale closures and React bugs
+
+**Frontend Polish (4 hours):** 2. **NLP-7: Extract complex logic from components** (4h)
+
+- `analysisLogs.jsx` - Extract scroll logic to custom hook
+- `versionManagement.jsx` - Fix derived state with useEffect
+- `teamManagementModal.jsx` - Extract color selection to hook
+- Impact: Better separation of concerns, reusability
+
+**Backend Documentation & Standards (24 hours):** 3. **NLP-1: Add JSDoc documentation** (16h)
+
+- Add comprehensive JSDoc to all controllers, services, utilities
+- Document parameters, return types, and examples
+- Impact: Better IDE support, easier onboarding
+
+4. **NLP-2: Standardize async/await usage** (4h)
+   - Convert remaining `.then()` chains to async/await
+   - Standardize error handling patterns
+   - Impact: Consistent, modern async code
+
+5. **NLP-3: Add machine-readable error codes** (4h)
+   - Add error codes to all API responses
+   - Create error code documentation
+   - Impact: Better error handling on frontend, easier debugging
+
+---
 
 ### ✅ Completed Backend Tasks (Phase 9):
 
@@ -1354,8 +1470,13 @@ pnpm lint         # Check code quality
 
 **Phase 9 Status:** ✅ COMPLETED - All medium priority issues resolved
 
-**Next Steps:** Proceed to Phase 10 (Low Priority polish) or Phase 11 (Testing) in parallel.
+**Phase 10 Status:** 🔄 IN PROGRESS - 2 of 7 tasks completed (9% complete)
+
+**Next Steps:**
+
+- Continue with Phase 10 low priority polish tasks (NLP-5 recommended next)
+- Phase 11 (Testing) can be started in parallel
 
 ---
 
-**End of Refactoring Roadmap v4.0**
+**End of Refactoring Roadmap v4.1**

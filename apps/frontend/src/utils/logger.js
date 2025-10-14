@@ -6,6 +6,8 @@
  * Supports log levels, contextual logging, and development/production modes
  */
 
+import { LOG_LEVEL, isDevelopment } from '../config/env.js';
+
 // Log levels with priority
 const LOG_LEVELS = {
   debug: 0,
@@ -28,12 +30,10 @@ const LOG_STYLES = {
  * Logger configuration
  */
 const config = {
-  // Get log level from environment or default to 'info' in production, 'debug' in development
-  level:
-    import.meta.env.VITE_LOG_LEVEL ||
-    (import.meta.env.MODE === 'development' ? 'debug' : 'info'),
+  // Get log level from centralized environment configuration
+  level: LOG_LEVEL,
   // Enable/disable colored output
-  useColors: import.meta.env.MODE === 'development',
+  useColors: isDevelopment,
   // Enable/disable timestamps
   showTimestamp: true,
   // Enable/disable module names
@@ -100,7 +100,7 @@ class Logger {
       return true;
     }
     // In production, suppress non-error logs
-    if (import.meta.env.PROD && level !== 'error') {
+    if (!isDevelopment && level !== 'error') {
       return false;
     }
     return LOG_LEVELS[level] >= this.minLevel;
