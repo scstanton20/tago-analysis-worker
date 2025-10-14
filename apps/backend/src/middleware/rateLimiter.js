@@ -83,7 +83,7 @@ export const authLimiter = rateLimit({
 // Rate limiter for team management operations (create, update, delete, folder operations)
 export const teamOperationLimiter = rateLimit({
   windowMs: RATE_LIMIT.WINDOW_FIFTEEN_MINUTES_MS,
-  max: 30,
+  max: 200,
   message: {
     error: 'Too many team operations from this IP, please try again later.',
   },
@@ -94,7 +94,7 @@ export const teamOperationLimiter = rateLimit({
 // Rate limiter for user management operations (add, update, delete, assign teams)
 export const userOperationLimiter = rateLimit({
   windowMs: RATE_LIMIT.WINDOW_FIFTEEN_MINUTES_MS,
-  max: 20,
+  max: 200,
   message: {
     error: 'Too many user operations from this IP, please try again later.',
   },
@@ -105,7 +105,7 @@ export const userOperationLimiter = rateLimit({
 // Rate limiter for settings operations (DNS config, cache management)
 export const settingsOperationLimiter = rateLimit({
   windowMs: RATE_LIMIT.WINDOW_FIFTEEN_MINUTES_MS,
-  max: 30,
+  max: 200,
   message: {
     error: 'Too many settings operations from this IP, please try again later.',
   },
@@ -113,10 +113,10 @@ export const settingsOperationLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Stricter rate limiter for SSE logout endpoint
+// Rate limiter for SSE logout endpoint
 export const sseLogoutLimiter = rateLimit({
   windowMs: RATE_LIMIT.WINDOW_FIFTEEN_MINUTES_MS,
-  max: 10,
+  max: 50,
   message: {
     error:
       'Too many logout notifications from this IP, please try again later.',

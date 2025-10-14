@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useForm } from '@mantine/form';
-import { admin, organization, authClient } from '../lib/auth';
+import { admin, authClient } from '../lib/auth';
 import { userService } from '../services/userService';
 import logger from '../utils/logger.js';
 import {
@@ -18,7 +18,9 @@ export function useUserManagement({
   currentUser,
   organizationId,
   refreshUserData,
+  refetchSession,
   notify,
+  teams,
 }) {
   // State management
   const [users, setUsers] = useState([]);
@@ -29,9 +31,21 @@ export function useUserManagement({
   const [createdUserInfo, setCreatedUserInfo] = useState(null);
   const [showSessionsModal, setShowSessionsModal] = useState(false);
   const [selectedUserForSessions, setSelectedUserForSessions] = useState(null);
-  const [availableTeams, setAvailableTeams] = useState([]);
-  const [teamsLoading, setTeamsLoading] = useState(false);
   const [actions, setActions] = useState([]);
+
+  // Convert teams from SSE object to array format for dropdown
+  const availableTeams = useMemo(() => {
+    if (!teams || typeof teams !== 'object') {
+      return [];
+    }
+
+    return Object.values(teams)
+      .filter((team) => !team.isSystem) // Exclude system teams
+      .map((team) => ({
+        value: team.id,
+        label: team.name,
+      }));
+  }, [teams]);
 
   // Extract usernames and emails from existing users data
   const existingUserData = useMemo(() => {
@@ -88,51 +102,6 @@ export function useUserManagement({
       setLoading(false);
     }
   }, []);
-
-  const loadTeams = useCallback(
-    async (isAdmin) => {
-      if (!organizationId) {
-        logger.warn('No organization ID available for loading teams');
-        setAvailableTeams([]);
-        return;
-      }
-
-      try {
-        setTeamsLoading(true);
-
-        const result = await organization.listTeams({
-          query: {
-            organizationId: organizationId,
-          },
-        });
-
-        if (!result.error && result.data) {
-          const filteredTeams = result.data.filter((team) => {
-            if (!team.isSystem && !team.is_system) {
-              return true;
-            }
-            return isAdmin;
-          });
-
-          setAvailableTeams(
-            filteredTeams.map((team) => ({
-              value: team.id,
-              label: team.name,
-            })),
-          );
-        } else {
-          logger.error('Failed to load teams:', result.error);
-          setAvailableTeams([]);
-        }
-      } catch (error) {
-        logger.error('Error loading teams:', error);
-        setAvailableTeams([]);
-      } finally {
-        setTeamsLoading(false);
-      }
-    },
-    [organizationId],
-  );
 
   const loadActions = useCallback(async () => {
     try {
@@ -597,6 +566,7 @@ export function useUserManagement({
           role: user.role || 'user',
           departmentPermissions,
         });
+        form.resetDirty();
         setShowCreateForm(true);
       } catch (error) {
         logger.error('Error loading user data for editing:', error);
@@ -675,15 +645,17 @@ export function useUserManagement({
           color: 'blue',
         });
 
-        await refreshUserData();
-        logger.log('✓ User data refreshed after impersonation');
+        // Refetch session to get updated user from Better Auth
+        // This will trigger PermissionsContext to auto-reload permissions via useEffect
+        await refetchSession();
+        logger.log('✓ Session refetched after impersonation start');
       } catch (err) {
         setError(err.message || 'Failed to impersonate user');
       } finally {
         setLoading(false);
       }
     },
-    [refreshUserData, notify],
+    [refetchSession, notify],
   );
 
   const handleManageSessions = useCallback((user) => {
@@ -695,7 +667,7 @@ export function useUserManagement({
     async (user) => {
       if (
         !confirm(
-          `Are you sure you want to ban "${user.name || user.email}"? This will prevent them from signing in.`,
+          `Are you sure you want to ban "${user.name || user.email}"? This will immediately log them out and prevent them from signing in.`,
         )
       ) {
         return;
@@ -739,7 +711,6 @@ export function useUserManagement({
         const result = await admin.unbanUser({
           userId: user.id,
         });
-
         if (result.error) {
           throw new Error(result.error.message);
         }
@@ -780,6 +751,7 @@ export function useUserManagement({
       role: 'user',
       departmentPermissions: {},
     });
+    form.resetDirty();
     setShowCreateForm(true);
     form.clearFieldError('username');
     form.clearFieldError('email');
@@ -803,12 +775,10 @@ export function useUserManagement({
     showSessionsModal,
     selectedUserForSessions,
     availableTeams,
-    teamsLoading,
     actions,
     form,
     // Functions
     loadUsers,
-    loadTeams,
     loadActions,
     isOnlyAdmin,
     // Handlers

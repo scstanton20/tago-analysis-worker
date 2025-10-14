@@ -83,6 +83,18 @@ export const AuthProvider = ({ children }) => {
   // Memoize auth functions to prevent recreating on every render
   const authFunctions = useMemo(
     () => ({
+      // Expose refetchSession for components that need to manually refresh session
+      // (e.g., after impersonation or other server-side session changes)
+      refetchSession: async () => {
+        try {
+          refetchSession();
+          logger.log('✓ Session manually refetched');
+        } catch (error) {
+          logger.error('Error manually refetching session:', error);
+          throw error;
+        }
+      },
+
       logout: async () => {
         await signOut();
       },

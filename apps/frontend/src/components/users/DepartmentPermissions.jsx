@@ -8,8 +8,6 @@ import {
   Box,
   Checkbox,
   Divider,
-  Center,
-  Loader,
 } from '@mantine/core';
 
 /**
@@ -21,7 +19,6 @@ export default function DepartmentPermissions({
   availableTeams,
   availableActions,
   departmentPermissions,
-  teamsLoading,
   onToggleDepartment,
   onTogglePermission,
 }) {
@@ -38,102 +35,91 @@ export default function DepartmentPermissions({
       </Text>
 
       <Stack gap="xs" mah="40vh" style={{ overflow: 'auto' }}>
-        {teamsLoading ? (
-          <Center py="md">
-            <Group>
-              <Loader size="sm" />
-              <Text size="sm" c="dimmed">
-                Loading teams...
-              </Text>
-            </Group>
-          </Center>
-        ) : (
-          availableTeams.map((team) => {
-            const teamPerms = departmentPermissions[team.value] || {
-              enabled: false,
-              permissions: [],
-            };
-            const isEnabled = teamPerms.enabled;
-            const permissions = teamPerms.permissions || [];
+        {availableTeams.map((team) => {
+          const teamPerms = departmentPermissions[team.value] || {
+            enabled: false,
+            permissions: [],
+          };
+          const isEnabled = teamPerms.enabled;
+          const permissions = teamPerms.permissions || [];
 
-            return (
-              <Paper
-                key={team.value}
-                withBorder
-                p="md"
-                style={{
-                  backgroundColor: isEnabled
-                    ? 'var(--mantine-color-blue-light)'
-                    : 'transparent',
-                  borderColor: isEnabled
-                    ? 'var(--mantine-color-blue-6)'
-                    : 'var(--mantine-color-gray-3)',
-                }}
-              >
-                <Stack gap="sm">
-                  {/* Department Header */}
-                  <Group
-                    justify="space-between"
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => onToggleDepartment(team.value)}
-                  >
-                    <Group gap="sm">
-                      <Checkbox
-                        checked={isEnabled}
-                        onChange={() => onToggleDepartment(team.value)}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      <Text fw={500} size="sm">
-                        {team.label}
-                      </Text>
-                    </Group>
-                    {isEnabled && (
-                      <Badge size="xs" variant="light" color="blue">
-                        {permissions.length} permission
-                        {permissions.length !== 1 ? 's' : ''}
-                      </Badge>
-                    )}
+          return (
+            <Paper
+              key={team.value}
+              withBorder
+              p="md"
+              style={{
+                backgroundColor: isEnabled
+                  ? 'var(--mantine-color-blue-light)'
+                  : 'transparent',
+                borderColor: isEnabled
+                  ? 'var(--mantine-color-blue-6)'
+                  : 'var(--mantine-color-gray-3)',
+              }}
+            >
+              <Stack gap="sm">
+                {/* Department Header */}
+                <Group
+                  justify="space-between"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => onToggleDepartment(team.value)}
+                >
+                  <Group gap="sm">
+                    <Checkbox
+                      checked={isEnabled}
+                      onChange={() => onToggleDepartment(team.value)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    <Text fw={500} size="sm">
+                      {team.label}
+                    </Text>
                   </Group>
-
-                  {/* Permissions for this department */}
                   {isEnabled && (
-                    <Box ml="xl">
-                      <Stack gap="xs">
-                        {availableActions.map((action) => (
-                          <Group key={action.value} gap="sm">
-                            <Checkbox
-                              size="sm"
-                              checked={permissions.includes(action.value)}
-                              onChange={() =>
-                                onTogglePermission(team.value, action.value)
-                              }
-                              disabled={action.value === 'view_analyses'} // Always enabled as default
-                              label={
-                                <Text size="sm">
-                                  {action.label}
-                                  {action.value === 'view_analyses' && (
-                                    <Text
-                                      component="span"
-                                      size="xs"
-                                      c="dimmed"
-                                      ml="xs"
-                                    >
-                                      (default)
-                                    </Text>
-                                  )}
-                                </Text>
-                              }
-                            />
-                          </Group>
-                        ))}
-                      </Stack>
-                    </Box>
+                    <Badge size="xs" variant="light" color="blue">
+                      {permissions.length} permission
+                      {permissions.length !== 1 ? 's' : ''}
+                    </Badge>
                   )}
-                </Stack>
-              </Paper>
-            );
-          })
-        )}
+                </Group>
+
+                {/* Permissions for this department */}
+                {isEnabled && (
+                  <Box ml="xl">
+                    <Stack gap="xs">
+                      {availableActions.map((action) => (
+                        <Group key={action.value} gap="sm">
+                          <Checkbox
+                            size="sm"
+                            checked={permissions.includes(action.value)}
+                            onChange={() =>
+                              onTogglePermission(team.value, action.value)
+                            }
+                            disabled={action.value === 'view_analyses'} // Always enabled as default
+                            label={
+                              <Text size="sm">
+                                {action.label}
+                                {action.value === 'view_analyses' && (
+                                  <Text
+                                    component="span"
+                                    size="xs"
+                                    c="dimmed"
+                                    ml="xs"
+                                  >
+                                    (default)
+                                  </Text>
+                                )}
+                              </Text>
+                            }
+                          />
+                        </Group>
+                      ))}
+                    </Stack>
+                  </Box>
+                )}
+              </Stack>
+            </Paper>
+          );
+        })}
       </Stack>
     </Stack>
   );
@@ -158,7 +144,6 @@ DepartmentPermissions.propTypes = {
       permissions: PropTypes.arrayOf(PropTypes.string).isRequired,
     }),
   ).isRequired,
-  teamsLoading: PropTypes.bool.isRequired,
   onToggleDepartment: PropTypes.func.isRequired,
   onTogglePermission: PropTypes.func.isRequired,
 };

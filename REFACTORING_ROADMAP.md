@@ -821,6 +821,7 @@ const logger =
 Added comprehensive JSDoc documentation to key utilities and hooks:
 
 **apiUtils.js changes:**
+
 - Added module-level JSDoc documentation
 - Documented `getBaseUrl()` (private function)
 - Added detailed JSDoc to `fetchWithHeaders()` with example
@@ -831,20 +832,23 @@ Added comprehensive JSDoc documentation to key utilities and hooks:
   - Error handling patterns
 
 **usePermissions.js changes:**
+
 - Added module-level JSDoc documentation
 - Added comprehensive hook documentation covering all 30+ exported properties and functions
 - Documented all permission checking functions (run, download, view, edit, upload, delete)
-- Documented bulk permission checkers (hasAny*, canUploadToAnyTeam)
+- Documented bulk permission checkers (hasAny\*, canUploadToAnyTeam)
 - Documented team-specific getters (getUploadableTeams, getEditableTeams, etc.)
 - Added usage example demonstrating common patterns
 
 **useAuth.js changes:**
+
 - Added module-level JSDoc documentation
 - Documented hook with all properties (user, isAuthenticated, isAdmin, etc.)
 - Documented all authentication functions (login, logout, updatePassword, etc.)
 - Added usage example
 
 **Impact:**
+
 - Improved developer experience with inline documentation
 - Better IDE autocomplete and IntelliSense support
 - Clear examples demonstrating proper usage patterns
@@ -852,6 +856,7 @@ Added comprehensive JSDoc documentation to key utilities and hooks:
 - Documentation coverage significantly improved for most-used utilities and hooks
 
 **Files with existing good documentation (verified, no changes needed):**
+
 - userValidation.js ✅
 - codeMirrorUtils.js ✅
 - reorderUtils.js ✅
@@ -875,6 +880,7 @@ Added comprehensive JSDoc documentation to key utilities and hooks:
 
 **Resolution:**
 Enhanced error handling in `hasPermission` async function:
+
 1. Changed `logger.warn` to `logger.error` with structured context (permission, teamId, userId, error message)
 2. Now rethrows errors with descriptive messages instead of swallowing them
 3. Added comprehensive JSDoc documentation explaining behavior and exceptions

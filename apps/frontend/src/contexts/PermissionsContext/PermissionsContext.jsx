@@ -1,10 +1,11 @@
-import { useState, useCallback, useMemo, useContext } from 'react';
+import { useState, useCallback, useMemo, useContext, useEffect } from 'react';
 import { authClient } from '../../lib/auth.js';
 import { fetchWithHeaders, handleResponse } from '../../utils/apiUtils.js';
 import { AuthContext } from '../AuthContext.jsx';
 import { SSEContext } from '../sseContext/context.js';
 import { PermissionsContext } from './context.js';
 import { useInitialState } from '../../hooks/useInitialState.js';
+import { useEventListener } from '../../hooks/useEventListener.js';
 import logger from '../../utils/logger.js';
 
 export const PermissionsProvider = ({ children }) => {
@@ -21,6 +22,9 @@ export const PermissionsProvider = ({ children }) => {
   const [organizationId, setOrganizationId] = useState(null);
   const [userTeams, setUserTeams] = useState([]);
   const [membershipLoading, setMembershipLoading] = useState(false);
+
+  // Track user ID to detect user changes (including impersonation)
+  const [currentUserId, setCurrentUserId] = useState(user?.id || null);
 
   // Memoize organization data loading function
   const loadOrganizationData = useCallback(async () => {
@@ -127,6 +131,50 @@ export const PermissionsProvider = ({ children }) => {
     condition: isAuthenticated && user,
     resetCondition: !isAuthenticated || !user,
   });
+
+  // Watch for user ID changes (including impersonation) and reload permissions
+  useEffect(() => {
+    const newUserId = user?.id || null;
+
+    // If user ID changed (including from one user to another during impersonation)
+    if (isAuthenticated && newUserId && newUserId !== currentUserId) {
+      logger.log(
+        `User changed from ${currentUserId} to ${newUserId}, reloading permissions...`,
+      );
+      setCurrentUserId(newUserId);
+
+      // Clear existing data and reload
+      setOrganizationMembership(null);
+      setOrganizationId(null);
+      setUserTeams([]);
+
+      loadOrganizationData();
+    } else if (!isAuthenticated && currentUserId) {
+      // User logged out, clear user ID
+      setCurrentUserId(null);
+    }
+  }, [user?.id, isAuthenticated, currentUserId, loadOrganizationData]);
+
+  // Listen for auth-change events (triggered by permission updates)
+  const handleAuthChangeForPermissions = useCallback(async () => {
+    if (!isAuthenticated || !user) {
+      return;
+    }
+
+    logger.log(
+      'PermissionsContext: Auth change event detected, reloading permissions...',
+    );
+
+    // Clear existing data
+    setOrganizationMembership(null);
+    setOrganizationId(null);
+    setUserTeams([]);
+
+    // Reload organization data
+    await loadOrganizationData();
+  }, [isAuthenticated, user, loadOrganizationData]);
+
+  useEventListener('auth-change', handleAuthChangeForPermissions);
 
   // Memoize team helper functions to prevent recreating on every render
   const teamHelpers = useMemo(

@@ -26,6 +26,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import { useUserManagement } from '../../hooks/useUserManagement';
+import { useSSE } from '../../contexts/sseContext/index';
 import UserSessionsModal from './userSessionsModal';
 import UserTable from '../users/UserTable';
 import UserForm from '../users/UserForm';
@@ -36,8 +37,9 @@ import UserForm from '../users/UserForm';
  * Refactored to use custom hooks and extracted components
  */
 export default function UserManagementModal({ opened, onClose }) {
-  const { user: currentUser, isAdmin } = useAuth();
+  const { user: currentUser, isAdmin, refetchSession } = useAuth();
   const { organizationId, refreshUserData } = usePermissions();
+  const { teams } = useSSE();
   const notify = useNotifications();
 
   // Use the custom hook that encapsulates all the business logic
@@ -54,12 +56,10 @@ export default function UserManagementModal({ opened, onClose }) {
     showSessionsModal,
     selectedUserForSessions,
     availableTeams,
-    teamsLoading,
     actions,
     form,
     // Functions
     loadUsers,
-    loadTeams,
     loadActions,
     isOnlyAdmin,
     // Handlers
@@ -81,13 +81,15 @@ export default function UserManagementModal({ opened, onClose }) {
     currentUser,
     organizationId,
     refreshUserData,
+    refetchSession,
     notify,
+    teams,
   });
 
   // Load data when modal opens
   useModalDataLoader(
     opened,
-    [loadUsers, () => loadTeams(isAdmin), loadActions, () => setError('')],
+    [loadUsers, loadActions, () => setError('')],
     isAdmin,
   );
 
@@ -238,7 +240,6 @@ export default function UserManagementModal({ opened, onClose }) {
                 isOnlyAdmin={isOnlyAdmin()}
                 availableTeams={availableTeams}
                 availableActions={actions}
-                teamsLoading={teamsLoading}
                 onSubmit={handleSubmit}
                 onCancel={handleCancel}
                 onUsernameChange={handleUsernameChange}

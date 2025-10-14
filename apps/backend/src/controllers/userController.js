@@ -246,6 +246,9 @@ class UserController {
           showNotification: true,
         },
       });
+
+      // Refresh SSE init data with updated permissions
+      await sseManager.refreshInitDataForUser(userId);
     }
 
     res.json({
@@ -503,6 +506,9 @@ class UserController {
         },
       });
 
+      // Refresh SSE init data with updated permissions
+      await sseManager.refreshInitDataForUser(userId);
+
       req.log.info(
         {
           action: 'updateUserTeamAssignments',
@@ -585,6 +591,9 @@ class UserController {
         },
       });
 
+      // Refresh SSE init data with updated permissions
+      await sseManager.refreshInitDataForUser(userId);
+
       res.json({ success: true, data: result.data });
     } catch (error) {
       handleError(res, error, 'updating user organization role', {
@@ -598,9 +607,26 @@ class UserController {
    */
   static async removeUserFromOrganization(req, res) {
     const { userId } = req.params;
-    const { organizationId } = req.body;
+    let { organizationId } = req.body;
 
     // Validation handled by middleware
+    // If organizationId not provided, get the main organization (single-org architecture)
+    if (!organizationId) {
+      const org = executeQuery(
+        'SELECT id FROM organization WHERE slug = ?',
+        ['main'],
+        'getting main organization for user removal',
+      );
+      if (!org) {
+        return res.status(400).json({ error: 'Organization not found' });
+      }
+      organizationId = org.id;
+      req.log.info(
+        { action: 'removeUserFromOrganization', userId },
+        'Using main organization for removal',
+      );
+    }
+
     req.log.info(
       { action: 'removeUserFromOrganization', userId, organizationId },
       'Removing user from organization',
@@ -745,6 +771,269 @@ class UserController {
       });
     } catch (error) {
       handleError(res, error, 'setting initial password', {
+        logger: req.logger,
+      });
+    }
+  }
+
+  /**
+   * Revoke a specific user session
+   */
+  static async revokeSession(req, res) {
+    const { sessionToken } = req.body;
+
+    if (!sessionToken) {
+      return res.status(400).json({ error: 'sessionToken is required' });
+    }
+
+    req.log.info(
+      { action: 'revokeSession', sessionToken: '***' },
+      'Revoking session',
+    );
+
+    try {
+      // First, get the user ID from the session before revoking it
+      const session = executeQuery(
+        'SELECT userId FROM session WHERE token = ?',
+        [sessionToken],
+        'getting user ID from session token',
+      );
+
+      if (!session) {
+        req.log.warn(
+          { action: 'revokeSession' },
+          'Session not found - may already be revoked',
+        );
+        return res.json({
+          success: true,
+          message: 'Session not found or already revoked',
+        });
+      }
+
+      const affectedUserId = session.userId;
+
+      // Delete the session directly from the database
+      // This is the same approach used in auth.js afterRemoveMember hook
+      const deleteResult = executeUpdate(
+        'DELETE FROM session WHERE token = ?',
+        [sessionToken],
+        `revoking session for user ${affectedUserId}`,
+      );
+
+      if (deleteResult.changes === 0) {
+        req.log.warn(
+          { action: 'revokeSession', userId: affectedUserId },
+          'Session not found in database',
+        );
+        return res.json({
+          success: true,
+          message: 'Session not found or already revoked',
+        });
+      }
+
+      req.log.info(
+        { action: 'revokeSession', userId: affectedUserId },
+        'Session revoked successfully',
+      );
+
+      // Send SSE notification to the affected user
+      sseManager.sendToUser(affectedUserId, {
+        type: 'sessionInvalidated',
+        reason: 'Session was revoked by an administrator',
+        timestamp: new Date().toISOString(),
+      });
+
+      req.log.info(
+        { action: 'revokeSession', userId: affectedUserId },
+        'Sent sessionInvalidated SSE event',
+      );
+
+      res.json({
+        success: true,
+        message: 'Session revoked successfully',
+      });
+    } catch (error) {
+      handleError(res, error, 'revoking session', {
+        logger: req.logger,
+      });
+    }
+  }
+
+  /**
+   * Revoke all sessions for a user
+   */
+  static async revokeAllUserSessions(req, res) {
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+
+    req.log.info(
+      { action: 'revokeAllUserSessions', userId },
+      'Revoking all sessions',
+    );
+
+    try {
+      // Delete all sessions directly from the database
+      // This is the same approach used in auth.js afterRemoveMember hook
+      const deleteResult = executeUpdate(
+        'DELETE FROM session WHERE userId = ?',
+        [userId],
+        `revoking all sessions for user ${userId}`,
+      );
+
+      req.log.info(
+        {
+          action: 'revokeAllUserSessions',
+          userId,
+          sessionsRevoked: deleteResult.changes,
+        },
+        'All sessions revoked successfully',
+      );
+
+      // Send SSE notification to the affected user
+      sseManager.sendToUser(userId, {
+        type: 'sessionInvalidated',
+        reason: 'All sessions were revoked by an administrator',
+        timestamp: new Date().toISOString(),
+      });
+
+      req.log.info(
+        { action: 'revokeAllUserSessions', userId },
+        'Sent sessionInvalidated SSE event',
+      );
+
+      res.json({
+        success: true,
+        message: 'All sessions revoked successfully',
+        sessionsRevoked: deleteResult.changes,
+      });
+    } catch (error) {
+      handleError(res, error, 'revoking all user sessions', {
+        logger: req.logger,
+      });
+    }
+  }
+
+  /**
+   * Ban user and immediately log them out
+   */
+  static async banUser(req, res) {
+    const { userId, banReason } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+
+    req.log.info({ action: 'banUser', userId, banReason }, 'Banning user');
+
+    try {
+      // Use better-auth admin API to ban the user
+      const result = await auth.api.banUser({
+        headers: req.headers, // Pass request headers for authentication
+        body: {
+          userId,
+          banReason: banReason || 'Banned by administrator',
+        },
+      });
+
+      if (result.error) {
+        req.log.error(
+          { action: 'banUser', err: result.error, userId },
+          'Better Auth banUser error',
+        );
+        const statusCode = result.error.status === 'UNAUTHORIZED' ? 401 : 400;
+        return res.status(statusCode).json({ error: result.error.message });
+      }
+
+      req.log.info({ action: 'banUser', userId }, 'User banned successfully');
+
+      // Immediately revoke all user sessions
+      const deleteResult = executeUpdate(
+        'DELETE FROM session WHERE userId = ?',
+        [userId],
+        `revoking all sessions for banned user ${userId}`,
+      );
+
+      req.log.info(
+        {
+          action: 'banUser',
+          userId,
+          sessionsRevoked: deleteResult.changes,
+        },
+        'All sessions revoked for banned user',
+      );
+
+      // Send SSE notification to log out the user immediately
+      sseManager.sendToUser(userId, {
+        type: 'sessionInvalidated',
+        reason:
+          banReason ||
+          'Your account has been banned by an administrator. Please contact support for more information.',
+        timestamp: new Date().toISOString(),
+      });
+
+      req.log.info(
+        { action: 'banUser', userId },
+        'Sent sessionInvalidated SSE event to banned user',
+      );
+
+      res.json({
+        success: true,
+        message: 'User banned and logged out successfully',
+        sessionsRevoked: deleteResult.changes,
+        data: result.data,
+      });
+    } catch (error) {
+      handleError(res, error, 'banning user', {
+        logger: req.logger,
+      });
+    }
+  }
+
+  /**
+   * Unban user
+   */
+  static async unbanUser(req, res) {
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+
+    req.log.info({ action: 'unbanUser', userId }, 'Unbanning user');
+
+    try {
+      // Use better-auth admin API to unban the user
+      const result = await auth.api.unbanUser({
+        headers: req.headers, // Pass request headers for authentication
+        body: {
+          userId,
+        },
+      });
+
+      if (result.error) {
+        req.log.error(
+          { action: 'unbanUser', err: result.error, userId },
+          'Better Auth unbanUser error',
+        );
+        const statusCode = result.error.status === 'UNAUTHORIZED' ? 401 : 400;
+        return res.status(statusCode).json({ error: result.error.message });
+      }
+
+      req.log.info(
+        { action: 'unbanUser', userId },
+        'User unbanned successfully',
+      );
+
+      res.json({
+        success: true,
+        message: 'User unbanned successfully',
+        data: result.data,
+      });
+    } catch (error) {
+      handleError(res, error, 'unbanning user', {
         logger: req.logger,
       });
     }

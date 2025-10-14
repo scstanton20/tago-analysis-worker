@@ -242,6 +242,35 @@ class SSEManager {
     }
   }
 
+  // Refresh init data for a specific user (used when permissions change)
+  async refreshInitDataForUser(userId) {
+    const userClients = this.clients.get(userId);
+    if (!userClients || userClients.size === 0) {
+      logger.debug({ userId }, 'No SSE clients found for user to refresh');
+      return 0;
+    }
+
+    logger.info({ userId }, 'Refreshing init data for user');
+    let refreshedCount = 0;
+
+    for (const client of userClients) {
+      try {
+        if (!client.res.destroyed) {
+          await this.sendInitialData(client);
+          refreshedCount++;
+        }
+      } catch (error) {
+        logger.error({ userId, error }, 'Error refreshing init data for user');
+      }
+    }
+
+    logger.info(
+      { userId, refreshedCount },
+      'Init data refresh completed for user',
+    );
+    return refreshedCount;
+  }
+
   // Send status update to specific client
   async sendStatusUpdate(client) {
     try {

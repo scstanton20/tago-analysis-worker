@@ -587,9 +587,23 @@ export function SSEProvider({ children }) {
       return;
     }
 
-    // Redirect to login on session invalidation
-    logger.log('SSE: Session invalidated, redirecting to login...');
-    window.location.href = '/login';
+    // Show notification about session revocation
+    import('@mantine/notifications').then(({ notifications }) => {
+      notifications.show({
+        title: 'Session Revoked',
+        message:
+          data.reason ||
+          'Your session has been revoked by an administrator. You will be logged out.',
+        color: 'red',
+        autoClose: false,
+      });
+    });
+
+    // Redirect to login after showing notification
+    setTimeout(() => {
+      logger.log('SSE: Session invalidated, redirecting to login...');
+      window.location.href = '/login';
+    }, 2500);
   }, []);
 
   const handleUserLogout = useCallback((data) => {

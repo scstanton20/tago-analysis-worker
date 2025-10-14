@@ -53,8 +53,8 @@ class SettingsController {
 
       req.log.info({ action: 'updateDNSConfig', config }, 'DNS config updated');
 
-      // Broadcast DNS cache config update via SSE
-      sseManager.broadcast({
+      // Broadcast DNS cache config update via SSE (admin only)
+      sseManager.broadcastToAdminUsers({
         type: 'dnsConfigUpdated',
         data: {
           config,
@@ -110,8 +110,8 @@ class SettingsController {
         'DNS cache cleared',
       );
 
-      // Broadcast DNS cache cleared via SSE
-      sseManager.broadcast({
+      // Broadcast DNS cache cleared via SSE (admin only)
+      sseManager.broadcastToAdminUsers({
         type: 'dnsCacheCleared',
         data: {
           entriesCleared,
@@ -175,8 +175,8 @@ class SettingsController {
 
       req.log.info({ action: 'resetDNSStats' }, 'DNS cache stats reset');
 
-      // Broadcast DNS cache stats reset via SSE
-      sseManager.broadcast({
+      // Broadcast DNS cache stats reset via SSE (admin only)
+      sseManager.broadcastToAdminUsers({
         type: 'dnsStatsReset',
         data: {
           stats,

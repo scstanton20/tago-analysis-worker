@@ -43,12 +43,12 @@ export const RATE_LIMIT = {
   WINDOW_FIVE_MINUTES_MS: 5 * 60 * 1000,
 
   // Request limits per window
-  FILE_OPERATIONS_MAX: 50, // General file operations
-  UPLOADS_MAX: 10, // Upload operations
-  ANALYSIS_RUN_MAX: 30, // Analysis run requests
-  DELETIONS_MAX: 20, // Deletion operations
-  VERSION_OPERATIONS_MAX: 100, // Version operations (mostly reads)
-  AUTH_MAX: 20, // Authentication attempts
+  FILE_OPERATIONS_MAX: 200, // General file operations
+  UPLOADS_MAX: 50, // Upload operations
+  ANALYSIS_RUN_MAX: 100, // Analysis run requests
+  DELETIONS_MAX: 50, // Deletion operations
+  VERSION_OPERATIONS_MAX: 500, // Version operations (mostly reads)
+  AUTH_MAX: 100, // Authentication attempts
 };
 
 // File size constants

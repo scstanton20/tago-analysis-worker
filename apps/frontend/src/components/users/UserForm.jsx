@@ -22,7 +22,6 @@ export default function UserForm({
   isOnlyAdmin,
   availableTeams,
   availableActions,
-  teamsLoading,
   onSubmit,
   onCancel,
   onUsernameChange,
@@ -133,7 +132,6 @@ export default function UserForm({
             availableTeams={availableTeams}
             availableActions={availableActions}
             departmentPermissions={form.values.departmentPermissions}
-            teamsLoading={teamsLoading}
             onToggleDepartment={onToggleDepartment}
             onTogglePermission={onTogglePermission}
           />
@@ -150,7 +148,11 @@ export default function UserForm({
           )}
 
         <Group justify="flex-end" gap="sm">
-          <Button variant="default" onClick={onCancel}>
+          <Button
+            variant="default"
+            onClick={onCancel}
+            disabled={!form.isDirty()}
+          >
             Cancel
           </Button>
           <Button
@@ -201,7 +203,6 @@ UserForm.propTypes = {
       label: PropTypes.string.isRequired,
     }),
   ).isRequired,
-  teamsLoading: PropTypes.bool.isRequired,
   onSubmit: PropTypes.func.isRequired,
   onCancel: PropTypes.func.isRequired,
   onUsernameChange: PropTypes.func.isRequired,
