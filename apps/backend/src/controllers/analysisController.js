@@ -13,7 +13,41 @@ import {
 } from '../utils/safePath.js';
 import { handleError } from '../utils/responseHelpers.js';
 
+/**
+ * Controller class for managing analysis operations
+ * Handles HTTP requests for analysis file management, execution control, versioning,
+ * environment configuration, and log management. Uses SSE for real-time updates.
+ *
+ * All methods are static and follow Express route handler pattern (req, res).
+ * Request-scoped logging is available via req.log.
+ */
 class AnalysisController {
+  /**
+   * Upload a new analysis file
+   * Creates analysis directory structure, saves file, and assigns to team/folder
+   *
+   * File size limit: 50MB
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.files - Uploaded files object from express-fileupload
+   * @param {Object} req.files.analysis - The analysis file to upload
+   * @param {string} req.files.analysis.name - Original filename
+   * @param {number} req.files.analysis.size - File size in bytes
+   * @param {Buffer} req.files.analysis.data - File content buffer
+   * @param {Object} req.body - Request body
+   * @param {string} req.body.teamId - Team ID to assign analysis to (required)
+   * @param {string} [req.body.targetFolderId] - Optional folder ID within team structure
+   * @param {Object} req.log - Request-scoped logger instance
+   * @param {Object} res - Express response object
+   *
+   * @returns {Promise<Object>} JSON response with upload result
+   *
+   * Side effects:
+   * - Creates analysis directory and files on disk
+   * - Updates analysis configuration
+   * - Broadcasts 'analysisCreated' SSE event to team users with analysis data
+   * - Broadcasts 'teamStructureUpdated' SSE event to team users with updated items
+   */
   static async uploadAnalysis(req, res) {
     if (!req.files || !req.files.analysis) {
       req.log.warn(
@@ -24,6 +58,26 @@ class AnalysisController {
     }
 
     const analysis = req.files.analysis;
+
+    // Check file size (50MB limit)
+    const maxSize = 50 * 1024 * 1024; // 50MB in bytes
+    if (analysis.size > maxSize) {
+      req.log.warn(
+        {
+          action: 'uploadAnalysis',
+          fileName: analysis.name,
+          fileSize: analysis.size,
+          maxSize: maxSize,
+        },
+        'Upload failed: file size exceeds limit',
+      );
+      return res.status(413).json({
+        error: 'File size exceeds the maximum limit of 50MB',
+        maxSizeMB: 50,
+        fileSizeMB: (analysis.size / (1024 * 1024)).toFixed(2),
+      });
+    }
+
     const teamId = req.body.teamId;
     const targetFolderId = req.body.targetFolderId || null;
 
@@ -81,6 +135,23 @@ class AnalysisController {
     }
   }
 
+  /**
+   * Retrieve analyses with permission-based filtering
+   * Admin users see all analyses; regular users only see analyses from teams
+   * they have 'view_analyses' permission for
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.user - Authenticated user object
+   * @param {string} req.user.id - User ID
+   * @param {string} req.user.role - User role (admin or regular user)
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Security:
+   * - Service layer filters by team IDs before loading file stats
+   * - Prevents timing attacks by filtering at data retrieval level
+   */
   static async getAnalyses(req, res) {
     req.log.info(
       { action: 'getAnalyses', userId: req.user.id, role: req.user.role },
@@ -124,6 +195,24 @@ class AnalysisController {
     }
   }
 
+  /**
+   * Start an analysis process
+   * Launches the analysis script as a child process and monitors its execution
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.fileName - Name of the analysis file to run
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Starts a child process for the analysis script
+   * - Broadcasts 'analysisStatus' SSE event with status 'running'
+   *
+   * Security:
+   * - Filename is sanitized to prevent path traversal attacks
+   */
   static async runAnalysis(req, res) {
     const { fileName } = req.params;
     // Sanitize the fileName to prevent path traversal
@@ -157,6 +246,24 @@ class AnalysisController {
     }
   }
 
+  /**
+   * Stop a running analysis process
+   * Terminates the child process and updates analysis status
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.fileName - Name of the analysis file to stop
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Kills the analysis child process
+   * - Broadcasts 'analysisStatus' SSE event with status 'stopped'
+   *
+   * Security:
+   * - Filename is sanitized to prevent path traversal attacks
+   */
   static async stopAnalysis(req, res) {
     const { fileName } = req.params;
     // Sanitize the fileName to prevent path traversal
@@ -190,6 +297,26 @@ class AnalysisController {
     }
   }
 
+  /**
+   * Delete an analysis and all its associated files
+   * Removes analysis directory, configuration entries, and team structure references
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.fileName - Name of the analysis file to delete
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Deletes analysis directory and all files
+   * - Removes analysis from configuration
+   * - Broadcasts 'analysisDeleted' SSE event to team users
+   * - Broadcasts 'teamStructureUpdated' SSE event to team users
+   *
+   * Security:
+   * - Filename is sanitized to prevent path traversal attacks
+   */
   static async deleteAnalysis(req, res) {
     const { fileName } = req.params;
     // Sanitize the fileName to prevent path traversal
@@ -245,6 +372,27 @@ class AnalysisController {
     }
   }
 
+  /**
+   * Retrieve analysis file content
+   * Returns current content or content from a specific version
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.fileName - Name of the analysis file
+   * @param {Object} req.query - Query parameters
+   * @param {string} [req.query.version] - Optional version number to retrieve
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Response:
+   * - Content-Type: text/plain
+   * - Body: File content as string
+   *
+   * Security:
+   * - Filename is sanitized to prevent path traversal attacks
+   * - Version number is validated to prevent negative or non-numeric values
+   */
   static async getAnalysisContent(req, res) {
     const { fileName } = req.params;
     const { version } = req.query;
@@ -305,6 +453,29 @@ class AnalysisController {
     }
   }
 
+  /**
+   * Update analysis file content
+   * Saves new content, creates a version backup, and restarts if running
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.fileName - Name of the analysis file to update
+   * @param {Object} req.body - Request body
+   * @param {string} req.body.content - New file content
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Creates version backup before updating
+   * - Writes new content to file
+   * - Restarts analysis process if it was running
+   * - Broadcasts 'analysisUpdated' SSE event
+   *
+   * Security:
+   * - Filename is sanitized to prevent path traversal attacks
+   * - Content validation handled by middleware
+   */
   static async updateAnalysis(req, res) {
     const { fileName } = req.params;
     const { content } = req.body;
@@ -356,6 +527,29 @@ class AnalysisController {
     }
   }
 
+  /**
+   * Rename an analysis file and directory
+   * Updates file/directory names, configuration, and restarts if running
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.fileName - Current name of the analysis file
+   * @param {Object} req.body - Request body
+   * @param {string} req.body.newFileName - New name for the analysis file
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Renames analysis directory and files
+   * - Updates configuration with new name
+   * - Restarts analysis process if it was running
+   * - Broadcasts 'analysisRenamed' SSE event
+   *
+   * Security:
+   * - Both old and new filenames are sanitized to prevent path traversal attacks
+   * - Name validation handled by middleware
+   */
   static async renameAnalysis(req, res) {
     const { fileName } = req.params;
     const { newFileName } = req.body;
@@ -415,6 +609,26 @@ class AnalysisController {
     }
   }
 
+  /**
+   * Retrieve paginated analysis logs
+   * Returns structured log entries with pagination metadata
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.fileName - Name of the analysis file
+   * @param {Object} req.query - Query parameters
+   * @param {string} [req.query.page=1] - Page number for pagination
+   * @param {string} [req.query.limit=100] - Number of log entries per page
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Response:
+   * - JSON object with logs array and pagination metadata
+   *
+   * Security:
+   * - Filename is sanitized to prevent path traversal attacks
+   */
   static async getLogs(req, res) {
     const { fileName } = req.params;
     const page = parseInt(req.query.page) || 1;
@@ -449,6 +663,36 @@ class AnalysisController {
     }
   }
 
+  /**
+   * Download analysis logs as a file
+   * Supports full log file download or time-filtered downloads
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.fileName - Name of the analysis file
+   * @param {Object} req.query - Query parameters
+   * @param {string} req.query.timeRange - Time range filter ('all', '1h', '24h', '7d', '30d')
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Behavior:
+   * - timeRange='all': Streams entire log file directly (memory efficient)
+   * - Other ranges: Creates filtered temporary file and sends it
+   *
+   * Response:
+   * - Content-Type: text/plain
+   * - Content-Disposition: attachment with sanitized filename
+   * - Body: Log file content
+   *
+   * Side effects:
+   * - Creates and auto-cleans temporary files for filtered downloads
+   *
+   * Security:
+   * - Filename is sanitized to prevent path traversal attacks
+   * - All file paths validated against base directory
+   * - Temporary files cleaned up after sending
+   */
   static async downloadLogs(req, res) {
     const { fileName } = req.params;
     const { timeRange } = req.query;
@@ -627,6 +871,24 @@ class AnalysisController {
     }
   }
 
+  /**
+   * Clear all logs for an analysis
+   * Truncates the log file and broadcasts clear event
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.fileName - Name of the analysis file
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Truncates analysis log file to empty
+   * - Broadcasts 'logsCleared' SSE event with clear timestamp
+   *
+   * Security:
+   * - Filename is sanitized to prevent path traversal attacks
+   */
   static async clearLogs(req, res) {
     const { fileName } = req.params;
     // Sanitize the fileName to prevent path traversal
@@ -665,6 +927,28 @@ class AnalysisController {
     }
   }
 
+  /**
+   * Download analysis file content
+   * Supports downloading current version or specific historical versions
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.fileName - Name of the analysis file
+   * @param {Object} req.query - Query parameters
+   * @param {string} [req.query.version] - Optional version number to download (0 or undefined = current)
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Response:
+   * - Content-Type: application/javascript
+   * - Content-Disposition: attachment with sanitized filename and optional version suffix
+   * - Body: Analysis file content
+   *
+   * Security:
+   * - Filename is sanitized to prevent path traversal attacks
+   * - Version number validated to prevent negative or non-numeric values
+   */
   static async downloadAnalysis(req, res) {
     const { fileName } = req.params;
     const { version } = req.query;
@@ -721,6 +1005,23 @@ class AnalysisController {
     }
   }
 
+  /**
+   * Retrieve version history for an analysis
+   * Returns list of all saved versions with metadata
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.fileName - Name of the analysis file
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Response:
+   * - JSON array of version objects with version numbers and timestamps
+   *
+   * Security:
+   * - Filename is sanitized to prevent path traversal attacks
+   */
   static async getVersions(req, res) {
     const { fileName } = req.params;
     // Sanitize the fileName to prevent path traversal
@@ -749,6 +1050,29 @@ class AnalysisController {
     }
   }
 
+  /**
+   * Rollback analysis to a specific version
+   * Restores content from version history and restarts if running
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.fileName - Name of the analysis file
+   * @param {Object} req.body - Request body
+   * @param {number} req.body.version - Version number to rollback to
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Restores file content from specified version
+   * - Creates new version backup before rollback
+   * - Restarts analysis process if it was running
+   * - Broadcasts 'analysisRolledBack' SSE event
+   *
+   * Security:
+   * - Filename is sanitized to prevent path traversal attacks
+   * - Version number validated by middleware
+   */
   static async rollbackToVersion(req, res) {
     const { fileName } = req.params;
     const { version } = req.body;
@@ -810,6 +1134,29 @@ class AnalysisController {
     }
   }
 
+  /**
+   * Update analysis environment variables
+   * Saves encrypted environment variables and restarts if running
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.fileName - Name of the analysis file
+   * @param {Object} req.body - Request body
+   * @param {Object} req.body.env - Environment variables object (key-value pairs)
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Saves encrypted environment variables to disk
+   * - Restarts analysis process if it was running (to apply new env vars)
+   * - Broadcasts 'analysisEnvironmentUpdated' SSE event
+   *
+   * Security:
+   * - Filename is sanitized to prevent path traversal attacks
+   * - Environment variables are encrypted before storage
+   * - Validation handled by middleware
+   */
   static async updateEnvironment(req, res) {
     const { fileName } = req.params;
     const { env } = req.body;
@@ -862,6 +1209,24 @@ class AnalysisController {
     }
   }
 
+  /**
+   * Retrieve analysis environment variables
+   * Returns decrypted environment variables for the specified analysis
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.fileName - Name of the analysis file
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Response:
+   * - JSON object with decrypted environment variables (key-value pairs)
+   *
+   * Security:
+   * - Filename is sanitized to prevent path traversal attacks
+   * - Environment variables are decrypted before returning
+   */
   static async getEnvironment(req, res) {
     const { fileName } = req.params;
     // Sanitize the fileName to prevent path traversal

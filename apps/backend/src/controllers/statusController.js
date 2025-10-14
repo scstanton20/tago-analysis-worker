@@ -5,7 +5,38 @@ import { handleError } from '../utils/responseHelpers.js';
 
 const require = createRequire(import.meta.url);
 
+/**
+ * Controller class for system status monitoring
+ * Provides health check endpoints with container status, service information, and uptime metrics.
+ *
+ * All methods are static and follow Express route handler pattern (req, res).
+ * Request-scoped logging is available via req.log.
+ */
 class StatusController {
+  /**
+   * Get comprehensive system status
+   * Returns container health, running analyses count, Tago SDK version, and uptime
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Response:
+   * - container_health: Status ('healthy'/'initializing'), message, and uptime
+   * - tagoConnection: SDK version and running analyses count
+   * - serverTime: Current server timestamp
+   *
+   * HTTP Status Codes:
+   * - 200: Container is ready and healthy
+   * - 203: Container is initializing (Non-Authoritative Information)
+   * - 500: Container has an error
+   *
+   * Use Case:
+   * - Health check endpoint for monitoring systems
+   * - Container readiness checks
+   * - System diagnostics
+   */
   static async getSystemStatus(req, res) {
     req.log.info({ action: 'getSystemStatus' }, 'Getting system status');
 

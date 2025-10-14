@@ -68,13 +68,17 @@ export const userValidationSchemas = {
 
   /**
    * DELETE /api/users/:userId/organization - Remove user from organization
+   * Note: organizationId can be null for orphaned users (users not in any organization)
    */
   removeUserFromOrganization: {
     params: z.object({
       userId: z.string().min(1, 'userId is required'),
     }),
     body: z.object({
-      organizationId: z.string().min(1, 'organizationId is required'),
+      organizationId: z
+        .string()
+        .min(1, 'organizationId is required')
+        .nullable(),
     }),
   },
 

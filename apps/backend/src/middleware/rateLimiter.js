@@ -57,29 +57,6 @@ export const versionOperationLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Stricter rate limiter for authentication endpoints (login, registration)
-// Exempts session checks to allow frequent polling without hitting limits
-export const authLimiter = rateLimit({
-  windowMs: RATE_LIMIT.WINDOW_FIFTEEN_MINUTES_MS,
-  max: RATE_LIMIT.AUTH_MAX,
-  message: {
-    error:
-      'Too many authentication attempts from this IP, please try again later.',
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  // Skip successful requests to avoid penalizing legitimate users
-  skipSuccessfulRequests: false, // Count all attempts to prevent brute force
-  // Skip session checks - they're read-only and need to be frequent
-  skip: (req) => {
-    return (
-      req.method === 'GET' &&
-      (req.path === '/api/auth/get-session' ||
-        req.url?.includes('/get-session'))
-    );
-  },
-});
-
 // Rate limiter for team management operations (create, update, delete, folder operations)
 export const teamOperationLimiter = rateLimit({
   windowMs: RATE_LIMIT.WINDOW_FIFTEEN_MINUTES_MS,

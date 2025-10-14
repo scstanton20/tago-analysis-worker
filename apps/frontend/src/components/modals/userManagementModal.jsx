@@ -8,7 +8,6 @@ import {
   Button,
   Text,
   Alert,
-  Badge,
   Box,
   Paper,
   LoadingOverlay,
@@ -26,7 +25,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import { useUserManagement } from '../../hooks/useUserManagement';
-import { useSSE } from '../../contexts/sseContext/index';
+import { useTeams } from '../../contexts/sseContext/index';
 import UserSessionsModal from './userSessionsModal';
 import UserTable from '../users/UserTable';
 import UserForm from '../users/UserForm';
@@ -39,7 +38,7 @@ import UserForm from '../users/UserForm';
 export default function UserManagementModal({ opened, onClose }) {
   const { user: currentUser, isAdmin, refetchSession } = useAuth();
   const { organizationId, refreshUserData } = usePermissions();
-  const { teams } = useSSE();
+  const { teams } = useTeams();
   const notify = useNotifications();
 
   // Use the custom hook that encapsulates all the business logic

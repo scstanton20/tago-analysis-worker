@@ -1,3 +1,37 @@
+/**
+ * Team Service - Team and folder structure management
+ * Manages teams (via Better Auth organization plugin), hierarchical folder structures,
+ * and analysis-team assignments.
+ *
+ * This service handles:
+ * - Team CRUD operations via Better Auth organization plugin
+ * - Analysis-team assignment and migration
+ * - Hierarchical folder structure within teams (nested tree)
+ * - Drag-and-drop item reordering
+ * - Team reordering and customization (color, order_index)
+ * - System team management (Uncategorized)
+ *
+ * Architecture:
+ * - Singleton service pattern (exported as teamService)
+ * - Integrates with Better Auth's team/organization tables
+ * - Custom fields: color, order_index, is_system
+ * - Team structure stored in analysisService config
+ * - Request-scoped logging via logger parameter
+ *
+ * Team Structure Format:
+ * - teamStructure[teamId]:
+ *   - items: [ // Flat or nested tree structure
+ *       { id, type: 'analysis', analysisName },
+ *       { id, type: 'folder', name, items: [...], expanded }
+ *     ]
+ *
+ * Integration Points:
+ * - Better Auth organization plugin for team CRUD
+ * - analysisService for configuration persistence
+ * - Custom hooks (beforeDeleteTeam) for automatic migration
+ *
+ * @module teamService
+ */
 import { v4 as uuidv4 } from 'uuid';
 import {
   executeQuery,
@@ -11,8 +45,35 @@ import { createChildLogger } from '../utils/logging/logger.js';
 const moduleLogger = createChildLogger('team-service');
 
 /**
- * Service class for managing teams using Better Auth organization plugin and their relationships with analyses
- * Now uses better-auth teams directly instead of maintaining separate department records
+ * Service class for managing teams and hierarchical folder structures
+ * Integrates with Better Auth organization plugin for team management.
+ *
+ * Key Features:
+ * - Team lifecycle management (create, read, update, delete)
+ * - Analysis-team assignment with automatic migration
+ * - Hierarchical folder structure (nested tree with drag-drop)
+ * - Team reordering and customization
+ * - System team support (Uncategorized, cannot be deleted)
+ * - Automatic orphan analysis handling
+ *
+ * Better Auth Integration:
+ * - Teams stored in Better Auth's team table
+ * - Custom fields: color, order_index, is_system
+ * - Uses Better Auth API for CRUD operations
+ * - Custom hooks for automatic migration (beforeDeleteTeam)
+ *
+ * Folder Structure:
+ * - Recursive tree structure with folders and analyses
+ * - Drag-and-drop support for reordering
+ * - Move operations with cycle detection
+ * - Delete operations move children to parent
+ *
+ * Logging Strategy:
+ * - Module-level logger (moduleLogger) for background operations
+ * - Request-scoped logger parameter for API operations
+ * - All public methods accept optional logger parameter
+ *
+ * @class TeamService
  */
 class TeamService {
   constructor() {

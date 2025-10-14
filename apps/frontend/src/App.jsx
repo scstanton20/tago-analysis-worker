@@ -1,17 +1,8 @@
 // frontend/src/App.jsx
 import { useState, lazy, Suspense } from 'react';
-import {
-  AppShell,
-  Text,
-  Burger,
-  Group,
-  LoadingOverlay,
-  Stack,
-  Button,
-} from '@mantine/core';
+import { AppShell, Text, Burger, Group } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { useSSE } from './contexts/sseContext';
-import { SSEProvider } from './contexts/sseContext/provider';
+import { SSEProvider, useAnalyses, useConnection } from './contexts/sseContext';
 import { CombinedAuthProvider } from './contexts/CombinedAuthProvider';
 import { PermissionsProvider } from './contexts/PermissionsContext/index.js';
 import { useAuth } from './hooks/useAuth';
@@ -29,47 +20,12 @@ import Logo from './components/logo';
 import ImpersonationBanner from './components/impersonationBanner';
 import ThemeSelector from './components/themeSelector';
 import ErrorBoundary from './components/ErrorBoundary';
-
-// Reusable loading overlay component
-function AppLoadingOverlay({ message, submessage, error, showRetry }) {
-  return (
-    <LoadingOverlay
-      visible={true}
-      zIndex={9999}
-      overlayProps={{ blur: 2, radius: 'sm' }}
-      loaderProps={{
-        size: 'xl',
-        children: (
-          <Stack align="center" gap="lg">
-            <Logo size={48} className={error ? '' : 'pulse'} />
-            <Text size="lg" fw={500} c={error ? 'red' : undefined}>
-              {message}
-            </Text>
-            {submessage && (
-              <Text size="sm" c="dimmed" ta="center" maw={400}>
-                {submessage}
-              </Text>
-            )}
-            {showRetry && (
-              <Button
-                onClick={() => window.location.reload()}
-                variant="gradient"
-                gradient={{ from: 'brand.6', to: 'accent.6' }}
-                mt="md"
-              >
-                Retry Connection
-              </Button>
-            )}
-          </Stack>
-        ),
-      }}
-      pos="fixed"
-    />
-  );
-}
+import AppLoadingOverlay from './components/common/AppLoadingOverlay';
+import ChunkLoadErrorBoundary from './components/common/ChunkLoadErrorBoundary';
 
 function AppContent() {
-  const { analyses, connectionStatus } = useSSE();
+  const { analyses } = useAnalyses();
+  const { connectionStatus } = useConnection();
   const { isAdmin } = useAuth();
   const { canUploadToAnyTeam, isTeamMember } = usePermissions();
 
@@ -192,6 +148,28 @@ function AppContent() {
           }}
         >
           {canUploadToAnyTeam() && (
+            <ChunkLoadErrorBoundary componentName="Analysis Creator">
+              <Suspense
+                fallback={
+                  <AppLoadingOverlay
+                    message="Connecting to Tago Analysis Worker..."
+                    submessage={
+                      (connectionStatus === 'connecting' &&
+                        'Establishing server connection...') ||
+                      (connectionStatus === 'disconnected' &&
+                        'Connection lost, retrying...') ||
+                      (connectionStatus === 'server_shutdown' &&
+                        'Server is restarting, please wait...') ||
+                      ''
+                    }
+                  />
+                }
+              >
+                <AnalysisCreator targetTeam={selectedTeam} />
+              </Suspense>
+            </ChunkLoadErrorBoundary>
+          )}
+          <ChunkLoadErrorBoundary componentName="Analysis List">
             <Suspense
               fallback={
                 <AppLoadingOverlay
@@ -208,31 +186,13 @@ function AppContent() {
                 />
               }
             >
-              <AnalysisCreator targetTeam={selectedTeam} />
-            </Suspense>
-          )}
-          <Suspense
-            fallback={
-              <AppLoadingOverlay
-                message="Connecting to Tago Analysis Worker..."
-                submessage={
-                  (connectionStatus === 'connecting' &&
-                    'Establishing server connection...') ||
-                  (connectionStatus === 'disconnected' &&
-                    'Connection lost, retrying...') ||
-                  (connectionStatus === 'server_shutdown' &&
-                    'Server is restarting, please wait...') ||
-                  ''
-                }
+              <AnalysisList
+                analyses={getFilteredAnalyses()}
+                showTeamLabels={!selectedTeam}
+                selectedTeam={selectedTeam}
               />
-            }
-          >
-            <AnalysisList
-              analyses={getFilteredAnalyses()}
-              showTeamLabels={!selectedTeam}
-              selectedTeam={selectedTeam}
-            />
-          </Suspense>
+            </Suspense>
+          </ChunkLoadErrorBoundary>
         </AppShell.Main>
       </AppShell>
     </>
@@ -271,9 +231,11 @@ function AppRouter() {
 
   if (!isAuthenticated) {
     return (
-      <Suspense fallback={<AppLoadingOverlay message="Loading..." />}>
-        <LoginPage />
-      </Suspense>
+      <ChunkLoadErrorBoundary componentName="Login Page">
+        <Suspense fallback={<AppLoadingOverlay message="Loading..." />}>
+          <LoginPage />
+        </Suspense>
+      </ChunkLoadErrorBoundary>
     );
   }
 

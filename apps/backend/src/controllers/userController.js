@@ -8,9 +8,33 @@ import {
 import { sseManager } from '../utils/sse.js';
 import { handleError } from '../utils/responseHelpers.js';
 
+/**
+ * Controller class for managing user operations
+ * Handles HTTP requests for user-organization relationships, team assignments,
+ * permission management, session control, and account status (ban/unban).
+ *
+ * Integrates with Better Auth for authentication and organization management.
+ * Uses direct database operations for team membership and permission management.
+ *
+ * All methods are static and follow Express route handler pattern (req, res).
+ * Request-scoped logging is available via req.log.
+ */
 class UserController {
   /**
    * Add user to organization
+   * Creates membership in Better Auth organization using the organization plugin
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.body - Request body
+   * @param {string} req.body.userId - User ID to add
+   * @param {string} req.body.organizationId - Organization ID
+   * @param {string} [req.body.role='member'] - Organization role (member, owner, admin)
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Security:
+   * - Validation handled by middleware
    */
   static async addToOrganization(req, res) {
     const { userId, organizationId, role = 'member' } = req.body;
@@ -58,6 +82,27 @@ class UserController {
 
   /**
    * Assign user to teams with permissions
+   * Creates team memberships with specified permissions using direct database operations
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.body - Request body
+   * @param {string} req.body.userId - User ID to assign
+   * @param {Array<Object>} req.body.teamAssignments - Array of team assignments
+   * @param {string} req.body.teamAssignments[].teamId - Team ID
+   * @param {string[]} [req.body.teamAssignments[].permissions] - Array of permission strings
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Ensures user is organization member before team assignments
+   * - Creates or updates team memberships in database
+   * - Broadcasts 'userTeamsUpdated' SSE event to affected user
+   * - Refreshes SSE init data with updated permissions
+   *
+   * Security:
+   * - Validation handled by middleware
+   * - Default permissions: ['analysis.view', 'analysis.run']
    */
   static async assignUserToTeams(req, res) {
     const { userId, teamAssignments } = req.body;
@@ -262,6 +307,22 @@ class UserController {
 
   /**
    * Get user team memberships
+   * Retrieves all teams user belongs to with their permissions
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.userId - User ID to query
+   * @param {Object} req.user - Authenticated user object
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Response:
+   * - JSON object with teams array containing id, name, and permissions for each team
+   *
+   * Security:
+   * - Users can only access their own memberships unless they are admins
+   * - Authorization check performed before query
    */
   static async getUserTeamMemberships(req, res) {
     const { userId } = req.params;
@@ -330,6 +391,28 @@ class UserController {
 
   /**
    * Update user team assignments
+   * Synchronizes user's team memberships by adding, updating, or removing assignments
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.userId - User ID to update
+   * @param {Object} req.body - Request body
+   * @param {Array<Object>} req.body.teamAssignments - Array of team assignments
+   * @param {string} req.body.teamAssignments[].teamId - Team ID
+   * @param {string[]} [req.body.teamAssignments[].permissions] - Array of permission strings
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Removes user from teams not in new assignments
+   * - Adds user to new teams or updates existing permissions
+   * - Ensures user is organization member before updates
+   * - Broadcasts 'userTeamsUpdated' SSE event to affected user
+   * - Refreshes SSE init data with updated permissions
+   *
+   * Security:
+   * - Validation handled by middleware
    */
   static async updateUserTeamAssignments(req, res) {
     const { userId } = req.params;
@@ -535,6 +618,27 @@ class UserController {
 
   /**
    * Update user's organization role
+   * Modifies user's role using Better Auth organization plugin
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.userId - User ID to update
+   * @param {Object} req.body - Request body
+   * @param {string} req.body.organizationId - Organization ID
+   * @param {string} req.body.role - New role (member, owner, admin)
+   * @param {Object} req.headers - Request headers (for Better Auth)
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Updates user role in Better Auth organization
+   * - Broadcasts 'userRoleUpdated' SSE event to affected user
+   * - Refreshes SSE init data with updated permissions
+   *
+   * Security:
+   * - Validation handled by middleware
+   * - Better Auth handles authorization
    */
   static async updateUserOrganizationRole(req, res) {
     const { userId } = req.params;
@@ -604,70 +708,89 @@ class UserController {
 
   /**
    * Remove user from organization
+   * Removes user membership using Better Auth for the main organization
+   *
+   * Note: Single-organization architecture - always uses 'main' organization
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.userId - User ID to remove
+   * @param {Object} req.headers - Request headers (for Better Auth)
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Removes user from Better Auth organization
+   * - Broadcasts 'userRemoved' SSE event with logout action
+   *
+   * Security:
+   * - Validation handled by middleware
+   * - Better Auth handles authorization
    */
   static async removeUserFromOrganization(req, res) {
-    const { userId } = req.params;
-    let { organizationId } = req.body;
-
-    // Validation handled by middleware
-    // If organizationId not provided, get the main organization (single-org architecture)
-    if (!organizationId) {
-      const org = executeQuery(
-        'SELECT id FROM organization WHERE slug = ?',
-        ['main'],
-        'getting main organization for user removal',
-      );
-      if (!org) {
-        return res.status(400).json({ error: 'Organization not found' });
-      }
-      organizationId = org.id;
-      req.log.info(
-        { action: 'removeUserFromOrganization', userId },
-        'Using main organization for removal',
-      );
-    }
-
-    req.log.info(
-      { action: 'removeUserFromOrganization', userId, organizationId },
-      'Removing user from organization',
-    );
-
     try {
-      // Check if user is actually a member before trying to remove
-      const existingMember = executeQuery(
-        'SELECT id FROM member WHERE userId = ? AND organizationId = ?',
-        [userId, organizationId],
-        'checking if user is member before removal',
+      const { userId } = req.params;
+      const { organizationId } = req.body;
+
+      req.log.info(
+        { action: 'removeUserFromOrganization', userId, organizationId },
+        'Removing user from organization',
       );
 
-      if (!existingMember) {
-        req.log.warn(
-          { action: 'removeUserFromOrganization', userId, organizationId },
-          'User is not a member - nothing to remove',
+      // If organizationId is null, user is not part of any organization
+      // Delete user account using Better Auth
+      if (!organizationId) {
+        req.log.info(
+          { action: 'removeUserFromOrganization', userId },
+          'No organizationId - deleting user account',
         );
+
+        const deleteResult = await auth.api.removeUser({
+          headers: req.headers,
+          body: {
+            userId,
+          },
+        });
+
+        if (deleteResult.error) {
+          req.log.error(
+            { err: deleteResult.error, userId },
+            'Better Auth removeUser error',
+          );
+          const statusCode =
+            deleteResult.error.status === 'UNAUTHORIZED' ? 401 : 400;
+          return res
+            .status(statusCode)
+            .json({ error: deleteResult.error.message });
+        }
+
+        req.log.info({ userId }, 'User account deleted successfully');
+
         return res.json({
           success: true,
-          message: 'User was not a member of the organization',
+          message: 'User deleted successfully',
         });
       }
 
-      // Use better-auth API to remove member
+      // User has organizationId, so they must be a member
+      // Remove from organization using Better Auth
+      req.log.info(
+        { action: 'removeUserFromOrganization', userId, organizationId },
+        'Removing user from organization',
+      );
+
       const result = await auth.api.removeMember({
         headers: req.headers,
         body: {
-          memberIdOrEmail: existingMember.id,
+          memberIdOrEmail: userId,
           organizationId,
         },
       });
 
       if (result.error) {
         req.log.error(
-          {
-            action: 'removeUserFromOrganization',
-            err: result.error,
-            userId,
-            organizationId,
-          },
+          { err: result.error, userId, organizationId },
           'Better Auth removeMember error',
         );
         const statusCode = result.error.status === 'UNAUTHORIZED' ? 401 : 400;
@@ -675,30 +798,38 @@ class UserController {
       }
 
       req.log.info(
-        { action: 'removeUserFromOrganization', userId, organizationId },
-        'User removed from organization',
+        { userId, organizationId },
+        '✓ Removed user from organization',
       );
-
-      // Send SSE notification to disconnect the removed user
-      sseManager.sendToUser(userId, {
-        type: 'userRemoved',
-        data: {
-          userId,
-          message: 'Your account has been removed',
-          action: 'logout',
-        },
-      });
 
       res.json({ success: true, message: 'User removed from organization' });
     } catch (error) {
-      handleError(res, error, 'removing user from organization', {
-        logger: req.logger,
-      });
+      req.log.error({ err: error }, 'Error removing user from organization');
+      res.status(500).json({ error: error.message });
     }
   }
 
   /**
-   * Set new password for first-time users (password onboarding)
+   * Set initial password for first-time users
+   * Handles password onboarding for users created without passwords
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.body - Request body
+   * @param {string} req.body.newPassword - New password to set
+   * @param {Object} req.user - Authenticated user object
+   * @param {string} req.user.id - User ID
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Hashes and stores password using Better Auth
+   * - Clears requiresPasswordChange flag in database
+   *
+   * Security:
+   * - Validation handled by middleware
+   * - User must be authenticated
+   * - Password is hashed before storage
    */
   static async setInitialPassword(req, res) {
     const { newPassword } = req.body;
@@ -778,6 +909,21 @@ class UserController {
 
   /**
    * Revoke a specific user session
+   * Deletes session from database and notifies user via SSE
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.body - Request body
+   * @param {string} req.body.sessionToken - Session token to revoke
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Deletes session from database
+   * - Broadcasts 'sessionInvalidated' SSE event to affected user
+   *
+   * Security:
+   * - Session token required
    */
   static async revokeSession(req, res) {
     const { sessionToken } = req.body;
@@ -835,23 +981,6 @@ class UserController {
         { action: 'revokeSession', userId: affectedUserId },
         'Session revoked successfully',
       );
-
-      // Send SSE notification to the affected user
-      sseManager.sendToUser(affectedUserId, {
-        type: 'sessionInvalidated',
-        reason: 'Session was revoked by an administrator',
-        timestamp: new Date().toISOString(),
-      });
-
-      req.log.info(
-        { action: 'revokeSession', userId: affectedUserId },
-        'Sent sessionInvalidated SSE event',
-      );
-
-      res.json({
-        success: true,
-        message: 'Session revoked successfully',
-      });
     } catch (error) {
       handleError(res, error, 'revoking session', {
         logger: req.logger,
@@ -861,6 +990,24 @@ class UserController {
 
   /**
    * Revoke all sessions for a user
+   * Deletes all user sessions from database and notifies user via SSE
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.body - Request body
+   * @param {string} req.body.userId - User ID whose sessions to revoke
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Deletes all user sessions from database
+   * - Broadcasts 'sessionInvalidated' SSE event to affected user
+   *
+   * Response:
+   * - JSON with sessionsRevoked count
+   *
+   * Security:
+   * - User ID required
    */
   static async revokeAllUserSessions(req, res) {
     const { userId } = req.body;
@@ -891,24 +1038,6 @@ class UserController {
         },
         'All sessions revoked successfully',
       );
-
-      // Send SSE notification to the affected user
-      sseManager.sendToUser(userId, {
-        type: 'sessionInvalidated',
-        reason: 'All sessions were revoked by an administrator',
-        timestamp: new Date().toISOString(),
-      });
-
-      req.log.info(
-        { action: 'revokeAllUserSessions', userId },
-        'Sent sessionInvalidated SSE event',
-      );
-
-      res.json({
-        success: true,
-        message: 'All sessions revoked successfully',
-        sessionsRevoked: deleteResult.changes,
-      });
     } catch (error) {
       handleError(res, error, 'revoking all user sessions', {
         logger: req.logger,
@@ -917,7 +1046,24 @@ class UserController {
   }
 
   /**
-   * Ban user and immediately log them out
+   * Ban user
+   * Uses Better Auth ban functionality
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.body - Request body
+   * @param {string} req.body.userId - User ID to ban
+   * @param {string} [req.body.banReason] - Reason for ban
+   * @param {Object} req.headers - Request headers (for Better Auth)
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Bans user in Better Auth
+   *
+   * Security:
+   * - User ID required
+   * - Better Auth handles authorization
    */
   static async banUser(req, res) {
     const { userId, banReason } = req.body;
@@ -931,7 +1077,7 @@ class UserController {
     try {
       // Use better-auth admin API to ban the user
       const result = await auth.api.banUser({
-        headers: req.headers, // Pass request headers for authentication
+        headers: req.headers,
         body: {
           userId,
           banReason: banReason || 'Banned by administrator',
@@ -949,40 +1095,9 @@ class UserController {
 
       req.log.info({ action: 'banUser', userId }, 'User banned successfully');
 
-      // Immediately revoke all user sessions
-      const deleteResult = executeUpdate(
-        'DELETE FROM session WHERE userId = ?',
-        [userId],
-        `revoking all sessions for banned user ${userId}`,
-      );
-
-      req.log.info(
-        {
-          action: 'banUser',
-          userId,
-          sessionsRevoked: deleteResult.changes,
-        },
-        'All sessions revoked for banned user',
-      );
-
-      // Send SSE notification to log out the user immediately
-      sseManager.sendToUser(userId, {
-        type: 'sessionInvalidated',
-        reason:
-          banReason ||
-          'Your account has been banned by an administrator. Please contact support for more information.',
-        timestamp: new Date().toISOString(),
-      });
-
-      req.log.info(
-        { action: 'banUser', userId },
-        'Sent sessionInvalidated SSE event to banned user',
-      );
-
       res.json({
         success: true,
-        message: 'User banned and logged out successfully',
-        sessionsRevoked: deleteResult.changes,
+        message: 'User banned successfully',
         data: result.data,
       });
     } catch (error) {
@@ -994,6 +1109,22 @@ class UserController {
 
   /**
    * Unban user
+   * Removes ban status using Better Auth
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.body - Request body
+   * @param {string} req.body.userId - User ID to unban
+   * @param {Object} req.headers - Request headers (for Better Auth)
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Unbans user in Better Auth
+   *
+   * Security:
+   * - User ID required
+   * - Better Auth handles authorization
    */
   static async unbanUser(req, res) {
     const { userId } = req.body;

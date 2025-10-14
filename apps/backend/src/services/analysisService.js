@@ -1,3 +1,36 @@
+/**
+ * Analysis Service - Core business logic for analysis management
+ * Manages analysis lifecycle, file operations, versioning, logging, and process monitoring.
+ *
+ * This service handles:
+ * - Analysis CRUD operations and file management
+ * - Process lifecycle (start/stop/restart) and health monitoring
+ * - Version control with rollback capabilities
+ * - Log management (in-memory and file-based with pagination)
+ * - Environment variable encryption and management
+ * - Team/department assignment and structure integration
+ * - Configuration persistence and migration
+ * - Process metrics collection for monitoring
+ *
+ * Architecture:
+ * - Singleton service pattern (exported as analysisService)
+ * - AnalysisProcess model instances stored in Map
+ * - Configuration caching for performance
+ * - Periodic health checks and metrics collection
+ * - Request-scoped logging via logger parameter
+ *
+ * Storage Structure:
+ * - analyses-storage/
+ *   - [analysisName]/
+ *     - index.js (current version)
+ *     - env/.env (encrypted environment variables)
+ *     - logs/analysis.log (NDJSON format)
+ *     - versions/ (version history)
+ *       - metadata.json
+ *       - v1.js, v2.js, etc.
+ *
+ * @module analysisService
+ */
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import { promises as fs } from 'fs';
@@ -39,7 +72,44 @@ function formatFileSize(bytes) {
 
 /**
  * Service class for managing analysis files, processes, and configurations
- * Handles CRUD operations, file management, logging, and department integration
+ * Handles CRUD operations, file management, logging, and team integration.
+ *
+ * Key Features:
+ * - Analysis lifecycle management (create, read, update, delete, rename)
+ * - Process control (start, stop, restart with health monitoring)
+ * - Version management (save, rollback, compare)
+ * - Log management (streaming, pagination, filtering, download)
+ * - Environment variable encryption and management
+ * - Team assignment and folder structure integration
+ * - Configuration persistence with automatic migration
+ * - Process metrics collection and monitoring
+ * - Automatic restart on crashes with exponential backoff
+ * - Periodic health checks (5-minute interval)
+ * - **Race condition protection** with promise-based lock mechanism
+ *
+ * Singleton Pattern:
+ * - Exported as `analysisService` for application-wide use
+ * - Single source of truth for analysis state
+ * - Centralized process and configuration management
+ *
+ * Process Management:
+ * - Each analysis runs as a child Node.js process
+ * - AnalysisProcess model wraps child process with state management
+ * - Intended state tracking for automatic recovery
+ * - Connection error detection and automatic restart
+ *
+ * Concurrency Control:
+ * - Lock mechanism (startLocks Map) prevents duplicate process starts
+ * - Concurrent requests to start same analysis wait for first to complete
+ * - Automatically releases locks on completion or failure
+ * - Utility methods for monitoring ongoing operations
+ *
+ * Logging Strategy:
+ * - Module-level logger (moduleLogger) for background operations
+ * - Request-scoped logger parameter for API operations
+ * - All public methods accept optional logger parameter
+ *
+ * @class AnalysisService
  */
 class AnalysisService {
   constructor() {
@@ -53,8 +123,27 @@ class AnalysisService {
     this.healthCheckInterval = null;
     /** @type {NodeJS.Timeout|null} Metrics collection interval timer */
     this.metricsInterval = null;
+    /** @type {Map<string, Promise>} Map of analysis name to ongoing start operations for lock management */
+    this.startLocks = new Map();
   }
 
+  /**
+   * Validate time range parameter for log filtering
+   *
+   * @param {string} timeRange - Time range to validate
+   * @returns {boolean} True if time range is valid
+   *
+   * Valid Ranges:
+   * - '1h': Last hour
+   * - '24h': Last 24 hours
+   * - '7d': Last 7 days
+   * - '30d': Last 30 days
+   * - 'all': All available logs
+   *
+   * @example
+   * analysisService.validateTimeRange('24h'); // true
+   * analysisService.validateTimeRange('invalid'); // false
+   */
   validateTimeRange(timeRange) {
     const validRanges = ['1h', '24h', '7d', '30d', 'all'];
     return validRanges.includes(timeRange);
@@ -677,29 +766,131 @@ class AnalysisService {
   }
 
   /**
-   * Start/run an analysis process
+   * Check if a start operation is currently in progress for an analysis
+   * Useful for debugging race conditions and monitoring concurrent operations
+   *
+   * @param {string} analysisName - Name of the analysis to check
+   * @returns {boolean} True if a start operation is in progress, false otherwise
+   *
+   * @example
+   * if (analysisService.isStartInProgress('myAnalysis')) {
+   *   console.log('Another start operation is already running');
+   * }
+   */
+  isStartInProgress(analysisName) {
+    return this.startLocks.has(analysisName);
+  }
+
+  /**
+   * Get all analyses that currently have start operations in progress
+   * Useful for monitoring and debugging concurrent operations
+   *
+   * @returns {Array<string>} Array of analysis names with ongoing start operations
+   *
+   * @example
+   * const inProgress = analysisService.getStartOperationsInProgress();
+   * console.log(`${inProgress.length} analyses currently starting`);
+   */
+  getStartOperationsInProgress() {
+    return Array.from(this.startLocks.keys());
+  }
+
+  /**
+   * Start/run an analysis process with lock protection to prevent race conditions
+   *
+   * This method implements a mutex/lock mechanism to ensure that concurrent requests
+   * to start the same analysis don't result in duplicate processes. The lock is
+   * automatically released after the operation completes or fails.
+   *
    * @param {string} analysisName - Name of the analysis to run
    * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<Object>} Result object with success status and analysis info
-   * @throws {Error} If analysis start fails
+   * @throws {Error} If analysis not found or start fails
+   *
+   * @example
+   * // Multiple concurrent calls are safe - second call will wait for first to complete
+   * await Promise.all([
+   *   analysisService.runAnalysis('myAnalysis'),
+   *   analysisService.runAnalysis('myAnalysis')
+   * ]); // Only starts once, both calls get same result
    */
   async runAnalysis(analysisName, logger = moduleLogger) {
     logger.info({ action: 'runAnalysis', analysisName }, 'Running analysis');
 
+    // Check if analysis exists
     const analysis = this.analyses.get(analysisName);
-
     if (!analysis) {
       throw new Error(`Analysis ${analysisName} not found`);
     }
 
-    await analysis.start();
-    await this.saveConfig();
+    // Check if a start operation is already in progress for this analysis
+    if (this.startLocks.has(analysisName)) {
+      logger.info(
+        { action: 'runAnalysis', analysisName },
+        'Start operation already in progress, waiting for completion',
+      );
 
-    logger.info(
-      { action: 'runAnalysis', analysisName, status: analysis.status },
-      'Analysis started',
-    );
-    return { success: true, status: analysis.status, logs: analysis.logs };
+      // Wait for the ongoing operation to complete and return its result
+      try {
+        const result = await this.startLocks.get(analysisName);
+        logger.info(
+          { action: 'runAnalysis', analysisName },
+          'Concurrent start operation completed',
+        );
+        return result;
+      } catch (error) {
+        // If the concurrent operation failed, throw the error
+        logger.error(
+          { action: 'runAnalysis', analysisName, error },
+          'Concurrent start operation failed',
+        );
+        throw error;
+      }
+    }
+
+    // Check if analysis is already running (additional safety check)
+    if (analysis.status === 'running' && analysis.process) {
+      logger.info(
+        { action: 'runAnalysis', analysisName },
+        'Analysis is already running',
+      );
+      return {
+        success: true,
+        status: analysis.status,
+        logs: analysis.logs,
+        alreadyRunning: true,
+      };
+    }
+
+    // Create a promise for this start operation and store it as a lock
+    const startPromise = (async () => {
+      try {
+        await analysis.start();
+        await this.saveConfig();
+
+        logger.info(
+          { action: 'runAnalysis', analysisName, status: analysis.status },
+          'Analysis started successfully',
+        );
+
+        return { success: true, status: analysis.status, logs: analysis.logs };
+      } catch (error) {
+        logger.error(
+          { action: 'runAnalysis', analysisName, error },
+          'Failed to start analysis',
+        );
+        throw error;
+      } finally {
+        // Always remove the lock when the operation completes (success or failure)
+        this.startLocks.delete(analysisName);
+      }
+    })();
+
+    // Store the promise as a lock before starting the operation
+    this.startLocks.set(analysisName, startPromise);
+
+    // Return the promise result
+    return startPromise;
   }
 
   /**

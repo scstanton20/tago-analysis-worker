@@ -52,9 +52,7 @@ export const auth = betterAuth({
   telemetry: { enabled: false },
   rateLimit: {
     window: 60, // 1 minute window
-    max: config.nodeEnv === 'development' ? 10000 : 1000, // Very generous in dev, reasonable in prod
-    // Development needs high limits due to React StrictMode and hot reloading
-    // Production uses moderate limit to prevent abuse while allowing normal usage
+    max: 100,
   },
   user: {
     changeEmail: {

@@ -470,23 +470,22 @@ class AnalysisProcess {
     return new Promise((resolve) => {
       this.process.kill('SIGTERM');
 
-      const forceKillTimeout = setTimeout(() => {
+      const forceKillTimeout = setTimeout(async () => {
         if (this.process) {
           this.logger.warn(`Force stopping process after timeout`);
-          this.addLog('Force stopping process...').then(() => {
-            this.process.kill('SIGKILL');
-          });
+          await this.addLog('Force stopping process...');
+          this.process.kill('SIGKILL');
         }
       }, config.analysis.forceKillTimeout);
 
-      this.process.once('exit', () => {
+      this.process.once('exit', async () => {
         clearTimeout(forceKillTimeout);
         this.updateStatus('stopped', false);
         this.logger.info(`Analysis process stopped successfully`);
-        this.addLog('Analysis stopped').then(() => {
-          this.process = null;
-          this.saveConfig().then(resolve);
-        });
+        await this.addLog('Analysis stopped');
+        this.process = null;
+        await this.saveConfig();
+        resolve();
       });
     });
   }

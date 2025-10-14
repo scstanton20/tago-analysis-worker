@@ -1,5 +1,5 @@
 // frontend/src/components/teamSidebar.jsx
-import { useState, useMemo, lazy, Suspense } from 'react';
+import { useState, useMemo, useCallback, lazy, Suspense } from 'react';
 import PropTypes from 'prop-types';
 import {
   DndContext,
@@ -16,7 +16,11 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useSSE } from '../contexts/sseContext/index';
+import {
+  useTeams,
+  useConnection,
+  useAnalyses,
+} from '../contexts/sseContext/index';
 import {
   Box,
   Stack,
@@ -29,8 +33,6 @@ import {
   ScrollArea,
   NavLink,
   Tooltip,
-  LoadingOverlay,
-  Portal,
 } from '@mantine/core';
 import {
   IconBrandAsana,
@@ -43,59 +45,13 @@ import {
 const TeamManagementModal = lazy(() => import('./modals/teamManagementModal'));
 const UserManagementModal = lazy(() => import('./modals/userManagementModal'));
 const ProfileModal = lazy(() => import('./modals/profileModal'));
-
-// Custom loading overlay component
-function AppLoadingOverlay({ message, submessage, error, showRetry }) {
-  return (
-    <Portal>
-      <LoadingOverlay
-        visible={true}
-        zIndex={9999}
-        overlayProps={{ blur: 2, radius: 'sm' }}
-        loaderProps={{
-          size: 'xl',
-          children: (
-            <Stack align="center" gap="lg">
-              <Logo size={48} className={error ? '' : 'pulse'} />
-              <Text size="lg" fw={500} c={error ? 'red' : undefined}>
-                {message}
-              </Text>
-              {submessage && (
-                <Text size="sm" c="dimmed" ta="center" maw={400}>
-                  {submessage}
-                </Text>
-              )}
-              {showRetry && (
-                <Button
-                  onClick={() => window.location.reload()}
-                  variant="gradient"
-                  gradient={{ from: 'brand.6', to: 'accent.6' }}
-                  mt="md"
-                >
-                  Retry Connection
-                </Button>
-              )}
-            </Stack>
-          ),
-        }}
-        pos="fixed"
-      />
-    </Portal>
-  );
-}
-
-AppLoadingOverlay.propTypes = {
-  message: PropTypes.string.isRequired,
-  submessage: PropTypes.string,
-  error: PropTypes.bool,
-  showRetry: PropTypes.bool,
-};
-
 import { teamService } from '../services/teamService';
 import { useAuth } from '../hooks/useAuth';
 import { usePermissions } from '../hooks/usePermissions';
 import Logo from './logo';
 import logger from '../utils/logger';
+import AppLoadingOverlay from './common/AppLoadingOverlay';
+import ChunkLoadErrorBoundary from './common/ChunkLoadErrorBoundary';
 
 // Sortable Team Item
 const SortableTeamItem = ({ team, isSelected, onClick, analysisCount }) => {
@@ -229,7 +185,9 @@ SortableTeamItem.propTypes = {
 
 // Main Team Sidebar Component
 export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
-  const { teams, getTeamAnalysisCount, hasInitialData } = useSSE();
+  const { teams } = useTeams();
+  const { analyses } = useAnalyses();
+  const { hasInitialData } = useConnection();
   const { user, logout, isAdmin } = useAuth();
   const { canAccessTeam, isAdmin: hasAdminPerms } = usePermissions();
 
@@ -238,6 +196,16 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [draggedAnalysis, setDraggedAnalysis] = useState(null);
   const [activeTeamId, setActiveTeamId] = useState(null);
+
+  // Helper function to count analyses per team
+  const getTeamAnalysisCount = useCallback(
+    (teamId) => {
+      return Object.values(analyses).filter(
+        (analysis) => analysis.teamId === teamId,
+      ).length;
+    },
+    [analyses],
+  );
 
   // Convert teams object to sorted array for display, filtered by user access (memoized)
   const teamsArray = useMemo(() => {
@@ -494,37 +462,49 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
 
       {/* Team Management Modal */}
       {showManageModal && (
-        <Suspense
-          fallback={<AppLoadingOverlay message="Loading team management..." />}
-        >
-          <TeamManagementModal
-            opened={showManageModal}
-            onClose={() => setShowManageModal(false)}
-            teams={teams}
-          />
-        </Suspense>
+        <ChunkLoadErrorBoundary componentName="Team Management Modal">
+          <Suspense
+            fallback={
+              <AppLoadingOverlay message="Loading team management..." />
+            }
+          >
+            <TeamManagementModal
+              opened={showManageModal}
+              onClose={() => setShowManageModal(false)}
+              teams={teams}
+            />
+          </Suspense>
+        </ChunkLoadErrorBoundary>
       )}
 
       {/* User Management Modal */}
       {showUserModal && (
-        <Suspense
-          fallback={<AppLoadingOverlay message="Loading user management..." />}
-        >
-          <UserManagementModal
-            opened={showUserModal}
-            onClose={() => setShowUserModal(false)}
-          />
-        </Suspense>
+        <ChunkLoadErrorBoundary componentName="User Management Modal">
+          <Suspense
+            fallback={
+              <AppLoadingOverlay message="Loading user management..." />
+            }
+          >
+            <UserManagementModal
+              opened={showUserModal}
+              onClose={() => setShowUserModal(false)}
+            />
+          </Suspense>
+        </ChunkLoadErrorBoundary>
       )}
 
       {/* Profile Modal */}
       {showProfileModal && (
-        <Suspense fallback={<AppLoadingOverlay message="Loading profile..." />}>
-          <ProfileModal
-            opened={showProfileModal}
-            onClose={() => setShowProfileModal(false)}
-          />
-        </Suspense>
+        <ChunkLoadErrorBoundary componentName="Profile Modal">
+          <Suspense
+            fallback={<AppLoadingOverlay message="Loading profile..." />}
+          >
+            <ProfileModal
+              opened={showProfileModal}
+              onClose={() => setShowProfileModal(false)}
+            />
+          </Suspense>
+        </ChunkLoadErrorBoundary>
       )}
     </Stack>
   );

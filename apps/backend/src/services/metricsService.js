@@ -1,4 +1,36 @@
-// backend/src/services/metricsService.js
+/**
+ * Metrics Service - System metrics collection and analysis
+ * Collects, parses, and aggregates Prometheus metrics for monitoring and observability.
+ *
+ * This service handles:
+ * - Container (backend) metrics collection (CPU, memory, event loop)
+ * - Child process (analysis) metrics aggregation
+ * - HTTP request metrics and latency percentiles
+ * - DNS cache hit rate calculation
+ * - Per-process metrics for individual analysis processes
+ * - Health score calculation
+ * - Prometheus metrics parsing and extraction
+ *
+ * Metrics Categories:
+ * - Container: Backend Node.js process metrics
+ * - Children: Aggregate metrics for all analysis processes
+ * - Total: Combined container + children metrics
+ * - Processes: Per-analysis process metrics with network stats
+ *
+ * Prometheus Integration:
+ * - Parses Prometheus text format metrics
+ * - Extracts specific metrics by name and labels
+ * - Calculates aggregates and percentiles
+ * - Provides structured data for frontend consumption
+ *
+ * Architecture:
+ * - Singleton service pattern (exported as metricsService)
+ * - Uses pidusage for accurate CPU% measurement
+ * - Caches previous values for rate calculations
+ * - Request-scoped logging via logger parameter
+ *
+ * @module metricsService
+ */
 import { register } from '../utils/metrics-enhanced.js';
 import { createChildLogger } from '../utils/logging/logger.js';
 import pidusage from 'pidusage';
@@ -7,7 +39,40 @@ import pidusage from 'pidusage';
 // Public methods accept logger parameter for request-scoped logging
 const moduleLogger = createChildLogger('metrics-service');
 
+/**
+ * Metrics Service class for collecting and analyzing system metrics
+ * Parses Prometheus metrics and provides structured data for monitoring.
+ *
+ * Key Features:
+ * - Multi-category metrics (container, children, total, per-process)
+ * - Prometheus text format parsing
+ * - HTTP metrics with percentile latencies
+ * - DNS cache hit rate calculation
+ * - Health score calculation based on multiple factors
+ * - Rate calculations using cached previous values
+ *
+ * Metrics Collection:
+ * - Container: Backend CPU/memory using pidusage
+ * - Children: Aggregate analysis process metrics
+ * - Per-process: Individual analysis metrics with network stats
+ * - HTTP: Request rate, error rate, p95/p99 latency
+ * - DNS: Hit rate from cache statistics
+ *
+ * Data Flow:
+ * 1. Fetch metrics string from Prometheus register
+ * 2. Parse into structured objects with labels
+ * 3. Extract specific metrics by name/labels
+ * 4. Calculate aggregates and rates
+ * 5. Return categorized metrics object
+ *
+ * @class MetricsService
+ */
 class MetricsService {
+  /**
+   * Initialize metrics service instance
+   *
+   * @property {Map} lastValues - Cache of previous metric values for rate calculations
+   */
   constructor() {
     this.lastValues = new Map();
   }

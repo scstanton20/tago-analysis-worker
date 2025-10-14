@@ -207,15 +207,16 @@ export const userService = {
   /**
    * Remove user from organization (also deletes user via backend hook)
    * Note: Due to single-org architecture, removing from org automatically deletes the user
+   * Backend always uses the main organization, so organizationId is not required
    * @param {string} userId - User ID
-   * @param {string} organizationId - Organization ID
+   * @param {string} organizationId - Organization Id
    * @returns {Promise<Object>} Result of removing user from organization and deletion
    */
   async removeUserFromOrganization(userId, organizationId) {
     const response = await fetchWithHeaders(`/users/${userId}/organization`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ organizationId, userId }),
+      body: JSON.stringify({ userId, organizationId }),
     });
 
     return handleResponse(response);

@@ -614,7 +614,7 @@ export function useUserManagement({
         setLoading(false);
       }
     },
-    [organizationId, notify, loadUsers],
+    [notify, loadUsers, organizationId],
   );
 
   const handleImpersonate = useCallback(

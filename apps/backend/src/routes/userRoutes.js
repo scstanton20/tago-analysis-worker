@@ -443,7 +443,7 @@ router.put(
  * /users/{userId}/organization:
  *   delete:
  *     summary: Remove user from organization and delete user
- *     description: Remove a user from the organization (admin only). Due to single-organization architecture, this automatically deletes the user entirely via the afterRemoveMember hook, including cleanup of all user data (sessions, team memberships, etc.)
+ *     description: Remove a user from the organization (admin only). Due to single-organization architecture, this automatically deletes the user entirely via the afterRemoveMember hook, including cleanup of all user data (sessions, team memberships, etc.). The backend always uses the main organization.
  *     tags: [User Management - Admin]
  *     parameters:
  *       - in: path
@@ -452,22 +452,6 @@ router.put(
  *         schema:
  *           type: string
  *         description: ID of the user to remove from organization and delete
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               organizationId:
- *                 type: string
- *                 description: ID of the organization to remove user from
- *               userId:
- *                 type: string
- *                 description: ID of the user (must match path parameter)
- *             required:
- *               - organizationId
- *               - userId
  *     responses:
  *       200:
  *         description: User removed from organization and deleted successfully

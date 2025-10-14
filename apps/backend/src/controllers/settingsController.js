@@ -3,10 +3,26 @@ import dnsCache from '../services/dnsCache.js';
 import { sseManager } from '../utils/sse.js';
 import { handleError } from '../utils/responseHelpers.js';
 
+/**
+ * Controller class for managing application settings
+ * Currently focused on DNS cache configuration and management.
+ *
+ * All methods are static and follow Express route handler pattern (req, res).
+ * Request-scoped logging is available via req.log.
+ */
 class SettingsController {
-  // DNS Cache Settings
-
-  // Get DNS configuration
+  /**
+   * Retrieve DNS cache configuration and statistics
+   * Returns current DNS cache settings and performance metrics
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Response:
+   * - JSON object with config (enabled, ttl, maxEntries) and stats (hits, misses, size)
+   */
   static async getDNSConfig(req, res) {
     req.log.info({ action: 'getDNSConfig' }, 'Getting DNS configuration');
 
@@ -30,7 +46,26 @@ class SettingsController {
     }
   }
 
-  // Update DNS configuration
+  /**
+   * Update DNS cache configuration
+   * Modifies DNS cache settings and persists to configuration file
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.body - Request body
+   * @param {boolean} [req.body.enabled] - Enable/disable DNS caching
+   * @param {number} [req.body.ttl] - Time-to-live in milliseconds
+   * @param {number} [req.body.maxEntries] - Maximum cache entries
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Updates DNS cache configuration in memory and on disk
+   * - Broadcasts 'dnsConfigUpdated' SSE event to admin users
+   *
+   * Security:
+   * - Validation handled by middleware
+   */
   static async updateDNSConfig(req, res) {
     const { enabled, ttl, maxEntries } = req.body;
 
@@ -74,7 +109,18 @@ class SettingsController {
     }
   }
 
-  // Get DNS cache entries
+  /**
+   * Retrieve all DNS cache entries
+   * Returns list of cached DNS records with hostnames and resolved IPs
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Response:
+   * - JSON object with entries array and total count
+   */
   static async getDNSCacheEntries(req, res) {
     req.log.info({ action: 'getDNSCacheEntries' }, 'Getting DNS cache entries');
 
@@ -97,7 +143,22 @@ class SettingsController {
     }
   }
 
-  // Clear DNS cache
+  /**
+   * Clear all DNS cache entries
+   * Removes all cached DNS records from memory
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Clears all DNS cache entries from memory
+   * - Broadcasts 'dnsCacheCleared' SSE event to admin users
+   *
+   * Response:
+   * - JSON object with entriesCleared count and updated stats
+   */
   static async clearDNSCache(req, res) {
     req.log.info({ action: 'clearDNSCache' }, 'Clearing DNS cache');
 
@@ -129,7 +190,24 @@ class SettingsController {
     }
   }
 
-  // Delete DNS cache entry
+  /**
+   * Delete a specific DNS cache entry
+   * Removes a single cached DNS record by hostname key
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.key - Hostname key to delete from cache
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Response:
+   * - Status 200 with success message if deleted
+   * - Status 404 if entry not found
+   *
+   * Security:
+   * - Validation handled by middleware
+   */
   static async deleteDNSCacheEntry(req, res) {
     const { key } = req.params;
 
@@ -165,7 +243,22 @@ class SettingsController {
     }
   }
 
-  // Reset DNS statistics
+  /**
+   * Reset DNS cache statistics
+   * Resets hit/miss counters and other performance metrics
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Resets DNS cache statistics counters (hits, misses, etc.)
+   * - Broadcasts 'dnsStatsReset' SSE event to admin users
+   *
+   * Response:
+   * - JSON object with reset stats
+   */
   static async resetDNSStats(req, res) {
     req.log.info({ action: 'resetDNSStats' }, 'Resetting DNS cache statistics');
 

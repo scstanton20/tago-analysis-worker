@@ -34,7 +34,7 @@ import {
   IconContainer,
   IconUsers,
 } from '@tabler/icons-react';
-import { useSSE } from '../../contexts/sseContext';
+import { useBackend, useConnection } from '../../contexts/sseContext';
 
 // Metric Card Component
 function MetricCard({
@@ -446,7 +446,8 @@ MetricsTabContent.propTypes = {
 
 // Main Metrics Dashboard Component
 export default function MetricsDashboard() {
-  const { metricsData, connectionStatus } = useSSE();
+  const { metricsData } = useBackend();
+  const { connectionStatus } = useConnection();
   const [activeTab, setActiveTab] = useState('total');
 
   // Derive loading state from metricsData availability

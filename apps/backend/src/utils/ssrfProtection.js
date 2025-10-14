@@ -1,26 +1,27 @@
 // utils/ssrfProtection.js
 // SSRF (Server-Side Request Forgery) protection for analysis processes
+//
+// Protection Strategy:
+// - Blocks critical services: localhost, cloud metadata endpoints, reserved ranges
+// - Allows LAN/private network access: 10.x.x.x, 172.16-31.x.x, 192.168.x.x
+// - Prevents DNS rebinding attacks against metadata services
+//
 import { createChildLogger } from './logging/logger.js';
 
 const logger = createChildLogger('ssrf-protection');
 
-// Private IP ranges (CIDR notation)
+// Critical blocked IP ranges - only block dangerous/sensitive services
+// Allows LAN/private network access for legitimate internal services
 const PRIVATE_IP_RANGES = [
-  // IPv4 private ranges
-  { range: '10.0.0.0/8', start: '10.0.0.0', end: '10.255.255.255' },
-  { range: '172.16.0.0/12', start: '172.16.0.0', end: '172.31.255.255' },
-  { range: '192.168.0.0/16', start: '192.168.0.0', end: '192.168.255.255' },
-  // Loopback
+  // Loopback - prevents localhost access
   { range: '127.0.0.0/8', start: '127.0.0.0', end: '127.255.255.255' },
-  // Link-local (includes AWS metadata endpoint 169.254.169.254)
+  // Link-local (includes AWS/GCP metadata endpoint 169.254.169.254)
   { range: '169.254.0.0/16', start: '169.254.0.0', end: '169.254.255.255' },
-  // Carrier-grade NAT
-  { range: '100.64.0.0/10', start: '100.64.0.0', end: '100.127.255.255' },
-  // Multicast
+  // Multicast - generally not needed for application traffic
   { range: '224.0.0.0/4', start: '224.0.0.0', end: '239.255.255.255' },
-  // Reserved
+  // Reserved/experimental ranges
   { range: '240.0.0.0/4', start: '240.0.0.0', end: '255.255.255.255' },
-  // 0.0.0.0/8
+  // Unspecified/invalid range
   { range: '0.0.0.0/8', start: '0.0.0.0', end: '0.255.255.255' },
 ];
 
@@ -32,13 +33,12 @@ const BLOCKED_HOSTNAMES = [
   '169.254.169.254', // AWS metadata IP
 ];
 
-// IPv6 blocked patterns
+// IPv6 blocked patterns - only critical services
+// Allows ULA (fc00::/7, fd00::/8) for private IPv6 networks
 const IPV6_BLOCKED_PATTERNS = [
   /^::1$/, // Loopback
-  /^::ffff:/, // IPv4-mapped IPv6
-  /^fe80:/, // Link-local
-  /^fc00:/, // Unique local address (ULA)
-  /^fd00:/, // Unique local address (ULA)
+  /^::ffff:/, // IPv4-mapped IPv6 (could map to blocked IPv4 ranges)
+  /^fe80:/, // Link-local (prevents access to local network services on IPv6)
   /^ff00:/, // Multicast
 ];
 
@@ -52,7 +52,8 @@ function ipToInt(ip) {
 }
 
 /**
- * Check if an IPv4 address is in a private/blocked range
+ * Check if an IPv4 address is in a blocked range (critical services only)
+ * Allows private network ranges (10.x.x.x, 172.16-31.x.x, 192.168.x.x)
  */
 function isPrivateIPv4(ip) {
   const ipInt = ipToInt(ip);
@@ -102,7 +103,7 @@ export function validateHostname(hostname) {
 
   if (isIPv4) {
     if (isPrivateIPv4(hostname)) {
-      const reason = `Direct access to private IPv4 address "${hostname}" is blocked`;
+      const reason = `Direct access to protected IPv4 address "${hostname}" is blocked (localhost/metadata/reserved range)`;
       logger.warn({ hostname, reason }, 'SSRF: IPv4 validation failed');
       return { allowed: false, reason };
     }
@@ -110,7 +111,7 @@ export function validateHostname(hostname) {
 
   if (isIPv6) {
     if (isPrivateIPv6(hostname)) {
-      const reason = `Direct access to private IPv6 address "${hostname}" is blocked`;
+      const reason = `Direct access to protected IPv6 address "${hostname}" is blocked (localhost/link-local/multicast)`;
       logger.warn({ hostname, reason }, 'SSRF: IPv6 validation failed');
       return { allowed: false, reason };
     }
@@ -129,7 +130,7 @@ export function validateHostname(hostname) {
 export function validateResolvedAddress(hostname, address, family) {
   if (family === 4) {
     if (isPrivateIPv4(address)) {
-      const reason = `Hostname "${hostname}" resolved to private IPv4 address "${address}"`;
+      const reason = `Hostname "${hostname}" resolved to protected IPv4 address "${address}" (localhost/metadata/reserved)`;
       logger.warn(
         { hostname, address, family, reason },
         'SSRF: Resolved address validation failed',
@@ -138,7 +139,7 @@ export function validateResolvedAddress(hostname, address, family) {
     }
   } else if (family === 6) {
     if (isPrivateIPv6(address)) {
-      const reason = `Hostname "${hostname}" resolved to private IPv6 address "${address}"`;
+      const reason = `Hostname "${hostname}" resolved to protected IPv6 address "${address}" (localhost/link-local/multicast)`;
       logger.warn(
         { hostname, address, family, reason },
         'SSRF: Resolved address validation failed',
@@ -185,7 +186,7 @@ export function validateResolvedAddresses(hostname, addresses) {
 
   // If all addresses were blocked, deny the request
   if (filtered.length === 0) {
-    const reason = `All resolved addresses for "${hostname}" are private/blocked: ${blocked.join(', ')}`;
+    const reason = `All resolved addresses for "${hostname}" are protected/blocked (localhost/metadata/reserved): ${blocked.join(', ')}`;
     logger.warn(
       { hostname, addresses, blocked, reason },
       'SSRF: All resolved addresses blocked',
@@ -197,7 +198,7 @@ export function validateResolvedAddresses(hostname, addresses) {
   if (blocked.length > 0) {
     logger.warn(
       { hostname, total: addresses.length, blocked: blocked.length, filtered },
-      'SSRF: Some resolved addresses were filtered',
+      'SSRF: Some resolved addresses were filtered (protected ranges)',
     );
   }
 

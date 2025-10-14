@@ -2,7 +2,11 @@
 import { useState, useMemo, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { produce } from 'immer';
-import { useSSE } from '../../contexts/sseContext';
+import {
+  useAnalyses,
+  useTeams,
+  useConnection,
+} from '../../contexts/sseContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import logger from '../../utils/logger';
 import AnalysisItem from './analysisItem';
@@ -41,13 +45,9 @@ export default function AnalysisList({
   showTeamLabels = false,
   selectedTeam = null,
 }) {
-  const {
-    analyses: allAnalyses = {},
-    teamStructure,
-    teamStructureVersion,
-    connectionStatus,
-    getTeam,
-  } = useSSE();
+  const { analyses: allAnalyses = {} } = useAnalyses();
+  const { teamStructure, teamStructureVersion, getTeam } = useTeams();
+  const { connectionStatus } = useConnection();
 
   const { accessibleTeams, isAdmin } = usePermissions();
 

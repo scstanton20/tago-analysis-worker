@@ -1,4 +1,4 @@
-import { useState, useCallback, lazy } from 'react';
+import { useState, useCallback, useMemo, lazy } from 'react';
 import PropTypes from 'prop-types';
 import {
   Modal,
@@ -123,10 +123,20 @@ export default function VersionManagementModal({
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
 
-  const currentVersionNumber = versionData.currentVersion;
-  const sortedVersions = [...versionData.versions]
-    .filter((version) => version.version !== currentVersionNumber)
-    .sort((a, b) => b.version - a.version);
+  // Memoize current version to prevent unnecessary recalculations
+  const currentVersionNumber = useMemo(
+    () => versionData.currentVersion,
+    [versionData.currentVersion],
+  );
+
+  // Memoize sorted versions to prevent unnecessary array operations
+  const sortedVersions = useMemo(
+    () =>
+      [...versionData.versions]
+        .filter((version) => version.version !== currentVersionNumber)
+        .sort((a, b) => b.version - a.version),
+    [versionData.versions, currentVersionNumber],
+  );
 
   return (
     <Modal
