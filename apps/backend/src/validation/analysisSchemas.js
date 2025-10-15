@@ -115,9 +115,7 @@ export const analysisValidationSchemas = {
     }),
     query: z.object({
       timeRange: z.enum(['1h', '24h', '7d', '30d', 'all'], {
-        errorMap: () => ({
-          message: 'Invalid time range. Must be one of: 1h, 24h, 7d, 30d, all',
-        }),
+        message: 'Invalid time range. Must be one of: 1h, 24h, 7d, 30d, all',
       }),
     }),
   },

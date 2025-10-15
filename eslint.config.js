@@ -135,6 +135,24 @@ export default [
     },
   },
 
+  // Test files configuration - supports top-level await
+  {
+    files: ['**/*.test.{js,jsx}', '**/tests/**/*.{js,jsx}'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      parserOptions: {
+        ecmaVersion: 2022,
+      },
+    },
+    rules: {
+      'no-unused-vars': [
+        'error',
+        { varsIgnorePattern: '^_|^[A-Z_]', argsIgnorePattern: '^_' },
+      ],
+    },
+  },
+
   // Must be last - disables conflicting ESLint rules
   prettierConfig,
 ];

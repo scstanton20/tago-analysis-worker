@@ -216,15 +216,6 @@ class SSEManager {
       return 0;
     }
 
-    logger.info(
-      {
-        userId,
-        messageType: data.type,
-        clientCount: userClients.size,
-      },
-      'Sending SSE message to user',
-    );
-
     const message = this.formatSSEMessage(data);
     let sentCount = 0;
 
@@ -248,11 +239,6 @@ class SSEManager {
         this.removeClient(userId, client.id);
       }
     }
-
-    logger.info(
-      { userId, messageType: data.type, sentCount },
-      'SSE message delivery complete',
-    );
 
     return sentCount;
   }
