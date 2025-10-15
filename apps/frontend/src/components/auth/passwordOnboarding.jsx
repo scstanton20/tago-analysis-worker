@@ -14,6 +14,7 @@ import {
 import { IconAlertCircle, IconKey } from '@tabler/icons-react';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import Logo from '../logo';
+import { validatePassword } from '../../utils/userValidation';
 
 export default function PasswordOnboarding({
   username,
@@ -41,8 +42,10 @@ export default function PasswordOnboarding({
       return;
     }
 
-    if (formData.newPassword.length < 6) {
-      setError('New password must be at least 6 characters long');
+    // Validate password with new requirements
+    const passwordError = validatePassword(formData.newPassword);
+    if (passwordError) {
+      setError(passwordError);
       return;
     }
 
@@ -128,7 +131,8 @@ export default function PasswordOnboarding({
                 radius="md"
               >
                 Please set a new password to complete your account setup and
-                access the application.
+                access the application. Password must be at least 6 characters
+                and contain at least one uppercase letter.
               </Alert>
 
               {error && (

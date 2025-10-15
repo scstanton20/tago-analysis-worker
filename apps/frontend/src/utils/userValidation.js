@@ -5,8 +5,11 @@
 
 // Validation constants
 export const USERNAME_REGEX = /^[a-zA-Z0-9_.-]+$/;
-export const EMAIL_REGEX = /^\S+@\S+$/;
+// Email must have @ symbol and a domain (at least one character after @, then a dot, then at least 2 characters)
+export const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 export const MIN_USERNAME_LENGTH = 3;
+// Password must contain at least one uppercase letter
+export const PASSWORD_UPPERCASE_REGEX = /[A-Z]/;
 
 /**
  * Generate a secure random password for new users
@@ -73,7 +76,8 @@ export function createUsernameValidator(authClient, isEditing) {
 export function createEmailValidator(existingEmails, isEditing) {
   return (email) => {
     if (!email) return 'Email is required';
-    if (!EMAIL_REGEX.test(email)) return 'Invalid email format';
+    if (!EMAIL_REGEX.test(email))
+      return 'Invalid email format. Must include @ and a valid domain (e.g., user@example.com)';
 
     // Check against existing emails (case-insensitive)
     if (!isEditing && existingEmails.includes(email.toLowerCase())) {
@@ -82,4 +86,20 @@ export function createEmailValidator(existingEmails, isEditing) {
 
     return null;
   };
+}
+
+/**
+ * Validate password requirements
+ * @param {string} password - Password to validate
+ * @param {number} minLength - Minimum password length (default: 6)
+ * @returns {string|null} Error message or null if valid
+ */
+export function validatePassword(password, minLength = 6) {
+  if (!password) return 'Password is required';
+  if (password.length < minLength)
+    return `Password must be at least ${minLength} characters long`;
+  if (!PASSWORD_UPPERCASE_REGEX.test(password))
+    return 'Password must contain at least one uppercase letter';
+
+  return null;
 }

@@ -600,9 +600,9 @@ describe('userSchemas', () => {
   });
 
   describe('setInitialPassword', () => {
-    it('should validate with valid password', () => {
+    it('should validate with valid password containing uppercase', () => {
       const validData = {
-        newPassword: 'secure123',
+        newPassword: 'Secure123',
       };
 
       const result = schemas.setInitialPassword.body.safeParse(validData);
@@ -610,9 +610,9 @@ describe('userSchemas', () => {
       expect(result.success).toBe(true);
     });
 
-    it('should validate with minimum length password (6 chars)', () => {
+    it('should validate with minimum length password with uppercase', () => {
       const validData = {
-        newPassword: '123456',
+        newPassword: 'Pass12',
       };
 
       const result = schemas.setInitialPassword.body.safeParse(validData);
@@ -620,9 +620,9 @@ describe('userSchemas', () => {
       expect(result.success).toBe(true);
     });
 
-    it('should validate with long password', () => {
+    it('should validate with long password containing uppercase', () => {
       const validData = {
-        newPassword: 'a'.repeat(100),
+        newPassword: 'A' + 'a'.repeat(99),
       };
 
       const result = schemas.setInitialPassword.body.safeParse(validData);
@@ -630,7 +630,7 @@ describe('userSchemas', () => {
       expect(result.success).toBe(true);
     });
 
-    it('should validate with special characters in password', () => {
+    it('should validate with special characters and uppercase in password', () => {
       const validData = {
         newPassword: 'P@ssw0rd!',
       };
@@ -651,7 +651,7 @@ describe('userSchemas', () => {
 
     it('should reject password shorter than 6 characters', () => {
       const invalidData = {
-        newPassword: '12345',
+        newPassword: 'Pass1',
       };
 
       const result = schemas.setInitialPassword.body.safeParse(invalidData);
@@ -660,6 +660,34 @@ describe('userSchemas', () => {
       expect(result.error?.issues[0].path).toContain('newPassword');
       expect(result.error?.issues[0].message).toContain(
         'at least 6 characters',
+      );
+    });
+
+    it('should reject password without uppercase letter', () => {
+      const invalidData = {
+        newPassword: 'secure123',
+      };
+
+      const result = schemas.setInitialPassword.body.safeParse(invalidData);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0].path).toContain('newPassword');
+      expect(result.error?.issues[0].message).toContain(
+        'at least one uppercase letter',
+      );
+    });
+
+    it('should reject all lowercase password even if long enough', () => {
+      const invalidData = {
+        newPassword: 'abcdef123456',
+      };
+
+      const result = schemas.setInitialPassword.body.safeParse(invalidData);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0].path).toContain('newPassword');
+      expect(result.error?.issues[0].message).toContain(
+        'at least one uppercase letter',
       );
     });
 

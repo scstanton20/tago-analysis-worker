@@ -49,7 +49,7 @@ export default function AnalysisList({
   const { teamStructure, teamStructureVersion, getTeam } = useTeams();
   const { connectionStatus } = useConnection();
 
-  const { accessibleTeams, isAdmin } = usePermissions();
+  const { getViewableTeams, isAdmin } = usePermissions();
 
   const [openLogIds, setOpenLogIds] = useState(new Set());
   const [folderModalOpen, setFolderModalOpen] = useState(false);
@@ -155,13 +155,14 @@ export default function AnalysisList({
       return Object.keys(allAnalyses).length;
     }
 
-    // Non-admin: count only analyses in accessible teams (uncategorized is just a regular team)
-    const accessibleTeamIds = accessibleTeams?.map((team) => team.id) || [];
+    // Non-admin: count only analyses in viewable teams
+    const viewableTeams = getViewableTeams();
+    const viewableTeamIds = viewableTeams.map((team) => team.id);
 
     return Object.values(allAnalyses).filter(
-      (analysis) => analysis && accessibleTeamIds.includes(analysis.teamId),
+      (analysis) => analysis && viewableTeamIds.includes(analysis.teamId),
     ).length;
-  }, [allAnalyses, isAdmin, accessibleTeams]);
+  }, [allAnalyses, isAdmin, getViewableTeams]);
 
   // Helper function to get team info
   const getTeamInfo = (teamId) => {
@@ -471,6 +472,20 @@ export default function AnalysisList({
     }
   }, [pendingReorders, pendingFolders, pendingFolderDeletions, selectedTeam]);
 
+  // Check if user has no team access (non-admin users only)
+  // Must be before early returns to satisfy React Hooks rules
+  const hasNoTeamAccess = useMemo(() => {
+    if (isAdmin) return false;
+    const viewableTeams = getViewableTeams();
+    return !viewableTeams || viewableTeams.length === 0;
+  }, [isAdmin, getViewableTeams]);
+
+  // Calculate whether there are analyses to show
+  const hasAnalyses = analysesArray.length > 0;
+
+  // Get current team info for display
+  const currentTeamInfo = selectedTeam ? getTeam?.(selectedTeam) : null;
+
   // Handle loading state
   if (connectionStatus === 'connecting') {
     return (
@@ -509,15 +524,6 @@ export default function AnalysisList({
       </Paper>
     );
   }
-
-  const hasAnalyses = analysesArray.length > 0;
-
-  // Check if user has no team access (non-admin users only)
-  const hasNoTeamAccess =
-    !isAdmin && (!accessibleTeams || accessibleTeams.length === 0);
-
-  // Get current team info for display
-  const currentTeamInfo = selectedTeam ? getTeam?.(selectedTeam) : null;
 
   return (
     <Paper p="lg" withBorder radius="md">

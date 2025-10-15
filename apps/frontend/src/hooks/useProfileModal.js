@@ -13,6 +13,7 @@ import { useEventListener } from './useEventListener';
 import { useFormSync } from './useFormSync';
 import { useModalDataLoader } from './useModalDataLoader';
 import logger from '../utils/logger';
+import { validatePassword } from '../utils/userValidation';
 
 /**
  * Hook for managing profile modal state
@@ -56,12 +57,10 @@ export function useProfileModal({ opened, onClose }) {
     validate: {
       currentPassword: (value) =>
         !value ? 'Current password is required' : null,
-      newPassword: (value) =>
-        !value
-          ? 'New password is required'
-          : value.length < 6
-            ? 'Password must be at least 6 characters'
-            : null,
+      newPassword: (value) => {
+        if (!value) return 'New password is required';
+        return validatePassword(value);
+      },
       confirmPassword: (value, values) =>
         value !== values.newPassword ? 'Passwords do not match' : null,
     },

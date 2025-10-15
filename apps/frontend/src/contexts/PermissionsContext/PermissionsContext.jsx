@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo, useContext, useEffect } from 'react';
 import { authClient } from '../../lib/auth.js';
 import { fetchWithHeaders, handleResponse } from '../../utils/apiUtils.js';
 import { AuthContext } from '../AuthContext.jsx';
-import { SSEContext } from '../sseContext/context.js';
+import { useTeams } from '../sseContext/index.js';
 import { PermissionsContext } from './context.js';
 import { useInitialState } from '../../hooks/useInitialState.js';
 import { useEventListener } from '../../hooks/useEventListener.js';
@@ -10,7 +10,7 @@ import logger from '../../utils/logger.js';
 
 export const PermissionsProvider = ({ children }) => {
   const authContext = useContext(AuthContext);
-  const sseContext = useContext(SSEContext);
+  const { teams: sseTeams } = useTeams();
 
   if (!authContext) {
     throw new Error('PermissionsProvider must be used within an AuthProvider');
@@ -273,7 +273,7 @@ export const PermissionsProvider = ({ children }) => {
       // Get teams where user has a specific permission (merges with SSE data for latest team info)
       getTeamsWithPermission: (permission) => {
         if (isAdmin) {
-          const sseTeamsObject = sseContext?.teams || {};
+          const sseTeamsObject = sseTeams || {};
           const sseTeamsArray = Object.values(sseTeamsObject);
 
           if (sseTeamsArray.length > 0) {
@@ -281,6 +281,8 @@ export const PermissionsProvider = ({ children }) => {
               id: sseTeam.id,
               name: sseTeam.name,
               color: sseTeam.color,
+              isSystem: sseTeam.isSystem,
+              order_index: sseTeam.order_index,
               permissions: [
                 'view_analyses',
                 'run_analyses',
@@ -311,7 +313,7 @@ export const PermissionsProvider = ({ children }) => {
         );
 
         // Merge permission data with real-time SSE team data
-        const sseTeamsObject = sseContext?.teams || {};
+        const sseTeamsObject = sseTeams || {};
         return teamsWithPermission.map((userTeam) => {
           const sseTeam = sseTeamsObject[userTeam.id];
           if (!sseTeam) {
@@ -324,11 +326,12 @@ export const PermissionsProvider = ({ children }) => {
             name: sseTeam.name,
             color: sseTeam.color,
             isSystem: sseTeam.isSystem,
+            order_index: sseTeam.order_index,
           };
         });
       },
     }),
-    [isAdmin, userTeams, sseContext?.teams],
+    [isAdmin, userTeams, sseTeams],
   );
 
   // Combine base helpers with SSE-enhanced helpers

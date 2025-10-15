@@ -41,7 +41,7 @@ export function PasswordTab({
 
         <PasswordInput
           label="New Password"
-          placeholder="Enter new password (min 6 characters)"
+          placeholder="Min 6 characters, must include uppercase"
           required
           autoComplete="new-password"
           name="new-password"

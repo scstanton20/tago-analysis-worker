@@ -16,11 +16,7 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import {
-  useTeams,
-  useConnection,
-  useAnalyses,
-} from '../contexts/sseContext/index';
+import { useConnection, useAnalyses } from '../contexts/sseContext/index';
 import {
   Box,
   Stack,
@@ -48,7 +44,6 @@ const ProfileModal = lazy(() => import('./modals/profileModal'));
 import { teamService } from '../services/teamService';
 import { useAuth } from '../hooks/useAuth';
 import { usePermissions } from '../hooks/usePermissions';
-import Logo from './logo';
 import logger from '../utils/logger';
 import AppLoadingOverlay from './common/AppLoadingOverlay';
 import ChunkLoadErrorBoundary from './common/ChunkLoadErrorBoundary';
@@ -185,11 +180,10 @@ SortableTeamItem.propTypes = {
 
 // Main Team Sidebar Component
 export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
-  const { teams } = useTeams();
   const { analyses } = useAnalyses();
   const { hasInitialData } = useConnection();
   const { user, logout, isAdmin } = useAuth();
-  const { canAccessTeam, isAdmin: hasAdminPerms } = usePermissions();
+  const { getViewableTeams, isAdmin: hasAdminPerms } = usePermissions();
 
   const [showManageModal, setShowManageModal] = useState(false);
   const [showUserModal, setShowUserModal] = useState(false);
@@ -207,43 +201,30 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
     [analyses],
   );
 
-  // Convert teams object to sorted array for display, filtered by user access (memoized)
+  // Get viewable teams and filter based on business rules for sidebar display
   const teamsArray = useMemo(() => {
-    const allTeams = Object.values(teams).sort((a, b) => {
-      // Always put uncategorized (system) teams first
-      if (a.isSystem && !b.isSystem) return -1;
-      if (!a.isSystem && b.isSystem) return 1;
+    const allTeams = getViewableTeams();
 
-      // If both are system teams or both are not, sort by order_index then name
-      if (a.order_index !== b.order_index) {
-        return (a.order_index || 0) - (b.order_index || 0);
-      }
-
-      return a.name.localeCompare(b.name);
-    });
-
-    // Filter teams based on user permissions and business rules
+    // Filter teams based on business rules
     return allTeams.filter((team) => {
-      // Check for Uncategorized team: show if it has analyses AND user has access
+      // Hide Uncategorized team if it has no analyses
       if (team.isSystem && team.name === 'Uncategorized') {
-        const analysisCount = getTeamAnalysisCount(team.id);
-        // Admin users see uncategorized if it has analyses
-        if (hasAdminPerms) {
-          return analysisCount > 0;
-        }
-        // Non-admin users must be assigned to uncategorized team to see it
-        return analysisCount > 0 && canAccessTeam(team.id);
+        return getTeamAnalysisCount(team.id) > 0;
       }
-
-      // If user is admin, show all other teams
-      if (hasAdminPerms) {
-        return true;
-      }
-
-      // For non-admin users, check if they have access to this team
-      return canAccessTeam(team.id);
+      return true;
     });
-  }, [teams, hasAdminPerms, canAccessTeam, getTeamAnalysisCount]);
+  }, [getViewableTeams, getTeamAnalysisCount]);
+
+  // Convert ALL teams to object format for TeamManagementModal
+  // Modal should show all teams including Uncategorized even when empty
+  const teamsObject = useMemo(() => {
+    const allTeams = getViewableTeams();
+    const obj = {};
+    allTeams.forEach((team) => {
+      obj[team.id] = team;
+    });
+    return obj;
+  }, [getViewableTeams]);
 
   // Use the efficient count function from SSE hook
   const getAnalysisCount = (teamId) => {
@@ -471,7 +452,7 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
             <TeamManagementModal
               opened={showManageModal}
               onClose={() => setShowManageModal(false)}
-              teams={teams}
+              teams={teamsObject}
             />
           </Suspense>
         </ChunkLoadErrorBoundary>

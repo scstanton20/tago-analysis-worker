@@ -63,25 +63,37 @@ vi.mock('../../src/services/teamService.js', () => ({
   },
 }));
 
-vi.mock('../../src/config/default.js', () => ({
-  default: {
-    paths: {
-      analysis: '/tmp/analyses',
-      config: '/tmp/config',
+vi.mock('../../src/config/default.js', () => {
+  const storageBase = '/tmp/test-analyses-storage';
+
+  // Build config object like production does - derive paths from storage.base
+  const mockConfig = {
+    env: 'test',
+    secretKey: 'test-secret-key-for-testing-purposes-only-32-chars',
+    storage: {
+      base: storageBase,
+      createDirs: true,
     },
     analysis: {
       maxLogsInMemory: 100,
       forceKillTimeout: 5000,
       autoRestartDelay: 5000,
     },
-    storage: {
-      base: '/tmp',
-    },
-    process: {
-      env: {},
-    },
-  },
-}));
+  };
+
+  // Derive paths from storage.base (matches production behavior in default.js)
+  mockConfig.paths = {
+    analysis: `${mockConfig.storage.base}/analyses`,
+    config: `${mockConfig.storage.base}/config`,
+  };
+
+  // Derive files from paths (matches production behavior in default.js)
+  mockConfig.files = {
+    config: `${mockConfig.paths.config}/analyses-config.json`,
+  };
+
+  return { default: mockConfig };
+});
 
 vi.mock('fs', () => ({
   promises: {
@@ -1239,7 +1251,6 @@ describe('AnalysisService', () => {
     it('should migrate pre-v4.0 config to v4.0', async () => {
       const oldConfig = {
         version: '3.0',
-        paths: { config: '/tmp/config' },
         analyses: {
           analysis1: { enabled: true, teamId: 'team-1' },
           analysis2: { enabled: false, teamId: 'team-2' },
@@ -1258,7 +1269,6 @@ describe('AnalysisService', () => {
     it('should create teamStructure with items', async () => {
       const oldConfig = {
         version: '3.0',
-        paths: { config: '/tmp/config' },
         analyses: {
           analysis1: { enabled: true, teamId: 'team-1' },
           analysis2: { enabled: false, teamId: 'team-1' },
@@ -1277,7 +1287,6 @@ describe('AnalysisService', () => {
     it('should handle analyses without teamId', async () => {
       const oldConfig = {
         version: '3.0',
-        paths: { config: '/tmp/config' },
         analyses: {
           analysis1: { enabled: true },
         },
@@ -1294,7 +1303,6 @@ describe('AnalysisService', () => {
     it('should not migrate if already v4.0 or higher', async () => {
       const config = {
         version: '4.0',
-        paths: { config: '/tmp/config' },
         analyses: {},
         teamStructure: { 'team-1': { items: [] } },
       };
@@ -1307,7 +1315,6 @@ describe('AnalysisService', () => {
     it('should not migrate if no analyses exist', async () => {
       const config = {
         version: '3.0',
-        paths: { config: '/tmp/config' },
         analyses: {},
       };
 
@@ -1319,7 +1326,6 @@ describe('AnalysisService', () => {
     it('should save config after migration', async () => {
       const oldConfig = {
         version: '3.0',
-        paths: { config: '/tmp/config' },
         analyses: {
           analysis1: { enabled: true, teamId: 'team-1' },
         },
@@ -1335,7 +1341,6 @@ describe('AnalysisService', () => {
     it('should migrate v4.0 config to v4.1', async () => {
       const config = {
         version: '4.0',
-        paths: { config: '/tmp/config' },
         analyses: {
           analysis1: { enabled: true, type: 'deprecated' },
           analysis2: { enabled: false, type: 'deprecated' },
@@ -1353,7 +1358,6 @@ describe('AnalysisService', () => {
     it('should not migrate if not v4.0', async () => {
       const config = {
         version: '4.1',
-        paths: { config: '/tmp/config' },
         analyses: {},
       };
 
@@ -1365,7 +1369,6 @@ describe('AnalysisService', () => {
     it('should handle analyses without type field', async () => {
       const config = {
         version: '4.0',
-        paths: { config: '/tmp/config' },
         analyses: {
           analysis1: { enabled: true },
           analysis2: { enabled: false, type: 'deprecated' },
@@ -1382,7 +1385,6 @@ describe('AnalysisService', () => {
     it('should save config after migration', async () => {
       const config = {
         version: '4.0',
-        paths: { config: '/tmp/config' },
         analyses: {
           analysis1: { enabled: true, type: 'deprecated' },
         },
@@ -1396,7 +1398,6 @@ describe('AnalysisService', () => {
     it('should count removed type fields', async () => {
       const config = {
         version: '4.0',
-        paths: { config: '/tmp/config' },
         analyses: {
           analysis1: { enabled: true, type: 'deprecated' },
           analysis2: { enabled: false, type: 'deprecated' },

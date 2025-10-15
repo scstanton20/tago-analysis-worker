@@ -89,7 +89,8 @@ export const userValidationSchemas = {
     body: z.object({
       newPassword: z
         .string()
-        .min(6, 'Password must be at least 6 characters long'),
+        .min(6, 'Password must be at least 6 characters long')
+        .regex(/[A-Z]/, 'Password must contain at least one uppercase letter'),
     }),
   },
 };

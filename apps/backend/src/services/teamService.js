@@ -271,7 +271,7 @@ class TeamService {
         createdAt: teamData.createdAt,
         color: teamData.color,
         order_index: teamData.order_index,
-        isSystem: teamData.is_system,
+        isSystem: teamData.is_system === 1,
       };
 
       logger.info(
@@ -360,16 +360,19 @@ class TeamService {
           )
           .get(id, this.organizationId);
 
-        if (updatedTeam) {
-          // Convert is_system from integer to boolean for frontend
-          updatedTeam.isSystem = updatedTeam.is_system === 1;
-        }
+        // Convert is_system from integer to boolean for frontend
+        const result = updatedTeam
+          ? {
+              ...updatedTeam,
+              isSystem: updatedTeam.is_system === 1,
+            }
+          : null;
 
         logger.info(
           { action: 'updateTeam', teamId: id, updates },
           'Team updated',
         );
-        return updatedTeam;
+        return result;
       }, `updating team ${id}`);
     } catch (error) {
       logger.error(
@@ -410,6 +413,7 @@ class TeamService {
       const result = await auth.api.removeTeam({
         body: {
           teamId: id,
+          organizationId: this.organizationId,
         },
         headers,
       });

@@ -244,35 +244,35 @@ class AnalysisService {
   /**
    * Migrate configuration from pre-v4.0 to v4.0 (nested folder structure)
    * Converts flat teamId structure to nested teamStructure with items
-   * @param {Object} config - Configuration object to migrate
+   * @param {Object} configData - Configuration object to migrate
    * @returns {Promise<boolean>} True if migration was performed, false if not needed
    * @private
    */
-  async migrateConfigToV4_0(config) {
-    const currentVersion = parseFloat(config.version) || 1.0;
+  async migrateConfigToV4_0(configData) {
+    const currentVersion = parseFloat(configData.version) || 1.0;
     const needsMigration =
       currentVersion < 4.0 ||
-      !config.teamStructure ||
-      Object.keys(config.teamStructure).length === 0;
+      !configData.teamStructure ||
+      Object.keys(configData.teamStructure).length === 0;
 
     if (
       !needsMigration ||
-      !config.analyses ||
-      Object.keys(config.analyses).length === 0
+      !configData.analyses ||
+      Object.keys(configData.analyses).length === 0
     ) {
       return false;
     }
 
     moduleLogger.info(
-      `Migrating config from v${config.version} to v4.0 (nested folder structure)`,
+      `Migrating config from v${configData.version} to v4.0 (nested folder structure)`,
     );
-    config.version = '4.0';
-    config.teamStructure = {};
+    configData.version = '4.0';
+    configData.teamStructure = {};
 
     // Group analyses by team
     const teamGroups = {};
     for (const [analysisName, analysis] of Object.entries(
-      config.analyses || {},
+      configData.analyses || {},
     )) {
       const teamId = analysis.teamId || 'uncategorized';
       if (!teamGroups[teamId]) teamGroups[teamId] = [];
@@ -281,7 +281,7 @@ class AnalysisService {
 
     // Create flat items structure for each team (no folders initially)
     for (const [teamId, analysisNames] of Object.entries(teamGroups)) {
-      config.teamStructure[teamId] = {
+      configData.teamStructure[teamId] = {
         items: analysisNames.map((name) => ({
           id: uuidv4(),
           type: 'analysis',
@@ -293,13 +293,13 @@ class AnalysisService {
     // Save migrated config
     await safeWriteFile(
       this.configPath,
-      JSON.stringify(config, null, 2),
+      JSON.stringify(configData, null, 2),
       config.paths.config,
     );
     moduleLogger.info(
       {
-        teamsCount: Object.keys(config.teamStructure).length,
-        analysisCount: Object.keys(config.analyses || {}).length,
+        teamsCount: Object.keys(configData.teamStructure).length,
+        analysisCount: Object.keys(configData.analyses || {}).length,
       },
       'Successfully migrated config to v4.0',
     );
@@ -310,36 +310,36 @@ class AnalysisService {
   /**
    * Migrate configuration from v4.0 to v4.1 (remove deprecated type field)
    * Removes the deprecated 'type' field from analysis configurations
-   * @param {Object} config - Configuration object to migrate
+   * @param {Object} configData - Configuration object to migrate
    * @returns {Promise<boolean>} True if migration was performed, false if not needed
    * @private
    */
-  async migrateConfigToV4_1(config) {
-    if (config.version !== '4.0') {
+  async migrateConfigToV4_1(configData) {
+    if (configData.version !== '4.0') {
       return false;
     }
 
     moduleLogger.info('Migrating config from v4.0 to v4.1 (remove type field)');
 
     let removedCount = 0;
-    for (const analysis of Object.values(config.analyses || {})) {
+    for (const analysis of Object.values(configData.analyses || {})) {
       if ('type' in analysis) {
         delete analysis.type;
         removedCount++;
       }
     }
 
-    config.version = '4.1';
+    configData.version = '4.1';
 
     // Save migrated config
     await safeWriteFile(
       this.configPath,
-      JSON.stringify(config, null, 2),
+      JSON.stringify(configData, null, 2),
       config.paths.config,
     );
     moduleLogger.info(
       {
-        analysisCount: Object.keys(config.analyses || {}).length,
+        analysisCount: Object.keys(configData.analyses || {}).length,
         removedTypeFields: removedCount,
       },
       'Successfully migrated config to v4.1',

@@ -388,7 +388,7 @@ describe('TeamService', () => {
       expect(result.deleted).toBe('team-1');
       expect(result.name).toBe('Team to Delete');
       expect(auth.api.removeTeam).toHaveBeenCalledWith({
-        body: { teamId: 'team-1' },
+        body: { teamId: 'team-1', organizationId: 'org-123' },
         headers: {},
       });
     });

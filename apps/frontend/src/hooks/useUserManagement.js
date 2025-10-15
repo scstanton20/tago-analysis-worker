@@ -8,6 +8,7 @@ import {
   EMAIL_REGEX,
   USERNAME_REGEX,
   MIN_USERNAME_LENGTH,
+  validatePassword,
 } from '../utils/userValidation';
 
 /**
@@ -146,7 +147,8 @@ export function useUserManagement({
   const validateEmail = useCallback(
     (email) => {
       if (!email) return 'Email is required';
-      if (!EMAIL_REGEX.test(email)) return 'Invalid email format';
+      if (!EMAIL_REGEX.test(email))
+        return 'Invalid email format. Must include @ and a valid domain (e.g., user@example.com)';
 
       if (
         !editingUser &&
@@ -297,6 +299,14 @@ export function useUserManagement({
 
           // Update password if provided
           if (values.password && values.password.trim()) {
+            // Validate password before updating
+            const passwordError = validatePassword(values.password);
+            if (passwordError) {
+              form.setFieldError('password', passwordError);
+              setLoading(false);
+              return;
+            }
+
             const passwordResult = await admin.setUserPassword({
               userId: editingUser.id,
               password: values.password,
