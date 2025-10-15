@@ -1,7 +1,9 @@
 // frontend/src/components/analysis/uploadAnalysis.jsx
 import { useState, useMemo, useCallback } from 'react';
+import PropTypes from 'prop-types';
 import { analysisService } from '../../services/analysisService';
-import { useSSE } from '../../contexts/sseContext/index';
+import logger from '../../utils/logger';
+import { useAnalyses } from '../../contexts/sseContext/index';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import { usePermissions } from '../../hooks/usePermissions.js';
 import { CodeMirrorEditor } from '../modals/codeMirrorCommon';
@@ -49,7 +51,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
   const [isUploading, setIsUploading] = useState(false);
 
   // SSE context
-  const { loadingAnalyses, analyses } = useSSE();
+  const { loadingAnalyses, analyses } = useAnalyses();
 
   // Permissions and team data
   const { getUploadableTeams, isAdmin } = usePermissions();
@@ -273,7 +275,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
       }
     } catch (error) {
       setError(error.message || 'Failed to save analysis');
-      console.error('Save failed:', error);
+      logger.error('Save failed:', error);
     } finally {
       setIsUploading(false);
     }
@@ -572,3 +574,8 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
     </Paper>
   );
 }
+
+AnalysisCreator.propTypes = {
+  targetTeam: PropTypes.string,
+  onClose: PropTypes.func,
+};

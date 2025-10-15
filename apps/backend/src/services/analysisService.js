@@ -1,3 +1,37 @@
+/**
+ * Analysis Service - Core business logic for analysis management
+ * Manages analysis lifecycle, file operations, versioning, logging, and process monitoring.
+ *
+ * This service handles:
+ * - Analysis CRUD operations and file management
+ * - Process lifecycle (start/stop/restart) and health monitoring
+ * - Version control with rollback capabilities
+ * - Log management (in-memory and file-based with pagination)
+ * - Environment variable encryption and management
+ * - Team/department assignment and structure integration
+ * - Configuration persistence and migration
+ * - Process metrics collection for monitoring
+ *
+ * Architecture:
+ * - Singleton service pattern (exported as analysisService)
+ * - AnalysisProcess model instances stored in Map
+ * - Configuration caching for performance
+ * - Periodic health checks and metrics collection
+ * - Request-scoped logging via logger parameter
+ *
+ * Storage Structure:
+ * - analyses-storage/
+ *   - [analysisName]/
+ *     - index.js (current version)
+ *     - env/.env (encrypted environment variables)
+ *     - logs/analysis.log (NDJSON format)
+ *     - versions/ (version history)
+ *       - metadata.json
+ *       - v1.js, v2.js, etc.
+ *
+ * @module analysisService
+ */
+import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import { promises as fs } from 'fs';
 import config from '../config/default.js';
@@ -17,7 +51,9 @@ import teamService from './teamService.js';
 import { createChildLogger, parseLogLine } from '../utils/logging/logger.js';
 import { collectChildProcessMetrics } from '../utils/metrics-enhanced.js';
 
-const logger = createChildLogger('analysis-service');
+// Module-level logger for background operations (health checks, metrics, initialization)
+// Public methods accept logger parameter for request-scoped logging
+const moduleLogger = createChildLogger('analysis-service');
 
 /**
  * Format file size in bytes to human readable format
@@ -36,7 +72,44 @@ function formatFileSize(bytes) {
 
 /**
  * Service class for managing analysis files, processes, and configurations
- * Handles CRUD operations, file management, logging, and department integration
+ * Handles CRUD operations, file management, logging, and team integration.
+ *
+ * Key Features:
+ * - Analysis lifecycle management (create, read, update, delete, rename)
+ * - Process control (start, stop, restart with health monitoring)
+ * - Version management (save, rollback, compare)
+ * - Log management (streaming, pagination, filtering, download)
+ * - Environment variable encryption and management
+ * - Team assignment and folder structure integration
+ * - Configuration persistence with automatic migration
+ * - Process metrics collection and monitoring
+ * - Automatic restart on crashes with exponential backoff
+ * - Periodic health checks (5-minute interval)
+ * - **Race condition protection** with promise-based lock mechanism
+ *
+ * Singleton Pattern:
+ * - Exported as `analysisService` for application-wide use
+ * - Single source of truth for analysis state
+ * - Centralized process and configuration management
+ *
+ * Process Management:
+ * - Each analysis runs as a child Node.js process
+ * - AnalysisProcess model wraps child process with state management
+ * - Intended state tracking for automatic recovery
+ * - Connection error detection and automatic restart
+ *
+ * Concurrency Control:
+ * - Lock mechanism (startLocks Map) prevents duplicate process starts
+ * - Concurrent requests to start same analysis wait for first to complete
+ * - Automatically releases locks on completion or failure
+ * - Utility methods for monitoring ongoing operations
+ *
+ * Logging Strategy:
+ * - Module-level logger (moduleLogger) for background operations
+ * - Request-scoped logger parameter for API operations
+ * - All public methods accept optional logger parameter
+ *
+ * @class AnalysisService
  */
 class AnalysisService {
   constructor() {
@@ -50,8 +123,27 @@ class AnalysisService {
     this.healthCheckInterval = null;
     /** @type {NodeJS.Timeout|null} Metrics collection interval timer */
     this.metricsInterval = null;
+    /** @type {Map<string, Promise>} Map of analysis name to ongoing start operations for lock management */
+    this.startLocks = new Map();
   }
 
+  /**
+   * Validate time range parameter for log filtering
+   *
+   * @param {string} timeRange - Time range to validate
+   * @returns {boolean} True if time range is valid
+   *
+   * Valid Ranges:
+   * - '1h': Last hour
+   * - '24h': Last 24 hours
+   * - '7d': Last 7 days
+   * - '30d': Last 30 days
+   * - 'all': All available logs
+   *
+   * @example
+   * analysisService.validateTimeRange('24h'); // true
+   * analysisService.validateTimeRange('invalid'); // false
+   */
   validateTimeRange(timeRange) {
     const validRanges = ['1h', '24h', '7d', '30d', 'all'];
     return validRanges.includes(timeRange);
@@ -143,9 +235,117 @@ class AnalysisService {
     await safeWriteFile(
       this.configPath,
       JSON.stringify(configuration, null, 2),
+      config.paths.config,
     );
 
     this.configCache = configuration;
+  }
+
+  /**
+   * Migrate configuration from pre-v4.0 to v4.0 (nested folder structure)
+   * Converts flat teamId structure to nested teamStructure with items
+   * @param {Object} configData - Configuration object to migrate
+   * @returns {Promise<boolean>} True if migration was performed, false if not needed
+   * @private
+   */
+  async migrateConfigToV4_0(configData) {
+    const currentVersion = parseFloat(configData.version) || 1.0;
+    const needsMigration =
+      currentVersion < 4.0 ||
+      !configData.teamStructure ||
+      Object.keys(configData.teamStructure).length === 0;
+
+    if (
+      !needsMigration ||
+      !configData.analyses ||
+      Object.keys(configData.analyses).length === 0
+    ) {
+      return false;
+    }
+
+    moduleLogger.info(
+      `Migrating config from v${configData.version} to v4.0 (nested folder structure)`,
+    );
+    configData.version = '4.0';
+    configData.teamStructure = {};
+
+    // Group analyses by team
+    const teamGroups = {};
+    for (const [analysisName, analysis] of Object.entries(
+      configData.analyses || {},
+    )) {
+      const teamId = analysis.teamId || 'uncategorized';
+      if (!teamGroups[teamId]) teamGroups[teamId] = [];
+      teamGroups[teamId].push(analysisName);
+    }
+
+    // Create flat items structure for each team (no folders initially)
+    for (const [teamId, analysisNames] of Object.entries(teamGroups)) {
+      configData.teamStructure[teamId] = {
+        items: analysisNames.map((name) => ({
+          id: uuidv4(),
+          type: 'analysis',
+          analysisName: name,
+        })),
+      };
+    }
+
+    // Save migrated config
+    await safeWriteFile(
+      this.configPath,
+      JSON.stringify(configData, null, 2),
+      config.paths.config,
+    );
+    moduleLogger.info(
+      {
+        teamsCount: Object.keys(configData.teamStructure).length,
+        analysisCount: Object.keys(configData.analyses || {}).length,
+      },
+      'Successfully migrated config to v4.0',
+    );
+
+    return true;
+  }
+
+  /**
+   * Migrate configuration from v4.0 to v4.1 (remove deprecated type field)
+   * Removes the deprecated 'type' field from analysis configurations
+   * @param {Object} configData - Configuration object to migrate
+   * @returns {Promise<boolean>} True if migration was performed, false if not needed
+   * @private
+   */
+  async migrateConfigToV4_1(configData) {
+    if (configData.version !== '4.0') {
+      return false;
+    }
+
+    moduleLogger.info('Migrating config from v4.0 to v4.1 (remove type field)');
+
+    let removedCount = 0;
+    for (const analysis of Object.values(configData.analyses || {})) {
+      if ('type' in analysis) {
+        delete analysis.type;
+        removedCount++;
+      }
+    }
+
+    configData.version = '4.1';
+
+    // Save migrated config
+    await safeWriteFile(
+      this.configPath,
+      JSON.stringify(configData, null, 2),
+      config.paths.config,
+    );
+    moduleLogger.info(
+      {
+        analysisCount: Object.keys(configData.analyses || {}).length,
+        removedTypeFields: removedCount,
+      },
+      'Successfully migrated config to v4.1',
+    );
+
+    return true;
   }
 
   /**
@@ -155,101 +355,34 @@ class AnalysisService {
    */
   async loadConfig() {
     try {
-      const data = await safeReadFile(this.configPath, 'utf8');
-      const config = JSON.parse(data);
+      const data = await safeReadFile(
+        this.configPath,
+        config.paths.config,
+        'utf8',
+      );
+      const configData = JSON.parse(data);
 
-      // Version 4.0 migration: Convert flat teamId to nested structure
-      const currentVersion = parseFloat(config.version) || 1.0;
-      const needsMigrationTo4_0 =
-        currentVersion < 4.0 ||
-        !config.teamStructure ||
-        Object.keys(config.teamStructure).length === 0;
-
-      if (
-        needsMigrationTo4_0 &&
-        config.analyses &&
-        Object.keys(config.analyses).length > 0
-      ) {
-        logger.info(
-          `Migrating config from v${config.version} to v4.0 (nested folder structure)`,
-        );
-        config.version = '4.0';
-        config.teamStructure = {};
-
-        // Group analyses by team
-        const teamGroups = {};
-        for (const [analysisName, analysis] of Object.entries(
-          config.analyses || {},
-        )) {
-          const teamId = analysis.teamId || 'uncategorized';
-          if (!teamGroups[teamId]) teamGroups[teamId] = [];
-          teamGroups[teamId].push(analysisName);
-        }
-
-        // Create flat items structure for each team (no folders initially)
-        for (const [teamId, analysisNames] of Object.entries(teamGroups)) {
-          config.teamStructure[teamId] = {
-            items: analysisNames.map((name) => ({
-              id: crypto.randomUUID(),
-              type: 'analysis',
-              analysisName: name,
-            })),
-          };
-        }
-
-        // Save migrated config
-        await safeWriteFile(this.configPath, JSON.stringify(config, null, 2));
-        logger.info(
-          {
-            teamsCount: Object.keys(config.teamStructure).length,
-            analysisCount: Object.keys(config.analyses || {}).length,
-          },
-          'Successfully migrated config to v4.0',
-        );
-      }
-
-      // Version 4.1 migration: Remove deprecated 'type' field from analyses
-      if (config.version === '4.0') {
-        logger.info('Migrating config from v4.0 to v4.1 (remove type field)');
-
-        let removedCount = 0;
-        for (const analysis of Object.values(config.analyses || {})) {
-          if ('type' in analysis) {
-            delete analysis.type;
-            removedCount++;
-          }
-        }
-
-        config.version = '4.1';
-
-        // Save migrated config
-        await safeWriteFile(this.configPath, JSON.stringify(config, null, 2));
-        logger.info(
-          {
-            analysisCount: Object.keys(config.analyses || {}).length,
-            removedTypeFields: removedCount,
-          },
-          'Successfully migrated config to v4.1',
-        );
-      }
+      // Run migrations in sequence
+      await this.migrateConfigToV4_0(configData);
+      await this.migrateConfigToV4_1(configData);
 
       // Store the full config including departments
-      this.configCache = config;
+      this.configCache = configData;
 
       // Don't load analyses here - they will be properly initialized
       // as AnalysisProcess instances in initializeAnalysis method
 
-      logger.info(
+      moduleLogger.info(
         {
-          configVersion: config.version,
-          analysisCount: Object.keys(config.analyses || {}).length,
+          configVersion: configData.version,
+          analysisCount: Object.keys(configData.analyses || {}).length,
         },
         'Configuration loaded',
       );
-      return config;
+      return configData;
     } catch (error) {
       if (error.code === 'ENOENT') {
-        logger.info('No existing config file, creating new one');
+        moduleLogger.info('No existing config file, creating new one');
         this.configCache = {
           version: '4.1',
           analyses: {},
@@ -275,10 +408,16 @@ class AnalysisService {
     }
     const basePath = getAnalysisPath(analysisName);
     await Promise.all([
-      safeMkdir(basePath, { recursive: true }),
-      safeMkdir(path.join(basePath, 'env'), { recursive: true }),
-      safeMkdir(path.join(basePath, 'logs'), { recursive: true }),
-      safeMkdir(path.join(basePath, 'versions'), { recursive: true }),
+      safeMkdir(basePath, config.paths.analysis, { recursive: true }),
+      safeMkdir(path.join(basePath, 'env'), config.paths.analysis, {
+        recursive: true,
+      }),
+      safeMkdir(path.join(basePath, 'logs'), config.paths.analysis, {
+        recursive: true,
+      }),
+      safeMkdir(path.join(basePath, 'versions'), config.paths.analysis, {
+        recursive: true,
+      }),
     ]);
     return basePath;
   }
@@ -290,10 +429,16 @@ class AnalysisService {
    * @param {Function} file.mv - Method to move file to destination
    * @param {string|null} [targetDepartment=null] - Department to assign analysis to (null means uncategorized)
    * @param {string|null} [targetFolderId=null] - Target folder ID within team structure (null means root)
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<Object>} Object with analysisName property
    * @throws {Error} If upload or registration fails
    */
-  async uploadAnalysis(file, targetDepartment = null, targetFolderId = null) {
+  async uploadAnalysis(
+    file,
+    targetDepartment = null,
+    targetFolderId = null,
+    logger = moduleLogger,
+  ) {
     const analysisName = path.parse(file.name).name;
     const basePath = await this.createAnalysisDirectories(analysisName);
     const filePath = path.join(basePath, 'index.js');
@@ -313,7 +458,7 @@ class AnalysisService {
     this.analyses.set(analysisName, analysis);
 
     const envFile = path.join(basePath, 'env', '.env');
-    await safeWriteFile(envFile, '', 'utf8');
+    await safeWriteFile(envFile, '', config.paths.analysis, 'utf8');
 
     await this.saveConfig();
 
@@ -326,7 +471,7 @@ class AnalysisService {
     }
 
     const newItem = {
-      id: crypto.randomUUID(),
+      id: uuidv4(),
       type: 'analysis',
       analysisName: analysisName,
     };
@@ -367,12 +512,16 @@ class AnalysisService {
     );
 
     // Create versions directory
-    await safeMkdir(versionsDir, { recursive: true });
+    await safeMkdir(versionsDir, config.paths.analysis, { recursive: true });
 
     // Read the uploaded content and save it as v1
-    const uploadedContent = await safeReadFile(currentFilePath, 'utf8');
+    const uploadedContent = await safeReadFile(
+      currentFilePath,
+      config.paths.analysis,
+      'utf8',
+    );
     const v1Path = path.join(versionsDir, 'v1.js');
-    await safeWriteFile(v1Path, uploadedContent, 'utf8');
+    await safeWriteFile(v1Path, uploadedContent, config.paths.analysis, 'utf8');
 
     // Create metadata - uploaded file is version 1
     const metadata = {
@@ -390,24 +539,36 @@ class AnalysisService {
     await safeWriteFile(
       metadataPath,
       JSON.stringify(metadata, null, 2),
+      config.paths.analysis,
       'utf8',
     );
   }
 
   /**
    * Get all analyses with their metadata and department information
+   * @param {Array<string>} [allowedTeamIds=null] - Optional array of team IDs to filter by (for permission filtering)
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<Object>} Object mapping analysis names to their metadata
    * @throws {Error} If directory read or file stat fails
    */
-  async getAllAnalyses() {
+  async getAllAnalyses(allowedTeamIds = null) {
     const analysisDirectories = await safeReaddir(config.paths.analysis);
 
     const results = await Promise.all(
       analysisDirectories.map(async (dirName) => {
         const indexPath = path.join(config.paths.analysis, dirName, 'index.js');
         try {
-          const stats = await safeStat(indexPath);
           const analysis = this.analyses.get(dirName);
+
+          // Early filtering: Skip analyses not in allowed teams (if filter is provided)
+          if (
+            allowedTeamIds !== null &&
+            !allowedTeamIds.includes(analysis?.teamId)
+          ) {
+            return null;
+          }
+
+          const stats = await safeStat(indexPath, config.paths.analysis);
 
           if (!this.analyses.has(dirName)) {
             this.analyses.set(dirName, analysis);
@@ -434,7 +595,6 @@ class AnalysisService {
     results.filter(Boolean).forEach((analysis) => {
       analysesObj[analysis.name] = analysis;
     });
-
     return analysesObj;
   }
 
@@ -442,10 +602,11 @@ class AnalysisService {
    * Rename an analysis file and update all references
    * @param {string} analysisName - Current name of the analysis
    * @param {string} newFileName - New name for the analysis
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<Object>} Object with success status and restart information
    * @throws {Error} If analysis not found, target exists, or rename fails
    */
-  async renameAnalysis(analysisName, newFileName) {
+  async renameAnalysis(analysisName, newFileName, logger = moduleLogger) {
     try {
       const analysis = this.analyses.get(analysisName);
 
@@ -479,7 +640,7 @@ class AnalysisService {
       }
 
       // Perform the rename
-      await safeRename(oldFilePath, newFilePath);
+      await safeRename(oldFilePath, newFilePath, config.paths.analysis);
 
       // Update the analysis object and maps
       this.analyses.delete(analysisName);
@@ -559,10 +720,11 @@ class AnalysisService {
   /**
    * Clear all logs for an analysis
    * @param {string} analysisName - Name of the analysis
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<Object>} Success result object
    * @throws {Error} If analysis not found or log clear fails
    */
-  async clearLogs(analysisName) {
+  async clearLogs(analysisName, logger = moduleLogger) {
     try {
       const analysis = this.analyses.get(analysisName);
       if (!analysis) {
@@ -577,7 +739,7 @@ class AnalysisService {
       );
 
       // Clear file (logs are stored in NDJSON format: one JSON object per line)
-      await safeWriteFile(logFilePath, '', 'utf8');
+      await safeWriteFile(logFilePath, '', config.paths.analysis, 'utf8');
 
       // Reset in-memory state
       analysis.logs = [];
@@ -604,30 +766,143 @@ class AnalysisService {
   }
 
   /**
-   * Start/run an analysis process
-   * @param {string} analysisName - Name of the analysis to run
-   * @returns {Promise<Object>} Result object with success status and analysis info
-   * @throws {Error} If analysis start fails
+   * Check if a start operation is currently in progress for an analysis
+   * Useful for debugging race conditions and monitoring concurrent operations
+   *
+   * @param {string} analysisName - Name of the analysis to check
+   * @returns {boolean} True if a start operation is in progress, false otherwise
+   *
+   * @example
+   * if (analysisService.isStartInProgress('myAnalysis')) {
+   *   console.log('Another start operation is already running');
+   * }
    */
-  async runAnalysis(analysisName) {
-    const analysis = this.analyses.get(analysisName);
+  isStartInProgress(analysisName) {
+    return this.startLocks.has(analysisName);
+  }
 
+  /**
+   * Get all analyses that currently have start operations in progress
+   * Useful for monitoring and debugging concurrent operations
+   *
+   * @returns {Array<string>} Array of analysis names with ongoing start operations
+   *
+   * @example
+   * const inProgress = analysisService.getStartOperationsInProgress();
+   * console.log(`${inProgress.length} analyses currently starting`);
+   */
+  getStartOperationsInProgress() {
+    return Array.from(this.startLocks.keys());
+  }
+
+  /**
+   * Start/run an analysis process with lock protection to prevent race conditions
+   *
+   * This method implements a mutex/lock mechanism to ensure that concurrent requests
+   * to start the same analysis don't result in duplicate processes. The lock is
+   * automatically released after the operation completes or fails.
+   *
+   * @param {string} analysisName - Name of the analysis to run
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
+   * @returns {Promise<Object>} Result object with success status and analysis info
+   * @throws {Error} If analysis not found or start fails
+   *
+   * @example
+   * // Multiple concurrent calls are safe - second call will wait for first to complete
+   * await Promise.all([
+   *   analysisService.runAnalysis('myAnalysis'),
+   *   analysisService.runAnalysis('myAnalysis')
+   * ]); // Only starts once, both calls get same result
+   */
+  async runAnalysis(analysisName, logger = moduleLogger) {
+    logger.info({ action: 'runAnalysis', analysisName }, 'Running analysis');
+
+    // Check if analysis exists
+    const analysis = this.analyses.get(analysisName);
     if (!analysis) {
       throw new Error(`Analysis ${analysisName} not found`);
     }
 
-    await analysis.start();
-    await this.saveConfig();
-    return { success: true, status: analysis.status, logs: analysis.logs };
+    // Check if a start operation is already in progress for this analysis
+    if (this.startLocks.has(analysisName)) {
+      logger.info(
+        { action: 'runAnalysis', analysisName },
+        'Start operation already in progress, waiting for completion',
+      );
+
+      // Wait for the ongoing operation to complete and return its result
+      try {
+        const result = await this.startLocks.get(analysisName);
+        logger.info(
+          { action: 'runAnalysis', analysisName },
+          'Concurrent start operation completed',
+        );
+        return result;
+      } catch (error) {
+        // If the concurrent operation failed, throw the error
+        logger.error(
+          { action: 'runAnalysis', analysisName, error },
+          'Concurrent start operation failed',
+        );
+        throw error;
+      }
+    }
+
+    // Check if analysis is already running (additional safety check)
+    if (analysis.status === 'running' && analysis.process) {
+      logger.info(
+        { action: 'runAnalysis', analysisName },
+        'Analysis is already running',
+      );
+      return {
+        success: true,
+        status: analysis.status,
+        logs: analysis.logs,
+        alreadyRunning: true,
+      };
+    }
+
+    // Create a promise for this start operation and store it as a lock
+    const startPromise = (async () => {
+      try {
+        await analysis.start();
+        await this.saveConfig();
+
+        logger.info(
+          { action: 'runAnalysis', analysisName, status: analysis.status },
+          'Analysis started successfully',
+        );
+
+        return { success: true, status: analysis.status, logs: analysis.logs };
+      } catch (error) {
+        logger.error(
+          { action: 'runAnalysis', analysisName, error },
+          'Failed to start analysis',
+        );
+        throw error;
+      } finally {
+        // Always remove the lock when the operation completes (success or failure)
+        this.startLocks.delete(analysisName);
+      }
+    })();
+
+    // Store the promise as a lock before starting the operation
+    this.startLocks.set(analysisName, startPromise);
+
+    // Return the promise result
+    return startPromise;
   }
 
   /**
    * Stop a running analysis process
    * @param {string} analysisName - Name of the analysis to stop
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<Object>} Success result object
    * @throws {Error} If analysis not found or stop fails
    */
-  async stopAnalysis(analysisName) {
+  async stopAnalysis(analysisName, logger = moduleLogger) {
+    logger.info({ action: 'stopAnalysis', analysisName }, 'Stopping analysis');
+
     const analysis = this.analyses.get(analysisName);
     if (!analysis) {
       throw new Error('Analysis not found');
@@ -637,6 +912,8 @@ class AnalysisService {
     analysis.intendedState = 'stopped';
     await analysis.stop();
     await this.saveConfig();
+
+    logger.info({ action: 'stopAnalysis', analysisName }, 'Analysis stopped');
     return { success: true };
   }
 
@@ -645,10 +922,16 @@ class AnalysisService {
    * @param {string} analysisName - Name of the analysis
    * @param {number} [page=1] - Page number for pagination
    * @param {number} [limit=100] - Number of log entries per page
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<Object>} Object with logs, pagination info, and source
    * @throws {Error} If analysis not found
    */
-  async getLogs(analysisName, page = 1, limit = 100) {
+  async getLogs(analysisName, page = 1, limit = 100, logger = moduleLogger) {
+    logger.info(
+      { action: 'getLogs', analysisName, page, limit },
+      'Getting logs',
+    );
+
     const analysis = this.analyses.get(analysisName);
 
     if (!analysis) {
@@ -778,15 +1061,18 @@ class AnalysisService {
   /**
    * Delete an analysis and all its associated files (including all versions)
    * @param {string} analysisName - Name of the analysis to delete
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<Object>} Success message object
    * @throws {Error} If deletion fails (except ENOENT)
    */
-  async deleteAnalysis(analysisName) {
+  async deleteAnalysis(analysisName, logger = moduleLogger) {
     const analysis = this.analyses.get(analysisName);
     const teamId = analysis?.teamId;
 
     if (analysis) {
       await analysis.stop();
+      // Clean up all resources to prevent memory leaks
+      await analysis.cleanup();
     }
 
     const analysisPath = path.join(config.paths.analysis, analysisName);
@@ -867,7 +1153,7 @@ class AnalysisService {
             dirName,
             'index.js',
           );
-          const stats = await safeStat(indexPath);
+          const stats = await safeStat(indexPath, config.paths.analysis);
           if (stats.isFile()) {
             await this.initializeAnalysis(
               dirName,
@@ -875,7 +1161,7 @@ class AnalysisService {
             );
           }
         } catch (error) {
-          logger.error(
+          moduleLogger.error(
             { error, analysisName: dirName },
             'Error loading analysis',
           );
@@ -893,17 +1179,22 @@ class AnalysisService {
   /**
    * Get the source code content of an analysis file
    * @param {string} analysisName - Name of the analysis
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<string>} Content of the analysis file
    * @throws {Error} If file read fails
    */
-  async getAnalysisContent(analysisName) {
+  async getAnalysisContent(analysisName, logger = moduleLogger) {
     try {
       const filePath = path.join(
         config.paths.analysis,
         analysisName,
         'index.js',
       );
-      const content = await safeReadFile(filePath, 'utf8');
+      const content = await safeReadFile(
+        filePath,
+        config.paths.analysis,
+        'utf8',
+      );
       return content;
     } catch (error) {
       logger.error({ error, analysisName }, 'Error reading analysis content');
@@ -930,13 +1221,17 @@ class AnalysisService {
     );
 
     // Ensure versions directory exists
-    await safeMkdir(versionsDir, { recursive: true });
+    await safeMkdir(versionsDir, config.paths.analysis, { recursive: true });
 
     // Load or create metadata
     let metadata = { versions: [], nextVersionNumber: 1, currentVersion: 0 };
     let isFirstVersionSave = false;
     try {
-      const metadataContent = await safeReadFile(metadataPath, 'utf8');
+      const metadataContent = await safeReadFile(
+        metadataPath,
+        config.paths.analysis,
+        'utf8',
+      );
       metadata = JSON.parse(metadataContent);
       // Ensure currentVersion exists for backward compatibility
       if (metadata.currentVersion === undefined) {
@@ -955,7 +1250,11 @@ class AnalysisService {
     }
 
     // Read current content
-    const currentContent = await safeReadFile(currentFilePath, 'utf8');
+    const currentContent = await safeReadFile(
+      currentFilePath,
+      config.paths.analysis,
+      'utf8',
+    );
 
     // Check if current content matches ANY existing saved version
     for (const version of metadata.versions) {
@@ -964,7 +1263,11 @@ class AnalysisService {
           versionsDir,
           `v${version.version}.js`,
         );
-        const versionContent = await safeReadFile(versionFilePath, 'utf8');
+        const versionContent = await safeReadFile(
+          versionFilePath,
+          config.paths.analysis,
+          'utf8',
+        );
         if (currentContent === versionContent) {
           // Content already exists as a saved version, no need to save again
           return null;
@@ -980,7 +1283,12 @@ class AnalysisService {
       ? 1
       : metadata.nextVersionNumber;
     const versionFilePath = path.join(versionsDir, `v${newVersionNumber}.js`);
-    await safeWriteFile(versionFilePath, currentContent, 'utf8');
+    await safeWriteFile(
+      versionFilePath,
+      currentContent,
+      config.paths.analysis,
+      'utf8',
+    );
 
     // Update metadata - add the new version and increment counter
     metadata.versions.push({
@@ -1001,6 +1309,7 @@ class AnalysisService {
     await safeWriteFile(
       metadataPath,
       JSON.stringify(metadata, null, 2),
+      config.paths.analysis,
       'utf8',
     );
 
@@ -1010,9 +1319,12 @@ class AnalysisService {
   /**
    * Get all versions for an analysis
    * @param {string} analysisName - Name of the analysis
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<Object>} Metadata with versions list and current version
    */
-  async getVersions(analysisName) {
+  async getVersions(analysisName, logger = moduleLogger) {
+    logger.info({ action: 'getVersions', analysisName }, 'Getting versions');
+
     const metadataPath = path.join(
       config.paths.analysis,
       analysisName,
@@ -1026,7 +1338,11 @@ class AnalysisService {
     );
 
     try {
-      const metadataContent = await safeReadFile(metadataPath, 'utf8');
+      const metadataContent = await safeReadFile(
+        metadataPath,
+        config.paths.analysis,
+        'utf8',
+      );
       const metadata = JSON.parse(metadataContent);
       // Ensure currentVersion exists for backward compatibility
       if (metadata.currentVersion === undefined) {
@@ -1035,7 +1351,11 @@ class AnalysisService {
 
       // Check if the current index.js content matches any saved version
       try {
-        const currentContent = await safeReadFile(currentFilePath, 'utf8');
+        const currentContent = await safeReadFile(
+          currentFilePath,
+          config.paths.analysis,
+          'utf8',
+        );
         let currentContentMatchesVersion = false;
 
         // Check against all saved versions
@@ -1047,7 +1367,11 @@ class AnalysisService {
               'versions',
               `v${version.version}.js`,
             );
-            const versionContent = await safeReadFile(versionFilePath, 'utf8');
+            const versionContent = await safeReadFile(
+              versionFilePath,
+              config.paths.analysis,
+              'utf8',
+            );
             if (currentContent === versionContent) {
               // Current content matches this saved version
               metadata.currentVersion = version.version;
@@ -1081,9 +1405,15 @@ class AnalysisService {
    * Rollback analysis to a specific version
    * @param {string} analysisName - Name of the analysis
    * @param {number} version - Version number to rollback to
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<Object>} Result with success status and restart info
    */
-  async rollbackToVersion(analysisName, version) {
+  async rollbackToVersion(analysisName, version, logger = moduleLogger) {
+    logger.info(
+      { action: 'rollbackToVersion', analysisName, version },
+      'Rolling back to version',
+    );
+
     const analysis = this.analyses.get(analysisName);
     if (!analysis) {
       throw new Error(`Analysis ${analysisName} not found`);
@@ -1124,8 +1454,17 @@ class AnalysisService {
     await this.saveVersion(analysisName);
 
     // Replace current file with the target version content
-    const versionContent = await safeReadFile(versionFilePath, 'utf8');
-    await safeWriteFile(currentFilePath, versionContent, 'utf8');
+    const versionContent = await safeReadFile(
+      versionFilePath,
+      config.paths.analysis,
+      'utf8',
+    );
+    await safeWriteFile(
+      currentFilePath,
+      versionContent,
+      config.paths.analysis,
+      'utf8',
+    );
 
     // Update metadata to track current version after rollback
     const metadata = await this.getVersions(analysisName);
@@ -1133,6 +1472,7 @@ class AnalysisService {
     await safeWriteFile(
       metadataPath,
       JSON.stringify(metadata, null, 2),
+      config.paths.analysis,
       'utf8',
     );
 
@@ -1148,6 +1488,15 @@ class AnalysisService {
       await this.addLog(analysisName, 'Analysis restarted after rollback');
     }
 
+    logger.info(
+      {
+        action: 'rollbackToVersion',
+        analysisName,
+        version,
+        restarted: wasRunning,
+      },
+      'Rollback completed',
+    );
     return {
       success: true,
       restarted: wasRunning,
@@ -1159,9 +1508,15 @@ class AnalysisService {
    * Get content of a specific version
    * @param {string} analysisName - Name of the analysis
    * @param {number} version - Version number (0 for current)
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<string>} Content of the version
    */
-  async getVersionContent(analysisName, version) {
+  async getVersionContent(analysisName, version, logger = moduleLogger) {
+    logger.info(
+      { action: 'getVersionContent', analysisName, version },
+      'Getting version content',
+    );
+
     if (version === 0) {
       // Return current version
       const currentFilePath = path.join(
@@ -1169,7 +1524,7 @@ class AnalysisService {
         analysisName,
         'index.js',
       );
-      return safeReadFile(currentFilePath, 'utf8');
+      return safeReadFile(currentFilePath, config.paths.analysis, 'utf8');
     }
 
     const versionFilePath = path.join(
@@ -1179,7 +1534,7 @@ class AnalysisService {
       `v${version}.js`,
     );
     try {
-      return await safeReadFile(versionFilePath, 'utf8');
+      return await safeReadFile(versionFilePath, config.paths.analysis, 'utf8');
     } catch (error) {
       if (error.code === 'ENOENT') {
         throw new Error(`Version ${version} not found`);
@@ -1195,10 +1550,11 @@ class AnalysisService {
    * @param {string} [updates.content] - New content for the analysis file
    * @param {string} [updates.teamId] - New team for the analysis
    * @param {boolean} [updates.enabled] - Enable/disable status
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<Object>} Update result with success status and restart info
    * @throws {Error} If analysis not found, department invalid, or update fails
    */
-  async updateAnalysis(analysisName, updates) {
+  async updateAnalysis(analysisName, updates, logger = moduleLogger) {
     try {
       const analysis = this.analyses.get(analysisName);
 
@@ -1231,7 +1587,12 @@ class AnalysisService {
           analysisName,
           'index.js',
         );
-        await safeWriteFile(filePath, updates.content, 'utf8');
+        await safeWriteFile(
+          filePath,
+          updates.content,
+          config.paths.analysis,
+          'utf8',
+        );
 
         // Update currentVersion based on what happened
         if (savedVersion !== null) {
@@ -1249,6 +1610,7 @@ class AnalysisService {
               );
               const versionContent = await safeReadFile(
                 versionFilePath,
+                config.paths.analysis,
                 'utf8',
               );
               if (updates.content === versionContent) {
@@ -1263,6 +1625,7 @@ class AnalysisService {
                 await safeWriteFile(
                   metadataPath,
                   JSON.stringify(metadata, null, 2),
+                  config.paths.analysis,
                   'utf8',
                 );
                 break;
@@ -1306,10 +1669,16 @@ class AnalysisService {
    * human-readable format for download: [timestamp] message
    * @param {string} analysisName - Name of the analysis
    * @param {string} timeRange - Time range filter ('1h', '24h', '7d', '30d', 'all')
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<Object>} Object with logFile path and filtered content
    * @throws {Error} If analysis not found, file doesn't exist, or invalid time range
    */
-  async getLogsForDownload(analysisName, timeRange) {
+  async getLogsForDownload(analysisName, timeRange, logger = moduleLogger) {
+    logger.info(
+      { action: 'getLogsForDownload', analysisName, timeRange },
+      'Getting logs for download',
+    );
+
     try {
       const logFile = path.join(
         config.paths.analysis,
@@ -1321,7 +1690,11 @@ class AnalysisService {
       // Ensure the log file exists
       await fs.access(logFile);
 
-      const content = await safeReadFile(logFile, 'utf8');
+      const content = await safeReadFile(
+        logFile,
+        config.paths.analysis,
+        'utf8',
+      );
       const lines = content
         .trim()
         .split('\n')
@@ -1378,10 +1751,16 @@ class AnalysisService {
   /**
    * Get decrypted environment variables for an analysis
    * @param {string} analysisName - Name of the analysis
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<Object>} Object with decrypted environment variables
    * @throws {Error} If file read or decryption fails (except ENOENT)
    */
-  async getEnvironment(analysisName) {
+  async getEnvironment(analysisName, logger = moduleLogger) {
+    logger.info(
+      { action: 'getEnvironment', analysisName },
+      'Getting environment variables',
+    );
+
     const envFile = path.join(
       config.paths.analysis,
       analysisName,
@@ -1390,7 +1769,11 @@ class AnalysisService {
     );
 
     try {
-      const envContent = await safeReadFile(envFile, 'utf8');
+      const envContent = await safeReadFile(
+        envFile,
+        config.paths.analysis,
+        'utf8',
+      );
       const envVariables = {};
       envContent.split('\n').forEach((line) => {
         const [key, encryptedValue] = line.split('=');
@@ -1411,10 +1794,11 @@ class AnalysisService {
    * Update environment variables for an analysis
    * @param {string} analysisName - Name of the analysis
    * @param {Object} env - Environment variables object to encrypt and save
+   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<Object>} Update result with success status and restart info
    * @throws {Error} If analysis not found or environment update fails
    */
-  async updateEnvironment(analysisName, env) {
+  async updateEnvironment(analysisName, env, logger = moduleLogger) {
     const envFile = path.join(
       config.paths.analysis,
       analysisName,
@@ -1438,7 +1822,7 @@ class AnalysisService {
         .map(([key, value]) => `${key}=${encrypt(value)}`)
         .join('\n');
 
-      await safeWriteFile(envFile, envContent, 'utf8');
+      await safeWriteFile(envFile, envContent, config.paths.analysis, 'utf8');
 
       // If it was running before, restart it
       if (wasRunning) {
@@ -1521,7 +1905,7 @@ class AnalysisService {
       alreadyRunning: [],
     };
 
-    logger.info(
+    moduleLogger.info(
       `Intended state verification: Found ${shouldBeRunning.length} analyses that should be running`,
     );
 
@@ -1537,7 +1921,7 @@ class AnalysisService {
         analysis.process && !analysis.process.killed && analysis.process.pid;
       if (analysis.status === 'running' && hasLiveProcess) {
         results.alreadyRunning.push(analysisName);
-        logger.debug(
+        moduleLogger.debug(
           `${analysisName} is already running with PID ${analysis.process.pid}`,
         );
         continue;
@@ -1546,7 +1930,7 @@ class AnalysisService {
       // If status shows running but no live process exists (e.g., after power outage),
       // reset status to stopped before restarting
       if (analysis.status === 'running' && !hasLiveProcess) {
-        logger.info(
+        moduleLogger.info(
           `${analysisName} status shows running but no live process found - resetting status and restarting`,
         );
         analysis.status = 'stopped';
@@ -1554,7 +1938,7 @@ class AnalysisService {
       }
 
       try {
-        logger.info(`Starting ${analysisName} (intended state: running)`);
+        moduleLogger.info(`Starting ${analysisName} (intended state: running)`);
         await analysis.start();
         results.succeeded.push(analysisName);
         await this.addLog(
@@ -1562,7 +1946,7 @@ class AnalysisService {
           'Restarted during intended state verification',
         );
       } catch (error) {
-        logger.error(
+        moduleLogger.error(
           { err: error, analysisName },
           'Failed to start analysis during intended state verification',
         );
@@ -1588,7 +1972,7 @@ class AnalysisService {
     const healthCheckIntervalMs = 5 * 60 * 1000; // 5 minutes
 
     this.healthCheckInterval = setInterval(async () => {
-      logger.debug('Running periodic health check for analyses');
+      moduleLogger.debug('Running periodic health check for analyses');
 
       try {
         // Check each analysis that should be running
@@ -1597,7 +1981,7 @@ class AnalysisService {
             analysis.intendedState === 'running' &&
             analysis.status !== 'running'
           ) {
-            logger.warn(
+            moduleLogger.warn(
               `Health check: ${analysisName} should be running but is ${analysis.status}. Attempting restart.`,
             );
 
@@ -1607,7 +1991,7 @@ class AnalysisService {
                 analysisName,
                 'Restarted by periodic health check',
               );
-              logger.info(
+              moduleLogger.info(
                 `Health check: Successfully restarted ${analysisName}`,
               );
 
@@ -1617,7 +2001,7 @@ class AnalysisService {
                 analysis.restartAttempts = 0;
               }
             } catch (error) {
-              logger.error(
+              moduleLogger.error(
                 { err: error, analysisName },
                 'Health check: Failed to restart analysis',
               );
@@ -1625,11 +2009,14 @@ class AnalysisService {
           }
         }
       } catch (error) {
-        logger.error({ err: error }, 'Error during periodic health check');
+        moduleLogger.error(
+          { err: error },
+          'Error during periodic health check',
+        );
       }
     }, healthCheckIntervalMs);
 
-    logger.info(
+    moduleLogger.info(
       'Started periodic health check for analyses (5 minute interval)',
     );
 
@@ -1644,13 +2031,13 @@ class AnalysisService {
     if (this.healthCheckInterval) {
       clearInterval(this.healthCheckInterval);
       this.healthCheckInterval = null;
-      logger.info('Stopped periodic health check');
+      moduleLogger.info('Stopped periodic health check');
     }
 
     if (this.metricsInterval) {
       clearInterval(this.metricsInterval);
       this.metricsInterval = null;
-      logger.info('Stopped metrics collection');
+      moduleLogger.info('Stopped metrics collection');
     }
   }
 
@@ -1670,11 +2057,11 @@ class AnalysisService {
       try {
         await collectChildProcessMetrics(this.analyses);
       } catch (error) {
-        logger.debug({ err: error }, 'Error collecting process metrics');
+        moduleLogger.debug({ err: error }, 'Error collecting process metrics');
       }
     }, metricsIntervalMs);
 
-    logger.info('Started process metrics collection (1 second interval)');
+    moduleLogger.info('Started process metrics collection (1 second interval)');
   }
 }
 

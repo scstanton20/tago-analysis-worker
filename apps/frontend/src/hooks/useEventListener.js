@@ -1,4 +1,4 @@
-import { useEffect, useRef, useLayoutEffect } from 'react';
+import { useEffect, useRef, useLayoutEffect, useMemo } from 'react';
 
 /**
  * Custom hook to handle event listeners without useEffect
@@ -17,6 +17,16 @@ export function useEventListener(
     savedHandler.current = handler;
   }, [handler]);
 
+  // Create stable reference to options object to prevent unnecessary effect re-runs
+  const stableOptions = useMemo(
+    () => ({
+      passive: options.passive,
+      once: options.once,
+      capture: options.capture,
+    }),
+    [options.passive, options.once, options.capture],
+  );
+
   useEffect(() => {
     const targetElement = element?.current || element;
     if (!(targetElement && targetElement.addEventListener)) {
@@ -26,14 +36,17 @@ export function useEventListener(
     // Create event listener that calls current handler
     const eventListener = (event) => savedHandler.current(event);
 
-    targetElement.addEventListener(eventName, eventListener, options);
+    targetElement.addEventListener(eventName, eventListener, stableOptions);
 
     // Cleanup
     return () => {
-      targetElement.removeEventListener(eventName, eventListener, options);
+      targetElement.removeEventListener(
+        eventName,
+        eventListener,
+        stableOptions,
+      );
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eventName, element, options.passive, options.once, options.capture]);
+  }, [eventName, element, stableOptions]);
 }
 
 /**

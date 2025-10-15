@@ -2,7 +2,9 @@
 import PropTypes from 'prop-types';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useMountedRef } from '../../hooks/useMountedRef';
+import { useAutoScroll } from '../../hooks/useAutoScroll';
 import { analysisService } from '../../services/analysisService';
+import logger from '../../utils/logger';
 import {
   Paper,
   ScrollArea,
@@ -29,35 +31,22 @@ const AnalysisLogs = ({ analysis }) => {
   const scrollRef = useRef(null);
   const isLoadingMore = useRef(false);
   const hasLoadedInitial = useRef(false);
-  const lastScrollTop = useRef(0);
-  const shouldAutoScroll = useRef(false);
   const isMountedRef = useMountedRef();
 
   // Memoize sseLogs to prevent unnecessary re-renders
   const sseLogs = useMemo(() => analysis.logs || [], [analysis.logs]);
+
+  // Auto-scroll hook for managing scroll behavior
+  const { handleScrollPositionChange, disableAutoScroll } = useAutoScroll({
+    scrollRef,
+    items: sseLogs,
+    hasLoadedInitial: hasLoadedInitial.current,
+    isMountedRef,
+  });
   const totalLogCount = useMemo(
     () => analysis.totalLogCount || sseLogs.length,
     [analysis.totalLogCount, sseLogs.length],
   );
-
-  // Auto-scroll when new logs arrive (only for live logs, not initial load)
-  useEffect(() => {
-    if (
-      shouldAutoScroll.current &&
-      scrollRef.current &&
-      sseLogs.length > 0 &&
-      hasLoadedInitial.current &&
-      isMountedRef.current
-    ) {
-      const element = scrollRef.current;
-      // Use requestAnimationFrame for better performance
-      requestAnimationFrame(() => {
-        if (element && isMountedRef.current) {
-          element.scrollTop = element.scrollHeight;
-        }
-      });
-    }
-  }, [sseLogs, isMountedRef]);
 
   const loadInitialLogs = useCallback(async () => {
     if (hasLoadedInitial.current || !isMountedRef.current) return;
@@ -75,7 +64,7 @@ const AnalysisLogs = ({ analysis }) => {
       }
       hasLoadedInitial.current = true;
     } catch (error) {
-      console.error('Failed to fetch initial logs:', error);
+      logger.error('Failed to fetch initial logs:', error);
       if (isMountedRef.current) {
         setHasMore(false);
       }
@@ -93,9 +82,9 @@ const AnalysisLogs = ({ analysis }) => {
     setAdditionalLogs([]);
     setPage(1);
     setHasMore(false);
-    shouldAutoScroll.current = false; // Start with auto-scroll disabled
+    disableAutoScroll(); // Start with auto-scroll disabled
     loadInitialLogs();
-  }, [analysis.name, loadInitialLogs]);
+  }, [analysis.name, loadInitialLogs, disableAutoScroll]);
 
   const loadMoreLogs = useCallback(async () => {
     if (isLoadingMore.current || !hasMore || !isMountedRef.current) return;
@@ -133,7 +122,7 @@ const AnalysisLogs = ({ analysis }) => {
         setPage(nextPage);
       }
     } catch (error) {
-      console.error('Failed to fetch more logs:', error);
+      logger.error('Failed to fetch more logs:', error);
     } finally {
       isLoadingMore.current = false;
     }
@@ -147,28 +136,10 @@ const AnalysisLogs = ({ analysis }) => {
     isMountedRef,
   ]);
 
-  const handleScrollPositionChange = useCallback(() => {
-    if (!scrollRef.current || !isMountedRef.current) return;
-
-    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-
-    // Check if user scrolled up manually
-    if (scrollTop < lastScrollTop.current) {
-      shouldAutoScroll.current = false;
-    }
-
-    // Only re-enable auto-scroll if user scrolls to the very bottom
-    if (scrollHeight - (scrollTop + clientHeight) < 10) {
-      shouldAutoScroll.current = true;
-    }
-
-    lastScrollTop.current = scrollTop;
-  }, [isMountedRef]);
-
   const handleBottomReached = useCallback(() => {
     // Only load more if we're not already loading and there are more logs
     if (!isLoadingMore.current && hasMore && isMountedRef.current) {
-      console.log('Bottom reached - triggering loadMoreLogs');
+      logger.log('Bottom reached - triggering loadMoreLogs');
       loadMoreLogs();
     }
   }, [hasMore, loadMoreLogs, isMountedRef]);
@@ -176,16 +147,18 @@ const AnalysisLogs = ({ analysis }) => {
   // Reset and load logs when analysis changes
   const [currentAnalysisName, setCurrentAnalysisName] = useState(analysis.name);
 
-  if (analysis.name !== currentAnalysisName) {
-    setCurrentAnalysisName(analysis.name);
-    hasLoadedInitial.current = false;
-    setInitialLogs([]);
-    setAdditionalLogs([]);
-    setPage(1);
-    setHasMore(false);
-    shouldAutoScroll.current = false; // Don't auto-scroll on reset
-    loadInitialLogs();
-  }
+  useEffect(() => {
+    if (analysis.name !== currentAnalysisName) {
+      setCurrentAnalysisName(analysis.name);
+      hasLoadedInitial.current = false;
+      setInitialLogs([]);
+      setAdditionalLogs([]);
+      setPage(1);
+      setHasMore(false);
+      disableAutoScroll();
+      loadInitialLogs();
+    }
+  }, [analysis.name, currentAnalysisName, disableAutoScroll, loadInitialLogs]);
 
   // Reset state when logs are cleared
   const [previousLogCount, setPreviousLogCount] = useState(sseLogs.length);
@@ -201,12 +174,12 @@ const AnalysisLogs = ({ analysis }) => {
         (sseLogs.length === 1 && sseLogs[0]?.message?.includes('cleared')));
 
     if (logsWereCleared) {
-      console.log('Logs cleared, resetting all state and reloading');
+      logger.log('Logs cleared, resetting all state and reloading');
       setInitialLogs([]);
       setAdditionalLogs([]);
       setPage(1);
       setHasMore(false);
-      shouldAutoScroll.current = false;
+      disableAutoScroll();
       hasLoadedInitial.current = false; // Force reload of initial logs
       loadInitialLogs();
     }
@@ -219,6 +192,7 @@ const AnalysisLogs = ({ analysis }) => {
     isMountedRef,
     loadInitialLogs,
     sseLogs,
+    disableAutoScroll,
   ]);
 
   // Memoize combined logs to prevent unnecessary recalculations
@@ -241,7 +215,24 @@ const AnalysisLogs = ({ analysis }) => {
 
   const logs = allLogs();
 
-  // Memoized resize handler to prevent memory leaks
+  // Store active event listeners to ensure cleanup on unmount
+  const activeListenersRef = useRef({ onMouseMove: null, onMouseUp: null });
+
+  // Cleanup effect to remove event listeners on unmount
+  useEffect(() => {
+    return () => {
+      // Remove any active event listeners when component unmounts
+      const { onMouseMove, onMouseUp } = activeListenersRef.current;
+      if (onMouseMove) {
+        document.removeEventListener('mousemove', onMouseMove);
+      }
+      if (onMouseUp) {
+        document.removeEventListener('mouseup', onMouseUp);
+      }
+    };
+  }, []);
+
+  // Memoized resize handler with proper cleanup
   const handleMouseDown = useCallback(
     (e) => {
       e.preventDefault();
@@ -259,7 +250,12 @@ const AnalysisLogs = ({ analysis }) => {
         setIsResizing(false);
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
+        // Clear refs after cleanup
+        activeListenersRef.current = { onMouseMove: null, onMouseUp: null };
       }
+
+      // Store references for potential cleanup on unmount
+      activeListenersRef.current = { onMouseMove, onMouseUp };
 
       document.addEventListener('mousemove', onMouseMove);
       document.addEventListener('mouseup', onMouseUp);

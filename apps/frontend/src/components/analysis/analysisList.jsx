@@ -1,7 +1,14 @@
 // frontend/src/components/analysis/analysisList.jsx
 import { useState, useMemo, useCallback } from 'react';
-import { useSSE } from '../../contexts/sseContext';
+import PropTypes from 'prop-types';
+import { produce } from 'immer';
+import {
+  useAnalyses,
+  useTeams,
+  useConnection,
+} from '../../contexts/sseContext';
 import { usePermissions } from '../../hooks/usePermissions';
+import logger from '../../utils/logger';
 import AnalysisItem from './analysisItem';
 import AnalysisTree from './analysisTree';
 import CreateFolderModal from '../modals/createFolderModal';
@@ -38,14 +45,11 @@ export default function AnalysisList({
   showTeamLabels = false,
   selectedTeam = null,
 }) {
-  const {
-    analyses: allAnalyses = {},
-    teamStructure,
-    connectionStatus,
-    getTeam,
-  } = useSSE();
+  const { analyses: allAnalyses = {} } = useAnalyses();
+  const { teamStructure, teamStructureVersion, getTeam } = useTeams();
+  const { connectionStatus } = useConnection();
 
-  const { accessibleTeams, isAdmin } = usePermissions();
+  const { getViewableTeams, isAdmin } = usePermissions();
 
   const [openLogIds, setOpenLogIds] = useState(new Set());
   const [folderModalOpen, setFolderModalOpen] = useState(false);
@@ -56,6 +60,7 @@ export default function AnalysisList({
   const [reorderModeKey, setReorderModeKey] = useState(0);
   const [localStructure, setLocalStructure] = useState(null);
   const [pendingFolders, setPendingFolders] = useState([]);
+  const [pendingFolderDeletions, setPendingFolderDeletions] = useState([]);
 
   // Handler for creating pending folders in reorder mode
   const handleCreatePendingFolder = useCallback(
@@ -79,33 +84,32 @@ export default function AnalysisList({
       ]);
 
       // Add to local structure
-      setLocalStructure((prev) => {
-        const newStructure = JSON.parse(JSON.stringify(prev));
-        const teamItems = newStructure[selectedTeam]?.items || [];
+      setLocalStructure((prev) =>
+        produce(prev, (draft) => {
+          const teamItems = draft[selectedTeam]?.items || [];
 
-        if (folderInfo.parentFolderId) {
-          // Add to parent folder
-          const findAndAdd = (items) => {
-            for (const item of items) {
-              if (item.id === folderInfo.parentFolderId) {
-                item.items = item.items || [];
-                item.items.push(newFolder);
-                return true;
+          if (folderInfo.parentFolderId) {
+            // Add to parent folder
+            const findAndAdd = (items) => {
+              for (const item of items) {
+                if (item.id === folderInfo.parentFolderId) {
+                  item.items = item.items || [];
+                  item.items.push(newFolder);
+                  return true;
+                }
+                if (item.type === 'folder' && item.items) {
+                  if (findAndAdd(item.items)) return true;
+                }
               }
-              if (item.type === 'folder' && item.items) {
-                if (findAndAdd(item.items)) return true;
-              }
-            }
-            return false;
-          };
-          findAndAdd(teamItems);
-        } else {
-          // Add to root
-          teamItems.push(newFolder);
-        }
-
-        return newStructure;
-      });
+              return false;
+            };
+            findAndAdd(teamItems);
+          } else {
+            // Add to root
+            teamItems.push(newFolder);
+          }
+        }),
+      );
 
       // Restart animations
       setReorderModeKey((prev) => prev + 1);
@@ -151,13 +155,14 @@ export default function AnalysisList({
       return Object.keys(allAnalyses).length;
     }
 
-    // Non-admin: count only analyses in accessible teams (uncategorized is just a regular team)
-    const accessibleTeamIds = accessibleTeams?.map((team) => team.id) || [];
+    // Non-admin: count only analyses in viewable teams
+    const viewableTeams = getViewableTeams();
+    const viewableTeamIds = viewableTeams.map((team) => team.id);
 
     return Object.values(allAnalyses).filter(
-      (analysis) => analysis && accessibleTeamIds.includes(analysis.teamId),
+      (analysis) => analysis && viewableTeamIds.includes(analysis.teamId),
     ).length;
-  }, [allAnalyses, isAdmin, accessibleTeams]);
+  }, [allAnalyses, isAdmin, getViewableTeams]);
 
   // Helper function to get team info
   const getTeamInfo = (teamId) => {
@@ -171,7 +176,7 @@ export default function AnalysisList({
     }
 
     // Fallback for missing teams
-    console.warn(`Team ${teamId} not found`);
+    logger.warn(`Team ${teamId} not found`);
     return { name: 'Unknown Team', color: '#ef4444' };
   };
 
@@ -226,29 +231,88 @@ export default function AnalysisList({
             labels: { confirm: 'Delete', cancel: 'Cancel' },
             confirmProps: { color: 'red' },
             onConfirm: async () => {
-              try {
-                await teamService.deleteFolder(selectedTeam, folder.id);
+              // If in reorder mode, defer deletion and update local structure only
+              if (reorderMode) {
+                const isTempFolder = folder.id.startsWith('temp-');
+
+                // Only add to pending deletions if it's a real folder (not temp)
+                if (!isTempFolder) {
+                  setPendingFolderDeletions((prev) => [...prev, folder.id]);
+                } else {
+                  // For temp folders, also remove from pending folders list
+                  setPendingFolders((prev) =>
+                    prev.filter((f) => f.tempId !== folder.id),
+                  );
+                }
+
+                // Update local structure immediately
+                setLocalStructure((prev) =>
+                  produce(prev, (draft) => {
+                    const items = draft?.[selectedTeam]?.items || [];
+
+                    // Find and remove the folder, moving its items to parent
+                    const removeFolder = (itemsList) => {
+                      for (let i = 0; i < itemsList.length; i++) {
+                        const item = itemsList[i];
+                        if (item.id === folder.id) {
+                          // Move folder's items to parent
+                          const folderItems = item.items || [];
+                          itemsList.splice(i, 1, ...folderItems);
+                          return true;
+                        }
+                        if (item.type === 'folder' && item.items) {
+                          if (removeFolder(item.items)) return true;
+                        }
+                      }
+                      return false;
+                    };
+
+                    removeFolder(items);
+                  }),
+                );
+
                 notifications.show({
-                  title: 'Success',
-                  message: `Folder "${folder.name}" deleted`,
-                  color: 'green',
+                  title: isTempFolder
+                    ? 'Folder Removed'
+                    : 'Folder Marked for Deletion',
+                  message: isTempFolder
+                    ? `"${folder.name}" removed from preview`
+                    : `"${folder.name}" will be deleted when you click Done`,
+                  color: 'blue',
                 });
-              } catch (error) {
-                notifications.show({
-                  title: 'Error',
-                  message: error.message || 'Failed to delete folder',
-                  color: 'red',
-                });
+              } else {
+                // Not in reorder mode - delete immediately
+                try {
+                  await teamService.deleteFolder(selectedTeam, folder.id);
+                  notifications.show({
+                    title: 'Success',
+                    message: `Folder "${folder.name}" deleted`,
+                    color: 'green',
+                  });
+                } catch (error) {
+                  notifications.show({
+                    title: 'Error',
+                    message: error.message || 'Failed to delete folder',
+                    color: 'red',
+                  });
+                }
               }
             },
           });
           break;
 
         default:
-          console.warn('Unknown folder action:', action);
+          logger.warn('Unknown folder action:', action);
       }
     },
-    [selectedTeam, handleCreateFolder],
+    [
+      selectedTeam,
+      handleCreateFolder,
+      reorderMode,
+      setPendingFolderDeletions,
+      setPendingFolders,
+      setLocalStructure,
+    ],
   );
 
   // Helper to find item and its parent in structure
@@ -272,59 +336,55 @@ export default function AnalysisList({
   // Apply a single reorder to a structure (returns new structure)
   const applyReorderToStructure = useCallback(
     (structure, reorder) => {
-      const items = structure?.[selectedTeam]?.items || [];
-      const newItems = JSON.parse(JSON.stringify(items)); // Deep clone
+      return produce(structure, (draft) => {
+        const items = draft?.[selectedTeam]?.items || [];
 
-      // Find the item to move
-      const activeInfo = findItemWithParent(newItems, reorder.itemId);
-      if (!activeInfo) return structure;
+        // Find the item to move
+        const activeInfo = findItemWithParent(items, reorder.itemId);
+        if (!activeInfo) return;
 
-      // Remove item from its current location
-      const removeFromParent = (items, itemId) => {
-        for (let i = 0; i < items.length; i++) {
-          if (items[i].id === itemId) {
-            return items.splice(i, 1)[0];
-          }
-          if (items[i].type === 'folder' && items[i].items) {
-            const removed = removeFromParent(items[i].items, itemId);
-            if (removed) return removed;
-          }
-        }
-        return null;
-      };
-
-      const itemToMove = removeFromParent(newItems, reorder.itemId);
-      if (!itemToMove) return structure;
-
-      // Insert item at new location
-      if (reorder.targetParentId) {
-        // Find target folder and insert
-        const findAndInsert = (items) => {
-          for (const item of items) {
-            if (item.id === reorder.targetParentId && item.type === 'folder') {
-              item.items = item.items || [];
-              item.items.splice(reorder.targetIndex, 0, itemToMove);
-              return true;
+        // Remove item from its current location
+        const removeFromParent = (items, itemId) => {
+          for (let i = 0; i < items.length; i++) {
+            if (items[i].id === itemId) {
+              return items.splice(i, 1)[0];
             }
-            if (item.type === 'folder' && item.items) {
-              if (findAndInsert(item.items)) return true;
+            if (items[i].type === 'folder' && items[i].items) {
+              const removed = removeFromParent(items[i].items, itemId);
+              if (removed) return removed;
             }
           }
-          return false;
+          return null;
         };
-        findAndInsert(newItems);
-      } else {
-        // Insert at root level
-        newItems.splice(reorder.targetIndex, 0, itemToMove);
-      }
 
-      return {
-        ...structure,
-        [selectedTeam]: {
-          ...structure[selectedTeam],
-          items: newItems,
-        },
-      };
+        const itemToMove = removeFromParent(items, reorder.itemId);
+        if (!itemToMove) return;
+
+        // Insert item at new location
+        if (reorder.targetParentId) {
+          // Find target folder and insert
+          const findAndInsert = (itemsList) => {
+            for (const item of itemsList) {
+              if (
+                item.id === reorder.targetParentId &&
+                item.type === 'folder'
+              ) {
+                item.items = item.items || [];
+                item.items.splice(reorder.targetIndex, 0, itemToMove);
+                return true;
+              }
+              if (item.type === 'folder' && item.items) {
+                if (findAndInsert(item.items)) return true;
+              }
+            }
+            return false;
+          };
+          findAndInsert(items);
+        } else {
+          // Insert at root level
+          items.splice(reorder.targetIndex, 0, itemToMove);
+        }
+      });
     },
     [selectedTeam, findItemWithParent],
   );
@@ -342,13 +402,18 @@ export default function AnalysisList({
   const handleCancelReorder = useCallback(() => {
     setPendingReorders([]);
     setPendingFolders([]);
+    setPendingFolderDeletions([]);
     setReorderMode(false);
     setReorderModeKey(0);
     setLocalStructure(null);
   }, []);
 
   const handleApplyReorders = useCallback(async () => {
-    if (pendingReorders.length === 0 && pendingFolders.length === 0) {
+    if (
+      pendingReorders.length === 0 &&
+      pendingFolders.length === 0 &&
+      pendingFolderDeletions.length === 0
+    ) {
       setReorderMode(false);
       setReorderModeKey(0);
       setLocalStructure(null);
@@ -356,7 +421,12 @@ export default function AnalysisList({
     }
 
     try {
-      // First, create all pending folders
+      // First, delete all pending folders
+      for (const folderId of pendingFolderDeletions) {
+        await teamService.deleteFolder(selectedTeam, folderId);
+      }
+
+      // Then, create all pending folders
       const folderIdMap = {}; // Map temp IDs to real IDs
       for (const folder of pendingFolders) {
         const result = await teamService.createFolder(selectedTeam, {
@@ -368,7 +438,7 @@ export default function AnalysisList({
         folderIdMap[folder.tempId] = result.id;
       }
 
-      // Then apply all pending reorders (replacing temp IDs with real ones)
+      // Finally, apply all pending reorders (replacing temp IDs with real ones)
       for (const reorder of pendingReorders) {
         await teamService.moveItem(
           selectedTeam,
@@ -388,18 +458,33 @@ export default function AnalysisList({
 
       setPendingReorders([]);
       setPendingFolders([]);
+      setPendingFolderDeletions([]);
       setReorderMode(false);
       setReorderModeKey(0);
       setLocalStructure(null);
     } catch (error) {
-      console.error('Failed to apply changes:', error);
+      logger.error('Failed to apply changes:', error);
       notifications.show({
         title: 'Error',
         message: error.message || 'Failed to apply changes',
         color: 'red',
       });
     }
-  }, [pendingReorders, pendingFolders, selectedTeam]);
+  }, [pendingReorders, pendingFolders, pendingFolderDeletions, selectedTeam]);
+
+  // Check if user has no team access (non-admin users only)
+  // Must be before early returns to satisfy React Hooks rules
+  const hasNoTeamAccess = useMemo(() => {
+    if (isAdmin) return false;
+    const viewableTeams = getViewableTeams();
+    return !viewableTeams || viewableTeams.length === 0;
+  }, [isAdmin, getViewableTeams]);
+
+  // Calculate whether there are analyses to show
+  const hasAnalyses = analysesArray.length > 0;
+
+  // Get current team info for display
+  const currentTeamInfo = selectedTeam ? getTeam?.(selectedTeam) : null;
 
   // Handle loading state
   if (connectionStatus === 'connecting') {
@@ -439,15 +524,6 @@ export default function AnalysisList({
       </Paper>
     );
   }
-
-  const hasAnalyses = analysesArray.length > 0;
-
-  // Check if user has no team access (non-admin users only)
-  const hasNoTeamAccess =
-    !isAdmin && (!accessibleTeams || accessibleTeams.length === 0);
-
-  // Get current team info for display
-  const currentTeamInfo = selectedTeam ? getTeam?.(selectedTeam) : null;
 
   return (
     <Paper p="lg" withBorder radius="md">
@@ -545,9 +621,7 @@ export default function AnalysisList({
                       leftSection={<IconArrowsSort size={16} />}
                       onClick={() => {
                         // Capture current structure for local editing
-                        setLocalStructure(
-                          JSON.parse(JSON.stringify(teamStructure)),
-                        );
+                        setLocalStructure(structuredClone(teamStructure));
                         setReorderMode(true);
                         setReorderModeKey((prev) => prev + 1);
                       }}
@@ -600,6 +674,7 @@ export default function AnalysisList({
             /* Tree View for selected team */
             <>
               <AnalysisTree
+                key={`tree-${selectedTeam}-${reorderMode ? 'reorder' : teamStructureVersion}`}
                 teamId={selectedTeam}
                 teamStructure={
                   reorderMode && localStructure ? localStructure : teamStructure
@@ -718,3 +793,9 @@ export default function AnalysisList({
     </Paper>
   );
 }
+
+AnalysisList.propTypes = {
+  analyses: PropTypes.object,
+  showTeamLabels: PropTypes.bool,
+  selectedTeam: PropTypes.string,
+};

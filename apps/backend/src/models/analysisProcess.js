@@ -13,6 +13,7 @@ import config from '../config/default.js';
 import { createChildLogger } from '../utils/logging/logger.js';
 import pino from 'pino';
 import dnsCache from '../services/dnsCache.js';
+import { ANALYSIS_PROCESS } from '../constants.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -45,14 +46,17 @@ class AnalysisProcess {
     this.logs = []; // In-memory buffer
     this.logSequence = 0; // Unique sequence number for each log
     this.totalLogCount = 0; // Total logs written to file
-    this.maxMemoryLogs = config.analysis.maxLogsInMemory || 1000;
+    this.maxMemoryLogs =
+      config.analysis.maxLogsInMemory ||
+      ANALYSIS_PROCESS.MAX_MEMORY_LOGS_FALLBACK;
 
     // Health check management
     this.restartAttempts = 0;
     // No max restart attempts - will retry indefinitely
-    this.restartDelay = 5000; // Initial restart delay
-    this.maxRestartDelay = 60000; // Max 1 minute between retries
+    this.restartDelay = ANALYSIS_PROCESS.INITIAL_RESTART_DELAY_MS;
+    this.maxRestartDelay = ANALYSIS_PROCESS.MAX_RESTART_DELAY_MS;
     this.connectionErrorDetected = false;
+    this.isStarting = false; // Flag to prevent race conditions on start
 
     // Create main logger for lifecycle events (not analysis output)
     this.logger = createChildLogger('analysis', {
@@ -88,7 +92,7 @@ class AnalysisProcess {
     // Recreate file logger with new path
     this.initializeFileLogger();
 
-    this.logger.info(`Updated analysis name from ${oldName} to ${newName}`);
+    this.logger.info({ oldName, newName }, 'Updated analysis name');
   }
 
   // Initialize the file logger for analysis output
@@ -96,7 +100,9 @@ class AnalysisProcess {
     try {
       // Create directory if it doesn't exist
       const logsDir = path.dirname(this.logFile);
-      safeMkdir(logsDir, { recursive: true }).catch(() => {}); // Don't await, let it happen async
+      safeMkdir(logsDir, config.paths.analysis, { recursive: true }).catch(
+        () => {},
+      ); // Don't await, let it happen async
 
       // Create Pino write stream for this analysis log file
       const fileStream = pino.destination({
@@ -184,10 +190,10 @@ class AnalysisProcess {
     this.initializeFileLogger();
 
     try {
-      const stats = await safeStat(this.logFile);
+      const stats = await safeStat(this.logFile, config.paths.analysis);
 
       // Check if file is too large (> 50MB)
-      const maxFileSize = 50 * 1024 * 1024; // 50MB
+      const maxFileSize = ANALYSIS_PROCESS.MAX_LOG_FILE_SIZE_BYTES;
 
       if (stats.size > maxFileSize) {
         const sizeMB = Math.round(stats.size / 1024 / 1024);
@@ -200,7 +206,7 @@ class AnalysisProcess {
         });
 
         // Delete the oversized log file
-        await safeUnlink(this.logFile);
+        await safeUnlink(this.logFile, config.paths.analysis);
 
         // Start fresh
         this.totalLogCount = 0;
@@ -216,7 +222,11 @@ class AnalysisProcess {
         );
       } else {
         // For normal-sized files, read as usual
-        const content = await safeReadFile(this.logFile, 'utf8');
+        const content = await safeReadFile(
+          this.logFile,
+          config.paths.analysis,
+          'utf8',
+        );
         const lines = content
           .trim()
           .split('\n')
@@ -362,7 +372,10 @@ class AnalysisProcess {
   }
 
   async start() {
-    if (this.process) return;
+    // Prevent race conditions - exit if already running or starting
+    if (this.process || this.isStarting) return;
+
+    this.isStarting = true;
 
     try {
       // Initialize log state before starting
@@ -420,6 +433,9 @@ class AnalysisProcess {
       this.logger.error({ err: error }, `Failed to start analysis process`);
       await this.addLog(`ERROR: ${error.message}`);
       throw error;
+    } finally {
+      // Always reset the flag, whether start succeeded or failed
+      this.isStarting = false;
     }
   }
 
@@ -439,7 +455,7 @@ class AnalysisProcess {
       }
     }
 
-    this.logger.debug(`Status updated from ${previousStatus} to ${status}`);
+    this.logger.debug({ previousStatus, status }, 'Status updated');
   }
 
   async stop() {
@@ -454,25 +470,80 @@ class AnalysisProcess {
     return new Promise((resolve) => {
       this.process.kill('SIGTERM');
 
-      const forceKillTimeout = setTimeout(() => {
+      const forceKillTimeout = setTimeout(async () => {
         if (this.process) {
           this.logger.warn(`Force stopping process after timeout`);
-          this.addLog('Force stopping process...').then(() => {
-            this.process.kill('SIGKILL');
-          });
+          await this.addLog('Force stopping process...');
+          this.process.kill('SIGKILL');
         }
       }, config.analysis.forceKillTimeout);
 
-      this.process.once('exit', () => {
+      this.process.once('exit', async () => {
         clearTimeout(forceKillTimeout);
         this.updateStatus('stopped', false);
         this.logger.info(`Analysis process stopped successfully`);
-        this.addLog('Analysis stopped').then(() => {
-          this.process = null;
-          this.saveConfig().then(resolve);
-        });
+        await this.addLog('Analysis stopped');
+        this.process = null;
+        await this.saveConfig();
+        resolve();
       });
     });
+  }
+
+  /**
+   * Clean up all resources associated with this analysis
+   * Call this method before deleting an analysis to prevent memory leaks
+   * @returns {Promise<void>}
+   */
+  async cleanup() {
+    this.logger.info(`Cleaning up analysis resources`);
+
+    // Kill process if still running
+    if (this.process && !this.process.killed) {
+      try {
+        this.process.kill('SIGKILL');
+      } catch (error) {
+        this.logger.warn(
+          { err: error },
+          'Error killing process during cleanup',
+        );
+      }
+      this.process = null;
+    }
+
+    // Close file logger stream to prevent memory leaks
+    if (this.fileLogger) {
+      try {
+        // Flush any remaining logs and close the stream
+        this.fileLogger.flush();
+        // Note: Pino doesn't have a close() method, but flush() ensures all logs are written
+      } catch (error) {
+        this.logger.warn(
+          { err: error },
+          'Error flushing file logger during cleanup',
+        );
+      }
+      this.fileLogger = null;
+    }
+
+    // Clear in-memory log buffer to free memory
+    this.logs = [];
+    this.logSequence = 0;
+    this.totalLogCount = 0;
+
+    // Clear output buffers
+    this.stdoutBuffer = '';
+    this.stderrBuffer = '';
+
+    // Reset state
+    this.status = 'stopped';
+    this.enabled = false;
+    this.intendedState = 'stopped';
+    this.connectionErrorDetected = false;
+    this.restartAttempts = 0;
+    this.isStarting = false;
+
+    this.logger.info(`Analysis resources cleaned up successfully`);
   }
 
   async saveConfig() {
@@ -494,7 +565,7 @@ class AnalysisProcess {
       await this.addLog(`ERROR: ${this.stderrBuffer.trim()}`);
     }
 
-    this.logger.info(`Analysis process exited with code ${code}`);
+    this.logger.info({ exitCode: code }, 'Analysis process exited');
 
     await this.addLog(`Process exited with code ${code}`);
     this.process = null;

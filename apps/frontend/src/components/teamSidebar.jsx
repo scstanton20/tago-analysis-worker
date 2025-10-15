@@ -1,5 +1,6 @@
 // frontend/src/components/teamSidebar.jsx
-import { useState, useMemo, lazy, Suspense } from 'react';
+import { useState, useMemo, useCallback, lazy, Suspense } from 'react';
+import PropTypes from 'prop-types';
 import {
   DndContext,
   closestCenter,
@@ -15,7 +16,7 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useSSE } from '../contexts/sseContext/index';
+import { useConnection, useAnalyses } from '../contexts/sseContext/index';
 import {
   Box,
   Stack,
@@ -28,8 +29,6 @@ import {
   ScrollArea,
   NavLink,
   Tooltip,
-  LoadingOverlay,
-  Portal,
 } from '@mantine/core';
 import {
   IconBrandAsana,
@@ -42,50 +41,12 @@ import {
 const TeamManagementModal = lazy(() => import('./modals/teamManagementModal'));
 const UserManagementModal = lazy(() => import('./modals/userManagementModal'));
 const ProfileModal = lazy(() => import('./modals/profileModal'));
-
-// Custom loading overlay component
-function AppLoadingOverlay({ message, submessage, error, showRetry }) {
-  return (
-    <Portal>
-      <LoadingOverlay
-        visible={true}
-        zIndex={9999}
-        overlayProps={{ blur: 2, radius: 'sm' }}
-        loaderProps={{
-          size: 'xl',
-          children: (
-            <Stack align="center" gap="lg">
-              <Logo size={48} className={error ? '' : 'pulse'} />
-              <Text size="lg" fw={500} c={error ? 'red' : undefined}>
-                {message}
-              </Text>
-              {submessage && (
-                <Text size="sm" c="dimmed" ta="center" maw={400}>
-                  {submessage}
-                </Text>
-              )}
-              {showRetry && (
-                <Button
-                  onClick={() => window.location.reload()}
-                  variant="gradient"
-                  gradient={{ from: 'brand.6', to: 'accent.6' }}
-                  mt="md"
-                >
-                  Retry Connection
-                </Button>
-              )}
-            </Stack>
-          ),
-        }}
-        pos="fixed"
-      />
-    </Portal>
-  );
-}
 import { teamService } from '../services/teamService';
 import { useAuth } from '../hooks/useAuth';
 import { usePermissions } from '../hooks/usePermissions';
-import Logo from './logo';
+import logger from '../utils/logger';
+import AppLoadingOverlay from './common/AppLoadingOverlay';
+import ChunkLoadErrorBoundary from './common/ChunkLoadErrorBoundary';
 
 // Sortable Team Item
 const SortableTeamItem = ({ team, isSelected, onClick, analysisCount }) => {
@@ -205,11 +166,24 @@ const SortableTeamItem = ({ team, isSelected, onClick, analysisCount }) => {
   );
 };
 
+SortableTeamItem.propTypes = {
+  team: PropTypes.shape({
+    id: PropTypes.string.isRequired,
+    name: PropTypes.string.isRequired,
+    color: PropTypes.string.isRequired,
+    isSystem: PropTypes.bool,
+  }).isRequired,
+  isSelected: PropTypes.bool.isRequired,
+  onClick: PropTypes.func.isRequired,
+  analysisCount: PropTypes.number.isRequired,
+};
+
 // Main Team Sidebar Component
 export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
-  const { teams, getTeamAnalysisCount, hasInitialData } = useSSE();
+  const { analyses } = useAnalyses();
+  const { hasInitialData } = useConnection();
   const { user, logout, isAdmin } = useAuth();
-  const { canAccessTeam, isAdmin: hasAdminPerms } = usePermissions();
+  const { getViewableTeams, isAdmin: hasAdminPerms } = usePermissions();
 
   const [showManageModal, setShowManageModal] = useState(false);
   const [showUserModal, setShowUserModal] = useState(false);
@@ -217,43 +191,40 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
   const [draggedAnalysis, setDraggedAnalysis] = useState(null);
   const [activeTeamId, setActiveTeamId] = useState(null);
 
-  // Convert teams object to sorted array for display, filtered by user access (memoized)
+  // Helper function to count analyses per team
+  const getTeamAnalysisCount = useCallback(
+    (teamId) => {
+      return Object.values(analyses).filter(
+        (analysis) => analysis.teamId === teamId,
+      ).length;
+    },
+    [analyses],
+  );
+
+  // Get viewable teams and filter based on business rules for sidebar display
   const teamsArray = useMemo(() => {
-    const allTeams = Object.values(teams).sort((a, b) => {
-      // Always put uncategorized (system) teams first
-      if (a.isSystem && !b.isSystem) return -1;
-      if (!a.isSystem && b.isSystem) return 1;
+    const allTeams = getViewableTeams();
 
-      // If both are system teams or both are not, sort by order_index then name
-      if (a.order_index !== b.order_index) {
-        return (a.order_index || 0) - (b.order_index || 0);
-      }
-
-      return a.name.localeCompare(b.name);
-    });
-
-    // Filter teams based on user permissions and business rules
+    // Filter teams based on business rules
     return allTeams.filter((team) => {
-      // Check for Uncategorized team: show if it has analyses AND user has access
+      // Hide Uncategorized team if it has no analyses
       if (team.isSystem && team.name === 'Uncategorized') {
-        const analysisCount = getTeamAnalysisCount(team.id);
-        // Admin users see uncategorized if it has analyses
-        if (hasAdminPerms) {
-          return analysisCount > 0;
-        }
-        // Non-admin users must be assigned to uncategorized team to see it
-        return analysisCount > 0 && canAccessTeam(team.id);
+        return getTeamAnalysisCount(team.id) > 0;
       }
-
-      // If user is admin, show all other teams
-      if (hasAdminPerms) {
-        return true;
-      }
-
-      // For non-admin users, check if they have access to this team
-      return canAccessTeam(team.id);
+      return true;
     });
-  }, [teams, hasAdminPerms, canAccessTeam, getTeamAnalysisCount]);
+  }, [getViewableTeams, getTeamAnalysisCount]);
+
+  // Convert ALL teams to object format for TeamManagementModal
+  // Modal should show all teams including Uncategorized even when empty
+  const teamsObject = useMemo(() => {
+    const allTeams = getViewableTeams();
+    const obj = {};
+    allTeams.forEach((team) => {
+      obj[team.id] = team;
+    });
+    return obj;
+  }, [getViewableTeams]);
 
   // Use the efficient count function from SSE hook
   const getAnalysisCount = (teamId) => {
@@ -270,9 +241,9 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
 
     try {
       await teamService.moveAnalysisToTeam(draggedAnalysis, teamId);
-      console.log(`Moved analysis ${draggedAnalysis} to team ${teamId}`);
+      logger.log(`Moved analysis ${draggedAnalysis} to team ${teamId}`);
     } catch (error) {
-      console.error('Error moving analysis:', error);
+      logger.error('Error moving analysis:', error);
     }
 
     setDraggedAnalysis(null);
@@ -291,7 +262,7 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
         try {
           await teamService.reorderTeams(newOrder.map((t) => t.id));
         } catch (error) {
-          console.error('Error reordering teams:', error);
+          logger.error('Error reordering teams:', error);
         }
       }
     }
@@ -340,8 +311,9 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
                 color="brand"
                 size="lg"
                 onClick={() => setShowManageModal(true)}
+                aria-label="Manage teams"
               >
-                <IconBrandAsana size={18} />
+                <IconBrandAsana size={18} aria-hidden="true" />
               </ActionIcon>
             </Tooltip>
           )}
@@ -352,8 +324,9 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
                 color="accent"
                 size="lg"
                 onClick={() => setShowUserModal(true)}
+                aria-label="Manage users"
               >
-                <IconUserPlus size={18} />
+                <IconUserPlus size={18} aria-hidden="true" />
               </ActionIcon>
             </Tooltip>
           )}
@@ -448,8 +421,9 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
                 color="brand"
                 size="sm"
                 onClick={() => setShowProfileModal(true)}
+                aria-label="Profile Settings"
               >
-                <IconUserEdit size={14} />
+                <IconUserEdit size={14} aria-hidden="true" />
               </ActionIcon>
             </Tooltip>
             <Tooltip label="Logout">
@@ -458,8 +432,9 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
                 color="red"
                 size="sm"
                 onClick={logout}
+                aria-label="Logout"
               >
-                <IconLogout size={14} />
+                <IconLogout size={14} aria-hidden="true" />
               </ActionIcon>
             </Tooltip>
           </Group>
@@ -468,38 +443,55 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
 
       {/* Team Management Modal */}
       {showManageModal && (
-        <Suspense
-          fallback={<AppLoadingOverlay message="Loading team management..." />}
-        >
-          <TeamManagementModal
-            opened={showManageModal}
-            onClose={() => setShowManageModal(false)}
-            teams={teams}
-          />
-        </Suspense>
+        <ChunkLoadErrorBoundary componentName="Team Management Modal">
+          <Suspense
+            fallback={
+              <AppLoadingOverlay message="Loading team management..." />
+            }
+          >
+            <TeamManagementModal
+              opened={showManageModal}
+              onClose={() => setShowManageModal(false)}
+              teams={teamsObject}
+            />
+          </Suspense>
+        </ChunkLoadErrorBoundary>
       )}
 
       {/* User Management Modal */}
       {showUserModal && (
-        <Suspense
-          fallback={<AppLoadingOverlay message="Loading user management..." />}
-        >
-          <UserManagementModal
-            opened={showUserModal}
-            onClose={() => setShowUserModal(false)}
-          />
-        </Suspense>
+        <ChunkLoadErrorBoundary componentName="User Management Modal">
+          <Suspense
+            fallback={
+              <AppLoadingOverlay message="Loading user management..." />
+            }
+          >
+            <UserManagementModal
+              opened={showUserModal}
+              onClose={() => setShowUserModal(false)}
+            />
+          </Suspense>
+        </ChunkLoadErrorBoundary>
       )}
 
       {/* Profile Modal */}
       {showProfileModal && (
-        <Suspense fallback={<AppLoadingOverlay message="Loading profile..." />}>
-          <ProfileModal
-            opened={showProfileModal}
-            onClose={() => setShowProfileModal(false)}
-          />
-        </Suspense>
+        <ChunkLoadErrorBoundary componentName="Profile Modal">
+          <Suspense
+            fallback={<AppLoadingOverlay message="Loading profile..." />}
+          >
+            <ProfileModal
+              opened={showProfileModal}
+              onClose={() => setShowProfileModal(false)}
+            />
+          </Suspense>
+        </ChunkLoadErrorBoundary>
       )}
     </Stack>
   );
 }
+
+TeamSidebar.propTypes = {
+  selectedTeam: PropTypes.string,
+  onTeamSelect: PropTypes.func,
+};

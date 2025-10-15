@@ -64,7 +64,7 @@ When you first run the application, an admin user will be automatically created:
 ```
 Email: admin@example.com
 Username: admin
-Password: admin123
+Password: Admin123
 ```
 
 **⚠️ Important**: You'll be prompted to change this password on first login for security.

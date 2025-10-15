@@ -1,6 +1,10 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import config from '../config/default.js';
+import { createChildLogger } from './logging/logger.js';
+
+// Module-level logger for database operations
+const logger = createChildLogger('auth-database');
 
 // Single database instance for auth operations
 let authDb = null;
@@ -59,7 +63,10 @@ export function executeQuery(query, params = [], operation = 'query') {
     const stmt = db.prepare(query);
     return stmt.get(...params);
   } catch (error) {
-    console.error(`Auth DB error during ${operation}:`, error);
+    logger.error(
+      { err: error, operation, query, paramCount: params.length },
+      `Auth DB error during ${operation}`,
+    );
     throw error;
   }
 }
@@ -77,7 +84,10 @@ export function executeQueryAll(query, params = [], operation = 'query') {
     const stmt = db.prepare(query);
     return stmt.all(...params);
   } catch (error) {
-    console.error(`Auth DB error during ${operation}:`, error);
+    logger.error(
+      { err: error, operation, query, paramCount: params.length },
+      `Auth DB error during ${operation}`,
+    );
     throw error;
   }
 }
@@ -95,7 +105,10 @@ export function executeUpdate(query, params = [], operation = 'update') {
     const stmt = db.prepare(query);
     return stmt.run(...params);
   } catch (error) {
-    console.error(`Auth DB error during ${operation}:`, error);
+    logger.error(
+      { err: error, operation, query, paramCount: params.length },
+      `Auth DB error during ${operation}`,
+    );
     throw error;
   }
 }
@@ -113,7 +126,10 @@ export function executeTransaction(transactionFn, operation = 'transaction') {
   try {
     return transaction(db);
   } catch (error) {
-    console.error(`Auth DB transaction error during ${operation}:`, error);
+    logger.error(
+      { err: error, operation },
+      `Auth DB transaction error during ${operation}`,
+    );
     throw error;
   }
 }

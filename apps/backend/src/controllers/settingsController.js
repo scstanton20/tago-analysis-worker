@@ -1,170 +1,291 @@
-// controllers/settingsController.js
+// backend/src/controllers/settingsController.js
 import dnsCache from '../services/dnsCache.js';
-import { createChildLogger } from '../utils/logging/logger.js';
 import { sseManager } from '../utils/sse.js';
+import { handleError } from '../utils/responseHelpers.js';
 
-const logger = createChildLogger('settings-controller');
+/**
+ * Controller class for managing application settings
+ * Currently focused on DNS cache configuration and management.
+ *
+ * All methods are static and follow Express route handler pattern (req, res).
+ * Request-scoped logging is available via req.log.
+ */
+class SettingsController {
+  /**
+   * Retrieve DNS cache configuration and statistics
+   * Returns current DNS cache settings and performance metrics
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Response:
+   * - JSON object with config (enabled, ttl, maxEntries) and stats (hits, misses, size)
+   */
+  static async getDNSConfig(req, res) {
+    req.log.info({ action: 'getDNSConfig' }, 'Getting DNS configuration');
 
-// DNS Cache Settings
-export const getDNSConfig = async (req, res) => {
-  try {
-    const config = dnsCache.getConfig();
-    const stats = dnsCache.getStats();
-    res.json({
-      config,
-      stats,
-    });
-  } catch (error) {
-    logger.error({ err: error }, 'Failed to get DNS config');
-    res.status(500).json({ error: 'Failed to get DNS configuration' });
+    try {
+      const config = dnsCache.getConfig();
+      const stats = dnsCache.getStats();
+
+      req.log.info(
+        { action: 'getDNSConfig', cacheSize: stats.size },
+        'DNS configuration retrieved',
+      );
+
+      res.json({
+        config,
+        stats,
+      });
+    } catch (error) {
+      handleError(res, error, 'getting DNS configuration', {
+        logger: req.logger,
+      });
+    }
   }
-};
 
-export const updateDNSConfig = async (req, res) => {
-  try {
+  /**
+   * Update DNS cache configuration
+   * Modifies DNS cache settings and persists to configuration file
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.body - Request body
+   * @param {boolean} [req.body.enabled] - Enable/disable DNS caching
+   * @param {number} [req.body.ttl] - Time-to-live in milliseconds
+   * @param {number} [req.body.maxEntries] - Maximum cache entries
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Updates DNS cache configuration in memory and on disk
+   * - Broadcasts 'dnsConfigUpdated' SSE event to admin users
+   *
+   * Security:
+   * - Validation handled by middleware
+   */
+  static async updateDNSConfig(req, res) {
     const { enabled, ttl, maxEntries } = req.body;
 
-    // Validate input
-    if (enabled !== undefined && typeof enabled !== 'boolean') {
-      return res.status(400).json({ error: 'enabled must be a boolean' });
-    }
-    if (ttl !== undefined) {
-      if (typeof ttl !== 'number' || ttl < 1000 || ttl > 86400000) {
-        return res.status(400).json({
-          error: 'ttl must be between 1000ms and 86400000ms (1 day)',
-        });
-      }
-    }
-    if (maxEntries !== undefined) {
-      if (
-        typeof maxEntries !== 'number' ||
-        maxEntries < 10 ||
-        maxEntries > 10000
-      ) {
-        return res
-          .status(400)
-          .json({ error: 'maxEntries must be between 10 and 10000' });
-      }
-    }
-
+    // Validation handled by middleware
     const newConfig = {};
     if (enabled !== undefined) newConfig.enabled = enabled;
     if (ttl !== undefined) newConfig.ttl = ttl;
     if (maxEntries !== undefined) newConfig.maxEntries = maxEntries;
 
-    await dnsCache.updateConfig(newConfig);
+    req.log.info(
+      { action: 'updateDNSConfig', updates: Object.keys(newConfig) },
+      'Updating DNS configuration',
+    );
 
-    const config = dnsCache.getConfig();
-    const stats = dnsCache.getStats();
+    try {
+      await dnsCache.updateConfig(newConfig);
 
-    logger.info({ config }, 'DNS config updated');
+      const config = dnsCache.getConfig();
+      const stats = dnsCache.getStats();
 
-    // Broadcast DNS cache config update via SSE
-    sseManager.broadcast({
-      type: 'dnsConfigUpdated',
-      data: {
+      req.log.info({ action: 'updateDNSConfig', config }, 'DNS config updated');
+
+      // Broadcast DNS cache config update via SSE (admin only)
+      sseManager.broadcastToAdminUsers({
+        type: 'dnsConfigUpdated',
+        data: {
+          config,
+          stats,
+        },
+      });
+
+      res.json({
+        message: 'DNS configuration updated successfully',
         config,
         stats,
-      },
-    });
-
-    res.json({
-      message: 'DNS configuration updated successfully',
-      config,
-      stats,
-    });
-  } catch (error) {
-    logger.error({ err: error }, 'Failed to update DNS config');
-    res.status(500).json({ error: 'Failed to update DNS configuration' });
+      });
+    } catch (error) {
+      handleError(res, error, 'updating DNS configuration', {
+        logger: req.logger,
+      });
+    }
   }
-};
 
-export const getDNSCacheEntries = async (req, res) => {
-  try {
-    const entries = dnsCache.getCacheEntries();
-    res.json({
-      entries,
-      total: entries.length,
-    });
-  } catch (error) {
-    logger.error({ err: error }, 'Failed to get DNS cache entries');
-    res.status(500).json({ error: 'Failed to get DNS cache entries' });
+  /**
+   * Retrieve all DNS cache entries
+   * Returns list of cached DNS records with hostnames and resolved IPs
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Response:
+   * - JSON object with entries array and total count
+   */
+  static async getDNSCacheEntries(req, res) {
+    req.log.info({ action: 'getDNSCacheEntries' }, 'Getting DNS cache entries');
+
+    try {
+      const entries = dnsCache.getCacheEntries();
+
+      req.log.info(
+        { action: 'getDNSCacheEntries', count: entries.length },
+        'DNS cache entries retrieved',
+      );
+
+      res.json({
+        entries,
+        total: entries.length,
+      });
+    } catch (error) {
+      handleError(res, error, 'getting DNS cache entries', {
+        logger: req.logger,
+      });
+    }
   }
-};
 
-export const clearDNSCache = async (req, res) => {
-  try {
-    const entriesCleared = dnsCache.clearCache();
-    const stats = dnsCache.getStats();
+  /**
+   * Clear all DNS cache entries
+   * Removes all cached DNS records from memory
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Clears all DNS cache entries from memory
+   * - Broadcasts 'dnsCacheCleared' SSE event to admin users
+   *
+   * Response:
+   * - JSON object with entriesCleared count and updated stats
+   */
+  static async clearDNSCache(req, res) {
+    req.log.info({ action: 'clearDNSCache' }, 'Clearing DNS cache');
 
-    logger.info({ entriesCleared }, 'DNS cache cleared');
+    try {
+      const entriesCleared = dnsCache.clearCache();
+      const stats = dnsCache.getStats();
 
-    // Broadcast DNS cache cleared via SSE
-    sseManager.broadcast({
-      type: 'dnsCacheCleared',
-      data: {
+      req.log.info(
+        { action: 'clearDNSCache', entriesCleared },
+        'DNS cache cleared',
+      );
+
+      // Broadcast DNS cache cleared via SSE (admin only)
+      sseManager.broadcastToAdminUsers({
+        type: 'dnsCacheCleared',
+        data: {
+          entriesCleared,
+          stats,
+        },
+      });
+
+      res.json({
+        message: 'DNS cache cleared successfully',
         entriesCleared,
         stats,
-      },
-    });
-
-    res.json({
-      message: 'DNS cache cleared successfully',
-      entriesCleared,
-      stats,
-    });
-  } catch (error) {
-    logger.error({ err: error }, 'Failed to clear DNS cache');
-    res.status(500).json({ error: 'Failed to clear DNS cache' });
+      });
+    } catch (error) {
+      handleError(res, error, 'clearing DNS cache', { logger: req.logger });
+    }
   }
-};
 
-export const deleteDNSCacheEntry = async (req, res) => {
-  try {
+  /**
+   * Delete a specific DNS cache entry
+   * Removes a single cached DNS record by hostname key
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.key - Hostname key to delete from cache
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Response:
+   * - Status 200 with success message if deleted
+   * - Status 404 if entry not found
+   *
+   * Security:
+   * - Validation handled by middleware
+   */
+  static async deleteDNSCacheEntry(req, res) {
     const { key } = req.params;
 
-    if (!key) {
-      return res.status(400).json({ error: 'Cache key is required' });
-    }
+    // Validation handled by middleware
+    req.log.info(
+      { action: 'deleteDNSCacheEntry', key },
+      'Deleting DNS cache entry',
+    );
 
-    const deleted = dnsCache.cache.delete(key);
+    try {
+      const deleted = dnsCache.cache.delete(key);
 
-    if (deleted) {
-      logger.info({ key }, 'DNS cache entry deleted');
-      res.json({
-        message: 'DNS cache entry deleted successfully',
-        key,
+      if (deleted) {
+        req.log.info(
+          { action: 'deleteDNSCacheEntry', key },
+          'DNS cache entry deleted',
+        );
+        res.json({
+          message: 'DNS cache entry deleted successfully',
+          key,
+        });
+      } else {
+        req.log.warn(
+          { action: 'deleteDNSCacheEntry', key },
+          'Cache entry not found',
+        );
+        res.status(404).json({ error: 'Cache entry not found' });
+      }
+    } catch (error) {
+      handleError(res, error, 'deleting DNS cache entry', {
+        logger: req.logger,
       });
-    } else {
-      res.status(404).json({ error: 'Cache entry not found' });
     }
-  } catch (error) {
-    logger.error({ err: error }, 'Failed to delete DNS cache entry');
-    res.status(500).json({ error: 'Failed to delete DNS cache entry' });
   }
-};
 
-export const resetDNSStats = async (req, res) => {
-  try {
-    dnsCache.resetStats();
-    const stats = dnsCache.getStats();
+  /**
+   * Reset DNS cache statistics
+   * Resets hit/miss counters and other performance metrics
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Resets DNS cache statistics counters (hits, misses, etc.)
+   * - Broadcasts 'dnsStatsReset' SSE event to admin users
+   *
+   * Response:
+   * - JSON object with reset stats
+   */
+  static async resetDNSStats(req, res) {
+    req.log.info({ action: 'resetDNSStats' }, 'Resetting DNS cache statistics');
 
-    logger.info('DNS cache stats reset');
+    try {
+      dnsCache.resetStats();
+      const stats = dnsCache.getStats();
 
-    // Broadcast DNS cache stats reset via SSE
-    sseManager.broadcast({
-      type: 'dnsStatsReset',
-      data: {
+      req.log.info({ action: 'resetDNSStats' }, 'DNS cache stats reset');
+
+      // Broadcast DNS cache stats reset via SSE (admin only)
+      sseManager.broadcastToAdminUsers({
+        type: 'dnsStatsReset',
+        data: {
+          stats,
+        },
+      });
+
+      res.json({
+        message: 'DNS cache statistics reset successfully',
         stats,
-      },
-    });
-
-    res.json({
-      message: 'DNS cache statistics reset successfully',
-      stats,
-    });
-  } catch (error) {
-    logger.error({ err: error }, 'Failed to reset DNS stats');
-    res.status(500).json({ error: 'Failed to reset DNS statistics' });
+      });
+    } catch (error) {
+      handleError(res, error, 'resetting DNS statistics', {
+        logger: req.logger,
+      });
+    }
   }
-};
+}
+
+export default SettingsController;

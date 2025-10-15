@@ -5,6 +5,10 @@ import {
   authMiddleware,
   requireAdmin,
 } from '../middleware/betterAuthMiddleware.js';
+import { validateRequest } from '../middleware/validateRequest.js';
+import { teamValidationSchemas } from '../validation/teamSchemas.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
+import { teamOperationLimiter } from '../middleware/rateLimiter.js';
 
 const router = Router();
 
@@ -44,7 +48,7 @@ router.use(requireAdmin);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/', TeamController.getAllTeams);
+router.get('/', asyncHandler(TeamController.getAllTeams));
 
 /**
  * @swagger
@@ -91,7 +95,12 @@ router.get('/', TeamController.getAllTeams);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post('/', TeamController.createTeam);
+router.post(
+  '/',
+  teamOperationLimiter,
+  validateRequest(teamValidationSchemas.createTeam),
+  asyncHandler(TeamController.createTeam),
+);
 
 /**
  * @swagger
@@ -135,7 +144,12 @@ router.post('/', TeamController.createTeam);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.put('/reorder', TeamController.reorderTeams);
+router.put(
+  '/reorder',
+  teamOperationLimiter,
+  validateRequest(teamValidationSchemas.reorderTeams),
+  asyncHandler(TeamController.reorderTeams),
+);
 
 /**
  * @swagger
@@ -189,7 +203,12 @@ router.put('/reorder', TeamController.reorderTeams);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.put('/:id', TeamController.updateTeam);
+router.put(
+  '/:id',
+  teamOperationLimiter,
+  validateRequest(teamValidationSchemas.updateTeam),
+  asyncHandler(TeamController.updateTeam),
+);
 
 /**
  * @swagger
@@ -252,7 +271,12 @@ router.put('/:id', TeamController.updateTeam);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.delete('/:id', TeamController.deleteTeam);
+router.delete(
+  '/:id',
+  teamOperationLimiter,
+  validateRequest(teamValidationSchemas.deleteTeam),
+  asyncHandler(TeamController.deleteTeam),
+);
 
 /**
  * @swagger
@@ -298,7 +322,11 @@ router.delete('/:id', TeamController.deleteTeam);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/:id/count', TeamController.getTeamAnalysisCount);
+router.get(
+  '/:id/count',
+  validateRequest(teamValidationSchemas.getTeamAnalysisCount),
+  asyncHandler(TeamController.getTeamAnalysisCount),
+);
 
 // Analysis-team routes
 /**
@@ -372,7 +400,12 @@ router.get('/:id/count', TeamController.getTeamAnalysisCount);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.put('/analyses/:name/team', TeamController.moveAnalysisToTeam);
+router.put(
+  '/analyses/:name/team',
+  teamOperationLimiter,
+  validateRequest(teamValidationSchemas.moveAnalysisToTeam),
+  asyncHandler(TeamController.moveAnalysisToTeam),
+);
 
 // Folder management routes
 /**
@@ -437,7 +470,12 @@ router.put('/analyses/:name/team', TeamController.moveAnalysisToTeam);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post('/:teamId/folders', TeamController.createFolder);
+router.post(
+  '/:teamId/folders',
+  teamOperationLimiter,
+  validateRequest(teamValidationSchemas.createFolder),
+  asyncHandler(TeamController.createFolder),
+);
 
 /**
  * @swagger
@@ -503,7 +541,12 @@ router.post('/:teamId/folders', TeamController.createFolder);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.put('/:teamId/folders/:folderId', TeamController.updateFolder);
+router.put(
+  '/:teamId/folders/:folderId',
+  teamOperationLimiter,
+  validateRequest(teamValidationSchemas.updateFolder),
+  asyncHandler(TeamController.updateFolder),
+);
 
 /**
  * @swagger
@@ -551,7 +594,12 @@ router.put('/:teamId/folders/:folderId', TeamController.updateFolder);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.delete('/:teamId/folders/:folderId', TeamController.deleteFolder);
+router.delete(
+  '/:teamId/folders/:folderId',
+  teamOperationLimiter,
+  validateRequest(teamValidationSchemas.deleteFolder),
+  asyncHandler(TeamController.deleteFolder),
+);
 
 /**
  * @swagger
@@ -605,6 +653,11 @@ router.delete('/:teamId/folders/:folderId', TeamController.deleteFolder);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post('/:teamId/items/move', TeamController.moveItem);
+router.post(
+  '/:teamId/items/move',
+  teamOperationLimiter,
+  validateRequest(teamValidationSchemas.moveItem),
+  asyncHandler(TeamController.moveItem),
+);
 
 export default router;

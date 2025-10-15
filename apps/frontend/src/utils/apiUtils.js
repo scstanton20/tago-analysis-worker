@@ -1,11 +1,35 @@
-// frontend/src/services/utils.js
+/**
+ * API utility functions for frontend service layer
+ * Provides standardized HTTP client with authentication and error handling
+ * @module utils/apiUtils
+ */
+import logger from './logger';
+import { isDevelopment, API_URL } from '../config/env.js';
+
+/**
+ * Get the base URL for API requests based on environment
+ * @private
+ * @returns {string} Base URL for API requests
+ */
 const getBaseUrl = () => {
-  if (import.meta.env.DEV && import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL; // Use Docker URL in Docker dev
+  if (isDevelopment && API_URL) {
+    return API_URL; // Use Docker URL in Docker dev
   }
   return '/api'; // Use /api prefix for local dev and production
 };
 
+/**
+ * Enhanced fetch function with automatic header management
+ * Includes credentials (cookies) and proper content-type handling
+ * @param {string} url - API endpoint URL (relative to base URL)
+ * @param {RequestInit} options - Fetch options
+ * @returns {Promise<Response>} Fetch response object
+ * @example
+ * const response = await fetchWithHeaders('/users', {
+ *   method: 'POST',
+ *   body: JSON.stringify({ name: 'John' })
+ * });
+ */
 export async function fetchWithHeaders(url, options = {}) {
   const defaultHeaders = {
     Accept: 'application/json',
@@ -28,32 +52,91 @@ export async function fetchWithHeaders(url, options = {}) {
   });
 }
 
-// Track if we're currently refreshing to prevent infinite loops
-let isRefreshing = false;
-let refreshPromise = null;
+/**
+ * Singleton class to manage token refresh state and request queueing
+ * Prevents race conditions and testing issues from module-level mutable state
+ */
+class TokenRefreshManager {
+  constructor() {
+    this.isRefreshing = false;
+    this.refreshPromise = null;
+    this.refreshQueue = [];
+    this.MAX_QUEUE_SIZE = 50;
+    this.REFRESH_TIMEOUT = 30000; // 30 seconds
+  }
 
-// Queue for pending requests during refresh
-let refreshQueue = [];
+  /**
+   * Process all queued requests after refresh completes
+   * @param {Error|null} error - Error if refresh failed
+   * @param {boolean} success - Whether refresh succeeded
+   */
+  processQueue(error, success = false) {
+    this.refreshQueue.forEach(({ resolve, reject }) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve(success);
+      }
+    });
+    this.refreshQueue = [];
+  }
 
-const processQueue = (error, success = false) => {
-  refreshQueue.forEach(({ resolve, reject }) => {
-    if (error) {
-      reject(error);
-    } else {
-      resolve(success);
-    }
-  });
-  refreshQueue = [];
-};
+  /**
+   * Reset refresh state (used for testing)
+   */
+  reset() {
+    this.isRefreshing = false;
+    this.refreshPromise = null;
+    this.refreshQueue = [];
+  }
+}
 
+// Export singleton instance
+const tokenRefreshManager = new TokenRefreshManager();
+
+/**
+ * Parse error response safely
+ * @param {Response} response - Fetch response object
+ * @param {string} defaultMessage - Default error message if parsing fails
+ * @returns {Promise<Object>} Error data object
+ */
+export async function parseErrorResponse(response, defaultMessage) {
+  try {
+    return await response.json();
+  } catch {
+    return { error: defaultMessage || response.statusText };
+  }
+}
+
+/**
+ * Handle fetch response with automatic error handling and token refresh
+ * Processes responses, handles authentication errors with automatic token refresh,
+ * manages request queueing during refresh, and provides consistent error handling
+ *
+ * @param {Response} response - Fetch response object to process
+ * @param {string} originalUrl - Original request URL (for retry logic)
+ * @param {RequestInit} originalOptions - Original fetch options (for retry logic)
+ * @returns {Promise<Object>} Parsed JSON response data
+ * @throws {Error} Various errors including authentication, password change required, etc.
+ *
+ * @description
+ * Special status codes:
+ * - 401: Triggers automatic token refresh and request retry (unless already refreshing or on auth endpoints)
+ * - 428: Password change required - throws error with requiresPasswordChange flag
+ *
+ * Token refresh behavior:
+ * - Prevents multiple simultaneous refresh attempts
+ * - Queues requests during refresh (max 50 requests)
+ * - Retries original request after successful refresh
+ * - Includes 30-second timeout protection
+ *
+ * @example
+ * const response = await fetchWithHeaders('/users');
+ * const data = await handleResponse(response, '/users', {});
+ */
 export async function handleResponse(response, originalUrl, originalOptions) {
   if (!response.ok) {
-    let errorData;
-    try {
-      errorData = await response.json();
-    } catch {
-      throw new Error(response.statusText);
-    }
+    const errorData = await parseErrorResponse(response, response.statusText);
 
     // Handle 428 Precondition Required - Password change required
     if (response.status === 428 && errorData.requiresPasswordChange) {
@@ -79,9 +162,24 @@ export async function handleResponse(response, originalUrl, originalOptions) {
 
       if (hasRefreshToken) {
         // If already refreshing, queue this request
-        if (isRefreshing) {
+        if (tokenRefreshManager.isRefreshing) {
+          // Protect against request accumulation on slow networks
+          if (
+            tokenRefreshManager.refreshQueue.length >=
+            tokenRefreshManager.MAX_QUEUE_SIZE
+          ) {
+            logger.warn(
+              `Token refresh queue full (${tokenRefreshManager.refreshQueue.length} requests), rejecting new request`,
+            );
+            return Promise.reject(
+              new Error(
+                'Too many pending requests. Please wait and try again.',
+              ),
+            );
+          }
+
           return new Promise((resolve, reject) => {
-            refreshQueue.push({
+            tokenRefreshManager.refreshQueue.push({
               resolve: () => {
                 // Retry the original request after refresh
                 fetchWithHeaders(originalUrl, originalOptions)
@@ -97,39 +195,53 @@ export async function handleResponse(response, originalUrl, originalOptions) {
         }
 
         // Start the refresh process
-        isRefreshing = true;
+        tokenRefreshManager.isRefreshing = true;
 
         if (!window.authService) {
           throw new Error('Auth service not available');
         }
 
-        refreshPromise = window.authService
+        // Create timeout promise to prevent stuck refreshes
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => {
+            logger.error('Token refresh timeout after 30 seconds');
+            reject(new Error('Token refresh timeout'));
+          }, tokenRefreshManager.REFRESH_TIMEOUT);
+        });
+
+        // Race between actual refresh and timeout
+        const actualRefresh = window.authService
           .refreshToken()
           .then((result) => {
-            // Reset the refresh state on success
-            isRefreshing = false;
-            refreshPromise = null;
-
             // Handle rate limited responses (still successful)
             if (result && result.rateLimited) {
-              processQueue(null, true);
               return true;
             }
-
-            processQueue(null, true);
             return true;
+          });
+
+        tokenRefreshManager.refreshPromise = Promise.race([
+          actualRefresh,
+          timeoutPromise,
+        ])
+          .then((result) => {
+            // Reset the refresh state on success
+            tokenRefreshManager.isRefreshing = false;
+            tokenRefreshManager.refreshPromise = null;
+            tokenRefreshManager.processQueue(null, true);
+            return result;
           })
           .catch((error) => {
             // Reset the refresh state on failure
-            isRefreshing = false;
-            refreshPromise = null;
-            processQueue(error, false);
+            tokenRefreshManager.isRefreshing = false;
+            tokenRefreshManager.refreshPromise = null;
+            tokenRefreshManager.processQueue(error, false);
             throw error;
           });
 
         try {
           // Wait for the refresh to complete
-          await refreshPromise;
+          await tokenRefreshManager.refreshPromise;
 
           // Retry the original request with the new token
           const retryResponse = await fetchWithHeaders(
@@ -147,4 +259,46 @@ export async function handleResponse(response, originalUrl, originalOptions) {
     throw new Error(errorData.error || response.statusText);
   }
   return response.json();
+}
+
+/**
+ * Download a file from a blob response
+ * @param {string} fileName - Name for the downloaded file
+ * @param {Blob} blob - Blob data to download
+ * @param {string} extension - File extension (e.g., '.js', '.log')
+ */
+export function downloadBlob(fileName, blob, extension = '') {
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${fileName}${extension}`;
+  a.style.display = 'none';
+  a.rel = 'noopener noreferrer';
+
+  document.body.appendChild(a);
+  a.click();
+
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+}
+
+/**
+ * Service method wrapper with consistent error handling
+ * @param {Function} fn - Service function to wrap
+ * @param {string} operationName - Name of the operation for error messages
+ * @returns {Function} Wrapped function with error handling
+ */
+export function withErrorHandling(fn, operationName) {
+  return async function (...args) {
+    try {
+      return await fn.apply(this, args);
+    } catch (error) {
+      logger.error(`Failed to ${operationName}:`, error);
+      const wrappedError = new Error(
+        `Failed to ${operationName}: ${error.message}`,
+      );
+      wrappedError.cause = error; // Preserve original error and stack trace
+      throw wrappedError;
+    }
+  };
 }

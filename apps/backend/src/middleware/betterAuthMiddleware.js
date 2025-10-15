@@ -1,15 +1,24 @@
 import { auth } from '../lib/auth.js';
 import { fromNodeHeaders } from 'better-auth/node';
 import { executeQuery, executeQueryAll } from '../utils/authDatabase.js';
+import { createChildLogger } from '../utils/logging/logger.js';
+
+const moduleLogger = createChildLogger('auth-middleware');
 
 // Authentication middleware using Better Auth
 export const authMiddleware = async (req, res, next) => {
+  const logger = req.log?.child({ middleware: 'authMiddleware' }) || console;
+
   try {
     const session = await auth.api.getSession({
       headers: fromNodeHeaders(req.headers),
     });
 
     if (!session?.session || !session?.user) {
+      logger.warn(
+        { action: 'authenticate' },
+        'Authentication failed: no session or user',
+      );
       return res.status(401).json({ error: 'Unauthorized' });
     }
     // Attach user and session to request
@@ -18,27 +27,48 @@ export const authMiddleware = async (req, res, next) => {
     // eslint-disable-next-line require-atomic-updates
     req.session = session.session;
 
+    logger.info(
+      { action: 'authenticate', userId: session.user.id },
+      'User authenticated',
+    );
     next();
   } catch (error) {
-    console.error('Auth middleware error:', error);
+    logger.error(
+      { action: 'authenticate', err: error },
+      'Auth middleware error',
+    );
     return res.status(401).json({ error: 'Unauthorized' });
   }
 };
 
 // Admin role requirement middleware
 export const requireAdmin = async (req, res, next) => {
+  const logger = req.log?.child({ middleware: 'requireAdmin' }) || console;
+
   try {
     if (!req.user) {
+      logger.warn({ action: 'checkAdmin' }, 'Admin check failed: no user');
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
     if (req.user.role !== 'admin') {
+      logger.warn(
+        { action: 'checkAdmin', userId: req.user.id, role: req.user.role },
+        'Admin access denied: insufficient role',
+      );
       return res.status(403).json({ error: 'Admin access required' });
     }
 
+    logger.info(
+      { action: 'checkAdmin', userId: req.user.id },
+      'Admin access granted',
+    );
     next();
   } catch (error) {
-    console.error('Admin middleware error:', error);
+    logger.error(
+      { action: 'checkAdmin', err: error },
+      'Admin middleware error',
+    );
     return res.status(403).json({ error: 'Access denied' });
   }
 };
@@ -59,7 +89,7 @@ const globalRolePermissions = {
 };
 
 // Helper function to check if user has permission for a specific team
-function hasTeamPermission(userId, teamId, permission) {
+function hasTeamPermission(userId, teamId, permission, logger = moduleLogger) {
   try {
     const membership = executeQuery(
       'SELECT permissions FROM teamMember WHERE userId = ? AND teamId = ?',
@@ -73,13 +103,16 @@ function hasTeamPermission(userId, teamId, permission) {
     }
     return false;
   } catch (error) {
-    console.error('Error checking team permission:', error);
+    logger.error(
+      { action: 'hasTeamPermission', err: error, userId, teamId, permission },
+      'Error checking team permission',
+    );
     return false;
   }
 }
 
 // Helper function to check if user has permission in any team
-function hasAnyTeamPermission(userId, permission) {
+function hasAnyTeamPermission(userId, permission, logger = moduleLogger) {
   try {
     const memberships = executeQueryAll(
       'SELECT permissions FROM teamMember WHERE userId = ?',
@@ -97,13 +130,16 @@ function hasAnyTeamPermission(userId, permission) {
     }
     return false;
   } catch (error) {
-    console.error('Error checking any team permission:', error);
+    logger.error(
+      { action: 'hasAnyTeamPermission', err: error, userId, permission },
+      'Error checking any team permission',
+    );
     return false;
   }
 }
 
 // Helper function to get user's team IDs with specific permission
-export function getUserTeamIds(userId, permission) {
+export function getUserTeamIds(userId, permission, logger = moduleLogger) {
   try {
     const memberships = executeQueryAll(
       'SELECT teamId, permissions FROM teamMember WHERE userId = ?',
@@ -119,13 +155,20 @@ export function getUserTeamIds(userId, permission) {
       })
       .map((membership) => membership.teamId);
   } catch (error) {
-    console.error('Error getting user team IDs:', error);
+    logger.error(
+      { action: 'getUserTeamIds', err: error, userId, permission },
+      'Error getting user team IDs',
+    );
     return [];
   }
 }
 
 // Helper function to get all users who have access to a specific team with a given permission
-export function getUsersWithTeamAccess(teamId, permission) {
+export function getUsersWithTeamAccess(
+  teamId,
+  permission,
+  logger = moduleLogger,
+) {
   try {
     // Get all admin users (they have global access)
     const adminUsers = executeQueryAll(
@@ -160,13 +203,19 @@ export function getUsersWithTeamAccess(teamId, permission) {
 
     return Array.from(authorizedUsers);
   } catch (error) {
-    console.error('Error getting users with team access:', error);
+    logger.error(
+      { action: 'getUsersWithTeamAccess', err: error, teamId, permission },
+      'Error getting users with team access',
+    );
     return [];
   }
 }
 
 // Middleware to extract team information from analysis and add to request
 export const extractAnalysisTeam = async (req, _res, next) => {
+  const logger =
+    req.log?.child({ middleware: 'extractAnalysisTeam' }) || console;
+
   try {
     const fileName = req.params?.fileName;
 
@@ -183,16 +232,26 @@ export const extractAnalysisTeam = async (req, _res, next) => {
         if (analysis) {
           // eslint-disable-next-line require-atomic-updates
           req.analysisTeamId = analysis.teamId || 'uncategorized';
+          logger.info(
+            { action: 'extractTeam', fileName, teamId: req.analysisTeamId },
+            'Analysis team extracted',
+          );
         }
       } catch (error) {
-        console.warn('Error extracting analysis team:', error);
+        logger.warn(
+          { action: 'extractTeam', err: error, fileName },
+          'Error extracting analysis team',
+        );
         // Continue without team info - let permission middleware handle it
       }
     }
 
     next();
   } catch (error) {
-    console.error('Error in extractAnalysisTeam middleware:', error);
+    logger.error(
+      { action: 'extractTeam', err: error },
+      'Error in extractAnalysisTeam middleware',
+    );
     next(); // Continue without team info
   }
 };
@@ -200,8 +259,15 @@ export const extractAnalysisTeam = async (req, _res, next) => {
 // Middleware for team-specific permission checks
 export const requireTeamPermission = (permission) => {
   return async (req, res, next) => {
+    const logger =
+      req.log?.child({ middleware: 'requireTeamPermission' }) || console;
+
     try {
       if (!req.user) {
+        logger.warn(
+          { action: 'checkTeamPermission', permission },
+          'No user found',
+        );
         return res.status(401).json({ error: 'Unauthorized' });
       }
 
@@ -210,6 +276,15 @@ export const requireTeamPermission = (permission) => {
       const globalPermissions = globalRolePermissions[globalRole] || [];
 
       if (globalPermissions.includes(permission)) {
+        logger.info(
+          {
+            action: 'checkTeamPermission',
+            userId: req.user.id,
+            permission,
+            role: globalRole,
+          },
+          'Global permission granted',
+        );
         return next(); // Global permission granted
       }
 
@@ -218,21 +293,46 @@ export const requireTeamPermission = (permission) => {
         req.body?.teamId || req.query?.teamId || req.analysisTeamId;
 
       if (!teamId) {
+        logger.warn(
+          { action: 'checkTeamPermission', userId: req.user.id, permission },
+          'Team permission check failed: no teamId',
+        );
         return res.status(403).json({
           error: `Team-specific permission required. Permission: ${permission}`,
         });
       }
 
       // Check team-specific permission
-      if (hasTeamPermission(req.user.id, teamId, permission)) {
+      if (hasTeamPermission(req.user.id, teamId, permission, logger)) {
+        logger.info(
+          {
+            action: 'checkTeamPermission',
+            userId: req.user.id,
+            teamId,
+            permission,
+          },
+          'Team permission granted',
+        );
         return next();
       }
 
+      logger.warn(
+        {
+          action: 'checkTeamPermission',
+          userId: req.user.id,
+          teamId,
+          permission,
+        },
+        'Team permission denied',
+      );
       return res.status(403).json({
         error: `Insufficient permissions for team ${teamId}. Required: ${permission}`,
       });
     } catch (error) {
-      console.error('Team permission middleware error:', error);
+      logger.error(
+        { action: 'checkTeamPermission', err: error, permission },
+        'Team permission middleware error',
+      );
       return res.status(403).json({ error: 'Access denied' });
     }
   };
@@ -241,8 +341,15 @@ export const requireTeamPermission = (permission) => {
 // Middleware that allows if user has permission in ANY team (for general operations)
 export const requireAnyTeamPermission = (permission) => {
   return async (req, res, next) => {
+    const logger =
+      req.log?.child({ middleware: 'requireAnyTeamPermission' }) || console;
+
     try {
       if (!req.user) {
+        logger.warn(
+          { action: 'checkAnyTeamPermission', permission },
+          'No user found',
+        );
         return res.status(401).json({ error: 'Unauthorized' });
       }
 
@@ -251,19 +358,39 @@ export const requireAnyTeamPermission = (permission) => {
       const globalPermissions = globalRolePermissions[globalRole] || [];
 
       if (globalPermissions.includes(permission)) {
+        logger.info(
+          {
+            action: 'checkAnyTeamPermission',
+            userId: req.user.id,
+            permission,
+            role: globalRole,
+          },
+          'Global permission granted',
+        );
         return next(); // Global permission granted
       }
 
       // Check if user has the permission in ANY of their teams
-      if (hasAnyTeamPermission(req.user.id, permission)) {
+      if (hasAnyTeamPermission(req.user.id, permission, logger)) {
+        logger.info(
+          { action: 'checkAnyTeamPermission', userId: req.user.id, permission },
+          'Team permission granted',
+        );
         return next();
       }
 
+      logger.warn(
+        { action: 'checkAnyTeamPermission', userId: req.user.id, permission },
+        'Permission denied in all teams',
+      );
       return res.status(403).json({
         error: `Insufficient permissions. Required: ${permission} in at least one team`,
       });
     } catch (error) {
-      console.error('Any team permission middleware error:', error);
+      logger.error(
+        { action: 'checkAnyTeamPermission', err: error, permission },
+        'Any team permission middleware error',
+      );
       return res.status(403).json({ error: 'Access denied' });
     }
   };

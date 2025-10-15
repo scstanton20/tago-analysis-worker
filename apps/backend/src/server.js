@@ -234,9 +234,9 @@ async function startServer() {
     app.use(express.json());
     app.use(metricsMiddleware);
 
-    // Better Auth routes using toNodeHandler approach
+    // Better Auth routes with rate limiting using toNodeHandler approach
     app.all('/api/auth/*splat', toNodeHandler(auth));
-    serverLogger.info('✓ Better Auth routes mounted');
+    serverLogger.info('✓ Better Auth routes mounted with rate limiting');
 
     app.use(`${API_PREFIX}/status`, routes.statusRoutes);
     serverLogger.info('✓ Status routes mounted');

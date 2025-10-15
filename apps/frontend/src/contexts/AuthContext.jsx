@@ -1,10 +1,16 @@
-import { createContext, useState, useCallback, useMemo } from 'react';
+import {
+  createContext,
+  useState,
+  useCallback,
+  useMemo,
+  useEffect,
+} from 'react';
 import { useSession, signOut, authClient } from '../lib/auth.js';
 import { notifications } from '@mantine/notifications';
 import { useEventListener } from '../hooks/useEventListener';
-import { usePolling } from '../hooks/useInterval';
 import PasswordOnboarding from '../components/auth/passwordOnboarding.jsx';
 import { fetchWithHeaders, handleResponse } from '../utils/apiUtils.js';
+import logger from '../utils/logger.js';
 
 const AuthContext = createContext();
 
@@ -45,63 +51,50 @@ export const AuthProvider = ({ children }) => {
     authData.isAuthenticated && authData.user?.requiresPasswordChange;
 
   // Update password onboarding state when derived state changes
-  if (shouldShowPasswordOnboarding && !showPasswordOnboarding) {
-    console.log(
-      'AuthContext: User requires password change:',
-      authData.user?.email || authData.user?.username,
-    );
-    setShowPasswordOnboarding(true);
-    setPasswordOnboardingUser(
-      authData.user?.username || authData.user?.email || '',
-    );
-  } else if (!shouldShowPasswordOnboarding && showPasswordOnboarding) {
-    setShowPasswordOnboarding(false);
-    setPasswordOnboardingUser('');
-  }
+  // Moved to useEffect to prevent state updates during render phase
+  useEffect(() => {
+    if (shouldShowPasswordOnboarding && !showPasswordOnboarding) {
+      logger.log(
+        'AuthContext: User requires password change:',
+        authData.user?.email || authData.user?.username,
+      );
+      setShowPasswordOnboarding(true);
+      setPasswordOnboardingUser(
+        authData.user?.username || authData.user?.email || '',
+      );
+    } else if (!shouldShowPasswordOnboarding && showPasswordOnboarding) {
+      setShowPasswordOnboarding(false);
+      setPasswordOnboardingUser('');
+    }
+  }, [shouldShowPasswordOnboarding, showPasswordOnboarding, authData.user]);
 
   // Listen for auth changes and refetch session
   const handleAuthChange = useCallback(async () => {
-    console.log('Auth change event detected, refetching session');
+    logger.log('Auth change event detected, refetching session');
     try {
       refetchSession();
     } catch (error) {
-      console.error('Error refetching session:', error);
+      logger.error('Error refetching session:', error);
     }
   }, [refetchSession]);
 
   useEventListener('auth-change', handleAuthChange);
 
-  // Periodic session validation to detect revoked sessions
-  const validateSession = useCallback(async () => {
-    try {
-      const freshSession = await authClient.getSession();
-
-      // If we had a session but now we don't, it was revoked
-      if (session && !freshSession?.data?.session) {
-        notifications.show({
-          title: 'Session Expired',
-          message:
-            'Your session has been revoked by an administrator. Please log in again.',
-          color: 'orange',
-          autoClose: 5000,
-        });
-
-        // Force a page refresh to ensure clean state
-        setTimeout(() => {
-          window.location.reload();
-        }, 2000);
-      }
-    } catch (error) {
-      console.error('Session validation error:', error);
-    }
-  }, [session]);
-
-  // Use polling hook for session validation
-  usePolling(validateSession, 30000, authData.isAuthenticated);
-
   // Memoize auth functions to prevent recreating on every render
   const authFunctions = useMemo(
     () => ({
+      // Expose refetchSession for components that need to manually refresh session
+      // (e.g., after impersonation or other server-side session changes)
+      refetchSession: async () => {
+        try {
+          refetchSession();
+          logger.log('✓ Session manually refetched');
+        } catch (error) {
+          logger.error('Error manually refetching session:', error);
+          throw error;
+        }
+      },
+
       logout: async () => {
         await signOut();
       },
@@ -114,10 +107,11 @@ export const AuthProvider = ({ children }) => {
               result.error.message || 'Failed to exit impersonation',
             );
           }
-          // Refresh the page to update the auth context
-          window.location.reload();
+          // Refetch session to update the auth context
+          await refetchSession();
+          logger.log('✓ Session refreshed after exiting impersonation');
         } catch (error) {
-          console.error('Error exiting impersonation:', error);
+          logger.error('Error exiting impersonation:', error);
           throw error;
         }
       },
@@ -126,11 +120,11 @@ export const AuthProvider = ({ children }) => {
         try {
           // Update name first
           if (profileData.name) {
-            console.log('Updating name:', profileData.name);
+            logger.log('Updating name:', profileData.name);
             const nameResult = await authClient.updateUser({
               name: profileData.name,
             });
-            console.log('Name update result:', nameResult);
+            logger.log('Name update result:', nameResult);
             if (nameResult.error) {
               throw new Error(
                 nameResult.error.message || 'Failed to update name',
@@ -140,11 +134,11 @@ export const AuthProvider = ({ children }) => {
 
           // Handle email change separately using Better Auth's changeEmail method
           if (profileData.email && profileData.email !== authData.user?.email) {
-            console.log('Changing email to:', profileData.email);
+            logger.log('Changing email to:', profileData.email);
             const emailResult = await authClient.changeEmail({
               newEmail: profileData.email,
             });
-            console.log('Email change result:', emailResult);
+            logger.log('Email change result:', emailResult);
             if (emailResult.error) {
               throw new Error(
                 emailResult.error.message || 'Failed to change email',
@@ -156,11 +150,11 @@ export const AuthProvider = ({ children }) => {
             profileData.username &&
             profileData.username !== authData.user?.username
           ) {
-            console.log('Changing username to:', profileData.username);
+            logger.log('Changing username to:', profileData.username);
             const usernameResult = await authClient.updateUser({
               username: profileData.username,
             });
-            console.log('Username change result:', usernameResult);
+            logger.log('Username change result:', usernameResult);
             if (usernameResult.error) {
               throw new Error(
                 usernameResult.error.message || 'Failed to change username',
@@ -169,7 +163,7 @@ export const AuthProvider = ({ children }) => {
           }
           return { success: true };
         } catch (error) {
-          console.error('Profile update error:', error);
+          logger.error('Profile update error:', error);
           throw error;
         }
       },
@@ -205,7 +199,7 @@ export const AuthProvider = ({ children }) => {
 
       passwordOnboarding: async (newPassword) => {
         try {
-          console.log('🔐 Setting initial password via server-side API');
+          logger.log('🔐 Setting initial password via server-side API');
 
           // Use our server-side endpoint that handles both password setting and flag clearing
           const response = await fetchWithHeaders(
@@ -224,15 +218,15 @@ export const AuthProvider = ({ children }) => {
             { method: 'POST', body: JSON.stringify({ newPassword }) },
           );
 
-          console.log('🔐 Password onboarding completed successfully:', result);
+          logger.log('🔐 Password onboarding completed successfully:', result);
           return result;
         } catch (error) {
-          console.error('Password onboarding error:', error);
+          logger.error('Password onboarding error:', error);
           throw error;
         }
       },
     }),
-    [authData.user?.email],
+    [authData.user?.email, authData.user?.username, refetchSession],
   );
 
   // Memoize the complete context value
@@ -252,16 +246,16 @@ export const AuthProvider = ({ children }) => {
           username={passwordOnboardingUser}
           passwordOnboarding={contextValue.passwordOnboarding}
           onSuccess={async () => {
-            console.log('🚨 AuthContext: PasswordOnboarding completed');
+            logger.log('🚨 AuthContext: PasswordOnboarding completed');
             setShowPasswordOnboarding(false);
             setPasswordOnboardingUser('');
 
             // Refresh session to remove requiresPasswordChange flag
             try {
               refetchSession();
-              console.log('✓ Session refreshed after password change');
+              logger.log('✓ Session refreshed after password change');
             } catch (error) {
-              console.error(
+              logger.error(
                 'Error refreshing session after password change:',
                 error,
               );

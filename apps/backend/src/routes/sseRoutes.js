@@ -5,6 +5,8 @@ import {
   handleSSEConnection,
   sseManager,
 } from '../utils/sse.js';
+import { sseLogoutLimiter } from '../middleware/rateLimiter.js';
+import { createChildLogger } from '../utils/logging/logger.js';
 
 const router = Router();
 
@@ -117,23 +119,38 @@ router.get('/events', authenticateSSE, handleSSEConnection);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post('/logout-notification', authenticateSSE, (req, res) => {
-  try {
-    const userId = req.user.id;
+router.post(
+  '/logout-notification',
+  sseLogoutLimiter,
+  authenticateSSE,
+  (req, res) => {
+    const logger =
+      req.log?.child({ route: 'logout-notification' }) ||
+      createChildLogger('sse-logout');
 
-    // Send SSE logout notification to all user's other sessions
-    sseManager.sendToUser(userId, {
-      type: 'userLogout',
-      userId: userId,
-      timestamp: new Date().toISOString(),
-    });
+    try {
+      const userId = req.user.id;
 
-    console.log(`Sent logout notification to user ${userId}`);
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Logout notification error:', error);
-    res.status(500).json({ error: 'Failed to send logout notification' });
-  }
-});
+      // Send SSE logout notification to all user's other sessions
+      sseManager.sendToUser(userId, {
+        type: 'userLogout',
+        userId: userId,
+        timestamp: new Date().toISOString(),
+      });
+
+      logger.info(
+        { action: 'logoutNotification', userId },
+        'Sent logout notification',
+      );
+      res.json({ success: true });
+    } catch (error) {
+      logger.error(
+        { action: 'logoutNotification', err: error, userId: req.user?.id },
+        'Logout notification error',
+      );
+      res.status(500).json({ error: 'Failed to send logout notification' });
+    }
+  },
+);
 
 export default router;

@@ -1,30 +1,79 @@
 // backend/src/controllers/teamController.js
 import teamService from '../services/teamService.js';
 import { sseManager } from '../utils/sse.js';
+import {
+  handleError,
+  broadcastTeamStructureUpdate,
+} from '../utils/responseHelpers.js';
 
+/**
+ * Controller class for managing teams and team structure
+ * Handles HTTP requests for team CRUD operations, analysis-team assignments,
+ * folder management within teams, and hierarchical structure management.
+ *
+ * Teams integrate with Better Auth's organization plugin for user membership,
+ * while maintaining custom properties (color, order) and hierarchical folder structures.
+ *
+ * All methods are static and follow Express route handler pattern (req, res).
+ * Request-scoped logging is available via req.log.
+ */
 class TeamController {
-  // Custom team operations that handle Better Auth team table with custom properties
+  /**
+   * Retrieve all teams
+   * Returns complete team list with metadata
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Response:
+   * - JSON array of team objects with id, name, color, order, and metadata
+   */
+  static async getAllTeams(req, res) {
+    req.log.info({ action: 'getAllTeams' }, 'Retrieving all teams');
 
-  // Get all teams
-  static async getAllTeams(_req, res) {
     try {
-      const teams = await teamService.getAllTeams();
+      const teams = await teamService.getAllTeams(req.log);
+      req.log.info(
+        { action: 'getAllTeams', count: teams.length },
+        'Teams retrieved',
+      );
       res.json(teams);
     } catch (error) {
-      console.error('Error getting teams:', error);
-      res.status(500).json({ error: 'Failed to retrieve teams' });
+      handleError(res, error, 'retrieving teams', { logger: req.logger });
     }
   }
 
-  // Create new team
+  /**
+   * Create a new team
+   * Creates team in Better Auth and initializes team structure
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.body - Request body
+   * @param {string} req.body.name - Team name
+   * @param {string} [req.body.color] - Team color (hex format)
+   * @param {number} [req.body.order] - Display order
+   * @param {Object} req.headers - Request headers (for Better Auth)
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Creates team in Better Auth organization table
+   * - Initializes empty team structure in configuration
+   * - Broadcasts 'teamCreated' SSE event to admin users
+   *
+   * Response:
+   * - Status 201 with created team object
+   */
   static async createTeam(req, res) {
+    const { name, color, order } = req.body;
+
+    // Validation handled by middleware
+    req.log.info({ action: 'createTeam', teamName: name }, 'Creating team');
+
     try {
-      const { name, color, order } = req.body;
-
-      if (!name) {
-        return res.status(400).json({ error: 'Team name is required' });
-      }
-
       const team = await teamService.createTeam(
         {
           name,
@@ -32,6 +81,12 @@ class TeamController {
           order,
         },
         req.headers,
+        req.log,
+      );
+
+      req.log.info(
+        { action: 'createTeam', teamId: team.id, teamName: name },
+        'Team created',
       );
 
       // Broadcast to admin users only (they manage teams)
@@ -42,22 +97,41 @@ class TeamController {
 
       res.status(201).json(team);
     } catch (error) {
-      console.error('Error creating team:', error);
-      if (error.message.includes('already exists')) {
-        res.status(409).json({ error: error.message });
-      } else {
-        res.status(500).json({ error: 'Failed to create team' });
-      }
+      handleError(res, error, 'creating team', { logger: req.logger });
     }
   }
 
-  // Update team
+  /**
+   * Update team properties
+   * Modifies team metadata (name, color, order)
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.id - Team ID
+   * @param {Object} req.body - Request body with fields to update
+   * @param {string} [req.body.name] - New team name
+   * @param {string} [req.body.color] - New team color
+   * @param {number} [req.body.order] - New display order
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Updates team in Better Auth organization table
+   * - Broadcasts 'teamUpdated' SSE event to admin users
+   */
   static async updateTeam(req, res) {
-    try {
-      const { id } = req.params;
-      const updates = req.body;
+    const { id } = req.params;
+    const updates = req.body;
+    req.log.info(
+      { action: 'updateTeam', teamId: id, fields: Object.keys(updates) },
+      'Updating team',
+    );
 
-      const team = await teamService.updateTeam(id, updates);
+    try {
+      const team = await teamService.updateTeam(id, updates, req.log);
+
+      req.log.info({ action: 'updateTeam', teamId: id }, 'Team updated');
 
       // Broadcast update to admin users only
       sseManager.broadcastToAdminUsers({
@@ -67,22 +141,37 @@ class TeamController {
 
       res.json(team);
     } catch (error) {
-      console.error('Error updating team:', error);
-      if (error.message.includes('not found')) {
-        res.status(404).json({ error: error.message });
-      } else {
-        res.status(500).json({ error: 'Failed to update team' });
-      }
+      handleError(res, error, 'updating team', { logger: req.logger });
     }
   }
 
-  // Delete team (analysis migration handled by hooks)
+  /**
+   * Delete a team
+   * Removes team and automatically migrates analyses to "No Team" via hooks
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.id - Team ID to delete
+   * @param {Object} req.headers - Request headers (for Better Auth)
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Deletes team from Better Auth organization table
+   * - Migrates team's analyses to "No Team" (handled by service hooks)
+   * - Removes team structure from configuration
+   * - Broadcasts 'teamDeleted' SSE event to admin users
+   */
   static async deleteTeam(req, res) {
-    try {
-      const { id } = req.params;
+    const { id } = req.params;
+    req.log.info({ action: 'deleteTeam', teamId: id }, 'Deleting team');
 
+    try {
       // Delete team (hooks handle analysis migration automatically)
-      const result = await teamService.deleteTeam(id, req.headers);
+      const result = await teamService.deleteTeam(id, req.headers, req.log);
+
+      req.log.info({ action: 'deleteTeam', teamId: id }, 'Team deleted');
 
       // Broadcast deletion to admin users only
       sseManager.broadcastToAdminUsers({
@@ -92,25 +181,41 @@ class TeamController {
 
       res.json(result);
     } catch (error) {
-      console.error('Error deleting team:', error);
-      if (error.message.includes('not found')) {
-        res.status(404).json({ error: error.message });
-      } else {
-        res.status(500).json({ error: 'Failed to delete team' });
-      }
+      handleError(res, error, 'deleting team', { logger: req.logger });
     }
   }
 
-  // Reorder teams
+  /**
+   * Reorder teams
+   * Updates display order for multiple teams based on ordered IDs array
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.body - Request body
+   * @param {string[]} req.body.orderedIds - Array of team IDs in desired order
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Updates 'order' property for all teams
+   * - Broadcasts 'teamsReordered' SSE event to admin users
+   *
+   * Security:
+   * - Validation handled by middleware
+   */
   static async reorderTeams(req, res) {
+    const { orderedIds } = req.body;
+
+    // Validation handled by middleware
+    req.log.info(
+      { action: 'reorderTeams', count: orderedIds.length },
+      'Reordering teams',
+    );
+
     try {
-      const { orderedIds } = req.body;
+      const teams = await teamService.reorderTeams(orderedIds, req.log);
 
-      if (!Array.isArray(orderedIds)) {
-        return res.status(400).json({ error: 'orderedIds must be an array' });
-      }
-
-      const teams = await teamService.reorderTeams(orderedIds);
+      req.log.info({ action: 'reorderTeams' }, 'Teams reordered');
 
       // Broadcast reorder to admin users only
       sseManager.broadcastToAdminUsers({
@@ -120,66 +225,165 @@ class TeamController {
 
       res.json(teams);
     } catch (error) {
-      console.error('Error reordering teams:', error);
-      res.status(500).json({ error: 'Failed to reorder teams' });
+      handleError(res, error, 'reordering teams', { logger: req.logger });
     }
   }
 
-  // Move analysis to team
+  /**
+   * Move an analysis to a different team
+   * Updates analysis team assignment and broadcasts structure changes
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.name - Analysis name to move
+   * @param {Object} req.body - Request body
+   * @param {string} req.body.teamId - Target team ID (or null for "No Team")
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Updates analysis teamId in configuration
+   * - Removes analysis from source team structure
+   * - Adds analysis to target team structure
+   * - Broadcasts 'analysisMove' SSE event
+   * - Broadcasts 'teamStructureUpdated' SSE events for both teams
+   *
+   * Security:
+   * - Validation handled by middleware
+   */
   static async moveAnalysisToTeam(req, res) {
+    const { name } = req.params;
+    const { teamId } = req.body;
+
+    // Validation handled by middleware
+    req.log.info(
+      {
+        action: 'moveAnalysisToTeam',
+        analysisName: name,
+        targetTeamId: teamId,
+      },
+      'Moving analysis to team',
+    );
+
     try {
-      const { name } = req.params;
-      const { teamId } = req.body;
+      const result = await teamService.moveAnalysisToTeam(
+        name,
+        teamId,
+        req.log,
+      );
 
-      // Use teamId from request body
-      const targetTeamId = teamId;
+      req.log.info(
+        {
+          action: 'moveAnalysisToTeam',
+          analysisName: name,
+          fromTeam: result.from,
+          toTeam: result.to,
+        },
+        'Analysis moved',
+      );
 
-      if (!targetTeamId) {
-        return res.status(400).json({ error: 'teamId is required' });
-      }
-
-      const result = await teamService.moveAnalysisToTeam(name, targetTeamId);
-
-      // Broadcast move to users with access to involved teams
+      // Broadcast move notification to users with access to involved teams
       sseManager.broadcastAnalysisMove(result.analysis, result.from, result.to);
+
+      // Broadcast structure updates for both teams so tree updates in real-time
+      if (result.from) {
+        await broadcastTeamStructureUpdate(sseManager, result.from);
+      }
+      if (result.to) {
+        await broadcastTeamStructureUpdate(sseManager, result.to);
+      }
 
       res.json(result);
     } catch (error) {
-      console.error('Error moving analysis:', error);
-      if (error.message.includes('not found')) {
-        res.status(404).json({ error: error.message });
-      } else {
-        res.status(500).json({ error: 'Failed to move analysis' });
-      }
+      handleError(res, error, 'moving analysis', { logger: req.logger });
     }
   }
 
-  // Get analysis count for a specific team/team
+  /**
+   * Get analysis count for a team
+   * Returns the number of analyses assigned to the specified team
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.id - Team ID
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Response:
+   * - JSON object with count property
+   */
   static async getTeamAnalysisCount(req, res) {
+    const { id } = req.params;
+    req.log.info(
+      { action: 'getTeamAnalysisCount', teamId: id },
+      'Getting team analysis count',
+    );
+
     try {
-      const { id } = req.params;
-      const count = await teamService.getAnalysisCountByTeamId(id);
+      const count = await teamService.getAnalysisCountByTeamId(id, req.log);
+      req.log.info(
+        { action: 'getTeamAnalysisCount', teamId: id, count },
+        'Analysis count retrieved',
+      );
       res.json({ count });
     } catch (error) {
-      console.error('Error getting analysis count:', error);
-      res.status(500).json({ error: 'Failed to get analysis count' });
+      handleError(res, error, 'getting analysis count', { logger: req.logger });
     }
   }
 
-  // Create folder in team
+  /**
+   * Create a folder within a team structure
+   * Adds a new folder node to the team's hierarchical structure
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.teamId - Team ID where folder will be created
+   * @param {Object} req.body - Request body
+   * @param {string} [req.body.parentFolderId] - Parent folder ID (null for root level)
+   * @param {string} req.body.name - Folder name
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Creates folder node in team structure configuration
+   * - Broadcasts 'folderCreated' SSE event to team users
+   * - Broadcasts 'teamStructureUpdated' SSE event to team users
+   *
+   * Response:
+   * - Status 201 with created folder object
+   *
+   * Security:
+   * - Validation handled by middleware
+   */
   static async createFolder(req, res) {
+    const { teamId } = req.params;
+    const { parentFolderId, name } = req.body;
+
+    // Validation handled by middleware
+    req.log.info(
+      { action: 'createFolder', teamId, folderName: name, parentFolderId },
+      'Creating folder',
+    );
+
     try {
-      const { teamId } = req.params;
-      const { parentFolderId, name } = req.body;
-
-      if (!name) {
-        return res.status(400).json({ error: 'Folder name is required' });
-      }
-
       const folder = await teamService.createFolder(
         teamId,
         parentFolderId,
         name,
+        req.log,
+      );
+
+      req.log.info(
+        {
+          action: 'createFolder',
+          teamId,
+          folderId: folder.id,
+          folderName: name,
+        },
+        'Folder created',
       );
 
       // Broadcast to team members
@@ -190,34 +394,59 @@ class TeamController {
       });
 
       // Broadcast structure update
-      const { analysisService } = await import(
-        '../services/analysisService.js'
-      );
-      const config = await analysisService.getConfig();
-      sseManager.broadcastToTeamUsers(teamId, {
-        type: 'teamStructureUpdated',
-        teamId,
-        items: config.teamStructure[teamId]?.items || [],
-      });
+      await broadcastTeamStructureUpdate(sseManager, teamId);
 
       res.status(201).json(folder);
     } catch (error) {
-      console.error('Error creating folder:', error);
-      if (error.message.includes('not found')) {
-        res.status(404).json({ error: error.message });
-      } else {
-        res.status(500).json({ error: 'Failed to create folder' });
-      }
+      handleError(res, error, 'creating folder', { logger: req.logger });
     }
   }
 
-  // Update folder
+  /**
+   * Update folder properties
+   * Modifies folder metadata (name, collapsed state, etc.)
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.teamId - Team ID containing the folder
+   * @param {string} req.params.folderId - Folder ID to update
+   * @param {Object} req.body - Request body with fields to update
+   * @param {string} [req.body.name] - New folder name
+   * @param {boolean} [req.body.collapsed] - Folder collapsed state
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Updates folder node in team structure configuration
+   * - Broadcasts 'folderUpdated' SSE event to team users
+   * - Broadcasts 'teamStructureUpdated' SSE event to team users
+   */
   static async updateFolder(req, res) {
-    try {
-      const { teamId, folderId } = req.params;
-      const updates = req.body;
+    const { teamId, folderId } = req.params;
+    const updates = req.body;
+    req.log.info(
+      {
+        action: 'updateFolder',
+        teamId,
+        folderId,
+        fields: Object.keys(updates),
+      },
+      'Updating folder',
+    );
 
-      const folder = await teamService.updateFolder(teamId, folderId, updates);
+    try {
+      const folder = await teamService.updateFolder(
+        teamId,
+        folderId,
+        updates,
+        req.log,
+      );
+
+      req.log.info(
+        { action: 'updateFolder', teamId, folderId },
+        'Folder updated',
+      );
 
       // Broadcast to team members
       sseManager.broadcastToTeamUsers(teamId, {
@@ -227,33 +456,46 @@ class TeamController {
       });
 
       // Broadcast structure update
-      const { analysisService } = await import(
-        '../services/analysisService.js'
-      );
-      const config = await analysisService.getConfig();
-      sseManager.broadcastToTeamUsers(teamId, {
-        type: 'teamStructureUpdated',
-        teamId,
-        items: config.teamStructure[teamId]?.items || [],
-      });
+      await broadcastTeamStructureUpdate(sseManager, teamId);
 
       res.json(folder);
     } catch (error) {
-      console.error('Error updating folder:', error);
-      if (error.message.includes('not found')) {
-        res.status(404).json({ error: error.message });
-      } else {
-        res.status(500).json({ error: 'Failed to update folder' });
-      }
+      handleError(res, error, 'updating folder', { logger: req.logger });
     }
   }
 
-  // Delete folder
+  /**
+   * Delete a folder from team structure
+   * Removes folder node and handles nested contents
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.teamId - Team ID containing the folder
+   * @param {string} req.params.folderId - Folder ID to delete
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Removes folder node from team structure configuration
+   * - Moves nested items to parent folder or root level
+   * - Broadcasts 'folderDeleted' SSE event to team users
+   * - Broadcasts 'teamStructureUpdated' SSE event to team users
+   */
   static async deleteFolder(req, res) {
-    try {
-      const { teamId, folderId } = req.params;
+    const { teamId, folderId } = req.params;
+    req.log.info(
+      { action: 'deleteFolder', teamId, folderId },
+      'Deleting folder',
+    );
 
-      const result = await teamService.deleteFolder(teamId, folderId);
+    try {
+      const result = await teamService.deleteFolder(teamId, folderId, req.log);
+
+      req.log.info(
+        { action: 'deleteFolder', teamId, folderId },
+        'Folder deleted',
+      );
 
       // Broadcast to team members
       sseManager.broadcastToTeamUsers(teamId, {
@@ -263,69 +505,63 @@ class TeamController {
       });
 
       // Broadcast structure update
-      const { analysisService } = await import(
-        '../services/analysisService.js'
-      );
-      const config = await analysisService.getConfig();
-      sseManager.broadcastToTeamUsers(teamId, {
-        type: 'teamStructureUpdated',
-        teamId,
-        items: config.teamStructure[teamId]?.items || [],
-      });
+      await broadcastTeamStructureUpdate(sseManager, teamId);
 
       res.json(result);
     } catch (error) {
-      console.error('Error deleting folder:', error);
-      if (error.message.includes('not found')) {
-        res.status(404).json({ error: error.message });
-      } else {
-        res.status(500).json({ error: 'Failed to delete folder' });
-      }
+      handleError(res, error, 'deleting folder', { logger: req.logger });
     }
   }
 
-  // Move item within team structure
+  /**
+   * Move an item within team structure
+   * Repositions folders or analyses within the hierarchical tree structure
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.teamId - Team ID containing the item
+   * @param {Object} req.body - Request body
+   * @param {string} req.body.itemId - ID of item to move (folder ID or analysis name)
+   * @param {string} req.body.newParentId - New parent folder ID (null for root level)
+   * @param {number} req.body.newIndex - New position index within parent
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Side effects:
+   * - Updates item position in team structure configuration
+   * - Broadcasts 'teamStructureUpdated' SSE event to team users
+   *
+   * Security:
+   * - Validation handled by middleware
+   */
   static async moveItem(req, res) {
+    const { teamId } = req.params;
+    const { itemId, newParentId, newIndex } = req.body;
+
+    // Validation handled by middleware
+    req.log.info(
+      { action: 'moveItem', teamId, itemId, newParentId, newIndex },
+      'Moving item',
+    );
+
     try {
-      const { teamId } = req.params;
-      const { itemId, targetParentId, targetIndex } = req.body;
-
-      if (!itemId || targetIndex === undefined) {
-        return res
-          .status(400)
-          .json({ error: 'itemId and targetIndex are required' });
-      }
-
       const result = await teamService.moveItem(
         teamId,
         itemId,
-        targetParentId,
-        targetIndex,
+        newParentId,
+        newIndex,
+        req.log,
       );
+
+      req.log.info({ action: 'moveItem', teamId, itemId }, 'Item moved');
 
       // Broadcast full structure update to team members
-      const { analysisService } = await import(
-        '../services/analysisService.js'
-      );
-      const config = await analysisService.getConfig();
-
-      sseManager.broadcastToTeamUsers(teamId, {
-        type: 'teamStructureUpdated',
-        teamId,
-        items: config.teamStructure[teamId]?.items || [],
-      });
+      await broadcastTeamStructureUpdate(sseManager, teamId);
 
       res.json(result);
     } catch (error) {
-      console.error('Error moving item:', error);
-      if (
-        error.message.includes('not found') ||
-        error.message.includes('Cannot move')
-      ) {
-        res.status(400).json({ error: error.message });
-      } else {
-        res.status(500).json({ error: 'Failed to move item' });
-      }
+      handleError(res, error, 'moving item', { logger: req.logger });
     }
   }
 }

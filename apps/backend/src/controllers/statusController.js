@@ -1,11 +1,45 @@
 // controllers/statusController.js
 import { createRequire } from 'module';
 import ms from 'ms';
+import { handleError } from '../utils/responseHelpers.js';
 
 const require = createRequire(import.meta.url);
 
+/**
+ * Controller class for system status monitoring
+ * Provides health check endpoints with container status, service information, and uptime metrics.
+ *
+ * All methods are static and follow Express route handler pattern (req, res).
+ * Request-scoped logging is available via req.log.
+ */
 class StatusController {
-  static async getSystemStatus(_req, res) {
+  /**
+   * Get comprehensive system status
+   * Returns container health, running analyses count, Tago SDK version, and uptime
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Response:
+   * - container_health: Status ('healthy'/'initializing'), message, and uptime
+   * - tagoConnection: SDK version and running analyses count
+   * - serverTime: Current server timestamp
+   *
+   * HTTP Status Codes:
+   * - 200: Container is ready and healthy
+   * - 203: Container is initializing (Non-Authoritative Information)
+   * - 500: Container has an error
+   *
+   * Use Case:
+   * - Health check endpoint for monitoring systems
+   * - Container readiness checks
+   * - System diagnostics
+   */
+  static async getSystemStatus(req, res) {
+    req.log.info({ action: 'getSystemStatus' }, 'Getting system status');
+
     try {
       // Import analysisService directly instead of dependency injection
       const { analysisService } = await import(
@@ -49,7 +83,10 @@ class StatusController {
           tagoVersion = 'unknown';
         }
       } catch (error) {
-        console.error('Error reading tago SDK version:', error);
+        req.log.warn(
+          { action: 'getSystemStatus', err: error },
+          'Failed to read Tago SDK version',
+        );
         tagoVersion = 'unknown';
       }
 
@@ -71,7 +108,10 @@ class StatusController {
           formattedUptime = '0 seconds';
         }
       } catch (msError) {
-        console.error('Error formatting uptime:', msError);
+        req.log.warn(
+          { action: 'getSystemStatus', err: msError },
+          'Failed to format uptime',
+        );
         formattedUptime = `${uptimeSeconds} seconds`;
       }
 
@@ -94,6 +134,15 @@ class StatusController {
         serverTime: new Date().toString(),
       };
 
+      req.log.info(
+        {
+          action: 'getSystemStatus',
+          containerStatus: currentContainerState.status,
+          runningAnalyses: runningAnalyses.length,
+        },
+        'System status retrieved',
+      );
+
       // Return appropriate HTTP status code based on container state
       const httpStatus =
         currentContainerState.status === 'ready'
@@ -104,11 +153,7 @@ class StatusController {
 
       res.status(httpStatus).json(status);
     } catch (error) {
-      console.error('Error in getSystemStatus:', error);
-      res.status(500).json({
-        error: 'Internal server error',
-        message: error.message,
-      });
+      handleError(res, error, 'getting system status', { logger: req.logger });
     }
   }
 }

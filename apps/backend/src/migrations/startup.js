@@ -162,7 +162,7 @@ export async function createAdminUserIfNeeded() {
       body: {
         name: 'Administrator',
         email: 'admin@example.com',
-        password: 'admin123',
+        password: 'Admin123',
         username: 'admin',
       },
       headers: {},
@@ -313,7 +313,7 @@ export async function createAdminUserIfNeeded() {
           {
             email: 'admin@example.com',
             username: 'admin',
-            password: 'admin123',
+            password: 'Admin123',
           },
           'Admin user credentials created',
         );

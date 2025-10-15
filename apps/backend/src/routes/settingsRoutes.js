@@ -1,14 +1,11 @@
 // routes/settingsRoutes.js
 import { Router } from 'express';
-import {
-  getDNSConfig,
-  updateDNSConfig,
-  getDNSCacheEntries,
-  clearDNSCache,
-  deleteDNSCacheEntry,
-  resetDNSStats,
-} from '../controllers/settingsController.js';
+import SettingsController from '../controllers/settingsController.js';
 import { authMiddleware } from '../middleware/betterAuthMiddleware.js';
+import { validateRequest } from '../middleware/validateRequest.js';
+import { settingsValidationSchemas } from '../validation/settingsSchemas.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
+import { settingsOperationLimiter } from '../middleware/rateLimiter.js';
 
 const router = Router();
 
@@ -37,7 +34,7 @@ router.use(authMiddleware);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/dns/config', getDNSConfig);
+router.get('/dns/config', asyncHandler(SettingsController.getDNSConfig));
 
 /**
  * @swagger
@@ -80,7 +77,12 @@ router.get('/dns/config', getDNSConfig);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.put('/dns/config', updateDNSConfig);
+router.put(
+  '/dns/config',
+  settingsOperationLimiter,
+  validateRequest(settingsValidationSchemas.updateDNSConfig),
+  asyncHandler(SettingsController.updateDNSConfig),
+);
 
 /**
  * @swagger
@@ -103,7 +105,7 @@ router.put('/dns/config', updateDNSConfig);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/dns/entries', getDNSCacheEntries);
+router.get('/dns/entries', asyncHandler(SettingsController.getDNSCacheEntries));
 
 /**
  * @swagger
@@ -136,7 +138,11 @@ router.get('/dns/entries', getDNSCacheEntries);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.delete('/dns/cache', clearDNSCache);
+router.delete(
+  '/dns/cache',
+  settingsOperationLimiter,
+  asyncHandler(SettingsController.clearDNSCache),
+);
 
 /**
  * @swagger
@@ -187,7 +193,12 @@ router.delete('/dns/cache', clearDNSCache);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.delete('/dns/cache/:key', deleteDNSCacheEntry);
+router.delete(
+  '/dns/cache/:key',
+  settingsOperationLimiter,
+  validateRequest(settingsValidationSchemas.deleteDNSCacheEntry),
+  asyncHandler(SettingsController.deleteDNSCacheEntry),
+);
 
 /**
  * @swagger
@@ -216,6 +227,10 @@ router.delete('/dns/cache/:key', deleteDNSCacheEntry);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post('/dns/stats/reset', resetDNSStats);
+router.post(
+  '/dns/stats/reset',
+  settingsOperationLimiter,
+  asyncHandler(SettingsController.resetDNSStats),
+);
 
 export default router;

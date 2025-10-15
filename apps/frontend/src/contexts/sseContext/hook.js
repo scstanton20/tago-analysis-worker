@@ -1,71 +1,64 @@
 // frontend/src/contexts/sseContext/hook.js
-import { useContext } from 'react';
-import { SSEContext } from './context';
+import { useMemo } from 'react';
+import { useConnection } from './connection/index.js';
+import { useAnalyses } from './analyses/index.js';
+import { useTeams } from './teams/index.js';
+import { useBackend } from './backend/index.js';
 
+/**
+ * Backward-compatible hook that combines all SSE contexts
+ * @deprecated Use specific hooks (useConnection, useAnalyses, useTeams, useBackend) instead
+ */
 export function useSSE() {
-  const context = useContext(SSEContext);
+  const connection = useConnection();
+  const analysesCtx = useAnalyses();
+  const teamsCtx = useTeams();
+  const backend = useBackend();
 
-  if (!context) {
-    throw new Error('useSSE must be used within an SSEProvider');
-  }
+  return useMemo(
+    () => ({
+      // Core state from analyses context
+      analyses: analysesCtx.analyses,
+      loadingAnalyses: analysesCtx.loadingAnalyses,
+      addLoadingAnalysis: analysesCtx.addLoadingAnalysis,
+      removeLoadingAnalysis: analysesCtx.removeLoadingAnalysis,
+      getAnalysis: analysesCtx.getAnalysis,
+      getAnalysisNames: analysesCtx.getAnalysisNames,
+      filterAnalyses: analysesCtx.filterAnalyses,
 
-  return {
-    // Core state
-    analyses: context.analyses || {},
-    teams: context.teams || {},
-    teamStructure: context.teamStructure || {},
+      // Derived analysis helpers
+      getAnalysisCount: () => Object.keys(analysesCtx.analyses).length,
+      getAnalysesByTeam: (teamId) => {
+        return Object.values(analysesCtx.analyses).filter(
+          (analysis) => analysis.teamId === teamId,
+        );
+      },
 
-    // DNS cache state
-    dnsCache: context.dnsCache,
+      // Teams state
+      teams: teamsCtx.teams,
+      teamStructure: teamsCtx.teamStructure,
+      teamStructureVersion: teamsCtx.teamStructureVersion,
+      getTeam: teamsCtx.getTeam,
+      getTeamNames: teamsCtx.getTeamNames,
 
-    // Metrics data
-    metricsData: context.metricsData,
+      // Derived team helpers
+      getTeamAnalysisCount: (teamId) => {
+        return Object.values(analysesCtx.analyses).filter(
+          (analysis) => analysis.teamId === teamId,
+        ).length;
+      },
 
-    // Connection state
-    connectionStatus: context.connectionStatus || 'connecting',
-    backendStatus: context.backendStatus,
-    hasInitialData: context.hasInitialData || false,
+      // Connection state
+      connectionStatus: connection.connectionStatus,
+      hasInitialData: connection.hasInitialData,
+      serverShutdown: connection.serverShutdown,
+      requestStatusUpdate: connection.requestStatusUpdate,
 
-    // Loading state
-    loadingAnalyses: context.loadingAnalyses || new Set(),
-
-    // Functions
-    addLoadingAnalysis: context.addLoadingAnalysis,
-    removeLoadingAnalysis: context.removeLoadingAnalysis,
-    requestStatusUpdate: context.requestStatusUpdate,
-
-    // Utility functions for object-based operations
-    getAnalysis: (name) => context.analyses?.[name] || null,
-    getTeam: (id) => context.teams?.[id] || null,
-
-    getAnalysesByTeam: (teamId) => {
-      if (!context.analyses) return [];
-      return Object.values(context.analyses).filter(
-        (analysis) => analysis.teamId === teamId,
-      );
-    },
-
-    getAnalysisCount: () =>
-      context.analyses ? Object.keys(context.analyses).length : 0,
-
-    getTeamAnalysisCount: (teamId) => {
-      if (!context.analyses) return 0;
-      return Object.values(context.analyses).filter(
-        (analysis) => analysis.teamId === teamId,
-      ).length;
-    },
-
-    // Helper for filtering analyses
-    filterAnalyses: (predicate) => {
-      if (!context.analyses) return [];
-      return Object.values(context.analyses).filter(predicate);
-    },
-
-    // Helper for getting analysis names
-    getAnalysisNames: () =>
-      context.analyses ? Object.keys(context.analyses) : [],
-
-    // Helper for getting team names
-    getTeamNames: () => (context.teams ? Object.keys(context.teams) : []),
-  };
+      // Backend state
+      backendStatus: backend.backendStatus,
+      dnsCache: backend.dnsCache,
+      metricsData: backend.metricsData,
+    }),
+    [connection, analysesCtx, teamsCtx, backend],
+  );
 }

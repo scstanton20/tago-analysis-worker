@@ -21,6 +21,7 @@ import {
 } from '@tabler/icons-react';
 import { signIn, signInPasskey } from '../../lib/auth.js';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
+import logger from '../../utils/logger';
 import Logo from '../logo';
 import PasswordOnboarding from './passwordOnboarding';
 
@@ -167,7 +168,7 @@ export default function LoginPage() {
       // Force refresh session to update UI
       window.dispatchEvent(new Event('auth-change'));
     } catch (err) {
-      console.error('Passkey login error:', err);
+      logger.error('Passkey login error:', err);
       setError(err.message || 'Passkey authentication failed');
     } finally {
       setPasskeyLoading(false);

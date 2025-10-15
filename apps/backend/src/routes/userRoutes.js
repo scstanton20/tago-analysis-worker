@@ -4,6 +4,10 @@ import {
   requireAdmin,
 } from '../middleware/betterAuthMiddleware.js';
 import UserController from '../controllers/userController.js';
+import { validateRequest } from '../middleware/validateRequest.js';
+import { userValidationSchemas } from '../validation/userSchemas.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
+import { userOperationLimiter } from '../middleware/rateLimiter.js';
 
 const router = Router();
 
@@ -61,7 +65,11 @@ router.use(authMiddleware);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/:userId/team-memberships', UserController.getUserTeamMemberships);
+router.get(
+  '/:userId/team-memberships',
+  validateRequest(userValidationSchemas.getUserTeamMemberships),
+  asyncHandler(UserController.getUserTeamMemberships),
+);
 
 /**
  * @swagger
@@ -110,7 +118,12 @@ router.get('/:userId/team-memberships', UserController.getUserTeamMemberships);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post('/set-initial-password', UserController.setInitialPassword);
+router.post(
+  '/set-initial-password',
+  userOperationLimiter,
+  validateRequest(userValidationSchemas.setInitialPassword),
+  asyncHandler(UserController.setInitialPassword),
+);
 
 // Admin-only routes
 router.use(requireAdmin);
@@ -176,7 +189,12 @@ router.use(requireAdmin);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post('/add-to-organization', UserController.addToOrganization);
+router.post(
+  '/add-to-organization',
+  userOperationLimiter,
+  validateRequest(userValidationSchemas.addToOrganization),
+  asyncHandler(UserController.addToOrganization),
+);
 
 /**
  * @swagger
@@ -255,7 +273,12 @@ router.post('/add-to-organization', UserController.addToOrganization);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post('/assign-teams', UserController.assignUserToTeams);
+router.post(
+  '/assign-teams',
+  userOperationLimiter,
+  validateRequest(userValidationSchemas.assignUserToTeams),
+  asyncHandler(UserController.assignUserToTeams),
+);
 
 /**
  * @swagger
@@ -339,7 +362,9 @@ router.post('/assign-teams', UserController.assignUserToTeams);
  */
 router.put(
   '/:userId/team-assignments',
-  UserController.updateUserTeamAssignments,
+  userOperationLimiter,
+  validateRequest(userValidationSchemas.updateUserTeamAssignments),
+  asyncHandler(UserController.updateUserTeamAssignments),
 );
 
 /**
@@ -408,7 +433,9 @@ router.put(
  */
 router.put(
   '/:userId/organization-role',
-  UserController.updateUserOrganizationRole,
+  userOperationLimiter,
+  validateRequest(userValidationSchemas.updateUserOrganizationRole),
+  asyncHandler(UserController.updateUserOrganizationRole),
 );
 
 /**
@@ -416,7 +443,7 @@ router.put(
  * /users/{userId}/organization:
  *   delete:
  *     summary: Remove user from organization and delete user
- *     description: Remove a user from the organization (admin only). Due to single-organization architecture, this automatically deletes the user entirely via the afterRemoveMember hook, including cleanup of all user data (sessions, team memberships, etc.)
+ *     description: Remove a user from the organization (admin only). Due to single-organization architecture, this automatically deletes the user entirely via the afterRemoveMember hook, including cleanup of all user data (sessions, team memberships, etc.). The backend always uses the main organization.
  *     tags: [User Management - Admin]
  *     parameters:
  *       - in: path
@@ -425,22 +452,6 @@ router.put(
  *         schema:
  *           type: string
  *         description: ID of the user to remove from organization and delete
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               organizationId:
- *                 type: string
- *                 description: ID of the organization to remove user from
- *               userId:
- *                 type: string
- *                 description: ID of the user (must match path parameter)
- *             required:
- *               - organizationId
- *               - userId
  *     responses:
  *       200:
  *         description: User removed from organization and deleted successfully
@@ -477,7 +488,9 @@ router.put(
  */
 router.delete(
   '/:userId/organization',
-  UserController.removeUserFromOrganization,
+  userOperationLimiter,
+  validateRequest(userValidationSchemas.removeUserFromOrganization),
+  asyncHandler(UserController.removeUserFromOrganization),
 );
 
 export default router;

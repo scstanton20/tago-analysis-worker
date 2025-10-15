@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import PropTypes from 'prop-types';
 import { useModalDataLoader } from '../../hooks/useModalDataLoader';
 import {
   Modal,
@@ -24,6 +25,7 @@ import {
 import { admin } from '../../lib/auth';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import { userService } from '../../services/userService';
+import logger from '../../utils/logger';
 
 export default function UserSessionsModal({ opened, onClose, user }) {
   const [sessions, setSessions] = useState([]);
@@ -42,7 +44,7 @@ export default function UserSessionsModal({ opened, onClose, user }) {
         userId: user.id,
       });
 
-      console.log('List sessions result:', result);
+      logger.log('List sessions result:', result);
 
       if (result.error) {
         throw new Error(result.error.message);
@@ -61,13 +63,13 @@ export default function UserSessionsModal({ opened, onClose, user }) {
       } else if (Array.isArray(result)) {
         sessionsData = result;
       } else {
-        console.warn('Unexpected sessions response structure:', result);
+        logger.warn('Unexpected sessions response structure:', result);
         sessionsData = [];
       }
 
       setSessions(sessionsData);
     } catch (err) {
-      console.error('Error loading sessions:', err);
+      logger.error('Error loading sessions:', err);
       setError(err.message || 'Failed to load sessions');
     } finally {
       setLoading(false);
@@ -86,16 +88,16 @@ export default function UserSessionsModal({ opened, onClose, user }) {
       setLoading(true);
       setError('');
 
-      console.log('Attempting to revoke session token:', sessionToken);
+      logger.log('Attempting to revoke session token:', sessionToken);
 
       const result = await admin.revokeUserSession({
         sessionToken,
       });
 
-      console.log('Revoke session result:', result);
+      logger.log('Revoke session result:', result);
 
       if (result.error) {
-        console.error('Error in revoke session result:', result.error);
+        logger.error('Error in revoke session result:', result.error);
         throw new Error(result.error.message);
       }
 
@@ -106,19 +108,19 @@ export default function UserSessionsModal({ opened, onClose, user }) {
       });
 
       // Reload sessions to see if it's actually gone
-      console.log('Reloading sessions after revocation...');
+      logger.log('Reloading sessions after revocation...');
       await loadSessions();
 
       // Test if the session is actually invalid by checking with the server
-      console.log('Testing session validity...');
+      logger.log('Testing session validity...');
       try {
         const sessionCheck = await userService.getCurrentSession();
-        console.log('Current session check after revocation:', sessionCheck);
+        logger.log('Current session check after revocation:', sessionCheck);
       } catch (error) {
-        console.log('Session validation error (expected):', error);
+        logger.log('Session validation error (expected):', error);
       }
     } catch (err) {
-      console.error('Error revoking session:', err);
+      logger.error('Error revoking session:', err);
       setError(err.message || 'Failed to revoke session');
     } finally {
       setLoading(false);
@@ -138,16 +140,16 @@ export default function UserSessionsModal({ opened, onClose, user }) {
       setLoading(true);
       setError('');
 
-      console.log('Attempting to revoke all sessions for user:', user.id);
+      logger.log('Attempting to revoke all sessions for user:', user.id);
 
       const result = await admin.revokeUserSessions({
         userId: user.id,
       });
 
-      console.log('Revoke all sessions result:', result);
+      logger.log('Revoke all sessions result:', result);
 
       if (result.error) {
-        console.error('Error in revoke all sessions result:', result.error);
+        logger.error('Error in revoke all sessions result:', result.error);
         throw new Error(result.error.message);
       }
 
@@ -158,10 +160,10 @@ export default function UserSessionsModal({ opened, onClose, user }) {
       });
 
       // Reload sessions to verify they're gone
-      console.log('Reloading sessions after revoking all...');
+      logger.log('Reloading sessions after revoking all...');
       await loadSessions();
     } catch (err) {
-      console.error('Error revoking all sessions:', err);
+      logger.error('Error revoking all sessions:', err);
       setError(err.message || 'Failed to revoke all sessions');
     } finally {
       setLoading(false);
@@ -213,10 +215,13 @@ export default function UserSessionsModal({ opened, onClose, user }) {
     <Modal
       opened={opened}
       onClose={onClose}
+      aria-labelledby="user-sessions-modal-title"
       title={
         <Group gap="xs">
-          <IconDeviceLaptop size={20} />
-          <Text fw={600}>Sessions for {user?.name || user?.email}</Text>
+          <IconDeviceLaptop size={20} aria-hidden="true" />
+          <Text fw={600} id="user-sessions-modal-title">
+            Sessions for {user?.name || user?.email}
+          </Text>
         </Group>
       }
       size="calc(100vw - 3rem)"
@@ -288,7 +293,7 @@ export default function UserSessionsModal({ opened, onClose, user }) {
               </Table.Thead>
               <Table.Tbody>
                 {sessions.map((session, index) => {
-                  console.log('Session data:', session); // Debug each session
+                  logger.log('Session data:', session); // Debug each session
                   return (
                     <Table.Tr key={session.token || session.id || index}>
                       <Table.Td>
@@ -315,10 +320,10 @@ export default function UserSessionsModal({ opened, onClose, user }) {
                           onClick={() =>
                             handleRevokeSession(session.token || session.id)
                           }
-                          title="Revoke this session"
+                          aria-label="Revoke this session"
                           disabled={!session.token && !session.id}
                         >
-                          <IconTrash size="1rem" />
+                          <IconTrash size="1rem" aria-hidden="true" />
                         </ActionIcon>
                       </Table.Td>
                     </Table.Tr>
@@ -332,3 +337,13 @@ export default function UserSessionsModal({ opened, onClose, user }) {
     </Modal>
   );
 }
+
+UserSessionsModal.propTypes = {
+  opened: PropTypes.bool.isRequired,
+  onClose: PropTypes.func.isRequired,
+  user: PropTypes.shape({
+    id: PropTypes.string.isRequired,
+    name: PropTypes.string,
+    email: PropTypes.string,
+  }),
+};

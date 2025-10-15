@@ -35,10 +35,13 @@ export default function SettingsModal({ opened, onClose }) {
     <Modal
       opened={opened}
       onClose={handleClose}
+      aria-labelledby="settings-modal-title"
       title={
         <Group gap="xs">
-          <IconSettings size={20} />
-          <Text fw={600}>Settings</Text>
+          <IconSettings size={20} aria-hidden="true" />
+          <Text fw={600} id="settings-modal-title">
+            Settings
+          </Text>
         </Group>
       }
       size="95%"

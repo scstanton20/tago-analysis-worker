@@ -30,11 +30,11 @@ import {
   IconDeviceFloppy,
 } from '@tabler/icons-react';
 import { dnsService } from '../../../services/dnsService';
-import { useSSE } from '../../../contexts/sseContext';
+import { useBackend } from '../../../contexts/sseContext';
 import { useAuth } from '../../../hooks/useAuth';
 
 export default function DNSCacheSettings() {
-  const { dnsCache } = useSSE();
+  const { dnsCache } = useBackend();
   const { isAuthenticated } = useAuth();
   const [loading, setLoading] = useState(false);
   const [entries, setEntries] = useState([]);

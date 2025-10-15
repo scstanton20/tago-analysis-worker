@@ -1,136 +1,147 @@
 // frontend/src/services/analysisService.js
-import { fetchWithHeaders, handleResponse } from '../utils/apiUtils';
+import {
+  fetchWithHeaders,
+  handleResponse,
+  downloadBlob,
+  parseErrorResponse,
+} from '../utils/apiUtils';
 import sanitize from 'sanitize-filename';
+import { createLogger } from '../utils/logger';
+
+const logger = createLogger('analysisService');
 
 export const analysisService = {
   async getAnalyses() {
+    logger.debug('Fetching analyses list');
     try {
       const response = await fetchWithHeaders('/analyses', {
         method: 'GET',
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch analyses');
-      }
-
-      return await response.json();
+      const result = await handleResponse(response);
+      logger.info('Analyses list fetched successfully', {
+        count: result?.analyses?.length,
+      });
+      return result;
     } catch (error) {
-      console.error('Failed to fetch analyses:', error);
+      logger.error('Failed to fetch analyses list', { error });
       throw error;
     }
   },
 
   async uploadAnalysis(file, teamId = null) {
-    const formData = new FormData();
-    formData.append('analysis', file);
-
-    // Add teamId if provided (backend will default to Uncategorized if not)
-    if (teamId) {
-      formData.append('teamId', teamId);
-    }
-
-    const response = await fetchWithHeaders('/analyses/upload', {
-      method: 'POST',
-      body: formData,
+    logger.debug('Uploading analysis', {
+      fileName: file.name,
+      fileSize: file.size,
+      teamId,
     });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to upload analysis');
-    }
-
-    return response.json();
-  },
-
-  async runAnalysis(fileName) {
     try {
-      console.log('Running analysis:', fileName);
-      const response = await fetchWithHeaders(`/analyses/${fileName}/run`, {
-        method: 'POST',
-      });
+      const formData = new FormData();
+      formData.append('analysis', file);
 
-      return await handleResponse(response);
-    } catch (error) {
-      console.error('Failed to run analysis:', error);
-      throw new Error(`Failed to run analysis: ${error.message}`);
-    }
-  },
-
-  async stopAnalysis(fileName) {
-    try {
-      console.log('Stopping analysis:', fileName);
-      const response = await fetchWithHeaders(`/analyses/${fileName}/stop`, {
-        method: 'POST',
-      });
-
-      return await handleResponse(response);
-    } catch (error) {
-      console.error('Failed to stop analysis:', error);
-      throw new Error(`Failed to stop analysis: ${error.message}`);
-    }
-  },
-
-  async deleteAnalysis(fileName) {
-    try {
-      console.log('Deleting analysis:', fileName);
-      const response = await fetchWithHeaders(`/analyses/${fileName}`, {
-        method: 'DELETE',
-      });
-
-      return await handleResponse(response);
-    } catch (error) {
-      console.error('Failed to delete analysis:', error);
-      throw new Error(`Failed to delete analysis: ${error.message}`);
-    }
-  },
-
-  async getAnalysisContent(fileName, version = null) {
-    try {
-      console.log(
-        'Fetching analysis content for:',
-        fileName,
-        'version:',
-        version,
-      );
-      const versionParam = version !== null ? `?version=${version}` : '';
-      const response = await fetchWithHeaders(
-        `/analyses/${fileName}/content${versionParam}`,
-        {
-          method: 'GET',
-        },
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({
-          error: 'Failed to fetch analysis content',
-        }));
-        throw new Error(errorData.error);
+      // Add teamId if provided (backend will default to Uncategorized if not)
+      if (teamId) {
+        formData.append('teamId', teamId);
       }
 
-      const content = await response.text();
-      return content;
+      const response = await fetchWithHeaders('/analyses/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      const result = await handleResponse(response);
+      logger.info('Analysis uploaded successfully', { fileName: file.name });
+      return result;
     } catch (error) {
-      console.error('Failed to fetch analysis content:', error);
+      logger.error('Failed to upload analysis', {
+        error,
+        fileName: file.name,
+      });
       throw error;
     }
   },
 
-  async updateAnalysis(fileName, content) {
+  async runAnalysis(fileName) {
+    logger.debug('Starting analysis', { fileName });
     try {
-      console.log('Preparing to update analysis:', {
-        fileName,
-        contentLength: content.length,
-        contentPreview: content.substring(0, 100),
+      const response = await fetchWithHeaders(`/analyses/${fileName}/run`, {
+        method: 'POST',
       });
+      const result = await handleResponse(response);
+      logger.info('Analysis started successfully', { fileName });
+      return result;
+    } catch (error) {
+      logger.error('Failed to start analysis', { error, fileName });
+      throw error;
+    }
+  },
 
-      if (typeof content !== 'string') {
-        throw new Error('Content must be a string');
-      }
+  async stopAnalysis(fileName) {
+    logger.debug('Stopping analysis', { fileName });
+    try {
+      const response = await fetchWithHeaders(`/analyses/${fileName}/stop`, {
+        method: 'POST',
+      });
+      const result = await handleResponse(response);
+      logger.info('Analysis stopped successfully', { fileName });
+      return result;
+    } catch (error) {
+      logger.error('Failed to stop analysis', { error, fileName });
+      throw error;
+    }
+  },
 
-      if (!content.trim()) {
-        throw new Error('Content cannot be empty');
-      }
+  async deleteAnalysis(fileName) {
+    logger.debug('Deleting analysis', { fileName });
+    try {
+      const response = await fetchWithHeaders(`/analyses/${fileName}`, {
+        method: 'DELETE',
+      });
+      const result = await handleResponse(response);
+      logger.info('Analysis deleted successfully', { fileName });
+      return result;
+    } catch (error) {
+      logger.error('Failed to delete analysis', { error, fileName });
+      throw error;
+    }
+  },
 
+  async getAnalysisContent(fileName, version = null) {
+    const versionParam = version !== null ? `?version=${version}` : '';
+    const response = await fetchWithHeaders(
+      `/analyses/${fileName}/content${versionParam}`,
+      {
+        method: 'GET',
+      },
+    );
+
+    // For text responses, check status and return text directly
+    if (!response.ok) {
+      const errorData = await parseErrorResponse(
+        response,
+        'Failed to fetch analysis content',
+      );
+      throw new Error(errorData.error);
+    }
+
+    return await response.text();
+  },
+
+  async updateAnalysis(fileName, content) {
+    logger.debug('Updating analysis content', {
+      fileName,
+      contentLength: content?.length,
+    });
+
+    if (typeof content !== 'string') {
+      logger.error('Invalid content type for analysis update', { fileName });
+      throw new Error('Content must be a string');
+    }
+
+    if (!content.trim()) {
+      logger.error('Empty content for analysis update', { fileName });
+      throw new Error('Content cannot be empty');
+    }
+
+    try {
       const response = await fetchWithHeaders(`/analyses/${fileName}`, {
         method: 'PUT',
         headers: {
@@ -138,36 +149,29 @@ export const analysisService = {
         },
         body: JSON.stringify({ content }),
       });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({
-          error: 'Failed to update analysis',
-        }));
-        throw new Error(errorData.error);
-      }
-
-      return await response.json();
+      const result = await handleResponse(response);
+      logger.info('Analysis content updated successfully', { fileName });
+      return result;
     } catch (error) {
-      console.error('Failed to update analysis:', error);
+      logger.error('Failed to update analysis content', { error, fileName });
       throw error;
     }
   },
 
   async renameAnalysis(fileName, newFileName) {
+    logger.debug('Renaming analysis', { fileName, newFileName });
+
+    if (typeof newFileName !== 'string') {
+      logger.error('Invalid new filename type', { fileName, newFileName });
+      throw new Error('New Filename must be a string');
+    }
+
+    if (!newFileName.trim()) {
+      logger.error('Empty new filename', { fileName });
+      throw new Error('New Filename cannot be empty');
+    }
+
     try {
-      console.log('Preparing to rename analysis:', {
-        fileName,
-        newFileName,
-      });
-
-      if (typeof newFileName !== 'string') {
-        throw new Error('New Filename must be a string');
-      }
-
-      if (!newFileName.trim()) {
-        throw new Error('New Filename cannot be empty');
-      }
-
       const response = await fetchWithHeaders(`/analyses/${fileName}/rename`, {
         method: 'PUT',
         headers: {
@@ -175,47 +179,43 @@ export const analysisService = {
         },
         body: JSON.stringify({ newFileName }),
       });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({
-          error: 'Failed to rename analysis',
-        }));
-        throw new Error(errorData.error);
-      }
-
-      return await response.json();
+      const result = await handleResponse(response);
+      logger.info('Analysis renamed successfully', { fileName, newFileName });
+      return result;
     } catch (error) {
-      console.error('Failed to rename analysis:', error);
+      logger.error('Failed to rename analysis', {
+        error,
+        fileName,
+        newFileName,
+      });
       throw error;
     }
   },
 
   async getLogs(fileName, params = {}) {
+    const { page = 1, limit = 100 } = params;
+    logger.debug('Fetching analysis logs', { fileName, page, limit });
     try {
-      const { page = 1, limit = 100 } = params;
       const queryParams = new URLSearchParams({ page, limit }).toString();
       const response = await fetchWithHeaders(
         `/analyses/${fileName}/logs?${queryParams}`,
       );
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          return [];
-        }
-        throw new Error('Failed to fetch logs');
-      }
-
-      return await response.json();
+      const result = await handleResponse(response);
+      logger.info('Analysis logs fetched successfully', {
+        fileName,
+        page,
+        logsCount: result?.logs?.length,
+      });
+      return result;
     } catch (error) {
-      console.error('Failed to fetch logs:', error);
-      return [];
+      logger.error('Failed to fetch analysis logs', { error, fileName, page });
+      throw error;
     }
   },
 
   async downloadLogs(fileName, timeRange) {
+    logger.debug('Downloading analysis logs', { fileName, timeRange });
     try {
-      console.log('Downloading logs for:', fileName, 'timeRange:', timeRange);
-
       // Sanitize the filename to prevent XSS
       const safeFileName = sanitize(fileName);
 
@@ -225,94 +225,91 @@ export const analysisService = {
       );
 
       if (!response.ok) {
-        throw new Error('Failed to download logs');
+        const errorData = await parseErrorResponse(
+          response,
+          'Failed to download logs',
+        );
+        throw new Error(errorData.error);
       }
 
       const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      // Use sanitized filename for download attribute
-      a.download = `${safeFileName}.log`;
-
-      // Set additional security attributes
-      a.style.display = 'none';
-      a.rel = 'noopener noreferrer';
-
-      document.body.appendChild(a);
-      a.click();
-
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      downloadBlob(safeFileName, blob, '.log');
+      logger.info('Analysis logs downloaded successfully', {
+        fileName,
+        timeRange,
+      });
     } catch (error) {
-      console.error('Failed to download logs:', error);
+      logger.error('Failed to download analysis logs', {
+        error,
+        fileName,
+        timeRange,
+      });
       throw error;
     }
   },
 
   async deleteLogs(fileName) {
+    logger.debug('Deleting analysis logs', { fileName });
     try {
-      console.log('Clearing logs for analysis:', fileName);
       const response = await fetchWithHeaders(`/analyses/${fileName}/logs`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
         },
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to clear logs');
-      }
-
-      return await response.json();
+      const result = await handleResponse(response);
+      logger.info('Analysis logs deleted successfully', { fileName });
+      return result;
     } catch (error) {
-      console.error('Failed to clear logs:', error);
+      logger.error('Failed to delete analysis logs', { error, fileName });
       throw error;
     }
   },
 
   async getEnvFile(fileName) {
-    try {
-      const response = await fetchWithHeaders(
-        `/analyses/${fileName}/environment`,
-        { method: 'GET' },
-      );
-      return await response.json();
-    } catch (error) {
-      console.error('Error fetching env file:', error);
-      return {};
-    }
+    const response = await fetchWithHeaders(
+      `/analyses/${fileName}/environment`,
+      { method: 'GET' },
+    );
+
+    return handleResponse(response);
   },
 
   async getAnalysisENVContent(fileName) {
     try {
       const envData = await this.getEnvFile(fileName);
       if (!envData || typeof envData !== 'object') {
-        throw new Error('Invalid env data');
+        return '';
       }
 
       // Convert env object to a formatted .env string
       return Object.entries(envData)
         .map(([key, value]) => `${key}=${value}`)
         .join('\n');
-    } catch (error) {
-      console.error('Error fetching formatted env content:', error);
-      return ''; // Ensure it returns a string
+    } catch {
+      // Return empty string for missing env files (404) or other errors
+      return '';
     }
   },
 
   async updateAnalysisENV(fileName, envContent) {
+    logger.debug('Updating analysis environment variables', {
+      fileName,
+      contentLength: envContent?.length,
+    });
+
+    if (typeof envContent !== 'string') {
+      logger.error('Invalid env content type', { fileName });
+      throw new Error('Invalid .env content format');
+    }
+
     try {
-      if (typeof envContent !== 'string') {
-        throw new Error('Invalid .env content format');
-      }
       const envObject = envContent
         .split('\n')
         .filter((line) => line.includes('=') && !line.startsWith('#'))
         .reduce((acc, line) => {
-          const [key, ...valueParts] = line.split('='); // Fix split issue
-          const value = valueParts.join('=').trim(); // Preserve values
+          const [key, ...valueParts] = line.split('=');
+          const value = valueParts.join('=').trim();
           acc[key.trim()] = value || '';
           return acc;
         }, {});
@@ -322,88 +319,57 @@ export const analysisService = {
         {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ env: envObject }), // ✅ Wrap in env property
+          body: JSON.stringify({ env: envObject }),
         },
       );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(
-          errorData.message || 'Failed to update environment variables',
-        );
-      }
-
-      return await response.json();
+      const result = await handleResponse(response);
+      logger.info('Analysis environment variables updated successfully', {
+        fileName,
+        varsCount: Object.keys(envObject).length,
+      });
+      return result;
     } catch (error) {
-      console.error('Error updating env file:', error);
+      logger.error('Failed to update analysis environment variables', {
+        error,
+        fileName,
+      });
       throw error;
     }
   },
 
   async downloadAnalysis(fileName, version = null) {
-    try {
-      console.log('Downloading analysis:', fileName, 'version:', version);
+    // Sanitize the filename to prevent XSS
+    const safeFileName = sanitize(fileName);
 
-      // Sanitize the filename to prevent XSS
-      const safeFileName = sanitize(fileName);
+    const versionParam = version ? `?version=${version}` : '';
+    const response = await fetchWithHeaders(
+      `/analyses/${fileName}/download${versionParam}`,
+      { method: 'GET' },
+    );
 
-      const versionParam = version ? `?version=${version}` : '';
-      const response = await fetchWithHeaders(
-        `/analyses/${fileName}/download${versionParam}`,
-        { method: 'GET' },
+    if (!response.ok) {
+      const errorData = await parseErrorResponse(
+        response,
+        'Failed to download analysis',
       );
-
-      if (!response.ok) {
-        throw new Error('Failed to download analysis');
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      const versionSuffix = version ? `_v${version}` : '';
-      a.download = `${safeFileName}${versionSuffix}.js`;
-      a.style.display = 'none';
-      a.rel = 'noopener noreferrer';
-
-      document.body.appendChild(a);
-      a.click();
-
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (error) {
-      console.error('Failed to download analysis:', error);
-      throw error;
+      throw new Error(errorData.error);
     }
+
+    const blob = await response.blob();
+    const versionSuffix = version ? `_v${version}` : '';
+    downloadBlob(`${safeFileName}${versionSuffix}`, blob, '.js');
   },
 
   async getVersions(fileName) {
-    try {
-      console.log('Fetching versions for:', fileName);
-      const response = await fetchWithHeaders(
-        `/analyses/${fileName}/versions`,
-        {
-          method: 'GET',
-        },
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({
-          error: 'Failed to fetch versions',
-        }));
-        throw new Error(errorData.error);
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error('Failed to fetch versions:', error);
-      throw error;
-    }
+    const response = await fetchWithHeaders(`/analyses/${fileName}/versions`, {
+      method: 'GET',
+    });
+    return handleResponse(response);
   },
 
   async rollbackToVersion(fileName, version) {
+    logger.debug('Rolling back analysis to version', { fileName, version });
     try {
-      console.log('Rolling back analysis:', fileName, 'to version:', version);
       const response = await fetchWithHeaders(
         `/analyses/${fileName}/rollback`,
         {
@@ -414,17 +380,15 @@ export const analysisService = {
           body: JSON.stringify({ version }),
         },
       );
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({
-          error: 'Failed to rollback analysis',
-        }));
-        throw new Error(errorData.error);
-      }
-
-      return await response.json();
+      const result = await handleResponse(response);
+      logger.info('Analysis rolled back successfully', { fileName, version });
+      return result;
     } catch (error) {
-      console.error('Failed to rollback analysis:', error);
+      logger.error('Failed to rollback analysis', {
+        error,
+        fileName,
+        version,
+      });
       throw error;
     }
   },

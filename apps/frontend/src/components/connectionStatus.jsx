@@ -1,6 +1,6 @@
 // frontend/src/components/connectionStatus.jsx
 import { useState, lazy, Suspense } from 'react';
-import { useSSE } from '../contexts/sseContext';
+import { useConnection, useBackend } from '../contexts/sseContext';
 import {
   ActionIcon,
   Popover,
@@ -11,59 +11,19 @@ import {
   Divider,
   Box,
   Indicator,
-  LoadingOverlay,
-  Portal,
 } from '@mantine/core';
 import { IconRefresh, IconSettings } from '@tabler/icons-react';
-import Logo from './logo';
+import AppLoadingOverlay from './common/AppLoadingOverlay';
+import ChunkLoadErrorBoundary from './common/ChunkLoadErrorBoundary';
 
 // Lazy load settings modal
 const SettingsModal = lazy(() => import('./modals/settingsModal'));
 
-// Custom loading overlay component
-function AppLoadingOverlay({ message, submessage, error, showRetry }) {
-  return (
-    <Portal>
-      <LoadingOverlay
-        visible={true}
-        zIndex={9999}
-        overlayProps={{ blur: 2, radius: 'sm' }}
-        loaderProps={{
-          size: 'xl',
-          children: (
-            <Stack align="center" gap="lg">
-              <Logo size={48} className={error ? '' : 'pulse'} />
-              <Text size="lg" fw={500} c={error ? 'red' : undefined}>
-                {message}
-              </Text>
-              {submessage && (
-                <Text size="sm" c="dimmed" ta="center" maw={400}>
-                  {submessage}
-                </Text>
-              )}
-              {showRetry && (
-                <Button
-                  onClick={() => window.location.reload()}
-                  variant="gradient"
-                  gradient={{ from: 'brand.6', to: 'accent.6' }}
-                  mt="md"
-                >
-                  Retry Connection
-                </Button>
-              )}
-            </Stack>
-          ),
-        }}
-        pos="fixed"
-      />
-    </Portal>
-  );
-}
-
 const ConnectionStatus = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [settingsModalOpened, setSettingsModalOpened] = useState(false);
-  const { connectionStatus, backendStatus, requestStatusUpdate } = useSSE();
+  const { connectionStatus, requestStatusUpdate } = useConnection();
+  const { backendStatus } = useBackend();
 
   const getOverallStatusColor = () => {
     if (!backendStatus) return 'red';
@@ -335,14 +295,16 @@ const ConnectionStatus = () => {
       </Popover>
 
       {settingsModalOpened && (
-        <Suspense
-          fallback={<AppLoadingOverlay message="Loading settings..." />}
-        >
-          <SettingsModal
-            opened={settingsModalOpened}
-            onClose={() => setSettingsModalOpened(false)}
-          />
-        </Suspense>
+        <ChunkLoadErrorBoundary componentName="Settings Modal">
+          <Suspense
+            fallback={<AppLoadingOverlay message="Loading settings..." />}
+          >
+            <SettingsModal
+              opened={settingsModalOpened}
+              onClose={() => setSettingsModalOpened(false)}
+            />
+          </Suspense>
+        </ChunkLoadErrorBoundary>
       )}
     </>
   );

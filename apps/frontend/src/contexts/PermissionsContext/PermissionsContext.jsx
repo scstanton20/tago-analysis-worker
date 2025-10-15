@@ -1,13 +1,16 @@
-import { useState, useCallback, useMemo, useContext } from 'react';
+import { useState, useCallback, useMemo, useContext, useEffect } from 'react';
 import { authClient } from '../../lib/auth.js';
 import { fetchWithHeaders, handleResponse } from '../../utils/apiUtils.js';
 import { AuthContext } from '../AuthContext.jsx';
-import { SSEContext } from '../sseContext/context.js';
+import { useTeams } from '../sseContext/index.js';
 import { PermissionsContext } from './context.js';
+import { useInitialState } from '../../hooks/useInitialState.js';
+import { useEventListener } from '../../hooks/useEventListener.js';
+import logger from '../../utils/logger.js';
 
 export const PermissionsProvider = ({ children }) => {
   const authContext = useContext(AuthContext);
-  const sseContext = useContext(SSEContext);
+  const { teams: sseTeams } = useTeams();
 
   if (!authContext) {
     throw new Error('PermissionsProvider must be used within an AuthProvider');
@@ -19,6 +22,9 @@ export const PermissionsProvider = ({ children }) => {
   const [organizationId, setOrganizationId] = useState(null);
   const [userTeams, setUserTeams] = useState([]);
   const [membershipLoading, setMembershipLoading] = useState(false);
+
+  // Track user ID to detect user changes (including impersonation)
+  const [currentUserId, setCurrentUserId] = useState(user?.id || null);
 
   // Memoize organization data loading function
   const loadOrganizationData = useCallback(async () => {
@@ -39,12 +45,12 @@ export const PermissionsProvider = ({ children }) => {
 
       if (activeOrgResult.data) {
         setOrganizationId(activeOrgResult.data.id);
-        console.log(
+        logger.log(
           '✓ Set active organization and ID:',
           activeOrgResult.data.id,
         );
       } else {
-        console.warn('Could not set active organization or get its data');
+        logger.warn('Could not set active organization or get its data');
         setOrganizationId(null);
       }
 
@@ -70,7 +76,7 @@ export const PermissionsProvider = ({ children }) => {
                 role: 'owner',
               })),
             );
-            console.log(
+            logger.log(
               `✓ Loaded ${teamsResult.data.length} teams for admin user`,
             );
           } else {
@@ -94,23 +100,23 @@ export const PermissionsProvider = ({ children }) => {
               teamMembershipsData.data?.teams
             ) {
               setUserTeams(teamMembershipsData.data.teams);
-              console.log(
+              logger.log(
                 `✓ Loaded ${teamMembershipsData.data.teams.length} team memberships for user`,
               );
             } else {
               setUserTeams([]);
             }
           } catch (fetchError) {
-            console.warn('Error fetching user team memberships:', fetchError);
+            logger.warn('Error fetching user team memberships:', fetchError);
             setUserTeams([]);
           }
         }
       } catch (teamsError) {
-        console.warn('Error loading team memberships:', teamsError);
+        logger.warn('Error loading team memberships:', teamsError);
         setUserTeams([]);
       }
     } catch (error) {
-      console.error('Error setting active organization:', error);
+      logger.error('Error setting active organization:', error);
       setOrganizationMembership(null);
       setOrganizationId(null);
       setUserTeams([]);
@@ -120,20 +126,55 @@ export const PermissionsProvider = ({ children }) => {
   }, [isAuthenticated, user]);
 
   // Load organization data when authentication state changes
-  const [hasLoadedOrgData, setHasLoadedOrgData] = useState(false);
-  const shouldLoadOrgData = isAuthenticated && user && !hasLoadedOrgData;
+  // Uses custom useInitialState hook to handle initialization pattern
+  useInitialState(loadOrganizationData, null, {
+    condition: isAuthenticated && user,
+    resetCondition: !isAuthenticated || !user,
+  });
 
-  if (shouldLoadOrgData) {
-    setHasLoadedOrgData(true);
-    loadOrganizationData();
-  }
+  // Watch for user ID changes (including impersonation) and reload permissions
+  useEffect(() => {
+    const newUserId = user?.id || null;
 
-  // Reset loaded flag when user changes
-  if (!isAuthenticated || !user) {
-    if (hasLoadedOrgData) {
-      setHasLoadedOrgData(false);
+    // If user ID changed (including from one user to another during impersonation)
+    if (isAuthenticated && newUserId && newUserId !== currentUserId) {
+      logger.log(
+        `User changed from ${currentUserId} to ${newUserId}, reloading permissions...`,
+      );
+      setCurrentUserId(newUserId);
+
+      // Clear existing data and reload
+      setOrganizationMembership(null);
+      setOrganizationId(null);
+      setUserTeams([]);
+
+      loadOrganizationData();
+    } else if (!isAuthenticated && currentUserId) {
+      // User logged out, clear user ID
+      setCurrentUserId(null);
     }
-  }
+  }, [user?.id, isAuthenticated, currentUserId, loadOrganizationData]);
+
+  // Listen for auth-change events (triggered by permission updates)
+  const handleAuthChangeForPermissions = useCallback(async () => {
+    if (!isAuthenticated || !user) {
+      return;
+    }
+
+    logger.log(
+      'PermissionsContext: Auth change event detected, reloading permissions...',
+    );
+
+    // Clear existing data
+    setOrganizationMembership(null);
+    setOrganizationId(null);
+    setUserTeams([]);
+
+    // Reload organization data
+    await loadOrganizationData();
+  }, [isAuthenticated, user, loadOrganizationData]);
+
+  useEventListener('auth-change', handleAuthChangeForPermissions);
 
   // Memoize team helper functions to prevent recreating on every render
   const teamHelpers = useMemo(
@@ -185,8 +226,9 @@ export const PermissionsProvider = ({ children }) => {
     [user?.role, userTeams, organizationMembership],
   );
 
-  // Memoize permission calculation functions for better performance
-  const permissionHelpers = useMemo(
+  // Memoize base permission functions that don't depend on SSE data
+  // This prevents unnecessary re-computation when SSE teams update
+  const basePermissionHelpers = useMemo(
     () => ({
       // Check if user has a specific permission based on their team memberships
       checkUserPermission: (permission, teamId = null) => {
@@ -205,10 +247,33 @@ export const PermissionsProvider = ({ children }) => {
         return userTeams.some((team) => team.permissions?.includes(permission));
       },
 
-      // Get teams where user has a specific permission
+      // Get permissions for a specific team
+      getTeamPermissions: (teamId) => {
+        if (isAdmin) {
+          return [
+            'view_analyses',
+            'run_analyses',
+            'upload_analyses',
+            'download_analyses',
+            'edit_analyses',
+            'delete_analyses',
+          ];
+        }
+
+        const team = userTeams.find((t) => t.id === teamId);
+        return team?.permissions || [];
+      },
+    }),
+    [isAuthenticated, user, isAdmin, userTeams],
+  );
+
+  // Memoize SSE-dependent helper separately to avoid re-computing all helpers on SSE updates
+  const sseEnhancedHelpers = useMemo(
+    () => ({
+      // Get teams where user has a specific permission (merges with SSE data for latest team info)
       getTeamsWithPermission: (permission) => {
         if (isAdmin) {
-          const sseTeamsObject = sseContext?.teams || {};
+          const sseTeamsObject = sseTeams || {};
           const sseTeamsArray = Object.values(sseTeamsObject);
 
           if (sseTeamsArray.length > 0) {
@@ -216,6 +281,8 @@ export const PermissionsProvider = ({ children }) => {
               id: sseTeam.id,
               name: sseTeam.name,
               color: sseTeam.color,
+              isSystem: sseTeam.isSystem,
+              order_index: sseTeam.order_index,
               permissions: [
                 'view_analyses',
                 'run_analyses',
@@ -246,7 +313,7 @@ export const PermissionsProvider = ({ children }) => {
         );
 
         // Merge permission data with real-time SSE team data
-        const sseTeamsObject = sseContext?.teams || {};
+        const sseTeamsObject = sseTeams || {};
         return teamsWithPermission.map((userTeam) => {
           const sseTeam = sseTeamsObject[userTeam.id];
           if (!sseTeam) {
@@ -259,28 +326,21 @@ export const PermissionsProvider = ({ children }) => {
             name: sseTeam.name,
             color: sseTeam.color,
             isSystem: sseTeam.isSystem,
+            order_index: sseTeam.order_index,
           };
         });
       },
-
-      // Get permissions for a specific team
-      getTeamPermissions: (teamId) => {
-        if (isAdmin) {
-          return [
-            'view_analyses',
-            'run_analyses',
-            'upload_analyses',
-            'download_analyses',
-            'edit_analyses',
-            'delete_analyses',
-          ];
-        }
-
-        const team = userTeams.find((t) => t.id === teamId);
-        return team?.permissions || [];
-      },
     }),
-    [isAuthenticated, user, isAdmin, userTeams, sseContext?.teams],
+    [isAdmin, userTeams, sseTeams],
+  );
+
+  // Combine base helpers with SSE-enhanced helpers
+  const permissionHelpers = useMemo(
+    () => ({
+      ...basePermissionHelpers,
+      ...sseEnhancedHelpers,
+    }),
+    [basePermissionHelpers, sseEnhancedHelpers],
   );
 
   // Memoize refresh functions
@@ -292,7 +352,7 @@ export const PermissionsProvider = ({ children }) => {
 
       refreshUserData: async () => {
         try {
-          console.log('Refreshing permissions and team data');
+          logger.log('Refreshing permissions and team data');
 
           // Clear and reload organization data
           setOrganizationMembership(null);
@@ -302,7 +362,7 @@ export const PermissionsProvider = ({ children }) => {
           // Reload organization data
           await loadOrganizationData();
         } catch (error) {
-          console.error('Error refreshing permissions data:', error);
+          logger.error('Error refreshing permissions data:', error);
         }
       },
     }),

@@ -11,9 +11,8 @@ import {
   Badge,
   Stack,
   Box,
-  LoadingOverlay,
-  Portal,
 } from '@mantine/core';
+import { modals } from '@mantine/modals';
 import {
   IconPlayerPlay,
   IconPlayerStop,
@@ -31,7 +30,9 @@ import { teamService } from '../../services/teamService';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import AnalysisLogs from './analysisLogs';
 import StatusBadge from './statusBadge';
-import Logo from '../logo';
+import logger from '../../utils/logger';
+import AppLoadingOverlay from '../common/AppLoadingOverlay';
+import ChunkLoadErrorBoundary from '../common/ChunkLoadErrorBoundary';
 
 // Lazy load all modal components
 const AnalysisEditModal = lazy(() => import('../modals/codeMirrorCommon'));
@@ -40,48 +41,8 @@ const TeamSelectModal = lazy(() => import('../modals/changeTeamModal'));
 const VersionManagementModal = lazy(
   () => import('../modals/versionManagement'),
 );
-import { useSSE } from '../../contexts/sseContext';
+import { useAnalyses, useTeams } from '../../contexts/sseContext';
 import { usePermissions } from '../../hooks/usePermissions';
-
-// Custom loading overlay component
-function AppLoadingOverlay({ message, submessage, error, showRetry }) {
-  return (
-    <Portal>
-      <LoadingOverlay
-        visible={true}
-        zIndex={9999}
-        overlayProps={{ blur: 2, radius: 'sm' }}
-        loaderProps={{
-          size: 'xl',
-          children: (
-            <Stack align="center" gap="lg">
-              <Logo size={48} className={error ? '' : 'pulse'} />
-              <Text size="lg" fw={500} c={error ? 'red' : undefined}>
-                {message}
-              </Text>
-              {submessage && (
-                <Text size="sm" c="dimmed" ta="center" maw={400}>
-                  {submessage}
-                </Text>
-              )}
-              {showRetry && (
-                <Button
-                  onClick={() => window.location.reload()}
-                  variant="gradient"
-                  gradient={{ from: 'brand.6', to: 'accent.6' }}
-                  mt="md"
-                >
-                  Retry Connection
-                </Button>
-              )}
-            </Stack>
-          ),
-        }}
-        pos="fixed"
-      />
-    </Portal>
-  );
-}
 
 export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
   const [editModalType, setEditModalType] = useState(null); // null, 'analysis', or 'env'
@@ -89,8 +50,9 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [showVersionModal, setShowVersionModal] = useState(false);
 
-  const { loadingAnalyses, addLoadingAnalysis, removeLoadingAnalysis, teams } =
-    useSSE();
+  const { loadingAnalyses, addLoadingAnalysis, removeLoadingAnalysis } =
+    useAnalyses();
+  const { teams } = useTeams();
   const {
     canRunAnalyses,
     canViewAnalyses,
@@ -130,7 +92,7 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
         analysis.name,
       );
     } catch (error) {
-      console.error('Failed to run analysis:', error);
+      logger.error('Failed to run analysis:', error);
       removeLoadingAnalysis(analysis.name);
     }
   };
@@ -143,24 +105,28 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
         analysis.name,
       );
     } catch (error) {
-      console.error('Failed to stop analysis:', error);
+      logger.error('Failed to stop analysis:', error);
       removeLoadingAnalysis(analysis.name);
     }
   };
 
   const handleDeleteAnalysis = async () => {
-    if (!window.confirm('Are you sure you want to delete this analysis?')) {
-      return;
-    }
-
-    try {
-      await notify.deleteAnalysis(
-        analysisService.deleteAnalysis(analysis.name),
-        analysis.name,
-      );
-    } catch (error) {
-      console.error('Failed to delete analysis:', error);
-    }
+    modals.openConfirmModal({
+      title: 'Delete Analysis',
+      children: `Are you sure you want to delete "${analysis.name}"? This action cannot be undone.`,
+      labels: { confirm: 'Delete', cancel: 'Cancel' },
+      confirmProps: { color: 'red' },
+      onConfirm: async () => {
+        try {
+          await notify.deleteAnalysis(
+            analysisService.deleteAnalysis(analysis.name),
+            analysis.name,
+          );
+        } catch (error) {
+          logger.error('Failed to delete analysis:', error);
+        }
+      },
+    });
   };
 
   const handleEditAnalysis = async () => {
@@ -187,32 +153,32 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
         },
       );
     } catch (error) {
-      console.error('Failed to download logs:', error);
+      logger.error('Failed to download logs:', error);
     }
   };
 
   const handleDeleteLogs = async () => {
-    if (
-      !window.confirm(
-        'Are you sure you want to delete all logs for this analysis?',
-      )
-    ) {
-      return;
-    }
+    modals.openConfirmModal({
+      title: 'Delete All Logs',
+      children: `Are you sure you want to delete all logs for "${analysis.name}"? This action cannot be undone.`,
+      labels: { confirm: 'Delete', cancel: 'Cancel' },
+      confirmProps: { color: 'red' },
+      onConfirm: async () => {
+        try {
+          await notify.executeWithNotification(
+            analysisService.deleteLogs(analysis.name),
+            {
+              loading: `Deleting logs for ${analysis.name}...`,
+              success: 'All logs deleted successfully.',
+            },
+          );
 
-    try {
-      await notify.executeWithNotification(
-        analysisService.deleteLogs(analysis.name),
-        {
-          loading: `Deleting logs for ${analysis.name}...`,
-          success: 'All logs deleted successfully.',
-        },
-      );
-
-      // SSE will automatically update the logs component with empty logs
-    } catch (error) {
-      console.error('Failed to delete logs:', error);
-    }
+          // SSE will automatically update the logs component with empty logs
+        } catch (error) {
+          logger.error('Failed to delete logs:', error);
+        }
+      },
+    });
   };
 
   const handleDownloadAnalysis = async () => {
@@ -225,7 +191,7 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
         },
       );
     } catch (error) {
-      console.error('Failed to download analysis:', error);
+      logger.error('Failed to download analysis:', error);
     }
   };
 
@@ -240,14 +206,14 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
       );
       setShowTeamModal(false);
     } catch (error) {
-      console.error('Error moving analysis:', error);
+      logger.error('Error moving analysis:', error);
     }
   };
 
   const handleVersionRollback = (version) => {
     // The rollback operation is handled by the modal
     // This callback can be used for additional UI updates if needed
-    console.log(`Analysis ${analysis.name} rolled back to version ${version}`);
+    logger.log(`Analysis ${analysis.name} rolled back to version ${version}`);
   };
 
   return (
@@ -350,8 +316,13 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
                 closeOnItemClick={true}
               >
                 <Menu.Target>
-                  <ActionIcon variant="subtle" size="lg" color="brand">
-                    <IconDotsVertical size={20} />
+                  <ActionIcon
+                    variant="subtle"
+                    size="lg"
+                    color="brand"
+                    aria-label={`Actions for ${analysis.name}`}
+                  >
+                    <IconDotsVertical size={20} aria-hidden="true" />
                   </ActionIcon>
                 </Menu.Target>
 
@@ -473,59 +444,75 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
 
       {/* Edit Modal - Render if user can view analyses */}
       {editModalType && canViewAnalyses(analysis) && (
-        <Suspense
-          fallback={
-            <AppLoadingOverlay
-              message={`Loading ${editModalType === 'analysis' ? 'analysis editor' : 'environment editor'}...`}
-            />
+        <ChunkLoadErrorBoundary
+          componentName={
+            editModalType === 'analysis'
+              ? 'Analysis Editor'
+              : 'Environment Editor'
           }
         >
-          <AnalysisEditModal
-            analysis={analysis}
-            onClose={() => setEditModalType(null)}
-            readOnly={!canEditAnalyses(analysis)}
-            type={editModalType}
-          />
-        </Suspense>
+          <Suspense
+            fallback={
+              <AppLoadingOverlay
+                message={`Loading ${editModalType === 'analysis' ? 'analysis editor' : 'environment editor'}...`}
+              />
+            }
+          >
+            <AnalysisEditModal
+              analysis={analysis}
+              onClose={() => setEditModalType(null)}
+              readOnly={!canEditAnalyses(analysis)}
+              type={editModalType}
+            />
+          </Suspense>
+        </ChunkLoadErrorBoundary>
       )}
       {showLogDownloadDialog && (
-        <Suspense
-          fallback={
-            <AppLoadingOverlay message="Loading log download options..." />
-          }
-        >
-          <LogDownloadDialog
-            isOpen={showLogDownloadDialog}
-            onClose={() => setShowLogDownloadDialog(false)}
-            onDownload={handleDownloadLogs}
-          />
-        </Suspense>
+        <ChunkLoadErrorBoundary componentName="Log Download Dialog">
+          <Suspense
+            fallback={
+              <AppLoadingOverlay message="Loading log download options..." />
+            }
+          >
+            <LogDownloadDialog
+              isOpen={showLogDownloadDialog}
+              onClose={() => setShowLogDownloadDialog(false)}
+              onDownload={handleDownloadLogs}
+            />
+          </Suspense>
+        </ChunkLoadErrorBoundary>
       )}
       {showTeamModal && (
-        <Suspense
-          fallback={<AppLoadingOverlay message="Loading team selection..." />}
-        >
-          <TeamSelectModal
-            isOpen={showTeamModal}
-            onClose={() => setShowTeamModal(false)}
-            onSelect={handleTeamChange}
-            teams={teamsArray}
-            currentTeam={analysis.teamId || analysis.team}
-            analysisName={analysis.name}
-          />
-        </Suspense>
+        <ChunkLoadErrorBoundary componentName="Team Selection Modal">
+          <Suspense
+            fallback={<AppLoadingOverlay message="Loading team selection..." />}
+          >
+            <TeamSelectModal
+              isOpen={showTeamModal}
+              onClose={() => setShowTeamModal(false)}
+              onSelect={handleTeamChange}
+              teams={teamsArray}
+              currentTeam={analysis.teamId || analysis.team}
+              analysisName={analysis.name}
+            />
+          </Suspense>
+        </ChunkLoadErrorBoundary>
       )}
       {showVersionModal && (
-        <Suspense
-          fallback={<AppLoadingOverlay message="Loading version history..." />}
-        >
-          <VersionManagementModal
-            isOpen={showVersionModal}
-            onClose={() => setShowVersionModal(false)}
-            analysis={analysis}
-            onVersionRollback={handleVersionRollback}
-          />
-        </Suspense>
+        <ChunkLoadErrorBoundary componentName="Version History Modal">
+          <Suspense
+            fallback={
+              <AppLoadingOverlay message="Loading version history..." />
+            }
+          >
+            <VersionManagementModal
+              isOpen={showVersionModal}
+              onClose={() => setShowVersionModal(false)}
+              analysis={analysis}
+              onVersionRollback={handleVersionRollback}
+            />
+          </Suspense>
+        </ChunkLoadErrorBoundary>
       )}
     </Paper>
   );

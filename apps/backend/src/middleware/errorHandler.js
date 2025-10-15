@@ -1,12 +1,15 @@
 // backend/src/middleware/errorHandler.js
 const errorHandler = (err, req, res, next) => {
+  const logger = req.log?.child({ middleware: 'errorHandler' }) || console;
+
   // Check if res has status method (Express response object)
   if (typeof res.status !== 'function') {
-    console.error('Error handler called with invalid response object:', err);
+    logger.error(
+      { action: 'errorHandler', err },
+      'Error handler called with invalid response object',
+    );
     return next(err);
   }
-
-  console.error('Error:', err);
 
   // Default to 500 server error
   let statusCode = 500;
@@ -31,6 +34,19 @@ const errorHandler = (err, req, res, next) => {
     statusCode = 403;
     message = 'Permission denied';
   }
+
+  logger.error(
+    {
+      action: 'errorHandler',
+      err,
+      statusCode,
+      code: err.code,
+      path: req.path,
+      method: req.method,
+      message,
+    },
+    'Error occurred',
+  );
 
   res.status(statusCode).json({
     error: message,

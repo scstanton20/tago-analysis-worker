@@ -429,7 +429,7 @@ This API provides real-time updates via **Server-Sent Events (SSE)** for:
           },
           description: 'Environment variables as key-value pairs',
           example: {
-            API_TOKEN: 'your-token-here',
+            API_TOKEN: '',
             DEBUG: 'true',
           },
         },

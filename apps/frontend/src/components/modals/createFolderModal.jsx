@@ -1,9 +1,10 @@
 // frontend/src/components/modals/createFolderModal.jsx
-import { Modal, TextInput, Button, Stack } from '@mantine/core';
+import { Modal, TextInput, Button, Stack, Text } from '@mantine/core';
 import { useState } from 'react';
 import PropTypes from 'prop-types';
 import { notifications } from '@mantine/notifications';
 import teamService from '../../services/teamService';
+import logger from '../../utils/logger';
 
 export default function CreateFolderModal({
   opened,
@@ -53,7 +54,7 @@ export default function CreateFolderModal({
       setName('');
       onClose();
     } catch (error) {
-      console.error('Error creating folder:', error);
+      logger.error('Error creating folder:', error);
       notifications.show({
         title: 'Error',
         message: error.message || 'Failed to create folder',
@@ -74,10 +75,13 @@ export default function CreateFolderModal({
     <Modal
       opened={opened}
       onClose={onClose}
+      aria-labelledby="create-folder-modal-title"
       title={
-        parentFolderId
-          ? `Create Subfolder in "${parentFolderName}"`
-          : 'Create Folder'
+        <Text fw={600} id="create-folder-modal-title">
+          {parentFolderId
+            ? `Create Subfolder in "${parentFolderName}"`
+            : 'Create Folder'}
+        </Text>
       }
       size="md"
     >
@@ -89,8 +93,6 @@ export default function CreateFolderModal({
           onChange={(e) => setName(e.target.value)}
           onKeyPress={handleKeyPress}
           required
-          autoFocus
-          data-autofocus
         />
 
         <Button onClick={handleCreate} loading={loading} fullWidth>

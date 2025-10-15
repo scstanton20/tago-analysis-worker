@@ -1,5 +1,7 @@
 import pino from 'pino';
-import config from '../../config/default.js';
+
+// Determine environment from NODE_ENV
+const env = process.env.NODE_ENV || 'development';
 
 // Custom serializers for enhanced logging
 const serializers = {
@@ -62,8 +64,7 @@ const serializers = {
 
 // Pino configuration based on environment
 const pinoConfig = {
-  level:
-    process.env.LOG_LEVEL || (config.env === 'development' ? 'debug' : 'info'),
+  level: process.env.LOG_LEVEL || (env === 'development' ? 'debug' : 'info'),
   serializers,
   formatters: {
     level: (label) => ({ level: label.toUpperCase() }),
@@ -81,7 +82,7 @@ const pinoConfig = {
 const transports = [];
 
 // Pretty printing for development
-if (config.env === 'development') {
+if (env === 'development') {
   const ignoreFields = ['pid', 'hostname'];
 
   // Hide module and analysis fields from console unless LOG_INCLUDE_MODULE is true
@@ -117,7 +118,7 @@ if (process.env.LOG_LOKI_URL) {
             : undefined,
         labels: {
           application: 'tago-analysis-worker',
-          environment: config.env,
+          environment: env,
           service: 'backend',
           // Parse additional labels from LOG_LOKI_LABELS (format: key1=value1,key2=value2)
           ...parseLokiLabels(process.env.LOG_LOKI_LABELS),
@@ -188,7 +189,7 @@ export const createAnalysisLogger = (analysisName, additionalContext = {}) => {
   const analysisTransports = [];
 
   // Include the same transports as the main logger
-  if (config.env === 'development') {
+  if (env === 'development') {
     const ignoreFields = ['pid', 'hostname'];
     if (process.env.LOG_INCLUDE_MODULE !== 'true') {
       ignoreFields.push('module', 'analysis');
@@ -222,7 +223,7 @@ export const createAnalysisLogger = (analysisName, additionalContext = {}) => {
               : undefined,
           labels: {
             application: 'tago-analysis-worker',
-            environment: config.env,
+            environment: env,
             service: 'backend',
             analysis: analysisName, // Add analysis name as Loki label
             ...parseLokiLabels(process.env.LOG_LOKI_LABELS),
@@ -254,9 +255,7 @@ export const createAnalysisLogger = (analysisName, additionalContext = {}) => {
 
   // Create analysis-specific logger with its own transports
   const analysisLogger = pino({
-    level:
-      process.env.LOG_LEVEL ||
-      (config.env === 'development' ? 'debug' : 'info'),
+    level: process.env.LOG_LEVEL || (env === 'development' ? 'debug' : 'info'),
     serializers,
     formatters: {
       level: (label) => ({ level: label.toUpperCase() }),

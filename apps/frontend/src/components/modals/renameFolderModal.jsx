@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { notifications } from '@mantine/notifications';
 import teamService from '../../services/teamService';
+import logger from '../../utils/logger';
 
 export default function RenameFolderModal({
   opened,
@@ -49,7 +50,7 @@ export default function RenameFolderModal({
 
       onClose();
     } catch (error) {
-      console.error('Error renaming folder:', error);
+      logger.error('Error renaming folder:', error);
       notifications.show({
         title: 'Error',
         message: error.message || 'Failed to rename folder',
@@ -76,8 +77,6 @@ export default function RenameFolderModal({
           onChange={(e) => setName(e.target.value)}
           onKeyPress={handleKeyPress}
           required
-          autoFocus
-          data-autofocus
         />
 
         <Button onClick={handleRename} loading={loading} fullWidth>
