@@ -38,6 +38,15 @@ describe('sharedDNSCache', () => {
   afterEach(() => {
     process.env = originalEnv;
     process.send = originalSend;
+
+    // Remove all message handlers to prevent memory leak warnings
+    if (messageHandlers) {
+      messageHandlers.forEach((handler) => {
+        process.removeListener('message', handler);
+      });
+      messageHandlers = [];
+    }
+
     vi.resetModules();
   });
 

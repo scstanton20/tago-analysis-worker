@@ -65,7 +65,17 @@ describe('authDatabase', () => {
   });
 
   afterEach(() => {
+    // Restore process.on first
     process.on = originalProcessOn;
+
+    // Remove captured event listeners to prevent memory leak warnings
+    if (processEventHandlers) {
+      Object.keys(processEventHandlers).forEach((event) => {
+        if (processEventHandlers[event]) {
+          process.removeListener(event, processEventHandlers[event]);
+        }
+      });
+    }
   });
 
   describe('getAuthDatabase', () => {

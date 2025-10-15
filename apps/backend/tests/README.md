@@ -70,51 +70,51 @@ tests/
 ├── mocks/                          # Mock implementations
 │   └── fsMocks.js                 # File system mocks
 ├── controllers/                    # Controller tests
-│   ├── analysisController.test.js # ✅ COMPLETED
-│   ├── settingsController.test.js # TODO
-│   ├── statusController.test.js   # TODO
-│   ├── teamController.test.js     # TODO
-│   └── userController.test.js     # TODO
+│   ├── analysisController.test.js
+│   ├── settingsController.test.js
+│   ├── statusController.test.js
+│   ├── teamController.test.js
+│   └── userController.test.js
 ├── services/                       # Service tests
-│   ├── analysisService.test.js    # ✅ COMPLETED
-│   ├── metricsService.test.js     # TODO
-│   ├── teamService.test.js        # TODO
-│   └── dnsCache.test.js           # TODO
+│   ├── analysisService.test.js
+│   ├── metricsService.test.js
+│   ├── teamService.test.js
+│   └── dnsCache.test.js
 ├── models/                         # Model tests
-│   └── analysisProcess.test.js    # ✅ COMPLETED
+│   └── analysisProcess.test.js
 ├── utils/                          # Utility tests
-│   ├── cryptoUtils.test.js        # ✅ COMPLETED
-│   ├── safePath.test.js           # ✅ COMPLETED
-│   ├── storage.test.js            # TODO
-│   ├── sse.test.js                # TODO
-│   ├── responseHelpers.test.js    # TODO
-│   ├── asyncHandler.test.js       # TODO
-│   ├── analysisWrapper.test.js    # TODO
-│   ├── sharedDNSCache.test.js     # TODO
-│   ├── ssrfProtection.test.js     # TODO
-│   ├── mqAPI.test.js              # TODO
-│   ├── logger.test.js             # TODO
-│   ├── metrics-enhanced.test.js   # TODO
-│   └── authDatabase.test.js       # TODO
+│   ├── cryptoUtils.test.js
+│   ├── safePath.test.js
+│   ├── storage.test.js
+│   ├── sse.test.js
+│   ├── responseHelpers.test.js
+│   ├── asyncHandler.test.js
+│   ├── analysisWrapper.test.js
+│   ├── sharedDNSCache.test.js
+│   ├── ssrfProtection.test.js
+│   ├── mqAPI.test.js
+│   ├── logger.test.js
+│   ├── metrics-enhanced.test.js
+│   └── authDatabase.test.js
 ├── middleware/                     # Middleware tests
-│   ├── errorHandler.test.js       # ✅ COMPLETED
-│   ├── validateRequest.test.js    # TODO
-│   ├── rateLimiter.test.js        # TODO
-│   └── betterAuthMiddleware.test.js # TODO
+│   ├── errorHandler.test.js
+│   ├── validateRequest.test.js
+│   ├── rateLimiter.test.js
+│   └── betterAuthMiddleware.test.js
 ├── validation/                     # Validation tests
-│   ├── analysisSchemas.test.js    # ✅ COMPLETED
-│   ├── settingsSchemas.test.js    # TODO
-│   ├── teamSchemas.test.js        # TODO
-│   └── userSchemas.test.js        # TODO
+│   ├── analysisSchemas.test.js
+│   ├── settingsSchemas.test.js
+│   ├── teamSchemas.test.js
+│   └── userSchemas.test.js
 └── routes/                         # Route tests
-    ├── analysisRoutes.test.js     # TODO
-    ├── authRoutes.test.js         # TODO
-    ├── metricsRoutes.test.js      # TODO
-    ├── settingsRoutes.test.js     # TODO
-    ├── sseRoutes.test.js          # TODO
-    ├── statusRoutes.test.js       # ✅ COMPLETED
-    ├── teamRoutes.test.js         # TODO
-    └── userRoutes.test.js         # TODO
+    ├── analysisRoutes.test.js
+    ├── authRoutes.test.js
+    ├── metricsRoutes.test.js
+    ├── settingsRoutes.test.js
+    ├── sseRoutes.test.js
+    ├── statusRoutes.test.js
+    ├── teamRoutes.test.js
+    └── userRoutes.test.js
 ```
 
 ## Writing Tests
@@ -188,74 +188,7 @@ Excluded from coverage:
 - `src/config/**`
 - `src/constants.js`
 - `src/lib/auth.js`
-
-## Completed Tests
-
-The following test files are complete and can serve as templates:
-
-1. **analysisController.test.js** - Full controller test with all endpoints
-2. **analysisService.test.js** - Comprehensive service test with business logic
-3. **analysisProcess.test.js** - Complete model test with lifecycle management
-4. **cryptoUtils.test.js** - Utility test for encryption/decryption
-5. **safePath.test.js** - Security-focused utility test
-6. **errorHandler.test.js** - Middleware test example
-7. **analysisSchemas.test.js** - Validation schema test
-8. **statusRoutes.test.js** - Route test with supertest
-
-## Remaining Tests to Implement
-
-### High Priority
-
-#### Controllers
-
-- **settingsController.test.js** - Settings management endpoints
-- **teamController.test.js** - Team/department management
-- **userController.test.js** - User management
-- **statusController.test.js** - Status and health checks
-
-#### Services
-
-- **teamService.test.js** - Team business logic
-- **metricsService.test.js** - Metrics collection
-- **dnsCache.test.js** - DNS caching service
-
-### Medium Priority
-
-#### Middleware
-
-- **validateRequest.test.js** - Request validation middleware
-- **rateLimiter.test.js** - Rate limiting middleware
-- **betterAuthMiddleware.test.js** - Authentication middleware
-
-#### Validation
-
-- **settingsSchemas.test.js** - Settings validation schemas
-- **teamSchemas.test.js** - Team validation schemas
-- **userSchemas.test.js** - User validation schemas
-
-#### Routes
-
-- **analysisRoutes.test.js** - Analysis API routes
-- **teamRoutes.test.js** - Team API routes
-- **authRoutes.test.js** - Authentication routes
-- **metricsRoutes.test.js** - Metrics routes
-- **sseRoutes.test.js** - SSE routes
-
-### Lower Priority
-
-#### Utilities
-
-- **storage.test.js** - Storage initialization
-- **sse.test.js** - Server-Sent Events manager
-- **responseHelpers.test.js** - HTTP response helpers
-- **asyncHandler.test.js** - Async error handling
-- **analysisWrapper.test.js** - Analysis process wrapper
-- **sharedDNSCache.test.js** - Shared DNS cache
-- **ssrfProtection.test.js** - SSRF protection
-- **mqAPI.test.js** - Message queue API
-- **logger.test.js** - Logging utilities
-- **metrics-enhanced.test.js** - Enhanced metrics
-- **authDatabase.test.js** - Auth database utilities
+- `src/routes/index.js`
 
 ## Test Patterns and Examples
 
@@ -481,75 +414,6 @@ describe('My Routes', () => {
 });
 ```
 
-## Best Practices
-
-### 1. Test Organization
-
-- Use descriptive `describe` blocks for grouping related tests
-- Name test cases clearly with `it('should ...')`
-- Follow Arrange-Act-Assert pattern
-- Keep tests focused and isolated
-
-### 2. Mocking
-
-- Mock external dependencies at the top of the file
-- Use `vi.clearAllMocks()` in `beforeEach` to reset mocks
-- Mock only what's necessary
-- Verify mock calls with `expect().toHaveBeenCalledWith()`
-
-### 3. Test Coverage
-
-- Test happy paths (successful operations)
-- Test error scenarios (failures, invalid input)
-- Test edge cases (empty arrays, null values, boundary conditions)
-- Test security concerns (path traversal, injection attacks)
-
-### 4. Assertions
-
-- Use specific matchers (`toBe`, `toEqual`, `toContain`)
-- Test both return values and side effects
-- Verify error messages and status codes
-- Check that mocks are called with correct arguments
-
-### 5. Async Testing
-
-- Always `await` async functions in tests
-- Use `async/await` syntax consistently
-- Handle promise rejections with `expect().rejects.toThrow()`
-- Test race conditions and concurrent operations
-
-### 6. Test Data
-
-- Use realistic test data
-- Create helper functions for common test data
-- Avoid hardcoding magic numbers
-- Use constants for repeated values
-
-### 7. Performance
-
-- Keep tests fast (mock slow operations)
-- Avoid unnecessary database calls
-- Use parallel test execution (default in Vitest)
-- Profile slow tests with `test:ui`
-
-### 8. Maintenance
-
-- Update tests when code changes
-- Remove obsolete tests
-- Refactor duplicated test code
-- Document complex test scenarios
-
-## Tips for Quick Implementation
-
-1. **Start with happy paths** - Get basic functionality working first
-2. **Copy and adapt** - Use completed tests as templates
-3. **Run tests frequently** - Use watch mode during development
-4. **Focus on coverage gaps** - Check coverage report to find untested code
-5. **Test incrementally** - Complete one file at a time
-6. **Use test:ui** - Visual interface helps understand test flow
-7. **Mock liberally** - Don't hesitate to mock complex dependencies
-8. **Ask for help** - Review completed tests for patterns
-
 ## Running Specific Tests
 
 ```bash
@@ -565,31 +429,3 @@ pnpm test tests/services
 # Run tests with specific name
 pnpm test -t "should create team"
 ```
-
-## Debugging Tests
-
-1. **Use `console.log`** - Temporarily add logs to understand test flow
-2. **Use `test.only`** - Run single test in isolation
-3. **Use `test.skip`** - Skip failing tests temporarily
-4. **Check mock calls** - Verify mocks are called as expected
-5. **Use Vitest UI** - Visual debugging interface
-6. **Check coverage** - Identify untested code paths
-
-## Next Steps
-
-1. Choose a test file from the TODO list
-2. Copy a similar completed test as a template
-3. Read the source file to understand functionality
-4. Write tests for all public methods/endpoints
-5. Run tests and verify coverage
-6. Commit completed test file
-7. Move to next file
-
-## Questions or Issues?
-
-- Review completed test files for patterns
-- Check Vitest documentation: https://vitest.dev
-- Check this README for examples
-- Run `pnpm test:ui` for visual test interface
-
-Good luck with implementing the remaining tests!

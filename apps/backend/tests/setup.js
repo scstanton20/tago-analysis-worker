@@ -1,5 +1,10 @@
 import { vi } from 'vitest';
 
+// Increase max listeners for test environment to prevent warnings
+// Tests often create multiple module instances with process listeners
+// Set to 0 (unlimited) for test environment
+process.setMaxListeners(0);
+
 // Mock environment variables for tests
 process.env.NODE_ENV = 'test';
 process.env.SECRET_KEY = 'test-secret-key-for-testing-purposes-only-32-chars';
