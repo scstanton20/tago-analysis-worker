@@ -301,8 +301,8 @@ async function startServer() {
     if (isProduction && httpsEnabled) {
       try {
         const httpsOptions = {
-          cert: safeReadFileSync(certPath),
-          key: safeReadFileSync(keyPath),
+          cert: safeReadFileSync(certPath, null),
+          key: safeReadFileSync(keyPath, null),
         };
 
         httpsServer = https.createServer(httpsOptions, app);
@@ -341,8 +341,8 @@ async function startServer() {
       if (httpsEnabled) {
         try {
           const httpsOptions = {
-            cert: safeReadFileSync(certPath),
-            key: safeReadFileSync(keyPath),
+            cert: safeReadFileSync(certPath, null),
+            key: safeReadFileSync(keyPath, null),
           };
 
           httpsServer = https.createServer(httpsOptions, app);

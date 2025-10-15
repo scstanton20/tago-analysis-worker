@@ -362,4 +362,103 @@ describe('safePath', () => {
       expect(result).toContain('my-cool-analysis');
     });
   });
+
+  describe('isAbsolutePathSafe', () => {
+    it('should allow valid absolute paths', () => {
+      const validPaths = [
+        '/app/certs/backend.crt',
+        '/etc/ssl/certs/mycert.pem',
+        '/mnt/certificates/cert.crt',
+        '/var/lib/ssl/key.pem',
+      ];
+
+      validPaths.forEach((filePath) => {
+        const result = safePath.isAbsolutePathSafe(filePath);
+        expect(result).toBe(true);
+      });
+    });
+
+    it('should reject relative paths', () => {
+      const relativePaths = [
+        'certs/backend.crt',
+        './certs/backend.crt',
+        '../certs/backend.crt',
+        'backend.crt',
+      ];
+
+      relativePaths.forEach((filePath) => {
+        const result = safePath.isAbsolutePathSafe(filePath);
+        expect(result).toBe(false);
+      });
+    });
+
+    it('should reject paths with traversal attempts', () => {
+      const traversalPaths = [
+        '/app/../etc/passwd',
+        '/app/certs/../../etc/passwd',
+        '/../etc/passwd',
+        '/app/./../../etc/passwd',
+      ];
+
+      traversalPaths.forEach((filePath) => {
+        const result = safePath.isAbsolutePathSafe(filePath);
+        expect(result).toBe(false);
+      });
+    });
+
+    it('should reject empty or null paths', () => {
+      expect(safePath.isAbsolutePathSafe('')).toBe(false);
+      expect(safePath.isAbsolutePathSafe(null)).toBe(false);
+      expect(safePath.isAbsolutePathSafe(undefined)).toBe(false);
+    });
+
+    it('should reject non-string paths', () => {
+      expect(safePath.isAbsolutePathSafe(123)).toBe(false);
+      expect(safePath.isAbsolutePathSafe({})).toBe(false);
+      expect(safePath.isAbsolutePathSafe([])).toBe(false);
+    });
+  });
+
+  describe('safeReadFileSync with basePath = null', () => {
+    it('should allow SSL certificate paths when basePath is null', () => {
+      // These tests verify the validation logic without actual file I/O
+      // The validation happens before fs.readFileSync is called
+      const certPaths = [
+        '/app/certs/backend.crt',
+        '/etc/ssl/certs/server.pem',
+        '/mnt/certificates/mycert.crt',
+      ];
+
+      // isAbsolutePathSafe should return true for these paths
+      certPaths.forEach((filePath) => {
+        const isValid = safePath.isAbsolutePathSafe(filePath);
+        expect(isValid).toBe(true);
+      });
+    });
+
+    it('should reject relative paths when basePath is null', () => {
+      const filePath = 'certs/backend.crt';
+
+      expect(() => {
+        safePath.safeReadFileSync(filePath, null, 'utf8');
+      }).toThrow('Invalid or unsafe file path');
+    });
+
+    it('should reject traversal attempts when basePath is null', () => {
+      const filePath = '/app/../etc/passwd';
+
+      expect(() => {
+        safePath.safeReadFileSync(filePath, null, 'utf8');
+      }).toThrow('Invalid or unsafe file path');
+    });
+
+    it('should still enforce basePath restrictions when basePath is provided', () => {
+      const filePath = '/etc/ssl/certs/cert.pem';
+      const basePath = '/app/analyses-storage';
+
+      expect(() => {
+        safePath.safeReadFileSync(filePath, basePath, 'utf8');
+      }).toThrow('Path traversal attempt detected');
+    });
+  });
 });

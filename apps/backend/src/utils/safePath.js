@@ -266,9 +266,35 @@ export function safeUnlinkSync(filePath, basePath = config.paths.analysis) {
 }
 
 /**
+ * Validates that an absolute path doesn't contain traversal attempts
+ * This is a lighter validation for system paths (like SSL certificates)
+ * that don't need to be within a specific base directory
+ * @param {string} filePath - Path to validate
+ * @returns {boolean} True if path is safe
+ */
+export function isAbsolutePathSafe(filePath) {
+  if (!filePath || typeof filePath !== 'string') {
+    return false;
+  }
+
+  // Must be an absolute path
+  if (!path.isAbsolute(filePath)) {
+    return false;
+  }
+
+  // Reject any path containing '..' segments (traversal attempt)
+  // Even though path.normalize() would resolve them, we want to reject the attempt itself
+  if (filePath.includes('..')) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Safe wrapper for fs.readFileSync
  * @param {string} filePath - File path to read
- * @param {string} [basePath=config.paths.analysis] - Base path for validation
+ * @param {string|null} [basePath=config.paths.analysis] - Base path for validation (null for absolute path validation only)
  * @param {Object|string} options - readFileSync options
  * @returns {Buffer|string}
  * @throws {Error} If path traversal attempt is detected
@@ -278,8 +304,16 @@ export function safeReadFileSync(
   basePath = config.paths.analysis,
   options = {},
 ) {
-  if (basePath && !isPathSafe(filePath, basePath)) {
-    throw new Error('Path traversal attempt detected');
+  if (basePath === null) {
+    // For system paths (like SSL certificates), validate as absolute path without base restriction
+    if (!isAbsolutePathSafe(filePath)) {
+      throw new Error('Invalid or unsafe file path');
+    }
+  } else {
+    // For application paths, validate against base directory
+    if (!isPathSafe(filePath, basePath)) {
+      throw new Error('Path traversal attempt detected');
+    }
   }
   return fsSync.readFileSync(filePath, options);
 }
