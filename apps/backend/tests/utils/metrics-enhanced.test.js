@@ -24,7 +24,12 @@ vi.mock('pidusage', () => ({
 }));
 
 vi.mock('child_process', () => ({
-  exec: vi.fn(),
+  exec: vi.fn((_cmd, callback) => {
+    // Mock exec to work with promisify - call callback with (error, result)
+    if (callback) {
+      callback(null, { stdout: '', stderr: '' });
+    }
+  }),
 }));
 
 vi.mock('../../src/utils/safePath.js', () => ({
