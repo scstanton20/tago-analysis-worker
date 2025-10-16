@@ -287,13 +287,6 @@ class SSEManager {
    */
   sendToUser(userId, data) {
     const userClients = this.clients.get(userId);
-    if (!userClients) {
-      logger.warn(
-        { userId, messageType: data.type },
-        'No SSE clients found for user',
-      );
-      return 0;
-    }
 
     const sentCount = this.broadcastToClients(userClients, data);
 
