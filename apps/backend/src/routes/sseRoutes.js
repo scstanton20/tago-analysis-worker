@@ -7,6 +7,7 @@ import {
 } from '../utils/sse.js';
 import { sseLogoutLimiter } from '../middleware/rateLimiter.js';
 import { createChildLogger } from '../utils/logging/logger.js';
+import { sseCompression } from '../middleware/compression.js';
 
 const router = Router();
 
@@ -86,7 +87,7 @@ const router = Router();
  *                 value:
  *                   error: "Invalid user"
  */
-router.get('/events', authenticateSSE, handleSSEConnection);
+router.get('/events', authenticateSSE, sseCompression(), handleSSEConnection);
 
 /**
 //  * @swagger

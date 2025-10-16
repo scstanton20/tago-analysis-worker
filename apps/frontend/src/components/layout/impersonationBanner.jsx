@@ -1,7 +1,7 @@
 import { Alert, Button, Group, Text } from '@mantine/core';
 import { IconUserCheck, IconX } from '@tabler/icons-react';
-import { useAuth } from '../hooks/useAuth';
-import logger from '../utils/logger';
+import { useAuth } from '../../hooks/useAuth';
+import logger from '../../utils/logger';
 
 export default function ImpersonationBanner() {
   const { isImpersonating, user, exitImpersonation } = useAuth();

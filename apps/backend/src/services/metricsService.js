@@ -75,6 +75,9 @@ class MetricsService {
    */
   constructor() {
     this.lastValues = new Map();
+    // Track network bytes for rate calculation (per-process)
+    // Map structure: processName -> { rxBytes, txBytes, timestamp }
+    this.networkBytesHistory = new Map();
   }
 
   // Get container (backend Node.js process) metrics
@@ -300,22 +303,70 @@ class MetricsService {
         }
       });
 
-      // Get network metrics (bytes)
+      // Get network metrics and calculate rates (Mbps)
+      const now = Date.now();
       const networkMetrics = parsedMetrics.filter(
         (m) => m.name === 'tago_analysis_network_bytes',
       );
+
+      // First pass: collect current bytes for each process
+      const currentNetworkBytes = new Map();
       networkMetrics.forEach((metric) => {
         const name = metric.labels.analysis_name;
         const direction = metric.labels.direction;
         if (name && direction) {
-          if (!processes.has(name)) processes.set(name, {});
+          if (!currentNetworkBytes.has(name)) {
+            currentNetworkBytes.set(name, { rxBytes: 0, txBytes: 0 });
+          }
           if (direction === 'rx') {
-            processes.get(name).networkRx = metric.value;
+            currentNetworkBytes.get(name).rxBytes = metric.value;
           } else if (direction === 'tx') {
-            processes.get(name).networkTx = metric.value;
+            currentNetworkBytes.get(name).txBytes = metric.value;
           }
         }
       });
+
+      // Second pass: calculate rates using historical data
+      currentNetworkBytes.forEach((current, name) => {
+        if (!processes.has(name)) processes.set(name, {});
+
+        const history = this.networkBytesHistory.get(name);
+        let networkRxMbps = 0;
+        let networkTxMbps = 0;
+
+        if (history && history.timestamp) {
+          const timeDiffSeconds = (now - history.timestamp) / 1000;
+          if (timeDiffSeconds > 0) {
+            // Calculate bytes per second, then convert to Mbps
+            const rxBytesPerSec =
+              (current.rxBytes - history.rxBytes) / timeDiffSeconds;
+            const txBytesPerSec =
+              (current.txBytes - history.txBytes) / timeDiffSeconds;
+
+            // Convert bytes/sec to Mbps: (bytes * 8 bits/byte) / 1,000,000 bits/Mbit
+            networkRxMbps = Math.max(0, (rxBytesPerSec * 8) / 1000000);
+            networkTxMbps = Math.max(0, (txBytesPerSec * 8) / 1000000);
+          }
+        }
+
+        processes.get(name).networkRxMbps = networkRxMbps;
+        processes.get(name).networkTxMbps = networkTxMbps;
+
+        // Update history for next calculation
+        this.networkBytesHistory.set(name, {
+          rxBytes: current.rxBytes,
+          txBytes: current.txBytes,
+          timestamp: now,
+        });
+      });
+
+      // Clean up history for processes that no longer exist
+      const currentProcessNames = new Set(currentNetworkBytes.keys());
+      for (const historicalName of this.networkBytesHistory.keys()) {
+        if (!currentProcessNames.has(historicalName)) {
+          this.networkBytesHistory.delete(historicalName);
+        }
+      }
 
       // Convert to array format
       return Array.from(processes.entries()).map(([name, metrics]) => ({
@@ -323,8 +374,9 @@ class MetricsService {
         cpu: metrics.cpu || 0,
         memory: metrics.memory || 0,
         uptime: metrics.uptime || 0,
-        networkRx: metrics.networkRx || 0, // bytes
-        networkTx: metrics.networkTx || 0, // bytes
+        // Network metrics: undefined when not available (e.g., on macOS)
+        networkRxMbps: metrics.networkRxMbps,
+        networkTxMbps: metrics.networkTxMbps,
       }));
     } catch (error) {
       logger.error(

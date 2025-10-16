@@ -65,6 +65,85 @@ const logger = createChildLogger('sse');
  */
 class SSEManager {
   /**
+   * Write SSE message and flush immediately for compression compatibility
+   * Helper method to ensure messages are sent immediately with compression enabled
+   *
+   * @param {Object} res - Express response object
+   * @param {string} message - Formatted SSE message to send
+   * @returns {void}
+   *
+   * Behavior:
+   * - Writes message to response stream
+   * - Flushes immediately if compression middleware is active
+   * - Required for SSE to work with gzip compression
+   */
+  writeAndFlush(res, message) {
+    res.write(message);
+    if (res.flush) {
+      res.flush();
+    }
+  }
+
+  /**
+   * Broadcast message to a collection of clients with optional filtering
+   * Generic broadcast helper to reduce code duplication
+   *
+   * @param {Set|Array} clients - Collection of client objects to broadcast to
+   * @param {Object} data - Message data to send (will be formatted as SSE)
+   * @param {Function} [filterFn=null] - Optional filter function (client) => boolean
+   * @returns {number} Count of clients that successfully received the message
+   *
+   * Behavior:
+   * - Iterates through clients
+   * - Applies optional filter function
+   * - Skips destroyed connections
+   * - Automatically removes failed clients
+   * - Updates lastHeartbeat on successful writes
+   *
+   * Error Handling:
+   * - Logs errors per client
+   * - Collects and removes failed clients after iteration
+   */
+  broadcastToClients(clients, data, filterFn = null) {
+    const message = this.formatSSEMessage(data);
+    let sentCount = 0;
+    const failedClients = [];
+
+    for (const client of clients) {
+      try {
+        // Apply optional filter
+        if (filterFn && !filterFn(client)) {
+          continue;
+        }
+
+        if (!client.res.destroyed) {
+          this.writeAndFlush(client.res, message);
+          sentCount++;
+        } else {
+          failedClients.push(client);
+        }
+      } catch (error) {
+        logger.error(
+          {
+            userId: client.userId,
+            clientId: client.id,
+            error,
+          },
+          'Error broadcasting SSE to client',
+        );
+        failedClients.push(client);
+      }
+    }
+
+    // Clean up failed clients
+    failedClients.forEach((client) => {
+      this.removeClient(client.userId, client.id);
+    });
+
+    return sentCount;
+  }
+
+  /**
    * Add authenticated SSE client connection
    * Registers client in user-specific and global registries, starts heartbeat and metrics if needed
    *
@@ -216,28 +295,13 @@ class SSEManager {
       return 0;
     }
 
-    const message = this.formatSSEMessage(data);
-    let sentCount = 0;
+    const sentCount = this.broadcastToClients(userClients, data);
 
-    for (const client of userClients) {
-      try {
-        if (!client.res.destroyed) {
-          client.res.write(message);
-          sentCount++;
-          logger.debug(
-            { userId, clientId: client.id, messageType: data.type },
-            'SSE message sent to client',
-          );
-        } else {
-          logger.warn(
-            { userId, clientId: client.id },
-            'Skipping destroyed client',
-          );
-        }
-      } catch (error) {
-        logger.error({ userId, error }, 'Error sending SSE to user');
-        this.removeClient(userId, client.id);
-      }
+    if (sentCount > 0) {
+      logger.debug(
+        { userId, messageType: data.type, clientCount: sentCount },
+        'SSE message sent to user clients',
+      );
     }
 
     return sentCount;
@@ -330,37 +394,7 @@ class SSEManager {
    * - Collects and removes failed clients after iteration
    */
   broadcast(data) {
-    const message = this.formatSSEMessage(data);
-    let sentCount = 0;
-    const failedClients = [];
-
-    for (const client of this.globalClients) {
-      try {
-        if (!client.res.destroyed) {
-          client.res.write(message);
-          sentCount++;
-        } else {
-          failedClients.push(client);
-        }
-      } catch (error) {
-        logger.error(
-          {
-            userId: client.userId,
-            clientId: client.id,
-            error,
-          },
-          'Error broadcasting SSE to user',
-        );
-        failedClients.push(client);
-      }
-    }
-
-    // Clean up failed clients
-    failedClients.forEach((client) => {
-      this.removeClient(client.userId, client.id);
-    });
-
-    return sentCount;
+    return this.broadcastToClients(this.globalClients, data);
   }
 
   /**
@@ -514,7 +548,7 @@ class SSEManager {
       };
 
       const message = this.formatSSEMessage(initData);
-      client.res.write(message);
+      this.writeAndFlush(client.res, message);
 
       // Send initial status
       await this.sendStatusUpdate(client);
@@ -675,7 +709,7 @@ class SSEManager {
       };
 
       const message = this.formatSSEMessage(status);
-      client.res.write(message);
+      this.writeAndFlush(client.res, message);
     } catch (error) {
       logger.error({ error }, 'Error sending SSE status update');
     }
@@ -990,22 +1024,11 @@ class SSEManager {
    * - Removes client on send failure
    */
   async broadcastToAdminUsers(data) {
-    let sentCount = 0;
-    for (const client of this.globalClients) {
-      try {
-        if (client.req.user?.role === 'admin' && !client.res.destroyed) {
-          client.res.write(this.formatSSEMessage(data));
-          sentCount++;
-        }
-      } catch (error) {
-        logger.error(
-          { userId: client.userId, error },
-          'Error sending to admin user',
-        );
-        this.removeClient(client.userId, client.id);
-      }
-    }
-    return sentCount;
+    return this.broadcastToClients(
+      this.globalClients,
+      data,
+      (client) => client.req.user?.role === 'admin',
+    );
   }
 
   /**
@@ -1155,7 +1178,7 @@ class SSEManager {
             type: 'metricsUpdate',
             ...filteredMetrics,
           });
-          client.res.write(message);
+          this.writeAndFlush(client.res, message);
         } catch (clientError) {
           logger.error(
             { userId: client.userId, error: clientError },
@@ -1255,7 +1278,7 @@ class SSEManager {
     for (const client of this.globalClients) {
       try {
         if (!client.res.destroyed) {
-          client.res.write(message);
+          this.writeAndFlush(client.res, message);
           // Update lastHeartbeat on successful write
           client.lastHeartbeat = new Date();
         } else {
@@ -1503,7 +1526,10 @@ export function handleSSEConnection(req, res) {
   });
 
   // Send initial connection confirmation
-  res.write('data: {"type":"connection","status":"connected"}\n\n');
+  sseManager.writeAndFlush(
+    res,
+    'data: {"type":"connection","status":"connected"}\n\n',
+  );
 
   // Add client to manager
   const client = sseManager.addClient(req.user.id, res, req);

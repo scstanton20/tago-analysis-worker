@@ -540,8 +540,9 @@ tago_analysis_network_bytes{analysis_name="test-analysis",direction="tx"} 512000
         cpu: 25.5,
         memory: 100, // 104857600 / 1024 / 1024
         uptime: 2, // 7200 / 3600
-        networkRx: 1024000,
-        networkTx: 512000,
+        // Network rates are 0 on first call (no historical data to calculate rate)
+        networkRxMbps: 0,
+        networkTxMbps: 0,
       });
     });
 
@@ -580,8 +581,8 @@ tago_analysis_memory_bytes{analysis_name="a2"} 104857600`;
         cpu: 10,
         memory: 0,
         uptime: 0,
-        networkRx: 0,
-        networkTx: 0,
+        networkRxMbps: undefined, // No network metrics provided
+        networkTxMbps: undefined,
       });
     });
   });

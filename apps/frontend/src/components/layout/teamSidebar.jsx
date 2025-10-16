@@ -16,7 +16,7 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useConnection, useAnalyses } from '../contexts/sseContext/index';
+import { useConnection, useAnalyses } from '../../contexts/sseContext/index';
 import {
   Box,
   Stack,
@@ -38,15 +38,15 @@ import {
   IconUserEdit,
 } from '@tabler/icons-react';
 // Lazy load modal components
-const TeamManagementModal = lazy(() => import('./modals/teamManagementModal'));
-const UserManagementModal = lazy(() => import('./modals/userManagementModal'));
-const ProfileModal = lazy(() => import('./modals/profileModal'));
-import { teamService } from '../services/teamService';
-import { useAuth } from '../hooks/useAuth';
-import { usePermissions } from '../hooks/usePermissions';
-import logger from '../utils/logger';
-import AppLoadingOverlay from './common/AppLoadingOverlay';
-import ChunkLoadErrorBoundary from './common/ChunkLoadErrorBoundary';
+const TeamManagementModal = lazy(() => import('../modals/teamManagementModal'));
+const UserManagementModal = lazy(() => import('../modals/userManagementModal'));
+const ProfileModal = lazy(() => import('../modals/profileModal'));
+import { teamService } from '../../services/teamService';
+import { useAuth } from '../../hooks/useAuth';
+import { usePermissions } from '../../hooks/usePermissions';
+import logger from '../../utils/logger';
+import AppLoadingOverlay from '../common/AppLoadingOverlay';
+import ChunkLoadErrorBoundary from '../common/ChunkLoadErrorBoundary';
 
 // Sortable Team Item
 const SortableTeamItem = ({ team, isSelected, onClick, analysisCount }) => {

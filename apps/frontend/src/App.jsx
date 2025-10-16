@@ -8,17 +8,17 @@ import { PermissionsProvider } from './contexts/PermissionsContext/index.js';
 import { useAuth } from './hooks/useAuth';
 import { usePermissions } from './hooks/usePermissions';
 // Import core components directly to avoid context timing issues
-import TeamSidebar from './components/teamSidebar';
+import TeamSidebar from './components/layout/teamSidebar';
 // Lazy load heavy components that make API calls
 const AnalysisList = lazy(() => import('./components/analysis/analysisList'));
 const AnalysisCreator = lazy(
   () => import('./components/analysis/uploadAnalysis'),
 );
 const LoginPage = lazy(() => import('./components/auth/LoginPage'));
-import ConnectionStatus from './components/connectionStatus';
-import Logo from './components/logo';
-import ImpersonationBanner from './components/impersonationBanner';
-import ThemeSelector from './components/themeSelector';
+import ConnectionStatus from './components/common/connectionStatus';
+import Logo from './components/ui/logo';
+import ImpersonationBanner from './components/layout/impersonationBanner';
+import ThemeSelector from './components/ui/themeSelector';
 import ErrorBoundary from './components/ErrorBoundary';
 import AppLoadingOverlay from './components/common/AppLoadingOverlay';
 import ChunkLoadErrorBoundary from './components/common/ChunkLoadErrorBoundary';

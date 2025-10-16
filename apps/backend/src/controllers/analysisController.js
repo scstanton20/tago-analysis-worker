@@ -208,7 +208,7 @@ class AnalysisController {
    *
    * Side effects:
    * - Starts a child process for the analysis script
-   * - Broadcasts 'analysisStatus' SSE event with status 'running'
+   * - Process lifecycle events (analysisUpdate) are broadcast from analysisProcess.js
    *
    * Security:
    * - Filename is sanitized to prevent path traversal attacks
@@ -231,14 +231,8 @@ class AnalysisController {
         'Analysis started',
       );
 
-      sseManager.broadcastAnalysisUpdate(sanitizedFileName, {
-        type: 'analysisStatus',
-        data: {
-          fileName: sanitizedFileName,
-          status: 'running',
-          enabled: true,
-        },
-      });
+      // No SSE broadcast needed here - the actual process lifecycle event
+      // (analysisUpdate) will be sent from analysisProcess.js when the child process starts
 
       res.json(result);
     } catch (error) {
@@ -259,7 +253,7 @@ class AnalysisController {
    *
    * Side effects:
    * - Kills the analysis child process
-   * - Broadcasts 'analysisStatus' SSE event with status 'stopped'
+   * - Process lifecycle events (analysisUpdate) are broadcast from analysisProcess.js
    *
    * Security:
    * - Filename is sanitized to prevent path traversal attacks
@@ -282,14 +276,8 @@ class AnalysisController {
         'Analysis stopped',
       );
 
-      sseManager.broadcastAnalysisUpdate(sanitizedFileName, {
-        type: 'analysisStatus',
-        data: {
-          fileName: sanitizedFileName,
-          status: 'stopped',
-          enabled: false,
-        },
-      });
+      // No SSE broadcast needed here - the actual process lifecycle event
+      // (analysisUpdate) will be sent from analysisProcess.js when the child process exits
 
       res.json(result);
     } catch (error) {

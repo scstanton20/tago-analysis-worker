@@ -865,7 +865,7 @@ class DNSCacheService {
     if (hitsChanged || missesChanged || errorsChanged || sizeChanged) {
       try {
         const sse = await this.getSSEManager();
-        sse.broadcast({
+        sse.broadcastToAdminUsers({
           type: 'dnsStatsUpdate',
           data: {
             stats: currentStats,

@@ -248,7 +248,8 @@ describe('AnalysisController', () => {
 
       expect(analysisService.runAnalysis).toHaveBeenCalledWith('test-analysis');
       expect(res.json).toHaveBeenCalledWith({ success: true });
-      expect(sseManager.broadcastAnalysisUpdate).toHaveBeenCalled();
+      // No SSE broadcast expected here - the actual process lifecycle event
+      // (analysisUpdate) will be sent from analysisProcess.js when the child process starts
     });
 
     it('should handle run errors', async () => {
@@ -282,7 +283,8 @@ describe('AnalysisController', () => {
         'test-analysis',
       );
       expect(res.json).toHaveBeenCalledWith({ success: true });
-      expect(sseManager.broadcastAnalysisUpdate).toHaveBeenCalled();
+      // No SSE broadcast expected here - the actual process lifecycle event
+      // (analysisUpdate) will be sent from analysisProcess.js when the child process exits
     });
 
     it('should handle stop errors', async () => {

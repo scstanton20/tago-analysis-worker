@@ -176,12 +176,7 @@ export const analysisValidationSchemas = {
       fileName: filenameSchema,
     }),
     body: z.object({
-      env: z
-        .record(z.string())
-        .refine(
-          (obj) => typeof obj === 'object' && !Array.isArray(obj),
-          'Environment variables must be provided as an object',
-        ),
+      env: z.record(z.string(), z.string()),
     }),
   },
 

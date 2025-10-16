@@ -1,7 +1,7 @@
 // frontend/src/components/common/AppLoadingOverlay.jsx
 import PropTypes from 'prop-types';
 import { LoadingOverlay, Portal, Stack, Text, Button } from '@mantine/core';
-import Logo from '../logo';
+import Logo from '../ui/logo';
 
 /**
  * Unified loading overlay component used across the application

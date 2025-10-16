@@ -504,6 +504,17 @@ export function SSEProvider({ children }) {
     }, 1000); // Small delay to let notification show
   }, []);
 
+  const handleAdminUserRoleUpdated = useCallback((data) => {
+    // This event is sent to all admins when any user's role is updated
+    // Dispatch custom event for user management modal to refresh
+    logger.log('SSE: Admin notification - user role updated:', data.data);
+    window.dispatchEvent(
+      new CustomEvent('admin-user-role-updated', {
+        detail: data.data,
+      }),
+    );
+  }, []);
+
   const handleLog = useCallback((data) => {
     if (data.data?.fileName && data.data?.log) {
       const { fileName, log, totalCount } = data.data;
@@ -669,6 +680,7 @@ export function SSEProvider({ children }) {
       userTeamsUpdated: handleUserTeamsUpdated,
       userRemoved: handleUserRemoved,
       userRoleUpdated: handleUserRoleUpdated,
+      adminUserRoleUpdated: handleAdminUserRoleUpdated,
       log: handleLog,
       logsCleared: handleLogsCleared,
       analysisRolledBack: handleAnalysisRolledBack,
@@ -699,6 +711,7 @@ export function SSEProvider({ children }) {
       handleUserTeamsUpdated,
       handleUserRemoved,
       handleUserRoleUpdated,
+      handleAdminUserRoleUpdated,
       handleLog,
       handleLogsCleared,
       handleAnalysisRolledBack,

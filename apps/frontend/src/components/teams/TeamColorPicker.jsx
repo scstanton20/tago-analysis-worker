@@ -15,6 +15,7 @@ import {
 } from '@mantine/core';
 import { IconX } from '@tabler/icons-react';
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const PREDEFINED_COLORS = [
   '#3b82f6', // blue
   '#10b981', // emerald
@@ -148,6 +149,7 @@ TeamColorPicker.propTypes = {
 /**
  * Get available colors excluding those already used
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function getAvailableColors(usedColors, excludeColor = null) {
   const exclude = new Set(usedColors);
   if (excludeColor) exclude.delete(excludeColor);

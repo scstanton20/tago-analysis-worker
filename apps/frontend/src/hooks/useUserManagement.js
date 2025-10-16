@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useForm } from '@mantine/form';
 import { admin, authClient } from '../lib/auth';
 import { userService } from '../services/userService';
@@ -276,6 +276,15 @@ export function useUserManagement({
 
             logger.log(
               `Role change from ${editingUser.role} to ${values.role}`,
+            );
+
+            // Immediately update the users array (optimistic update)
+            setUsers((prevUsers) =>
+              prevUsers.map((user) =>
+                user.id === editingUser.id
+                  ? { ...user, role: values.role }
+                  : user,
+              ),
             );
 
             setEditingUser((prev) => ({
@@ -770,6 +779,47 @@ export function useUserManagement({
   const handleSessionsModalClose = useCallback(() => {
     setShowSessionsModal(false);
     setSelectedUserForSessions(null);
+  }, []);
+
+  // Listen for SSE events for user role updates
+  useEffect(() => {
+    const handleAdminUserRoleUpdated = (event) => {
+      const data = event.detail;
+      logger.log(
+        'User management: Received admin user role update event:',
+        data,
+      );
+
+      // Update the specific user in the users list without a full reload
+      setUsers((prevUsers) => {
+        return prevUsers.map((user) => {
+          if (user.id === data.userId) {
+            logger.log(
+              `Updating user ${user.id} role from ${user.role} to ${data.role}`,
+            );
+            return {
+              ...user,
+              role: data.role,
+            };
+          }
+          return user;
+        });
+      });
+    };
+
+    // Add event listener
+    window.addEventListener(
+      'admin-user-role-updated',
+      handleAdminUserRoleUpdated,
+    );
+
+    // Cleanup
+    return () => {
+      window.removeEventListener(
+        'admin-user-role-updated',
+        handleAdminUserRoleUpdated,
+      );
+    };
   }, []);
 
   return {

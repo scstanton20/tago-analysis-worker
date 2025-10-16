@@ -698,6 +698,28 @@ class UserController {
       // Refresh SSE init data with updated permissions
       await sseManager.refreshInitDataForUser(userId);
 
+      // Broadcast to all admin users to update their user management modal
+      // Get user details using Better Auth API
+      const userResult = await auth.api.getUser({
+        query: {
+          id: userId,
+        },
+      });
+
+      const updatedUser = userResult?.data;
+      const userName = updatedUser?.name || updatedUser?.email || 'User';
+
+      await sseManager.broadcastToAdminUsers({
+        type: 'adminUserRoleUpdated',
+        data: {
+          userId,
+          role,
+          userName,
+          message: `${userName}'s role has been updated to ${roleLabel}`,
+          action: 'refresh_user_list',
+        },
+      });
+
       res.json({ success: true, data: result.data });
     } catch (error) {
       handleError(res, error, 'updating user organization role', {

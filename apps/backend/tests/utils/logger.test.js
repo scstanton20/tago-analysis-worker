@@ -296,9 +296,6 @@ describe('logger', () => {
         spawnargs: ['node', 'script.js', '--flag', 'extra1', 'extra2'],
       };
 
-      // Access the serializer directly through the logger's bindings
-      const serialized = logger.bindings().process || mockProcess;
-
       // Test that we can create a log with process data
       expect(() => logger.info({ process: mockProcess }, 'test')).not.toThrow();
     });
@@ -324,7 +321,9 @@ describe('logger', () => {
       testError.syscall = 'open';
       testError.path = '/tmp/test.txt';
 
-      expect(() => logger.error({ err: testError }, 'error occurred')).not.toThrow();
+      expect(() =>
+        logger.error({ err: testError }, 'error occurred'),
+      ).not.toThrow();
     });
 
     it('should handle null error in serializer', async () => {
@@ -385,7 +384,9 @@ describe('logger', () => {
         },
       };
 
-      expect(() => logger.info({ res: mockResponse }, 'response')).not.toThrow();
+      expect(() =>
+        logger.info({ res: mockResponse }, 'response'),
+      ).not.toThrow();
     });
 
     it('should handle null response in serializer', async () => {
@@ -407,7 +408,9 @@ describe('logger', () => {
         statusCode: 200,
       };
 
-      expect(() => logger.info({ res: mockResponse }, 'response')).not.toThrow();
+      expect(() =>
+        logger.info({ res: mockResponse }, 'response'),
+      ).not.toThrow();
     });
 
     it('should handle request without headers or connection', async () => {

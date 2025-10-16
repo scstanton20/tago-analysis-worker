@@ -22,7 +22,7 @@ import {
 import { signIn, signInPasskey } from '../../lib/auth.js';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import logger from '../../utils/logger';
-import Logo from '../logo';
+import Logo from '../ui/logo';
 import PasswordOnboarding from './passwordOnboarding';
 
 export default function LoginPage() {

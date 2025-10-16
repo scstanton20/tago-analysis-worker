@@ -1,6 +1,6 @@
 // frontend/src/components/connectionStatus.jsx
 import { useState, lazy, Suspense } from 'react';
-import { useConnection, useBackend } from '../contexts/sseContext';
+import { useConnection, useBackend } from '../../contexts/sseContext';
 import {
   ActionIcon,
   Popover,
@@ -13,11 +13,11 @@ import {
   Indicator,
 } from '@mantine/core';
 import { IconRefresh, IconSettings } from '@tabler/icons-react';
-import AppLoadingOverlay from './common/AppLoadingOverlay';
-import ChunkLoadErrorBoundary from './common/ChunkLoadErrorBoundary';
+import AppLoadingOverlay from '../common/AppLoadingOverlay';
+import ChunkLoadErrorBoundary from '../common/ChunkLoadErrorBoundary';
 
 // Lazy load settings modal
-const SettingsModal = lazy(() => import('./modals/settingsModal'));
+const SettingsModal = lazy(() => import('../modals/settingsModal'));
 
 const ConnectionStatus = () => {
   const [isExpanded, setIsExpanded] = useState(false);

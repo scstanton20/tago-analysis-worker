@@ -9,8 +9,6 @@ export function SSEAnalysesProvider({ children }) {
   const [loadingAnalyses, setLoadingAnalyses] = useState(new Set());
 
   const logSequences = useRef(new Map());
-  const analysisStartTimes = useRef(new Map());
-  const analysisStartTimeouts = useRef(new Map());
 
   const addLoadingAnalysis = useCallback((analysisName) => {
     setLoadingAnalyses((prev) => new Set([...prev, analysisName]));
@@ -82,102 +80,59 @@ export function SSEAnalysesProvider({ children }) {
     });
   }, []);
 
-  const handleAnalysisUpdate = useCallback((data) => {
-    if (data.analysisName && data.update) {
-      setAnalyses((prev) => ({
-        ...prev,
-        [data.analysisName]: {
-          ...prev[data.analysisName],
-          ...data.update,
-        },
-      }));
+  const handleAnalysisUpdate = useCallback(
+    (data) => {
+      if (data.analysisName && data.update) {
+        setAnalyses((prev) => ({
+          ...prev,
+          [data.analysisName]: {
+            ...prev[data.analysisName],
+            ...data.update,
+          },
+        }));
 
-      // When analysis starts
-      if (data.update.status === 'running') {
-        const startTime = Date.now();
-        analysisStartTimes.current.set(data.analysisName, startTime);
+        // Always remove loading state when we get a status update
+        removeLoadingAnalysis(data.analysisName);
 
-        // Show "Starting..." notification
-        import('@mantine/notifications').then(({ notifications }) => {
-          const notifId = `${data.analysisName}-starting`;
-          notifications.show({
-            id: notifId,
-            title: 'Starting...',
-            message: `${data.analysisName}`,
-            color: 'blue',
-            loading: true,
-            autoClose: false,
+        // Show notifications for status changes
+        if (data.update.status === 'running') {
+          import('@mantine/notifications').then(({ notifications }) => {
+            notifications.show({
+              title: 'Started',
+              message: `${data.analysisName} is now running`,
+              color: 'green',
+              autoClose: 3000,
+            });
           });
-        });
-
-        // Schedule success notification after 1 second
-        const timeoutId = setTimeout(() => {
-          const currentStartTime = analysisStartTimes.current.get(
-            data.analysisName,
-          );
-          if (currentStartTime === startTime) {
-            // Still running - show success
-            import('@mantine/notifications').then(({ notifications }) => {
-              notifications.update({
-                id: `${data.analysisName}-starting`,
-                title: 'Started',
-                message: `${data.analysisName} is running`,
-                color: 'green',
-                loading: false,
+        } else if (
+          data.update.status === 'stopped' &&
+          data.update.exitCode !== undefined
+        ) {
+          // Analysis stopped
+          import('@mantine/notifications').then(({ notifications }) => {
+            if (data.update.exitCode === 0) {
+              // Normal exit
+              notifications.show({
+                title: 'Stopped',
+                message: `${data.analysisName} stopped`,
+                color: 'blue',
                 autoClose: 3000,
               });
-            });
-            analysisStartTimes.current.delete(data.analysisName);
-            analysisStartTimeouts.current.delete(data.analysisName);
-          }
-        }, 1000);
-
-        analysisStartTimeouts.current.set(data.analysisName, timeoutId);
-      }
-
-      // When analysis stops (any exit code)
-      if (
-        data.update.status === 'stopped' &&
-        data.update.exitCode !== undefined
-      ) {
-        const startTime = analysisStartTimes.current.get(data.analysisName);
-        if (startTime) {
-          const runDuration = Date.now() - startTime;
-
-          // IMMEDIATELY delete start time and clear timeout to prevent success notification
-          analysisStartTimes.current.delete(data.analysisName);
-
-          const timeoutId = analysisStartTimeouts.current.get(
-            data.analysisName,
-          );
-          if (timeoutId) {
-            clearTimeout(timeoutId);
-            analysisStartTimeouts.current.delete(data.analysisName);
-          }
-
-          if (runDuration <= 1000) {
-            // Exited within 1 second - this is always a failure for listeners
-            // (they should stay running continuously)
-            // Small delay to ensure the "Starting..." notification was created
-            setTimeout(() => {
-              import('@mantine/notifications').then(({ notifications }) => {
-                const exitCode = data.update.exitCode;
-
-                notifications.update({
-                  id: `${data.analysisName}-starting`,
-                  title: 'Failed to Start',
-                  message: `${data.analysisName} exited with code ${exitCode} after ${runDuration}ms`,
-                  color: 'red',
-                  loading: false,
-                  autoClose: 5000,
-                });
+            } else {
+              // Error exit
+              notifications.show({
+                title: 'Failed',
+                message: `${data.analysisName} exited with code ${data.update.exitCode}`,
+                color: 'red',
+                autoClose: 5000,
               });
-            }, 50); // 50ms delay to ensure notification was created
-          }
+            }
+          });
         }
       }
-    }
-  }, []);
+    },
+    [removeLoadingAnalysis],
+  );
 
   const handleAnalysisCreated = useCallback((data) => {
     if (data.data?.analysis) {
@@ -247,32 +202,6 @@ export function SSEAnalysesProvider({ children }) {
         }
         return newAnalyses;
       });
-    }
-  }, []);
-
-  const handleAnalysisStatus = useCallback((data) => {
-    if (data.data?.fileName) {
-      const fileName = data.data.fileName;
-      setLoadingAnalyses((prev) => {
-        const newSet = new Set(prev);
-        newSet.delete(fileName);
-        return newSet;
-      });
-      setAnalyses((prev) => ({
-        ...prev,
-        [fileName]: {
-          ...prev[fileName],
-          status: data.data.status,
-          enabled: data.data.enabled,
-          teamId:
-            data.data.teamId ||
-            data.data.department ||
-            prev[fileName]?.teamId ||
-            prev[fileName]?.department,
-          lastRun: data.data.lastRun || prev[fileName]?.lastRun,
-          startTime: data.data.startTime || prev[fileName]?.startTime,
-        },
-      }));
     }
   }, []);
 
@@ -450,9 +379,6 @@ export function SSEAnalysesProvider({ children }) {
         case 'analysisRenamed':
           handleAnalysisRenamed(data);
           break;
-        case 'analysisStatus':
-          handleAnalysisStatus(data);
-          break;
         case 'analysisUpdated':
           handleAnalysisUpdated(data);
           break;
@@ -484,7 +410,6 @@ export function SSEAnalysesProvider({ children }) {
       handleAnalysisCreated,
       handleAnalysisDeleted,
       handleAnalysisRenamed,
-      handleAnalysisStatus,
       handleAnalysisUpdated,
       handleAnalysisEnvironmentUpdated,
       handleLog,
@@ -497,11 +422,7 @@ export function SSEAnalysesProvider({ children }) {
 
   // Cleanup effect
   const cleanup = useCallback(() => {
-    // Clear all pending analysis start timeouts
-    analysisStartTimeouts.current.forEach((timeoutId) =>
-      clearTimeout(timeoutId),
-    );
-    analysisStartTimeouts.current.clear();
+    // No cleanup needed
   }, []);
 
   const value = useMemo(

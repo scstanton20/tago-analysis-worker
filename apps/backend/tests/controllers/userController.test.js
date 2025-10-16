@@ -11,6 +11,7 @@ vi.mock('../../src/lib/auth.js', () => ({
       removeUser: vi.fn(),
       banUser: vi.fn(),
       unbanUser: vi.fn(),
+      getUser: vi.fn(),
     },
     $context: Promise.resolve({
       password: {
@@ -33,6 +34,7 @@ vi.mock('../../src/utils/sse.js', () => ({
   sseManager: {
     sendToUser: vi.fn(),
     refreshInitDataForUser: vi.fn(),
+    broadcastToAdminUsers: vi.fn(),
   },
 }));
 
@@ -532,6 +534,16 @@ describe('UserController', () => {
         error: null,
       });
 
+      // Mock getUser API to return user details
+      auth.api.getUser.mockResolvedValue({
+        data: {
+          id: 'user-123',
+          name: 'Test User',
+          email: 'test@example.com',
+        },
+        error: null,
+      });
+
       await UserController.updateUserOrganizationRole(req, res);
 
       expect(auth.api.updateMemberRole).toHaveBeenCalledWith({
@@ -553,6 +565,82 @@ describe('UserController', () => {
       expect(sseManager.refreshInitDataForUser).toHaveBeenCalledWith(
         'user-123',
       );
+    });
+
+    it('should broadcast role update to all admin users', async () => {
+      const req = createMockRequest({
+        params: { userId: 'user-123' },
+        body: {
+          organizationId: 'org-123',
+          role: 'admin',
+        },
+      });
+      const res = createMockResponse();
+
+      auth.api.updateMemberRole.mockResolvedValue({
+        data: { role: 'admin' },
+        error: null,
+      });
+
+      // Mock getUser API to return user details
+      auth.api.getUser.mockResolvedValue({
+        data: {
+          id: 'user-123',
+          name: 'Test User',
+          email: 'test@example.com',
+        },
+        error: null,
+      });
+
+      await UserController.updateUserOrganizationRole(req, res);
+
+      // Verify the admin broadcast was called
+      expect(sseManager.broadcastToAdminUsers).toHaveBeenCalledWith({
+        type: 'adminUserRoleUpdated',
+        data: {
+          userId: 'user-123',
+          role: 'admin',
+          userName: 'Test User',
+          message: "Test User's role has been updated to Administrator",
+          action: 'refresh_user_list',
+        },
+      });
+    });
+
+    it('should use email as userName when name is not available', async () => {
+      const req = createMockRequest({
+        params: { userId: 'user-123' },
+        body: {
+          organizationId: 'org-123',
+          role: 'user',
+        },
+      });
+      const res = createMockResponse();
+
+      auth.api.updateMemberRole.mockResolvedValue({
+        data: { role: 'user' },
+        error: null,
+      });
+
+      // Mock getUser API with no name, only email
+      auth.api.getUser.mockResolvedValue({
+        data: {
+          id: 'user-123',
+          name: null,
+          email: 'test@example.com',
+        },
+        error: null,
+      });
+
+      await UserController.updateUserOrganizationRole(req, res);
+
+      expect(sseManager.broadcastToAdminUsers).toHaveBeenCalledWith({
+        type: 'adminUserRoleUpdated',
+        data: expect.objectContaining({
+          userName: 'test@example.com',
+          message: "test@example.com's role has been updated to User",
+        }),
+      });
     });
 
     it('should handle unauthorized errors', async () => {

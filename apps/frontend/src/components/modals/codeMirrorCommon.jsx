@@ -9,6 +9,7 @@
  * @deprecated
  */
 
+/* eslint-disable react-refresh/only-export-components */
 // Re-export for backward compatibility
 export { CodeMirrorEditor } from '../editor/CodeMirrorEditor';
 export { default } from './AnalysisEditModal';

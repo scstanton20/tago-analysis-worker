@@ -764,7 +764,7 @@ describe('DNSCacheService', () => {
   describe('checkAndBroadcastStats', () => {
     it('should broadcast stats when hits changed', async () => {
       const mockSSE = {
-        broadcast: vi.fn(),
+        broadcastToAdminUsers: vi.fn(),
       };
 
       vi.spyOn(dnsCache, 'getSSEManager').mockResolvedValue(mockSSE);
@@ -774,7 +774,7 @@ describe('DNSCacheService', () => {
 
       await dnsCache.checkAndBroadcastStats();
 
-      expect(mockSSE.broadcast).toHaveBeenCalledWith({
+      expect(mockSSE.broadcastToAdminUsers).toHaveBeenCalledWith({
         type: 'dnsStatsUpdate',
         data: {
           stats: expect.objectContaining({
@@ -788,7 +788,7 @@ describe('DNSCacheService', () => {
 
     it('should broadcast stats when misses changed', async () => {
       const mockSSE = {
-        broadcast: vi.fn(),
+        broadcastToAdminUsers: vi.fn(),
       };
 
       vi.spyOn(dnsCache, 'getSSEManager').mockResolvedValue(mockSSE);
@@ -798,13 +798,13 @@ describe('DNSCacheService', () => {
 
       await dnsCache.checkAndBroadcastStats();
 
-      expect(mockSSE.broadcast).toHaveBeenCalled();
+      expect(mockSSE.broadcastToAdminUsers).toHaveBeenCalled();
       expect(dnsCache.lastStatsSnapshot.misses).toBe(20);
     });
 
     it('should broadcast stats when errors changed', async () => {
       const mockSSE = {
-        broadcast: vi.fn(),
+        broadcastToAdminUsers: vi.fn(),
       };
 
       vi.spyOn(dnsCache, 'getSSEManager').mockResolvedValue(mockSSE);
@@ -814,13 +814,13 @@ describe('DNSCacheService', () => {
 
       await dnsCache.checkAndBroadcastStats();
 
-      expect(mockSSE.broadcast).toHaveBeenCalled();
+      expect(mockSSE.broadcastToAdminUsers).toHaveBeenCalled();
       expect(dnsCache.lastStatsSnapshot.errors).toBe(5);
     });
 
     it('should broadcast stats when cache size changed', async () => {
       const mockSSE = {
-        broadcast: vi.fn(),
+        broadcastToAdminUsers: vi.fn(),
       };
 
       vi.spyOn(dnsCache, 'getSSEManager').mockResolvedValue(mockSSE);
@@ -831,13 +831,13 @@ describe('DNSCacheService', () => {
 
       await dnsCache.checkAndBroadcastStats();
 
-      expect(mockSSE.broadcast).toHaveBeenCalled();
+      expect(mockSSE.broadcastToAdminUsers).toHaveBeenCalled();
       expect(dnsCache.lastStatsSnapshot.cacheSize).toBe(2);
     });
 
     it('should not broadcast when stats unchanged', async () => {
       const mockSSE = {
-        broadcast: vi.fn(),
+        broadcastToAdminUsers: vi.fn(),
       };
 
       vi.spyOn(dnsCache, 'getSSEManager').mockResolvedValue(mockSSE);
@@ -856,12 +856,14 @@ describe('DNSCacheService', () => {
 
       await dnsCache.checkAndBroadcastStats();
 
-      expect(mockSSE.broadcast).not.toHaveBeenCalled();
+      expect(mockSSE.broadcastToAdminUsers).not.toHaveBeenCalled();
     });
 
     it('should handle broadcast errors gracefully', async () => {
       const mockSSE = {
-        broadcast: vi.fn().mockRejectedValue(new Error('Broadcast failed')),
+        broadcastToAdminUsers: vi
+          .fn()
+          .mockRejectedValue(new Error('Broadcast failed')),
       };
 
       vi.spyOn(dnsCache, 'getSSEManager').mockResolvedValue(mockSSE);
@@ -887,7 +889,7 @@ describe('DNSCacheService', () => {
 
     it('should update all snapshot fields after broadcast', async () => {
       const mockSSE = {
-        broadcast: vi.fn(),
+        broadcastToAdminUsers: vi.fn(),
       };
 
       vi.spyOn(dnsCache, 'getSSEManager').mockResolvedValue(mockSSE);

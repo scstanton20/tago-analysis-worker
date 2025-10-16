@@ -13,7 +13,7 @@ import {
 } from '@mantine/core';
 import { IconAlertCircle, IconKey } from '@tabler/icons-react';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
-import Logo from '../logo';
+import Logo from '../ui/logo.jsx';
 import { validatePassword } from '../../utils/userValidation';
 
 export default function PasswordOnboarding({
