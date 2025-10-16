@@ -105,17 +105,17 @@ class SSEManager {
    * - Collects and removes failed clients after iteration
    */
   broadcastToClients(clients, data, filterFn = null) {
+    if (!clients || typeof clients[Symbol.iterator] !== 'function') {
+      return 0; // safely skip if not iterable (user has no connected clients)
+    }
+
     const message = this.formatSSEMessage(data);
     let sentCount = 0;
     const failedClients = [];
 
     for (const client of clients) {
       try {
-        // Apply optional filter
-        if (filterFn && !filterFn(client)) {
-          continue;
-        }
-
+        if (filterFn && !filterFn(client)) continue;
         if (!client.res.destroyed) {
           this.writeAndFlush(client.res, message);
           sentCount++;
@@ -124,22 +124,16 @@ class SSEManager {
         }
       } catch (error) {
         logger.error(
-          {
-            userId: client.userId,
-            clientId: client.id,
-            error,
-          },
+          { userId: client.userId, clientId: client.id, error },
           'Error broadcasting SSE to client',
         );
         failedClients.push(client);
       }
     }
 
-    // Clean up failed clients
-    failedClients.forEach((client) => {
-      this.removeClient(client.userId, client.id);
-    });
-
+    failedClients.forEach((client) =>
+      this.removeClient(client.userId, client.id),
+    );
     return sentCount;
   }
 
@@ -862,10 +856,7 @@ class SSEManager {
       const { getUsersWithTeamAccess } = await import(
         '../middleware/betterAuthMiddleware.js'
       );
-      const authorizedUsers = await getUsersWithTeamAccess(
-        teamId,
-        'view_analyses',
-      );
+      const authorizedUsers = getUsersWithTeamAccess(teamId, 'view_analyses');
 
       let sentCount = 0;
       for (const userId of authorizedUsers) {
