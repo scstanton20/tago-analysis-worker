@@ -145,8 +145,6 @@ function ProcessTable({ processes, loading = false }) {
           <Table.Th>Process Name</Table.Th>
           <Table.Th>CPU %</Table.Th>
           <Table.Th>Memory (MB)</Table.Th>
-          <Table.Th>RX (Mbps)</Table.Th>
-          <Table.Th>TX (Mbps)</Table.Th>
           <Table.Th>Uptime (hrs)</Table.Th>
         </Table.Tr>
       </Table.Thead>
@@ -174,36 +172,6 @@ function ProcessTable({ processes, loading = false }) {
               </Group>
             </Table.Td>
             <Table.Td>{process.memory?.toFixed(0) || '0'}</Table.Td>
-            <Table.Td>
-              <Text
-                c={
-                  process.networkRxMbps === undefined
-                    ? 'dimmed'
-                    : process.networkRxMbps > 0
-                      ? 'blue'
-                      : 'dimmed'
-                }
-              >
-                {process.networkRxMbps === undefined
-                  ? 'N/A'
-                  : process.networkRxMbps?.toFixed(2) || '0.00'}
-              </Text>
-            </Table.Td>
-            <Table.Td>
-              <Text
-                c={
-                  process.networkTxMbps === undefined
-                    ? 'dimmed'
-                    : process.networkTxMbps > 0
-                      ? 'green'
-                      : 'dimmed'
-                }
-              >
-                {process.networkTxMbps === undefined
-                  ? 'N/A'
-                  : process.networkTxMbps?.toFixed(2) || '0.00'}
-              </Text>
-            </Table.Td>
             <Table.Td>{process.uptime?.toFixed(1) || '0.0'}</Table.Td>
           </Table.Tr>
         ))}
@@ -218,8 +186,6 @@ ProcessTable.propTypes = {
       name: PropTypes.string,
       cpu: PropTypes.number,
       memory: PropTypes.number,
-      networkRxMbps: PropTypes.number,
-      networkTxMbps: PropTypes.number,
       uptime: PropTypes.number,
     }),
   ),

@@ -19,6 +19,19 @@ vi.mock('../../src/middleware/validateRequest.js', () => ({
   validateRequest: () => (req, res, next) => next(),
 }));
 
+vi.mock('../../src/validation/userSchemas.js', () => ({
+  userValidationSchemas: {
+    getUserTeamMemberships: {},
+    setInitialPassword: {},
+    addToOrganization: {},
+    assignUserToTeams: {},
+    updateUserTeamAssignments: {},
+    updateUserOrganizationRole: {},
+    removeUserFromOrganization: {},
+    forceLogout: {},
+  },
+}));
+
 vi.mock('../../src/controllers/userController.js', () => ({
   default: {
     getUserTeamMemberships: vi.fn((req, res) =>
@@ -90,6 +103,12 @@ vi.mock('../../src/controllers/userController.js', () => ({
       res.json({
         success: true,
         message: 'User removed from organization',
+      }),
+    ),
+    forceLogout: vi.fn((req, res) =>
+      res.json({
+        success: true,
+        data: { closedConnections: 1 },
       }),
     ),
   },

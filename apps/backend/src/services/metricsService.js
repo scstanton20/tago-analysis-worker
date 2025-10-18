@@ -75,9 +75,6 @@ class MetricsService {
    */
   constructor() {
     this.lastValues = new Map();
-    // Track network bytes for rate calculation (per-process)
-    // Map structure: processName -> { rxBytes, txBytes, timestamp }
-    this.networkBytesHistory = new Map();
   }
 
   // Get container (backend Node.js process) metrics
@@ -267,6 +264,18 @@ class MetricsService {
       const parsedMetrics = this.parsePrometheusMetrics(metricsString);
       const processes = new Map();
 
+      // Get process status first (1 = running, 0 = stopped)
+      const statusMetrics = parsedMetrics.filter(
+        (m) => m.name === 'tago_analysis_process_status',
+      );
+      statusMetrics.forEach((metric) => {
+        const name = metric.labels.analysis_name;
+        if (name) {
+          if (!processes.has(name)) processes.set(name, {});
+          processes.get(name).status = metric.value;
+        }
+      });
+
       // Get CPU metrics
       const cpuMetrics = parsedMetrics.filter(
         (m) => m.name === 'tago_analysis_cpu_percent',
@@ -303,81 +312,15 @@ class MetricsService {
         }
       });
 
-      // Get network metrics and calculate rates (Mbps)
-      const now = Date.now();
-      const networkMetrics = parsedMetrics.filter(
-        (m) => m.name === 'tago_analysis_network_bytes',
-      );
-
-      // First pass: collect current bytes for each process
-      const currentNetworkBytes = new Map();
-      networkMetrics.forEach((metric) => {
-        const name = metric.labels.analysis_name;
-        const direction = metric.labels.direction;
-        if (name && direction) {
-          if (!currentNetworkBytes.has(name)) {
-            currentNetworkBytes.set(name, { rxBytes: 0, txBytes: 0 });
-          }
-          if (direction === 'rx') {
-            currentNetworkBytes.get(name).rxBytes = metric.value;
-          } else if (direction === 'tx') {
-            currentNetworkBytes.get(name).txBytes = metric.value;
-          }
-        }
-      });
-
-      // Second pass: calculate rates using historical data
-      currentNetworkBytes.forEach((current, name) => {
-        if (!processes.has(name)) processes.set(name, {});
-
-        const history = this.networkBytesHistory.get(name);
-        let networkRxMbps = 0;
-        let networkTxMbps = 0;
-
-        if (history && history.timestamp) {
-          const timeDiffSeconds = (now - history.timestamp) / 1000;
-          if (timeDiffSeconds > 0) {
-            // Calculate bytes per second, then convert to Mbps
-            const rxBytesPerSec =
-              (current.rxBytes - history.rxBytes) / timeDiffSeconds;
-            const txBytesPerSec =
-              (current.txBytes - history.txBytes) / timeDiffSeconds;
-
-            // Convert bytes/sec to Mbps: (bytes * 8 bits/byte) / 1,000,000 bits/Mbit
-            networkRxMbps = Math.max(0, (rxBytesPerSec * 8) / 1000000);
-            networkTxMbps = Math.max(0, (txBytesPerSec * 8) / 1000000);
-          }
-        }
-
-        processes.get(name).networkRxMbps = networkRxMbps;
-        processes.get(name).networkTxMbps = networkTxMbps;
-
-        // Update history for next calculation
-        this.networkBytesHistory.set(name, {
-          rxBytes: current.rxBytes,
-          txBytes: current.txBytes,
-          timestamp: now,
-        });
-      });
-
-      // Clean up history for processes that no longer exist
-      const currentProcessNames = new Set(currentNetworkBytes.keys());
-      for (const historicalName of this.networkBytesHistory.keys()) {
-        if (!currentProcessNames.has(historicalName)) {
-          this.networkBytesHistory.delete(historicalName);
-        }
-      }
-
-      // Convert to array format
-      return Array.from(processes.entries()).map(([name, metrics]) => ({
-        name,
-        cpu: metrics.cpu || 0,
-        memory: metrics.memory || 0,
-        uptime: metrics.uptime || 0,
-        // Network metrics: undefined when not available (e.g., on macOS)
-        networkRxMbps: metrics.networkRxMbps,
-        networkTxMbps: metrics.networkTxMbps,
-      }));
+      // Convert to array format and filter to only running processes (status === 1)
+      return Array.from(processes.entries())
+        .filter(([, metrics]) => metrics.status === 1) // Only include running processes
+        .map(([name, metrics]) => ({
+          name,
+          cpu: metrics.cpu || 0,
+          memory: metrics.memory || 0,
+          uptime: metrics.uptime || 0,
+        }));
     } catch (error) {
       logger.error(
         {

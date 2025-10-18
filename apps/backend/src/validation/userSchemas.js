@@ -93,4 +93,16 @@ export const userValidationSchemas = {
         .regex(/[A-Z]/, 'Password must contain at least one uppercase letter'),
     }),
   },
+
+  /**
+   * POST /api/users/force-logout/:userId - Force logout a user
+   */
+  forceLogout: {
+    params: z.object({
+      userId: z.string().min(1, 'userId is required'),
+    }),
+    body: z.object({
+      reason: z.string().default('Your session has been terminated'),
+    }),
+  },
 };

@@ -1,11 +1,6 @@
 // Enhanced metrics collection for per-process monitoring
 import client from 'prom-client';
 import pidusage from 'pidusage';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import { safeReadFile, safeExistsSync } from './safePath.js';
-
-const execAsync = promisify(exec);
 
 const register = new client.Registry();
 
@@ -36,7 +31,7 @@ const httpRequestTotal = new client.Counter({
 const analysisProcesses = new client.Gauge({
   name: 'tago_analysis_processes',
   help: 'Number of analysis processes',
-  labelNames: ['state', 'type'],
+  labelNames: ['state'],
   registers: [register],
 });
 
@@ -44,7 +39,7 @@ const analysisProcesses = new client.Gauge({
 const analysisProcessStatus = new client.Gauge({
   name: 'tago_analysis_process_status',
   help: 'Process status (1 = running, 0 = stopped)',
-  labelNames: ['analysis_name', 'type'],
+  labelNames: ['analysis_name'],
   registers: [register],
 });
 
@@ -112,21 +107,6 @@ const analysisDNSCacheMisses = new client.Counter({
   registers: [register],
 });
 
-// Per-process network I/O metrics
-const analysisNetworkBytes = new client.Gauge({
-  name: 'tago_analysis_network_bytes',
-  help: 'Network I/O bytes for analysis processes',
-  labelNames: ['analysis_name', 'direction'],
-  registers: [register],
-});
-
-const analysisOpenConnections = new client.Gauge({
-  name: 'tago_analysis_open_connections',
-  help: 'Number of open network connections',
-  labelNames: ['analysis_name', 'state'],
-  registers: [register],
-});
-
 // SSE metrics
 const sseConnections = new client.Gauge({
   name: 'tago_sse_connections',
@@ -165,8 +145,6 @@ export {
   analysisIPCMessages,
   analysisDNSCacheHits,
   analysisDNSCacheMisses,
-  analysisNetworkBytes,
-  analysisOpenConnections,
   sseConnections,
   dnsCacheHits,
   dnsCacheMisses,
@@ -193,127 +171,20 @@ export function metricsMiddleware(req, res, next) {
   next();
 }
 
-// Network stats collection helpers
-
-/**
- * Get network I/O stats for a process (Linux only via /proc filesystem)
- * Returns bytes received and transmitted if available
- */
-async function getProcessNetworkStats(pid) {
-  // Linux-specific: try to get network stats from /proc
-  if (process.platform === 'linux') {
-    try {
-      // Read network device stats - note this is system-wide, not per-process
-      // Per-process network I/O requires parsing /proc/net/tcp and matching file descriptors
-      const netDevPath = `/proc/${pid}/net/dev`;
-
-      if (!safeExistsSync(netDevPath)) {
-        return null;
-      }
-
-      const content = await safeReadFile(netDevPath, 'utf8');
-      const lines = content.split('\n');
-
-      let rxBytes = 0;
-      let txBytes = 0;
-
-      // Parse network device stats (format: interface | rxBytes ... | txBytes ...)
-      for (const line of lines) {
-        // Skip header lines
-        if (line.includes('Receive') || line.includes('face')) continue;
-
-        const parts = line.trim().split(/\s+/);
-        if (parts.length < 10) continue;
-
-        // Interface is parts[0], rx bytes is parts[1], tx bytes is parts[9]
-        const interfaceName = parts[0].replace(':', '');
-
-        // Skip loopback interface
-        if (interfaceName === 'lo') continue;
-
-        rxBytes += parseInt(parts[1]) || 0;
-        txBytes += parseInt(parts[9]) || 0;
-      }
-
-      return { rxBytes, txBytes };
-    } catch {
-      // /proc access failed, return null
-      return null;
-    }
-  }
-
-  return null;
-}
-
-/**
- * Get count of open network connections for a process
- * Returns connection counts by state (established, listen, etc.)
- */
-async function getProcessConnections(pid) {
-  if (process.platform === 'linux') {
-    try {
-      // Use lsof to get network connections for the process
-      const { stdout } = await execAsync(
-        `lsof -p ${pid} -n -P 2>/dev/null | grep -E 'TCP|UDP' || true`,
-      );
-
-      const connections = {
-        established: 0,
-        listen: 0,
-        other: 0,
-        total: 0,
-      };
-
-      if (!stdout.trim()) {
-        return connections;
-      }
-
-      const lines = stdout.trim().split('\n');
-
-      for (const line of lines) {
-        connections.total++;
-
-        if (line.includes('ESTABLISHED')) {
-          connections.established++;
-        } else if (line.includes('LISTEN')) {
-          connections.listen++;
-        } else {
-          connections.other++;
-        }
-      }
-
-      return connections;
-    } catch {
-      // lsof not available or permission denied
-      return null;
-    }
-  }
-
-  return null;
-}
-
 // Collect detailed child process metrics
 export async function collectChildProcessMetrics(processes) {
   let runningCount = 0;
   let stoppedCount = 0;
-  let listenerCount = 0;
-  let actionCount = 0;
 
   for (const [name, process] of processes) {
     const isRunning = process.status === 'running';
-    const processType = process.type;
 
     // Update process status
-    analysisProcessStatus.set(
-      { analysis_name: name, type: processType },
-      isRunning ? 1 : 0,
-    );
+    analysisProcessStatus.set({ analysis_name: name }, isRunning ? 1 : 0);
 
     // Count overall processes
     if (isRunning) {
       runningCount++;
-      if (processType === 'listener') listenerCount++;
-      else if (processType === 'action') actionCount++;
     } else {
       stoppedCount++;
     }
@@ -336,52 +207,11 @@ export async function collectChildProcessMetrics(processes) {
         const startTime = processStartTimes.get(name);
         const uptime = (Date.now() - startTime) / 1000;
         analysisProcessUptime.set({ analysis_name: name }, uptime);
-
-        // Collect network stats (Linux only)
-        const networkStats = await getProcessNetworkStats(process.process.pid);
-        if (networkStats) {
-          analysisNetworkBytes.set(
-            { analysis_name: name, direction: 'rx' },
-            networkStats.rxBytes,
-          );
-          analysisNetworkBytes.set(
-            { analysis_name: name, direction: 'tx' },
-            networkStats.txBytes,
-          );
-        }
-
-        // Collect connection stats (Linux only)
-        const connections = await getProcessConnections(process.process.pid);
-        if (connections) {
-          analysisOpenConnections.set(
-            { analysis_name: name, state: 'established' },
-            connections.established,
-          );
-          analysisOpenConnections.set(
-            { analysis_name: name, state: 'listen' },
-            connections.listen,
-          );
-          analysisOpenConnections.set(
-            { analysis_name: name, state: 'other' },
-            connections.other,
-          );
-        }
       } catch {
         // Process may have exited, reset metrics
         analysisProcessCPU.set({ analysis_name: name }, 0);
         analysisProcessMemory.set({ analysis_name: name }, 0);
         analysisProcessUptime.set({ analysis_name: name }, 0);
-        analysisNetworkBytes.set({ analysis_name: name, direction: 'rx' }, 0);
-        analysisNetworkBytes.set({ analysis_name: name, direction: 'tx' }, 0);
-        analysisOpenConnections.set(
-          { analysis_name: name, state: 'established' },
-          0,
-        );
-        analysisOpenConnections.set(
-          { analysis_name: name, state: 'listen' },
-          0,
-        );
-        analysisOpenConnections.set({ analysis_name: name, state: 'other' }, 0);
         processStartTimes.delete(name);
       }
     } else {
@@ -389,23 +219,13 @@ export async function collectChildProcessMetrics(processes) {
       analysisProcessCPU.set({ analysis_name: name }, 0);
       analysisProcessMemory.set({ analysis_name: name }, 0);
       analysisProcessUptime.set({ analysis_name: name }, 0);
-      analysisNetworkBytes.set({ analysis_name: name, direction: 'rx' }, 0);
-      analysisNetworkBytes.set({ analysis_name: name, direction: 'tx' }, 0);
-      analysisOpenConnections.set(
-        { analysis_name: name, state: 'established' },
-        0,
-      );
-      analysisOpenConnections.set({ analysis_name: name, state: 'listen' }, 0);
-      analysisOpenConnections.set({ analysis_name: name, state: 'other' }, 0);
       processStartTimes.delete(name);
     }
   }
 
   // Update overall process counts
-  analysisProcesses.set({ state: 'running', type: 'all' }, runningCount);
-  analysisProcesses.set({ state: 'stopped', type: 'all' }, stoppedCount);
-  analysisProcesses.set({ state: 'running', type: 'listener' }, listenerCount);
-  analysisProcesses.set({ state: 'running', type: 'action' }, actionCount);
+  analysisProcesses.set({ state: 'running' }, runningCount);
+  analysisProcesses.set({ state: 'stopped' }, stoppedCount);
 }
 
 // Helper to track process events

@@ -307,7 +307,7 @@ class UserController {
 
   /**
    * Get user team memberships
-   * Retrieves all teams user belongs to with their permissions
+   * Retrieves teams and permissions for a user
    *
    * @param {Object} req - Express request object
    * @param {Object} req.params - URL parameters
@@ -319,10 +319,13 @@ class UserController {
    *
    * Response:
    * - JSON object with teams array containing id, name, and permissions for each team
+   * - Admin users: Returns ALL teams with full permissions
+   * - Regular users: Returns only teams they are explicitly members of
    *
    * Security:
    * - Users can only access their own memberships unless they are admins
    * - Authorization check performed before query
+   * - Target user's role determines response (admin gets all teams)
    */
   static async getUserTeamMemberships(req, res) {
     const { userId } = req.params;
@@ -353,7 +356,58 @@ class UserController {
     );
 
     try {
-      // Use database query to get user's team memberships since Better Auth doesn't have getUserTeams
+      // Check if the target user (userId) is an admin
+      const targetUser = executeQuery(
+        'SELECT role FROM user WHERE id = ?',
+        [userId],
+        `getting role for user ${userId}`,
+      );
+
+      // If target user is an admin, return all teams with full permissions
+      if (targetUser?.role === 'admin') {
+        const allTeams = executeQueryAll(
+          `
+          SELECT id, name
+          FROM team
+          ORDER BY name
+        `,
+          [],
+          'getting all teams for admin user',
+        );
+
+        req.log.info(
+          {
+            action: 'getUserTeamMemberships',
+            userId,
+            count: allTeams.length,
+            isAdmin: true,
+          },
+          'All teams retrieved for admin user',
+        );
+
+        // Admin users get all permissions on all teams
+        const adminPermissions = [
+          'view_analyses',
+          'run_analyses',
+          'upload_analyses',
+          'download_analyses',
+          'edit_analyses',
+          'delete_analyses',
+        ];
+
+        return res.json({
+          success: true,
+          data: {
+            teams: allTeams.map((team) => ({
+              id: team.id,
+              name: team.name,
+              permissions: adminPermissions,
+            })),
+          },
+        });
+      }
+
+      // For regular users, get their specific team memberships
       const memberships = executeQueryAll(
         `
         SELECT t.id, t.name, m.permissions
@@ -930,263 +984,55 @@ class UserController {
   }
 
   /**
-   * Revoke a specific user session
-   * Deletes session from database and notifies user via SSE
+   * Force logout a user
+   * Sends a logout notification via SSE and closes all user's connections
    *
    * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.userId - User ID to force logout
    * @param {Object} req.body - Request body
-   * @param {string} req.body.sessionToken - Session token to revoke
+   * @param {string} [req.body.reason='Your session has been terminated'] - Reason for forced logout
    * @param {Object} req.log - Request-scoped logger
    * @param {Object} res - Express response object
    * @returns {Promise<void>}
    *
    * Side effects:
-   * - Deletes session from database
-   * - Broadcasts 'sessionInvalidated' SSE event to affected user
+   * - Sends 'forceLogout' SSE message to all user's connections
+   * - Closes all SSE connections for the user after a brief delay
    *
    * Security:
-   * - Session token required
+   * - Validation handled by middleware
+   * - Admin access required (enforced by router)
    */
-  static async revokeSession(req, res) {
-    const { sessionToken } = req.body;
+  static async forceLogout(req, res) {
+    const { userId } = req.params;
+    const { reason = 'Your session has been terminated' } = req.body;
 
-    if (!sessionToken) {
-      return res.status(400).json({ error: 'sessionToken is required' });
-    }
-
+    // Validation handled by middleware
     req.log.info(
-      { action: 'revokeSession', sessionToken: '***' },
-      'Revoking session',
+      { action: 'forceLogout', userId, reason },
+      'Forcing user logout via SSE',
     );
 
     try {
-      // First, get the user ID from the session before revoking it
-      const session = executeQuery(
-        'SELECT userId FROM session WHERE token = ?',
-        [sessionToken],
-        'getting user ID from session token',
-      );
-
-      if (!session) {
-        req.log.warn(
-          { action: 'revokeSession' },
-          'Session not found - may already be revoked',
-        );
-        return res.json({
-          success: true,
-          message: 'Session not found or already revoked',
-        });
-      }
-
-      const affectedUserId = session.userId;
-
-      // Delete the session directly from the database
-      // This is the same approach used in auth.js afterRemoveMember hook
-      const deleteResult = executeUpdate(
-        'DELETE FROM session WHERE token = ?',
-        [sessionToken],
-        `revoking session for user ${affectedUserId}`,
-      );
-
-      if (deleteResult.changes === 0) {
-        req.log.warn(
-          { action: 'revokeSession', userId: affectedUserId },
-          'Session not found in database',
-        );
-        return res.json({
-          success: true,
-          message: 'Session not found or already revoked',
-        });
-      }
-
-      req.log.info(
-        { action: 'revokeSession', userId: affectedUserId },
-        'Session revoked successfully',
-      );
-    } catch (error) {
-      handleError(res, error, 'revoking session', {
-        logger: req.logger,
-      });
-    }
-  }
-
-  /**
-   * Revoke all sessions for a user
-   * Deletes all user sessions from database and notifies user via SSE
-   *
-   * @param {Object} req - Express request object
-   * @param {Object} req.body - Request body
-   * @param {string} req.body.userId - User ID whose sessions to revoke
-   * @param {Object} req.log - Request-scoped logger
-   * @param {Object} res - Express response object
-   * @returns {Promise<void>}
-   *
-   * Side effects:
-   * - Deletes all user sessions from database
-   * - Broadcasts 'sessionInvalidated' SSE event to affected user
-   *
-   * Response:
-   * - JSON with sessionsRevoked count
-   *
-   * Security:
-   * - User ID required
-   */
-  static async revokeAllUserSessions(req, res) {
-    const { userId } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({ error: 'userId is required' });
-    }
-
-    req.log.info(
-      { action: 'revokeAllUserSessions', userId },
-      'Revoking all sessions',
-    );
-
-    try {
-      // Delete all sessions directly from the database
-      // This is the same approach used in auth.js afterRemoveMember hook
-      const deleteResult = executeUpdate(
-        'DELETE FROM session WHERE userId = ?',
-        [userId],
-        `revoking all sessions for user ${userId}`,
+      const closedConnections = await sseManager.forceUserLogout(
+        userId,
+        reason,
       );
 
       req.log.info(
-        {
-          action: 'revokeAllUserSessions',
-          userId,
-          sessionsRevoked: deleteResult.changes,
-        },
-        'All sessions revoked successfully',
-      );
-    } catch (error) {
-      handleError(res, error, 'revoking all user sessions', {
-        logger: req.logger,
-      });
-    }
-  }
-
-  /**
-   * Ban user
-   * Uses Better Auth ban functionality
-   *
-   * @param {Object} req - Express request object
-   * @param {Object} req.body - Request body
-   * @param {string} req.body.userId - User ID to ban
-   * @param {string} [req.body.banReason] - Reason for ban
-   * @param {Object} req.headers - Request headers (for Better Auth)
-   * @param {Object} req.log - Request-scoped logger
-   * @param {Object} res - Express response object
-   * @returns {Promise<void>}
-   *
-   * Side effects:
-   * - Bans user in Better Auth
-   *
-   * Security:
-   * - User ID required
-   * - Better Auth handles authorization
-   */
-  static async banUser(req, res) {
-    const { userId, banReason } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({ error: 'userId is required' });
-    }
-
-    req.log.info({ action: 'banUser', userId, banReason }, 'Banning user');
-
-    try {
-      // Use better-auth admin API to ban the user
-      const result = await auth.api.banUser({
-        headers: req.headers,
-        body: {
-          userId,
-          banReason: banReason || 'Banned by administrator',
-        },
-      });
-
-      if (result.error) {
-        req.log.error(
-          { action: 'banUser', err: result.error, userId },
-          'Better Auth banUser error',
-        );
-        const statusCode = result.error.status === 'UNAUTHORIZED' ? 401 : 400;
-        return res.status(statusCode).json({ error: result.error.message });
-      }
-
-      req.log.info({ action: 'banUser', userId }, 'User banned successfully');
-
-      res.json({
-        success: true,
-        message: 'User banned successfully',
-        data: result.data,
-      });
-    } catch (error) {
-      handleError(res, error, 'banning user', {
-        logger: req.logger,
-      });
-    }
-  }
-
-  /**
-   * Unban user
-   * Removes ban status using Better Auth
-   *
-   * @param {Object} req - Express request object
-   * @param {Object} req.body - Request body
-   * @param {string} req.body.userId - User ID to unban
-   * @param {Object} req.headers - Request headers (for Better Auth)
-   * @param {Object} req.log - Request-scoped logger
-   * @param {Object} res - Express response object
-   * @returns {Promise<void>}
-   *
-   * Side effects:
-   * - Unbans user in Better Auth
-   *
-   * Security:
-   * - User ID required
-   * - Better Auth handles authorization
-   */
-  static async unbanUser(req, res) {
-    const { userId } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({ error: 'userId is required' });
-    }
-
-    req.log.info({ action: 'unbanUser', userId }, 'Unbanning user');
-
-    try {
-      // Use better-auth admin API to unban the user
-      const result = await auth.api.unbanUser({
-        headers: req.headers, // Pass request headers for authentication
-        body: {
-          userId,
-        },
-      });
-
-      if (result.error) {
-        req.log.error(
-          { action: 'unbanUser', err: result.error, userId },
-          'Better Auth unbanUser error',
-        );
-        const statusCode = result.error.status === 'UNAUTHORIZED' ? 401 : 400;
-        return res.status(statusCode).json({ error: result.error.message });
-      }
-
-      req.log.info(
-        { action: 'unbanUser', userId },
-        'User unbanned successfully',
+        { action: 'forceLogout', userId, closedConnections },
+        'User forced logout successfully',
       );
 
       res.json({
         success: true,
-        message: 'User unbanned successfully',
-        data: result.data,
+        data: {
+          closedConnections,
+        },
       });
     } catch (error) {
-      handleError(res, error, 'unbanning user', {
+      handleError(res, error, 'forcing user logout', {
         logger: req.logger,
       });
     }

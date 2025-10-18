@@ -620,6 +620,17 @@ export function useUserManagement({
           throw new Error(result.error.message);
         }
 
+        // Force logout the deleted user
+        try {
+          await userService.forceLogout(
+            user.id,
+            'Your account has been deleted by an administrator',
+          );
+          logger.log(`✓ Forced logout for deleted user ${user.id}`);
+        } catch (logoutError) {
+          logger.warn('Failed to force logout deleted user:', logoutError);
+          // Continue even if force logout fails
+        }
         notify.showNotification({
           title: 'Success',
           message: `User ${user.name || user.email} deleted successfully.`,
@@ -703,6 +714,18 @@ export function useUserManagement({
 
         if (result.error) {
           throw new Error(result.error.message);
+        }
+
+        // Force logout the banned user
+        try {
+          await userService.forceLogout(
+            user.id,
+            'Your account has been banned by an administrator',
+          );
+          logger.log(`✓ Forced logout for banned user ${user.id}`);
+        } catch (logoutError) {
+          logger.warn('Failed to force logout banned user:', logoutError);
+          // Continue even if force logout fails
         }
 
         notify.showNotification({

@@ -50,6 +50,7 @@ const db = getAuthDatabase();
 export const auth = betterAuth({
   database: db,
   telemetry: { enabled: false },
+  disabledPaths: ['/organization/list-teams'],
   rateLimit: {
     window: 60, // 1 minute window
     max: 100,

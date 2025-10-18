@@ -9,7 +9,6 @@ import { useForm } from '@mantine/form';
 import { useAuth } from './useAuth';
 import { addPasskey, passkey } from '../lib/auth';
 import { useNotifications } from './useNotifications.jsx';
-import { useEventListener } from './useEventListener';
 import { useFormSync } from './useFormSync';
 import { useModalDataLoader } from './useModalDataLoader';
 import logger from '../utils/logger';
@@ -143,17 +142,6 @@ export function useProfileModal({ opened, onClose }) {
 
   // Load WebAuthn support and passkeys when modal opens
   useModalDataLoader(opened, [checkWebAuthnSupport, loadPasskeys]);
-
-  // Listen for password change logout event
-  const handlePasswordChangeLogout = useCallback(
-    (event) => {
-      notify.info(event.detail.message);
-      onClose(); // Close the modal since user will be logged out
-    },
-    [notify, onClose],
-  );
-
-  useEventListener('password-changed-logout', handlePasswordChangeLogout);
 
   /**
    * Handle password change submission

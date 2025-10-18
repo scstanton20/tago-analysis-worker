@@ -89,15 +89,3 @@ export const settingsOperationLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
-
-// Rate limiter for SSE logout endpoint
-export const sseLogoutLimiter = rateLimit({
-  windowMs: RATE_LIMIT.WINDOW_FIFTEEN_MINUTES_MS,
-  max: 50,
-  message: {
-    error:
-      'Too many logout notifications from this IP, please try again later.',
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});

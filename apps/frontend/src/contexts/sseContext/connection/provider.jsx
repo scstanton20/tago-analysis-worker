@@ -1,6 +1,7 @@
 // frontend/src/contexts/sseContext/connection/provider.jsx
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import PropTypes from 'prop-types';
+import { notifications } from '@mantine/notifications';
 import { SSEConnectionContext } from './context';
 import { useAuth } from '../../../hooks/useAuth';
 import logger from '../../../utils/logger';
@@ -66,22 +67,14 @@ export function SSEConnectionProvider({ children, onMessage }) {
     }
 
     // Show notification about session revocation
-    import('@mantine/notifications').then(({ notifications }) => {
-      notifications.show({
-        title: 'Session Revoked',
-        message:
-          data.reason ||
-          'Your session has been revoked by an administrator. You will be logged out.',
-        color: 'red',
-        autoClose: false,
-      });
+    notifications.show({
+      title: 'Session Revoked',
+      message:
+        data.reason ||
+        'Your session has been revoked by an administrator. You will be logged out.',
+      color: 'red',
+      autoClose: false,
     });
-
-    // Redirect to login after showing notification
-    setTimeout(() => {
-      logger.log('SSE: Session invalidated, redirecting to login...');
-      window.location.href = '/login';
-    }, 2500);
   }, []);
 
   const handleMessage = useCallback(
@@ -226,7 +219,9 @@ export function SSEConnectionProvider({ children, onMessage }) {
   }, [createConnection]);
 
   // Store reconnect in ref to break circular dependency
-  reconnectRef.current = reconnect;
+  useEffect(() => {
+    reconnectRef.current = reconnect;
+  }, [reconnect]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -308,17 +303,6 @@ export function SSEConnectionProvider({ children, onMessage }) {
       }
     };
   }, [createConnection, reconnect, isAuthenticated, serverShutdown]);
-
-  // Request status updates periodically (fallback)
-  useEffect(() => {
-    if (connectionStatus === 'connected') {
-      requestStatusUpdate();
-
-      const interval = setInterval(requestStatusUpdate, 60000);
-
-      return () => clearInterval(interval);
-    }
-  }, [connectionStatus, requestStatusUpdate]);
 
   const value = useMemo(
     () => ({

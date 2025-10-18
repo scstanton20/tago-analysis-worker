@@ -136,7 +136,7 @@ router.get(
  *             properties:
  *               type:
  *                 type: string
- *                 enum: [listener, scheduled]
+ *                 enum: [listener]
  *                 description: Type of analysis execution
  *     responses:
  *       200:

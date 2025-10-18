@@ -523,12 +523,11 @@ tago_http_requests_total{status="200"} 100`;
   });
 
   describe('getProcessMetrics', () => {
-    it('should get per-process metrics', async () => {
-      const metricsString = `tago_analysis_cpu_percent{analysis_name="test-analysis"} 25.5
+    it('should get per-process metrics without network data', async () => {
+      const metricsString = `tago_analysis_process_status{analysis_name="test-analysis"} 1
+tago_analysis_cpu_percent{analysis_name="test-analysis"} 25.5
 tago_analysis_memory_bytes{analysis_name="test-analysis"} 104857600
-tago_analysis_uptime_seconds{analysis_name="test-analysis"} 7200
-tago_analysis_network_bytes{analysis_name="test-analysis",direction="rx"} 1024000
-tago_analysis_network_bytes{analysis_name="test-analysis",direction="tx"} 512000`;
+tago_analysis_uptime_seconds{analysis_name="test-analysis"} 7200`;
 
       register.metrics.mockResolvedValue(metricsString);
 
@@ -540,14 +539,13 @@ tago_analysis_network_bytes{analysis_name="test-analysis",direction="tx"} 512000
         cpu: 25.5,
         memory: 100, // 104857600 / 1024 / 1024
         uptime: 2, // 7200 / 3600
-        // Network rates are 0 on first call (no historical data to calculate rate)
-        networkRxMbps: 0,
-        networkTxMbps: 0,
       });
     });
 
     it('should handle multiple processes', async () => {
-      const metricsString = `tago_analysis_cpu_percent{analysis_name="a1"} 10
+      const metricsString = `tago_analysis_process_status{analysis_name="a1"} 1
+tago_analysis_process_status{analysis_name="a2"} 1
+tago_analysis_cpu_percent{analysis_name="a1"} 10
 tago_analysis_cpu_percent{analysis_name="a2"} 20
 tago_analysis_memory_bytes{analysis_name="a1"} 52428800
 tago_analysis_memory_bytes{analysis_name="a2"} 104857600`;
@@ -570,7 +568,8 @@ tago_analysis_memory_bytes{analysis_name="a2"} 104857600`;
     });
 
     it('should handle missing metrics gracefully', async () => {
-      const metricsString = 'tago_analysis_cpu_percent{analysis_name="a1"} 10';
+      const metricsString = `tago_analysis_process_status{analysis_name="a1"} 1
+tago_analysis_cpu_percent{analysis_name="a1"} 10`;
 
       register.metrics.mockResolvedValue(metricsString);
 
@@ -581,8 +580,6 @@ tago_analysis_memory_bytes{analysis_name="a2"} 104857600`;
         cpu: 10,
         memory: 0,
         uptime: 0,
-        networkRxMbps: undefined, // No network metrics provided
-        networkTxMbps: undefined,
       });
     });
   });

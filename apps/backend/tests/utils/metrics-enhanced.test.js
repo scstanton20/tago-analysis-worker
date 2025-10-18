@@ -132,7 +132,6 @@ describe('metrics-enhanced', () => {
           'test-analysis',
           {
             status: 'running',
-            type: 'listener',
             process: { pid: 1234 },
           },
         ],
@@ -145,9 +144,9 @@ describe('metrics-enhanced', () => {
 
     it('should count running and stopped processes', async () => {
       const processes = new Map([
-        ['analysis1', { status: 'running', type: 'listener' }],
-        ['analysis2', { status: 'stopped', type: 'action' }],
-        ['analysis3', { status: 'running', type: 'action' }],
+        ['analysis1', { status: 'running' }],
+        ['analysis2', { status: 'stopped' }],
+        ['analysis3', { status: 'running' }],
       ]);
 
       await metrics.collectChildProcessMetrics(processes);
@@ -161,10 +160,7 @@ describe('metrics-enhanced', () => {
       pidusage.mockRejectedValue(new Error('Process not found'));
 
       const processes = new Map([
-        [
-          'test',
-          { status: 'running', type: 'listener', process: { pid: 999 } },
-        ],
+        ['test', { status: 'running', process: { pid: 999 } }],
       ]);
 
       await expect(
@@ -173,9 +169,7 @@ describe('metrics-enhanced', () => {
     });
 
     it('should reset metrics for stopped processes', async () => {
-      const processes = new Map([
-        ['stopped-analysis', { status: 'stopped', type: 'listener' }],
-      ]);
+      const processes = new Map([['stopped-analysis', { status: 'stopped' }]]);
 
       await metrics.collectChildProcessMetrics(processes);
 
@@ -250,48 +244,6 @@ describe('metrics-enhanced', () => {
     });
   });
 
-  describe('network stats collection (Linux)', () => {
-    it('should skip network stats on non-Linux platforms', async () => {
-      const originalPlatform = process.platform;
-      Object.defineProperty(process, 'platform', {
-        value: 'darwin',
-        configurable: true,
-      });
-
-      const processes = new Map([
-        [
-          'test',
-          { status: 'running', type: 'listener', process: { pid: 1234 } },
-        ],
-      ]);
-
-      await metrics.collectChildProcessMetrics(processes);
-
-      Object.defineProperty(process, 'platform', {
-        value: originalPlatform,
-        configurable: true,
-      });
-
-      expect(true).toBe(true);
-    });
-
-    it('should handle missing /proc files gracefully', async () => {
-      const { safeExistsSync } = await import('../../src/utils/safePath.js');
-      safeExistsSync.mockReturnValue(false);
-
-      const processes = new Map([
-        [
-          'test',
-          { status: 'running', type: 'listener', process: { pid: 1234 } },
-        ],
-      ]);
-
-      await expect(
-        metrics.collectChildProcessMetrics(processes),
-      ).resolves.not.toThrow();
-    });
-  });
-
   describe('metric exports', () => {
     it('should export register', () => {
       expect(metrics.register).toBeDefined();
@@ -302,7 +254,7 @@ describe('metrics-enhanced', () => {
       expect(metrics.httpRequestTotal).toBeDefined();
     });
 
-    it('should export analysis metrics', () => {
+    it('should export analysis metrics (CPU, memory, uptime only)', () => {
       expect(metrics.analysisProcesses).toBeDefined();
       expect(metrics.analysisProcessStatus).toBeDefined();
       expect(metrics.analysisProcessCPU).toBeDefined();

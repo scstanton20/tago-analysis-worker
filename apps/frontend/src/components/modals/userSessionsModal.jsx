@@ -101,6 +101,18 @@ export default function UserSessionsModal({ opened, onClose, user }) {
         throw new Error(result.error.message);
       }
 
+      // Force logout the user to immediately notify them
+      try {
+        await userService.forceLogout(
+          user.id,
+          'Your session has been revoked by an administrator',
+        );
+        logger.log(`✓ Forced logout for user ${user.id} after session revocation`);
+      } catch (logoutError) {
+        logger.warn('Failed to force logout user:', logoutError);
+        // Continue even if force logout fails
+      }
+
       notify.showNotification({
         title: 'Success',
         message: 'Session revoked successfully',
@@ -151,6 +163,18 @@ export default function UserSessionsModal({ opened, onClose, user }) {
       if (result.error) {
         logger.error('Error in revoke all sessions result:', result.error);
         throw new Error(result.error.message);
+      }
+
+      // Force logout the user to immediately notify them
+      try {
+        await userService.forceLogout(
+          user.id,
+          'All your sessions have been revoked by an administrator',
+        );
+        logger.log(`✓ Forced logout for user ${user.id} after all sessions revocation`);
+      } catch (logoutError) {
+        logger.warn('Failed to force logout user:', logoutError);
+        // Continue even if force logout fails
       }
 
       notify.showNotification({

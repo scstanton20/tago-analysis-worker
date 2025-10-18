@@ -5,7 +5,6 @@ import {
   handleSSEConnection,
   sseManager,
 } from '../utils/sse.js';
-import { sseLogoutLimiter } from '../middleware/rateLimiter.js';
 import { createChildLogger } from '../utils/logging/logger.js';
 import { sseCompression } from '../middleware/compression.js';
 
@@ -88,70 +87,5 @@ const router = Router();
  *                   error: "Invalid user"
  */
 router.get('/events', authenticateSSE, sseCompression(), handleSSEConnection);
-
-/**
-//  * @swagger
- * /sse/logout-notification:
- *   post:
- *     summary: Send logout notification to other sessions
- *     description: Notify all other active sessions of the same user about logout event via SSE
- *     tags: [Real-time Events]
- *     responses:
- *       200:
- *         description: Logout notification sent successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *       401:
- *         description: Authentication required
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
- *       500:
- *         description: Failed to send logout notification
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
- */
-router.post(
-  '/logout-notification',
-  sseLogoutLimiter,
-  authenticateSSE,
-  (req, res) => {
-    const logger =
-      req.log?.child({ route: 'logout-notification' }) ||
-      createChildLogger('sse-logout');
-
-    try {
-      const userId = req.user.id;
-
-      // Send SSE logout notification to all user's other sessions
-      sseManager.sendToUser(userId, {
-        type: 'userLogout',
-        userId: userId,
-        timestamp: new Date().toISOString(),
-      });
-
-      logger.info(
-        { action: 'logoutNotification', userId },
-        'Sent logout notification',
-      );
-      res.json({ success: true });
-    } catch (error) {
-      logger.error(
-        { action: 'logoutNotification', err: error, userId: req.user?.id },
-        'Logout notification error',
-      );
-      res.status(500).json({ error: 'Failed to send logout notification' });
-    }
-  },
-);
 
 export default router;

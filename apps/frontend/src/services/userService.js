@@ -142,50 +142,6 @@ export const userService = {
   },
 
   /**
-   * Get user sessions for a specific user
-   * @param {string} userId - User ID
-   * @returns {Promise<Object>} User's active sessions
-   */
-  async getUserSessions(userId) {
-    const response = await fetchWithHeaders(`/users/${userId}/sessions`, {
-      method: 'GET',
-    });
-
-    return handleResponse(response);
-  },
-
-  /**
-   * Revoke a specific user session
-   * @param {string} userId - User ID
-   * @param {string} sessionId - Session ID to revoke
-   * @returns {Promise<Object>} Result of session revocation
-   */
-  async revokeUserSession(userId, sessionId) {
-    const response = await fetchWithHeaders(
-      `/users/${userId}/sessions/${sessionId}`,
-      {
-        method: 'DELETE',
-      },
-    );
-
-    return handleResponse(response);
-  },
-
-  /**
-   * Revoke all sessions for a user
-   * @param {string} userId - User ID
-   * @returns {Promise<Object>} Result of revoking all sessions
-   */
-  async revokeAllUserSessions(userId) {
-    const response = await fetchWithHeaders(`/users/${userId}/sessions`, {
-      method: 'DELETE',
-    });
-
-    return handleResponse(response);
-  },
-
-  /**
-   * Update user's organization role
    * @param {string} userId - User ID
    * @param {string} organizationId - Organization ID
    * @param {string} role - New role in organization
@@ -220,5 +176,28 @@ export const userService = {
     });
 
     return handleResponse(response);
+  },
+
+  /**
+   * Force logout a user by closing all their SSE connections
+   * @param {string} userId - User ID to force logout
+   * @param {string} reason - Reason for forced logout
+   * @returns {Promise<Object>} Result of forced logout operation
+   */
+  async forceLogout(userId, reason = 'Your session has been terminated') {
+    logger.debug('Forcing user logout', { userId, reason });
+    try {
+      const response = await fetchWithHeaders(`/users/force-logout/${userId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      });
+      const result = await handleResponse(response);
+      logger.info('User forced logout successfully', { userId });
+      return result;
+    } catch (error) {
+      logger.error('Failed to force user logout', { error, userId });
+      throw error;
+    }
   },
 };

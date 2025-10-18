@@ -304,7 +304,6 @@ class SSEManager {
    * Use Cases:
    * - User banned from system
    * - User removed from organization
-   * - Force logout after permission changes
    *
    * Behavior:
    * - Ends each response stream
@@ -357,6 +356,48 @@ class SSEManager {
       'Disconnected all SSE clients for user',
     );
     return disconnectedCount;
+  }
+
+  /**
+   * Force logout a user by sending SSE notification and closing connections
+   * Sends logout notification via SSE, then closes all user's SSE connections
+   *
+   * @param {string} userId - User ID to force logout
+   * @param {string} [reason='Your session has been terminated'] - Reason for logout
+   * @returns {Promise<number>} Count of connections that were closed
+   *
+   * Use Cases:
+   * - User banned from system
+   * - User sessions revoked by admin
+   * - User removed from organization
+   *
+   * Behavior:
+   * - Sends forceLogout message to all user's connections
+   * - Waits briefly for message delivery
+   * - Closes all SSE connections for the user
+   * - Returns count of closed connections
+   */
+  async forceUserLogout(userId, reason = 'Your session has been terminated') {
+    logger.info({ userId, reason }, 'Forcing user logout via SSE');
+
+    // Send logout notification to all user's sessions
+    const sentCount = this.sendToUser(userId, {
+      type: 'forceLogout',
+      reason: reason,
+      timestamp: new Date().toISOString(),
+    });
+
+    // Give the message a moment to be delivered before closing connections
+    if (sentCount > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
+
+    // Close all SSE connections for this user
+    const closedCount = this.disconnectUser(userId);
+
+    logger.info({ userId, sentCount, closedCount }, 'Force logout completed');
+
+    return closedCount;
   }
 
   /**
@@ -447,7 +488,7 @@ class SSEManager {
    *
    * @param {Object} client - Client object with res, req, userId properties
    * @param {Object} client.req - Express request with user object
-   * @param {Object} client.req.user - Authenticated user with role property
+   * @param {Object} client.req.user - Authenticated user with id property
    * @param {Object} client.res - Express response for writing SSE messages
    * @returns {Promise<void>}
    *
@@ -455,13 +496,15 @@ class SSEManager {
    * - type: 'init' - Identifies as initialization message
    * - analyses: Analysis files (filtered by team access for non-admin)
    * - teams: Team configurations (filtered by team access for non-admin)
-   * - teamStructure: Hierarchical folder structure from config
+   * - teamStructure: Hierarchical folder structure (filtered by team access for non-admin)
    * - version: API version (currently '4.0')
    *
    * Permission Filtering:
-   * - Admin users: Receive all analyses and teams
-   * - Regular users: Only receive analyses/teams for accessible teams
+   * - ALWAYS fetches fresh user data from database to ensure current role/permissions
+   * - Admin users: Receive all analyses, teams, and teamStructure
+   * - Regular users: Only receive analyses/teams/teamStructure for accessible teams
    * - Uses 'view_analyses' permission for filtering
+   * - Prevents stale permissions from being applied after role/team changes
    *
    * Side Effects:
    * - Calls sendStatusUpdate() after sending init data
@@ -469,6 +512,7 @@ class SSEManager {
    * Error Handling:
    * - Logs errors but doesn't throw
    * - Connection remains open even if init fails
+   * - Returns early if user not found in database
    */
   async sendInitialData(client) {
     try {
@@ -480,8 +524,22 @@ class SSEManager {
         '../middleware/betterAuthMiddleware.js'
       );
 
-      // Get user from client request
-      const user = client.req.user;
+      // IMPORTANT: Always fetch fresh user data from database
+      // Don't rely on cached client.req.user which may be stale after permission changes
+      const { executeQuery } = await import('../utils/authDatabase.js');
+      const freshUser = executeQuery(
+        'SELECT id, role, email, name FROM user WHERE id = ?',
+        [client.req.user.id],
+        'fetching fresh user data for SSE init',
+      );
+
+      if (!freshUser) {
+        logger.error(
+          { userId: client.req.user.id },
+          'User not found when sending init data',
+        );
+        return;
+      }
 
       const [allAnalyses, allTeamsArray] = await Promise.all([
         analysisService.getAllAnalyses(),
@@ -496,11 +554,12 @@ class SSEManager {
 
       let analyses = allAnalyses;
       let teams = allTeams;
+      let allowedTeamIds = [];
 
       // Filter data for non-admin users
-      if (user.role !== 'admin') {
+      if (freshUser.role !== 'admin') {
         // Get user's allowed team IDs for view_analyses permission
-        const allowedTeamIds = getUserTeamIds(user.id, 'view_analyses');
+        allowedTeamIds = getUserTeamIds(freshUser.id, 'view_analyses');
 
         // Filter analyses to only include those from accessible teams
         const filteredAnalyses = {};
@@ -520,11 +579,22 @@ class SSEManager {
 
         analyses = filteredAnalyses;
         teams = filteredTeams;
+      } else {
+        // Admin users have access to all teams
+        allowedTeamIds = Object.keys(allTeams);
       }
 
-      // Get team structure from config
+      // Get team structure from config and filter based on permissions
       const config = await analysisService.getConfig();
-      const teamStructure = config.teamStructure || {};
+      const allTeamStructure = config.teamStructure || {};
+
+      // Filter teamStructure to only include structures for accessible teams
+      const teamStructure = {};
+      for (const [teamId, structure] of Object.entries(allTeamStructure)) {
+        if (allowedTeamIds.includes(teamId)) {
+          teamStructure[teamId] = structure;
+        }
+      }
 
       const initData = {
         type: 'init',
@@ -730,6 +800,58 @@ class SSEManager {
     };
     this.metricsInterval = null;
     this.heartbeatInterval = null;
+    this.cachedSdkVersion = null; // Cache SDK version to avoid repeated file reads
+    this._initSdkVersion(); // Initialize SDK version cache
+  }
+
+  /**
+   * Initialize SDK version cache
+   * Reads Tago SDK version once on startup and caches it
+   *
+   * @private
+   * @returns {Promise<void>}
+   */
+  async _initSdkVersion() {
+    try {
+      const { createRequire } = await import('module');
+      const require = createRequire(import.meta.url);
+      const fs = await import('fs');
+      const path = await import('path');
+
+      // Find the SDK package.json by resolving the SDK path
+      const sdkPath = require.resolve('@tago-io/sdk');
+      let currentDir = path.dirname(sdkPath);
+
+      // Walk up directories to find the correct package.json
+      while (currentDir !== path.dirname(currentDir)) {
+        const potentialPath = path.join(currentDir, 'package.json');
+        if (fs.existsSync(potentialPath)) {
+          const pkg = JSON.parse(fs.readFileSync(potentialPath, 'utf8'));
+          if (pkg.name === '@tago-io/sdk') {
+            this.cachedSdkVersion = pkg.version;
+            logger.info({ version: pkg.version }, 'Cached Tago SDK version');
+            return;
+          }
+        }
+        currentDir = path.dirname(currentDir);
+      }
+
+      this.cachedSdkVersion = 'unknown';
+      logger.warn('Could not find Tago SDK version');
+    } catch (error) {
+      logger.error({ error }, 'Error caching Tago SDK version');
+      this.cachedSdkVersion = 'unknown';
+    }
+  }
+
+  /**
+   * Get cached SDK version
+   * Returns the cached SDK version or 'unknown' if not available
+   *
+   * @returns {string} SDK version string
+   */
+  getSdkVersion() {
+    return this.cachedSdkVersion || 'unknown';
   }
 
   /**
@@ -1074,9 +1196,16 @@ class SSEManager {
    *
    * Metrics Included:
    * - container: Docker container CPU/memory usage
-   * - processes: Per-analysis process metrics (filtered by team access)
+   * - processes: Per-analysis process metrics from OS (filtered by team access)
    * - children: Aggregate child process metrics
    * - total: Combined system metrics
+   * - container_health: Container status, uptime, and health information
+   * - tagoConnection: SDK version and running analyses count (from OS processes)
+   *
+   * Source of Truth:
+   * - Uses OS-level process metrics (pidusage) as the single source of truth
+   * - runningAnalyses count comes from actual running processes, not application state
+   * - Ensures data consistency between metrics and analysis counts
    *
    * Permission Filtering:
    * - Admin users: Receive all process metrics
@@ -1094,6 +1223,8 @@ class SSEManager {
    * - processes: Filtered process array
    * - children: Recalculated aggregate metrics
    * - total: Updated system totals
+   * - container_health: Health status with uptime
+   * - tagoConnection: SDK version and actual running analyses count
    *
    * Error Handling:
    * - Removes clients that fail to receive metrics
@@ -1112,6 +1243,19 @@ class SSEManager {
         '../middleware/betterAuthMiddleware.js'
       );
       const allAnalyses = await analysisService.getAllAnalyses();
+      const ms = (await import('ms')).default;
+
+      // Get container state and SDK version
+      const containerState = this.getContainerState();
+      const sdkVersion = this.getSdkVersion();
+
+      // Calculate uptime
+      const uptimeSeconds = Math.floor(
+        (new Date() - containerState.startTime) / 1000,
+      );
+      const uptimeFormatted = ms(new Date() - containerState.startTime, {
+        long: true,
+      });
 
       // Send customized metrics to each connected client
       for (const client of this.globalClients) {
@@ -1158,9 +1302,27 @@ class SSEManager {
             };
           }
 
+          // Use OS-level process count as source of truth for running analyses
+          // filteredMetrics.processes contains actual running processes from pidusage
+          const runningAnalysesCount = filteredMetrics.processes.length;
+
+          // Add container health and SDK version to metrics
           const message = this.formatSSEMessage({
             type: 'metricsUpdate',
             ...filteredMetrics,
+            container_health: {
+              status:
+                containerState.status === 'ready' ? 'healthy' : 'initializing',
+              message: containerState.message,
+              uptime: {
+                seconds: uptimeSeconds,
+                formatted: uptimeFormatted,
+              },
+            },
+            tagoConnection: {
+              sdkVersion: sdkVersion,
+              runningAnalyses: runningAnalysesCount,
+            },
           });
           this.writeAndFlush(client.res, message);
         } catch (clientError) {

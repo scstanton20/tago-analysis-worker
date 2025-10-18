@@ -177,7 +177,7 @@ This API provides real-time updates via **Server-Sent Events (SSE)** for:
             },
             type: {
               type: 'string',
-              enum: ['listener', 'scheduled'],
+              enum: ['listener'],
               description: 'Analysis execution type',
             },
             department: {
@@ -192,10 +192,6 @@ This API provides real-time updates via **Server-Sent Events (SSE)** for:
               type: 'string',
               format: 'date-time',
               description: 'Last execution timestamp',
-            },
-            schedule: {
-              type: 'string',
-              description: 'Cron schedule for scheduled analyses',
             },
           },
         },

@@ -47,6 +47,15 @@ export function SSEBackendProvider({ children }) {
         processes: data.processes,
         timestamp: data.timestamp,
       });
+
+      // Extract and update backend status from consolidated metricsUpdate
+      if (data.container_health && data.tagoConnection) {
+        setBackendStatus({
+          container_health: data.container_health,
+          tagoConnection: data.tagoConnection,
+          serverTime: data.timestamp,
+        });
+      }
     }
   }, []);
 

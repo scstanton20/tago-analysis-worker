@@ -1,6 +1,8 @@
 // frontend/src/contexts/sseContext/analyses/provider.jsx
 import { useState, useCallback, useRef, useMemo } from 'react';
 import PropTypes from 'prop-types';
+import { notifications } from '@mantine/notifications';
+import { IconCheck, IconX, IconLoader } from '@tabler/icons-react';
 import { SSEAnalysesContext } from './context';
 import logger from '../../../utils/logger';
 
@@ -96,38 +98,37 @@ export function SSEAnalysesProvider({ children }) {
 
         // Show notifications for status changes
         if (data.update.status === 'running') {
-          import('@mantine/notifications').then(({ notifications }) => {
-            notifications.show({
-              title: 'Started',
-              message: `${data.analysisName} is now running`,
-              color: 'green',
-              autoClose: 3000,
-            });
+          notifications.show({
+            title: 'Started',
+            message: `${data.analysisName} is now running`,
+            icon: <IconCheck size={16} />,
+            color: 'green',
+            autoClose: 3000,
           });
         } else if (
           data.update.status === 'stopped' &&
           data.update.exitCode !== undefined
         ) {
           // Analysis stopped
-          import('@mantine/notifications').then(({ notifications }) => {
-            if (data.update.exitCode === 0) {
-              // Normal exit
-              notifications.show({
-                title: 'Stopped',
-                message: `${data.analysisName} stopped`,
-                color: 'blue',
-                autoClose: 3000,
-              });
-            } else {
-              // Error exit
-              notifications.show({
-                title: 'Failed',
-                message: `${data.analysisName} exited with code ${data.update.exitCode}`,
-                color: 'red',
-                autoClose: 5000,
-              });
-            }
-          });
+          if (data.update.exitCode === 0) {
+            // Normal exit
+            notifications.show({
+              title: 'Stopped',
+              message: `${data.analysisName} stopped`,
+              icon: <IconLoader size={16} />,
+              color: 'blue',
+              autoClose: 3000,
+            });
+          } else {
+            // Error exit
+            notifications.show({
+              title: 'Failed',
+              message: `${data.analysisName} exited with code ${data.update.exitCode}`,
+              icon: <IconX size={16} />,
+              color: 'red',
+              autoClose: 5000,
+            });
+          }
         }
       }
     },

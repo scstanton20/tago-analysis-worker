@@ -80,6 +80,39 @@ export const AuthProvider = ({ children }) => {
 
   useEventListener('auth-change', handleAuthChange);
 
+  // Listen for forced logout events
+  const handleForceLogout = useCallback(
+    async (event) => {
+      const reason = event.detail?.reason || 'Your session has been terminated';
+      logger.log('Force logout event detected:', reason);
+
+      // Show notification
+      notifications.show({
+        title: 'Session Terminated',
+        message: reason,
+        color: 'red',
+        autoClose: 5000,
+      });
+
+      // Sign out and reload
+      try {
+        await signOut();
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      } catch (error) {
+        logger.error('Error during forced logout:', error);
+        // Still reload even if signOut fails
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      }
+    },
+    [],
+  );
+
+  useEventListener('force-logout', handleForceLogout);
+
   // Memoize auth functions to prevent recreating on every render
   const authFunctions = useMemo(
     () => ({

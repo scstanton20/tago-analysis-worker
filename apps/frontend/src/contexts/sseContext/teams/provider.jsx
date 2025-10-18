@@ -1,6 +1,8 @@
 // frontend/src/contexts/sseContext/teams/provider.jsx
 import { useState, useCallback, useMemo } from 'react';
 import PropTypes from 'prop-types';
+import { notifications } from '@mantine/notifications';
+import { IconLoader } from '@tabler/icons-react';
 import { SSETeamsContext } from './context';
 import logger from '../../../utils/logger';
 
@@ -35,6 +37,12 @@ export function SSETeamsProvider({ children }) {
 
     setTeams(teamsObj);
     setTeamStructure(data.teamStructure || {});
+
+    // Trigger permissions refresh after SSE state is updated
+    // This ensures PermissionsContext has the latest team data
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('auth-change'));
+    }, 100); // Small delay to ensure state updates are processed
   }, []);
 
   const handleTeamCreatedOrUpdated = useCallback((data) => {
@@ -84,22 +92,19 @@ export function SSETeamsProvider({ children }) {
   const handleUserTeamsUpdated = useCallback((data) => {
     // Show notification to user about team changes
     if (data.data?.showNotification && data.data?.message) {
-      // Import notifications dynamically to avoid circular dependencies
-      import('@mantine/notifications').then(({ notifications }) => {
-        notifications.show({
-          title: 'Team Access Updated',
-          message: data.data.message,
-          color: 'blue',
-          autoClose: 5000,
-        });
+      notifications.show({
+        title: 'Team Access Updated',
+        message: data.data.message,
+        icon: <IconLoader size={16} />,
+        color: 'blue',
+        autoClose: 5000,
       });
     }
 
-    // When user's team assignments change, trigger auth refresh
-    logger.log('SSE: User teams updated, triggering permissions refresh...');
-    setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('auth-change'));
-    }, 1000); // Small delay to let notification show
+    // Note: Backend already sends a fresh 'init' message after team updates
+    // via refreshInitDataForUser(), so we don't need to trigger 'auth-change'
+    // which would clear PermissionsContext data and cause a race condition
+    logger.log('SSE: User teams updated - new init message will arrive with updated data');
   }, []);
 
   // Message handler to be called by parent

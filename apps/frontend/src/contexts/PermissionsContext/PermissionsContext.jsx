@@ -59,57 +59,30 @@ export const PermissionsProvider = ({ children }) => {
       setOrganizationMembership(orgRole);
 
       // Load user team memberships
+      // IMPORTANT: Always use our custom endpoint for both admin and regular users
+      // This endpoint returns all teams for admins and only assigned teams for regular users
       try {
-        if (user.role === 'admin') {
-          // Admins have access to all teams
-          const teamsResult = await authClient.organization.listTeams({
-            query: {
-              organizationId: activeOrgResult.data?.id,
-            },
-          });
+        const teamMembershipsResponse = await fetchWithHeaders(
+          `/users/${user.id}/team-memberships`,
+        );
 
-          if (teamsResult.data && Array.isArray(teamsResult.data)) {
-            setUserTeams(
-              teamsResult.data.map((team) => ({
-                id: team.id,
-                name: team.name,
-                role: 'owner',
-              })),
-            );
-            logger.log(
-              `✓ Loaded ${teamsResult.data.length} teams for admin user`,
-            );
-          } else {
-            setUserTeams([]);
-          }
+        const teamMembershipsData = await handleResponse(
+          teamMembershipsResponse,
+          `/users/${user.id}/team-memberships`,
+          { credentials: 'include' },
+        );
+
+        if (
+          teamMembershipsData.success &&
+          teamMembershipsData.data?.teams
+        ) {
+          setUserTeams(teamMembershipsData.data.teams);
+          const isAdminUser = user.role === 'admin';
+          logger.log(
+            `✓ Loaded ${teamMembershipsData.data.teams.length} team memberships${isAdminUser ? ' (all teams for admin)' : ''}`,
+          );
         } else {
-          // For regular users, fetch their specific team memberships via API
-          try {
-            const teamMembershipsResponse = await fetchWithHeaders(
-              `/users/${user.id}/team-memberships`,
-            );
-
-            const teamMembershipsData = await handleResponse(
-              teamMembershipsResponse,
-              `/users/${user.id}/team-memberships`,
-              { credentials: 'include' },
-            );
-
-            if (
-              teamMembershipsData.success &&
-              teamMembershipsData.data?.teams
-            ) {
-              setUserTeams(teamMembershipsData.data.teams);
-              logger.log(
-                `✓ Loaded ${teamMembershipsData.data.teams.length} team memberships for user`,
-              );
-            } else {
-              setUserTeams([]);
-            }
-          } catch (fetchError) {
-            logger.warn('Error fetching user team memberships:', fetchError);
-            setUserTeams([]);
-          }
+          setUserTeams([]);
         }
       } catch (teamsError) {
         logger.warn('Error loading team memberships:', teamsError);

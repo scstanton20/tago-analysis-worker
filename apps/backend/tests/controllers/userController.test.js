@@ -378,6 +378,8 @@ describe('UserController', () => {
         { id: 'team-2', name: 'Team 2', permissions: '["analysis.run"]' },
       ];
 
+      // Mock target user role check - regular user
+      executeQuery.mockReturnValue({ role: 'user' });
       executeQueryAll.mockReturnValue(mockMemberships);
 
       await UserController.getUserTeamMemberships(req, res);
@@ -400,11 +402,77 @@ describe('UserController', () => {
       });
       const res = createMockResponse();
 
+      // Mock target user role check - regular user
+      executeQuery.mockReturnValue({ role: 'user' });
       executeQueryAll.mockReturnValue([]);
 
       await UserController.getUserTeamMemberships(req, res);
 
       expect(res.json).toHaveBeenCalled();
+    });
+
+    it('should return all teams with full permissions for admin users', async () => {
+      const req = createMockRequest({
+        params: { userId: 'admin-user-id' },
+        user: { id: 'admin-user-id', role: 'admin' },
+      });
+      const res = createMockResponse();
+
+      const mockAllTeams = [
+        { id: 'team-1', name: 'Team 1' },
+        { id: 'team-2', name: 'Team 2' },
+        { id: 'team-3', name: 'Team 3' },
+      ];
+
+      // Mock target user role check - admin user
+      executeQuery.mockReturnValue({ role: 'admin' });
+      executeQueryAll.mockReturnValue(mockAllTeams);
+
+      await UserController.getUserTeamMemberships(req, res);
+
+      expect(res.json).toHaveBeenCalledWith({
+        success: true,
+        data: {
+          teams: [
+            {
+              id: 'team-1',
+              name: 'Team 1',
+              permissions: [
+                'view_analyses',
+                'run_analyses',
+                'upload_analyses',
+                'download_analyses',
+                'edit_analyses',
+                'delete_analyses',
+              ],
+            },
+            {
+              id: 'team-2',
+              name: 'Team 2',
+              permissions: [
+                'view_analyses',
+                'run_analyses',
+                'upload_analyses',
+                'download_analyses',
+                'edit_analyses',
+                'delete_analyses',
+              ],
+            },
+            {
+              id: 'team-3',
+              name: 'Team 3',
+              permissions: [
+                'view_analyses',
+                'run_analyses',
+                'upload_analyses',
+                'download_analyses',
+                'edit_analyses',
+                'delete_analyses',
+              ],
+            },
+          ],
+        },
+      });
     });
 
     it('should deny access for non-admin users to other users', async () => {
@@ -429,6 +497,8 @@ describe('UserController', () => {
       });
       const res = createMockResponse();
 
+      // Mock target user role check
+      executeQuery.mockReturnValue({ role: 'user' });
       executeQueryAll.mockImplementation(() => {
         throw new Error('Database error');
       });
@@ -678,6 +748,246 @@ describe('UserController', () => {
 
       expect(res.status).toHaveBeenCalledWith(500);
     });
+
+    it('should update role and team assignments simultaneously when changing from admin to user', async () => {
+      const req = createMockRequest({
+        params: { userId: 'user-123' },
+        body: {
+          organizationId: 'org-123',
+          role: 'member',
+          teamAssignments: [
+            { teamId: 'team-1', permissions: ['analysis.view', 'analysis.run'] },
+            { teamId: 'team-2', permissions: ['analysis.view'] },
+          ],
+        },
+      });
+      const res = createMockResponse();
+
+      // Mock successful role update
+      auth.api.updateMemberRole.mockResolvedValue({
+        data: { role: 'member' },
+        error: null,
+      });
+
+      // Mock getUser API
+      auth.api.getUser.mockResolvedValue({
+        data: {
+          id: 'user-123',
+          name: 'Test User',
+          email: 'test@example.com',
+        },
+        error: null,
+      });
+
+      // Mock team assignment operations
+      executeQueryAll.mockReturnValue([]); // No current team assignments
+      executeQuery.mockReturnValue({ id: 'org-123' });
+      executeUpdate.mockReturnValue({ changes: 1 });
+
+      await UserController.updateUserOrganizationRole(req, res);
+
+      // Should update role
+      expect(auth.api.updateMemberRole).toHaveBeenCalledWith({
+        headers: req.headers,
+        body: {
+          memberId: 'user-123',
+          organizationId: 'org-123',
+          role: 'member',
+        },
+      });
+
+      // Should assign teams
+      expect(executeUpdate).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO teamMember'),
+        expect.arrayContaining([
+          expect.any(String),
+          'user-123',
+          'team-1',
+          JSON.stringify(['analysis.view', 'analysis.run']),
+          expect.any(String),
+        ]),
+        expect.any(String),
+      );
+
+      expect(executeUpdate).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO teamMember'),
+        expect.arrayContaining([
+          expect.any(String),
+          'user-123',
+          'team-2',
+          JSON.stringify(['analysis.view']),
+          expect.any(String),
+        ]),
+        expect.any(String),
+      );
+
+      // Should send notifications
+      expect(sseManager.sendToUser).toHaveBeenCalled();
+      expect(sseManager.refreshInitDataForUser).toHaveBeenCalledWith(
+        'user-123',
+      );
+    });
+
+    it('should clear team assignments when changing from user to admin', async () => {
+      const req = createMockRequest({
+        params: { userId: 'user-123' },
+        body: {
+          organizationId: 'org-123',
+          role: 'admin',
+          teamAssignments: [], // Empty when promoting to admin
+        },
+      });
+      const res = createMockResponse();
+
+      // Mock successful role update
+      auth.api.updateMemberRole.mockResolvedValue({
+        data: { role: 'admin' },
+        error: null,
+      });
+
+      // Mock getUser API
+      auth.api.getUser.mockResolvedValue({
+        data: {
+          id: 'user-123',
+          name: 'Test User',
+          email: 'test@example.com',
+        },
+        error: null,
+      });
+
+      // Mock existing team assignments to be removed
+      executeQueryAll.mockReturnValue([
+        { teamId: 'team-1' },
+        { teamId: 'team-2' },
+      ]);
+      executeQuery.mockReturnValue({ id: 'org-123' });
+      executeUpdate.mockReturnValue({ changes: 1 });
+
+      await UserController.updateUserOrganizationRole(req, res);
+
+      // Should update role
+      expect(auth.api.updateMemberRole).toHaveBeenCalledWith({
+        headers: req.headers,
+        body: {
+          memberId: 'user-123',
+          organizationId: 'org-123',
+          role: 'admin',
+        },
+      });
+
+      // Should remove all team assignments
+      expect(executeUpdate).toHaveBeenCalledWith(
+        expect.stringContaining('DELETE FROM teamMember'),
+        expect.arrayContaining(['user-123', 'team-1']),
+        expect.any(String),
+      );
+
+      expect(executeUpdate).toHaveBeenCalledWith(
+        expect.stringContaining('DELETE FROM teamMember'),
+        expect.arrayContaining(['user-123', 'team-2']),
+        expect.any(String),
+      );
+    });
+
+    it('should skip team assignments when not provided', async () => {
+      const req = createMockRequest({
+        params: { userId: 'user-123' },
+        body: {
+          organizationId: 'org-123',
+          role: 'member',
+          // teamAssignments not provided
+        },
+      });
+      const res = createMockResponse();
+
+      auth.api.updateMemberRole.mockResolvedValue({
+        data: { role: 'member' },
+        error: null,
+      });
+
+      auth.api.getUser.mockResolvedValue({
+        data: {
+          id: 'user-123',
+          name: 'Test User',
+        },
+        error: null,
+      });
+
+      await UserController.updateUserOrganizationRole(req, res);
+
+      // Should update role
+      expect(auth.api.updateMemberRole).toHaveBeenCalled();
+
+      // Should NOT attempt team operations when teamAssignments not provided
+      expect(executeQueryAll).not.toHaveBeenCalled();
+    });
+
+    it('should use main organization when organizationId is null', async () => {
+      const req = createMockRequest({
+        params: { userId: 'user-123' },
+        body: {
+          organizationId: null,
+          role: 'member',
+        },
+      });
+      const res = createMockResponse();
+
+      // Mock getting the main organization
+      executeQuery.mockReturnValue({ id: 'main-org-123' });
+
+      auth.api.updateMemberRole.mockResolvedValue({
+        data: { role: 'member' },
+        error: null,
+      });
+
+      auth.api.getUser.mockResolvedValue({
+        data: {
+          id: 'user-123',
+          name: 'Test User',
+        },
+        error: null,
+      });
+
+      await UserController.updateUserOrganizationRole(req, res);
+
+      // Should query for main organization
+      expect(executeQuery).toHaveBeenCalledWith(
+        'SELECT id FROM organization WHERE slug = ?',
+        ['main'],
+        expect.any(String),
+      );
+
+      // Should update role with main organization ID
+      expect(auth.api.updateMemberRole).toHaveBeenCalledWith({
+        headers: req.headers,
+        body: {
+          memberId: 'user-123',
+          organizationId: 'main-org-123',
+          role: 'member',
+        },
+      });
+    });
+
+    it('should return error when main organization not found', async () => {
+      const req = createMockRequest({
+        params: { userId: 'user-123' },
+        body: {
+          organizationId: null,
+          role: 'member',
+        },
+      });
+      const res = createMockResponse();
+
+      // Mock main organization not found
+      executeQuery.mockReturnValue(null);
+
+      await UserController.updateUserOrganizationRole(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Main organization not found',
+      });
+    });
   });
 
   describe('removeUserFromOrganization', () => {
@@ -810,290 +1120,6 @@ describe('UserController', () => {
       mockContext.password.hash.mockRejectedValue(new Error('Hash error'));
 
       await UserController.setInitialPassword(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
-    });
-  });
-
-  describe('revokeSession', () => {
-    it('should revoke session successfully', async () => {
-      const req = createMockRequest({
-        body: { sessionToken: 'session-token-123' },
-      });
-      const res = createMockResponse();
-
-      executeQuery.mockReturnValue({ userId: 'user-123' });
-      executeUpdate.mockReturnValue({ changes: 1 });
-
-      await UserController.revokeSession(req, res);
-
-      expect(executeQuery).toHaveBeenCalledWith(
-        expect.stringContaining('SELECT userId FROM session'),
-        ['session-token-123'],
-        expect.any(String),
-      );
-      expect(executeUpdate).toHaveBeenCalledWith(
-        expect.stringContaining('DELETE FROM session WHERE token'),
-        ['session-token-123'],
-        expect.any(String),
-      );
-    });
-
-    it('should return 400 when sessionToken is missing', async () => {
-      const req = createMockRequest({
-        body: {},
-      });
-      const res = createMockResponse();
-
-      await UserController.revokeSession(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({
-        error: 'sessionToken is required',
-      });
-    });
-
-    it('should handle session not found', async () => {
-      const req = createMockRequest({
-        body: { sessionToken: 'invalid-token' },
-      });
-      const res = createMockResponse();
-
-      executeQuery.mockReturnValue(null);
-
-      await UserController.revokeSession(req, res);
-
-      expect(res.json).toHaveBeenCalledWith({
-        success: true,
-        message: 'Session not found or already revoked',
-      });
-    });
-
-    it('should handle errors when revoking session', async () => {
-      const req = createMockRequest({
-        body: { sessionToken: 'session-token-123' },
-      });
-      const res = createMockResponse();
-
-      executeQuery.mockImplementation(() => {
-        throw new Error('Database error');
-      });
-
-      await UserController.revokeSession(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
-    });
-  });
-
-  describe('revokeAllUserSessions', () => {
-    it('should revoke all user sessions successfully', async () => {
-      const req = createMockRequest({
-        body: { userId: 'user-123' },
-      });
-      const res = createMockResponse();
-
-      executeUpdate.mockReturnValue({ changes: 3 });
-
-      await UserController.revokeAllUserSessions(req, res);
-
-      expect(executeUpdate).toHaveBeenCalledWith(
-        expect.stringContaining('DELETE FROM session WHERE userId'),
-        ['user-123'],
-        expect.any(String),
-      );
-    });
-
-    it('should return 400 when userId is missing', async () => {
-      const req = createMockRequest({
-        body: {},
-      });
-      const res = createMockResponse();
-
-      await UserController.revokeAllUserSessions(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({
-        error: 'userId is required',
-      });
-    });
-
-    it('should handle errors when revoking sessions', async () => {
-      const req = createMockRequest({
-        body: { userId: 'user-123' },
-      });
-      const res = createMockResponse();
-
-      executeUpdate.mockImplementation(() => {
-        throw new Error('Database error');
-      });
-
-      await UserController.revokeAllUserSessions(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
-    });
-  });
-
-  describe('banUser', () => {
-    it('should ban user successfully', async () => {
-      const req = createMockRequest({
-        body: {
-          userId: 'user-123',
-          banReason: 'Violated terms',
-        },
-      });
-      const res = createMockResponse();
-
-      auth.api.banUser.mockResolvedValue({
-        data: { banned: true },
-        error: null,
-      });
-
-      await UserController.banUser(req, res);
-
-      expect(auth.api.banUser).toHaveBeenCalledWith({
-        headers: req.headers,
-        body: {
-          userId: 'user-123',
-          banReason: 'Violated terms',
-        },
-      });
-      expect(res.json).toHaveBeenCalledWith({
-        success: true,
-        message: 'User banned successfully',
-        data: { banned: true },
-      });
-    });
-
-    it('should use default ban reason when not specified', async () => {
-      const req = createMockRequest({
-        body: { userId: 'user-123' },
-      });
-      const res = createMockResponse();
-
-      auth.api.banUser.mockResolvedValue({
-        data: {},
-        error: null,
-      });
-
-      await UserController.banUser(req, res);
-
-      expect(auth.api.banUser).toHaveBeenCalledWith(
-        expect.objectContaining({
-          body: expect.objectContaining({
-            banReason: 'Banned by administrator',
-          }),
-        }),
-      );
-    });
-
-    it('should return 400 when userId is missing', async () => {
-      const req = createMockRequest({
-        body: {},
-      });
-      const res = createMockResponse();
-
-      await UserController.banUser(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({
-        error: 'userId is required',
-      });
-    });
-
-    it('should handle Better Auth errors', async () => {
-      const req = createMockRequest({
-        body: { userId: 'user-123' },
-      });
-      const res = createMockResponse();
-
-      auth.api.banUser.mockResolvedValue({
-        error: { message: 'User not found' },
-      });
-
-      await UserController.banUser(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(400);
-    });
-
-    it('should handle general errors', async () => {
-      const req = createMockRequest({
-        body: { userId: 'user-123' },
-      });
-      const res = createMockResponse();
-
-      auth.api.banUser.mockRejectedValue(new Error('Server error'));
-
-      await UserController.banUser(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
-    });
-  });
-
-  describe('unbanUser', () => {
-    it('should unban user successfully', async () => {
-      const req = createMockRequest({
-        body: { userId: 'user-123' },
-      });
-      const res = createMockResponse();
-
-      auth.api.unbanUser.mockResolvedValue({
-        data: { banned: false },
-        error: null,
-      });
-
-      await UserController.unbanUser(req, res);
-
-      expect(auth.api.unbanUser).toHaveBeenCalledWith({
-        headers: req.headers,
-        body: {
-          userId: 'user-123',
-        },
-      });
-      expect(res.json).toHaveBeenCalledWith({
-        success: true,
-        message: 'User unbanned successfully',
-        data: { banned: false },
-      });
-    });
-
-    it('should return 400 when userId is missing', async () => {
-      const req = createMockRequest({
-        body: {},
-      });
-      const res = createMockResponse();
-
-      await UserController.unbanUser(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({
-        error: 'userId is required',
-      });
-    });
-
-    it('should handle Better Auth errors', async () => {
-      const req = createMockRequest({
-        body: { userId: 'user-123' },
-      });
-      const res = createMockResponse();
-
-      auth.api.unbanUser.mockResolvedValue({
-        error: { message: 'User not found', status: 'UNAUTHORIZED' },
-      });
-
-      await UserController.unbanUser(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(401);
-    });
-
-    it('should handle general errors', async () => {
-      const req = createMockRequest({
-        body: { userId: 'user-123' },
-      });
-      const res = createMockResponse();
-
-      auth.api.unbanUser.mockRejectedValue(new Error('Server error'));
-
-      await UserController.unbanUser(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
     });

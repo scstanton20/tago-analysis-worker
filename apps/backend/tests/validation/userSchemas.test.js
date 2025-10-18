@@ -458,19 +458,33 @@ describe('userSchemas', () => {
       expect(result.error?.issues[0].path).toContain('userId');
     });
 
-    it('should require organizationId in body', () => {
-      const invalidData = {
+    it('should allow null organizationId in body', () => {
+      const validData = {
+        body: {
+          organizationId: null,
+          role: 'admin',
+        },
+      };
+
+      const result = schemas.updateUserOrganizationRole.body.safeParse(
+        validData.body,
+      );
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should allow undefined organizationId in body', () => {
+      const validData = {
         body: {
           role: 'admin',
         },
       };
 
       const result = schemas.updateUserOrganizationRole.body.safeParse(
-        invalidData.body,
+        validData.body,
       );
 
-      expect(result.success).toBe(false);
-      expect(result.error?.issues[0].path).toContain('organizationId');
+      expect(result.success).toBe(true);
     });
 
     it('should require role in body', () => {
@@ -502,6 +516,42 @@ describe('userSchemas', () => {
 
       expect(result.success).toBe(false);
       expect(result.error?.issues[0].path).toContain('organizationId');
+    });
+
+    it('should validate with teamAssignments', () => {
+      const validData = {
+        body: {
+          organizationId: 'org-456',
+          role: 'member',
+          teamAssignments: [
+            { teamId: 'team-1', permissions: ['analysis.view'] },
+          ],
+        },
+      };
+
+      const result = schemas.updateUserOrganizationRole.body.safeParse(
+        validData.body,
+      );
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should validate with null organizationId and teamAssignments', () => {
+      const validData = {
+        body: {
+          organizationId: null,
+          role: 'member',
+          teamAssignments: [
+            { teamId: 'team-1', permissions: ['analysis.view'] },
+          ],
+        },
+      };
+
+      const result = schemas.updateUserOrganizationRole.body.safeParse(
+        validData.body,
+      );
+
+      expect(result.success).toBe(true);
     });
 
     it('should reject invalid role value', () => {

@@ -206,27 +206,6 @@ describe('rateLimiter middleware', () => {
     });
   });
 
-  describe('sseLogoutLimiter', () => {
-    it('should be defined and callable', () => {
-      expect(rateLimiters.sseLogoutLimiter).toBeDefined();
-      expect(typeof rateLimiters.sseLogoutLimiter).toBe('function');
-    });
-
-    it('should be an express middleware function', () => {
-      expect(rateLimiters.sseLogoutLimiter.length).toBeGreaterThanOrEqual(2);
-    });
-
-    it('should call next when invoked', () => {
-      const req = createMockRequest();
-      const res = createMockResponse();
-      const next = createMockNext();
-
-      rateLimiters.sseLogoutLimiter(req, res, next);
-
-      expect(typeof rateLimiters.sseLogoutLimiter).toBe('function');
-    });
-  });
-
   describe('all rate limiters', () => {
     it('should export all expected limiters', () => {
       expect(rateLimiters.fileOperationLimiter).toBeDefined();
@@ -237,7 +216,6 @@ describe('rateLimiter middleware', () => {
       expect(rateLimiters.teamOperationLimiter).toBeDefined();
       expect(rateLimiters.userOperationLimiter).toBeDefined();
       expect(rateLimiters.settingsOperationLimiter).toBeDefined();
-      expect(rateLimiters.sseLogoutLimiter).toBeDefined();
     });
 
     it('should all be middleware functions', () => {
@@ -250,7 +228,6 @@ describe('rateLimiter middleware', () => {
         rateLimiters.teamOperationLimiter,
         rateLimiters.userOperationLimiter,
         rateLimiters.settingsOperationLimiter,
-        rateLimiters.sseLogoutLimiter,
       ];
 
       limiters.forEach((limiter) => {
@@ -269,7 +246,6 @@ describe('rateLimiter middleware', () => {
         rateLimiters.teamOperationLimiter,
         rateLimiters.userOperationLimiter,
         rateLimiters.settingsOperationLimiter,
-        rateLimiters.sseLogoutLimiter,
       ];
 
       // Check that limiters are not the same reference
@@ -293,7 +269,6 @@ describe('rateLimiter middleware', () => {
         rateLimiters.teamOperationLimiter,
         rateLimiters.userOperationLimiter,
         rateLimiters.settingsOperationLimiter,
-        rateLimiters.sseLogoutLimiter,
       ];
 
       limiters.forEach((limiter) => {
@@ -425,7 +400,6 @@ describe('rateLimiter middleware', () => {
       expect(typeof rateLimiters.teamOperationLimiter).toBe('function');
       expect(typeof rateLimiters.userOperationLimiter).toBe('function');
       expect(typeof rateLimiters.settingsOperationLimiter).toBe('function');
-      expect(typeof rateLimiters.sseLogoutLimiter).toBe('function');
     });
 
     it('should accept standard express middleware parameters', () => {

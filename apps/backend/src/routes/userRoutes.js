@@ -19,7 +19,16 @@ router.use(authMiddleware);
  * /users/{userId}/team-memberships:
  *   get:
  *     summary: Get user team memberships
- *     description: Get team memberships for a user. Users can only access their own memberships, admins can access any user's memberships.
+ *     description: |
+ *       Get team memberships and permissions for a user.
+ *
+ *       **Behavior based on target user's role:**
+ *       - If target user is an admin: Returns ALL teams with full permissions
+ *       - If target user is a regular user: Returns only teams they are explicitly members of
+ *
+ *       **Access control:**
+ *       - Users can only access their own memberships
+ *       - Admins can access any user's memberships
  *     tags: [User Management]
  *     parameters:
  *       - in: path
@@ -46,6 +55,28 @@ router.use(authMiddleware);
  *                       type: array
  *                       items:
  *                         $ref: '#/components/schemas/UserTeamMembership'
+ *             examples:
+ *               adminUser:
+ *                 summary: Response for admin user
+ *                 value:
+ *                   success: true
+ *                   data:
+ *                     teams:
+ *                       - id: "team-1"
+ *                         name: "Team Alpha"
+ *                         permissions: ["view_analyses", "run_analyses", "upload_analyses", "download_analyses", "edit_analyses", "delete_analyses"]
+ *                       - id: "team-2"
+ *                         name: "Team Beta"
+ *                         permissions: ["view_analyses", "run_analyses", "upload_analyses", "download_analyses", "edit_analyses", "delete_analyses"]
+ *               regularUser:
+ *                 summary: Response for regular user
+ *                 value:
+ *                   success: true
+ *                   data:
+ *                     teams:
+ *                       - id: "team-1"
+ *                         name: "Team Alpha"
+ *                         permissions: ["view_analyses", "run_analyses"]
  *       400:
  *         description: Invalid userId provided
  *         content:
@@ -491,6 +522,74 @@ router.delete(
   userOperationLimiter,
   validateRequest(userValidationSchemas.removeUserFromOrganization),
   asyncHandler(UserController.removeUserFromOrganization),
+);
+
+/**
+ * @swagger
+ * /users/force-logout/{userId}:
+ *   post:
+ *     summary: Force logout a user
+ *     description: Force logout a user by closing all their SSE connections and sending a logout notification (admin only)
+ *     tags: [User Management - Admin]
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID of the user to force logout
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason:
+ *                 type: string
+ *                 description: Reason for forcing logout
+ *                 default: "Your session has been terminated"
+ *     responses:
+ *       200:
+ *         description: User forced logout successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     closedConnections:
+ *                       type: number
+ *                       description: Number of SSE connections closed
+ *       400:
+ *         description: Invalid request data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       401:
+ *         description: Authentication required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       403:
+ *         description: Admin access required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.post(
+  '/force-logout/:userId',
+  userOperationLimiter,
+  validateRequest(userValidationSchemas.forceLogout),
+  asyncHandler(UserController.forceLogout),
 );
 
 export default router;

@@ -1,6 +1,8 @@
 // frontend/src/contexts/sseContext/compositeProvider.jsx
 import { useCallback, useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
+import { notifications } from '@mantine/notifications';
+import { IconCheck } from '@tabler/icons-react';
 import { SSEConnectionProvider } from './connection/index.js';
 import { SSEAnalysesProvider } from './analyses/index.js';
 import { SSETeamsProvider } from './teams/index.js';
@@ -78,63 +80,35 @@ function MessageRouter({ children }) {
         backendRef.current.handleMessage(data);
         break;
 
-      // User-related messages
-      case 'userRemoved':
-        // When user is removed from organization, log them out
-        logger.log('SSE: User account removed, logging out...');
-        window.location.href = '/login';
-        break;
-
-      case 'userBanned':
-        // When user is banned, log them out with ban message
-        logger.log(
-          'SSE: User account banned, logging out...',
-          data.data?.reason,
-        );
-        // Show ban notification
-        import('@mantine/notifications').then(({ notifications }) => {
-          notifications.show({
-            title: 'Account Banned',
-            message: data.data?.reason || 'Your account has been banned',
-            color: 'red',
-            autoClose: false,
-          });
-        });
-        // Log out after a brief delay to show the notification
-        setTimeout(() => {
-          window.location.href = '/login';
-        }, 2000);
-        break;
-
       case 'userRoleUpdated':
         // Show notification to user about role changes
         if (data.data?.showNotification && data.data?.message) {
-          import('@mantine/notifications').then(({ notifications }) => {
-            notifications.show({
-              title: 'Role Updated',
-              message: data.data.message,
-              color: 'green',
-              autoClose: 5000,
-            });
+          notifications.show({
+            title: 'Role Updated',
+            message: data.data.message,
+            icon: <IconCheck size={16} />,
+            color: 'green',
+            autoClose: 5000,
           });
         }
-        // When user's role changes, trigger auth refresh
-        logger.log('SSE: User role updated, triggering permissions refresh...');
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('auth-change'));
-        }, 1000);
+        // Note: Backend already sends a fresh 'init' message after role updates
+        // via refreshInitDataForUser(), so we don't need to trigger 'auth-change'
+        // which would clear PermissionsContext data and cause a race condition
+        logger.log('SSE: User role updated - new init message will arrive with updated permissions');
         break;
 
-      case 'userLogout': {
-        logger.log('User logout event received via SSE, data:', data);
-        // Dispatch custom event for AuthProvider to handle
-        const customEvent = new CustomEvent('sse-user-logout', {
-          detail: { type: 'user-logout', userId: data.userId },
-        });
-        logger.log('Dispatching sse-user-logout event:', customEvent.detail);
-        window.dispatchEvent(customEvent);
+      case 'forceLogout':
+        // Force logout the user
+        logger.log('SSE: Received force logout, logging out user...');
+        window.dispatchEvent(
+          new CustomEvent('force-logout', {
+            detail: {
+              reason: data.reason || 'Your session has been terminated',
+              timestamp: data.timestamp,
+            },
+          }),
+        );
         break;
-      }
 
       case 'refresh':
         // Refresh data via SSE instead of page reload

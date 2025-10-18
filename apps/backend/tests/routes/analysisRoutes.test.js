@@ -191,14 +191,6 @@ describe('Analysis Routes', () => {
       });
       expect(AnalysisController.runAnalysis).toHaveBeenCalled();
     });
-
-    it('should apply analysis run limiter', async () => {
-      await request(app)
-        .post('/api/analyses/test-analysis/run')
-        .send({ type: 'scheduled' });
-
-      expect(AnalysisController.runAnalysis).toHaveBeenCalled();
-    });
   });
 
   describe('POST /api/analyses/:fileName/stop', () => {
