@@ -147,10 +147,6 @@ describe('Team Routes - WITH REAL AUTH', () => {
     app = express();
     app.use(express.json());
 
-    // Import REAL middleware (no mocks!)
-    const { attachRequestLogger } = await import(
-      '../../src/middleware/loggingMiddleware.js'
-    );
     app.use(attachRequestLogger);
 
     // Import routes

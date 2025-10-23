@@ -12,13 +12,10 @@ export default defineConfig({
     // Global setup/teardown for test database
     globalSetup: ['./tests/globalSetup.js'],
     globalTeardown: ['./tests/globalTeardown.js'],
-    // Run tests sequentially to avoid database conflicts with shared auth.db
+    // Run tests sequentially to avoid database conflicts with shared auth.db (v4 syntax)
     pool: 'forks',
-    poolOptions: {
-      forks: {
-        singleFork: true, // Run all tests in a single fork for database isolation
-      },
-    },
+    maxWorkers: 1, // Run all tests in a single worker
+    fileParallelism: false, // Disable parallel file execution
     exclude: [
       '**/node_modules/**',
       '**/dist/**',

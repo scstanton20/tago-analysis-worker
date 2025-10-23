@@ -3,9 +3,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Mock dependencies
 vi.mock('prom-client', () => ({
   default: {
-    Registry: vi.fn(() => ({
-      metrics: vi.fn(),
-    })),
+    Registry: vi.fn(function () {
+      this.metrics = vi.fn();
+    }),
     Histogram: vi.fn(function () {
       return { observe: vi.fn() };
     }),
