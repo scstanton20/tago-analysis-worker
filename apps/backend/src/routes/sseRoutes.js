@@ -1,11 +1,6 @@
 // backend/src/routes/sseRoutes.js
 import { Router } from 'express';
-import {
-  authenticateSSE,
-  handleSSEConnection,
-  sseManager,
-} from '../utils/sse.js';
-import { createChildLogger } from '../utils/logging/logger.js';
+import { authenticateSSE, handleSSEConnection } from '../utils/sse.js';
 import { sseCompression } from '../middleware/compression.js';
 
 const router = Router();

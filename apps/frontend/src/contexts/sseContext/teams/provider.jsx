@@ -104,7 +104,9 @@ export function SSETeamsProvider({ children }) {
     // Note: Backend already sends a fresh 'init' message after team updates
     // via refreshInitDataForUser(), so we don't need to trigger 'auth-change'
     // which would clear PermissionsContext data and cause a race condition
-    logger.log('SSE: User teams updated - new init message will arrive with updated data');
+    logger.log(
+      'SSE: User teams updated - new init message will arrive with updated data',
+    );
   }, []);
 
   // Message handler to be called by parent

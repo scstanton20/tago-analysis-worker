@@ -1,16 +1,32 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+/**
+ * User Routes Integration Tests
+ *
+ * - Uses REAL better-auth authentication (no mocks)
+ * - Tests multiple user roles and permissions
+ * - Includes negative test cases (401, 403)
+ * - Tests admin-only and self-service permissions
+ * - Uses real database sessions
+ */
+
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeAll,
+  afterAll,
+  beforeEach,
+} from 'vitest';
 import express from 'express';
 import request from 'supertest';
+import {
+  setupTestAuth,
+  cleanupTestAuth,
+  getSessionCookie,
+  createTestUser,
+} from '../utils/authHelpers.js';
 
-// Mock dependencies
-vi.mock('../../src/middleware/betterAuthMiddleware.js', () => ({
-  authMiddleware: (req, res, next) => {
-    req.user = { id: 'test-user', role: 'admin' };
-    next();
-  },
-  requireAdmin: (req, res, next) => next(),
-}));
-
+// Mock only external dependencies - NO AUTH MOCKS!
 vi.mock('../../src/middleware/rateLimiter.js', () => ({
   userOperationLimiter: (req, res, next) => next(),
 }));
@@ -118,35 +134,56 @@ vi.mock('../../src/utils/asyncHandler.js', () => ({
   asyncHandler: (fn) => fn,
 }));
 
-vi.mock('../../src/middleware/loggingMiddleware.js', () => ({
-  attachRequestLogger: (req, res, next) => {
-    req.log = {
+// Logging middleware mock - provides req.log
+const attachRequestLogger = (req, res, next) => {
+  req.log = {
+    info: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+    child: vi.fn(() => ({
       info: vi.fn(),
       error: vi.fn(),
       warn: vi.fn(),
       debug: vi.fn(),
-    };
-    next();
-  },
+    })),
+  };
+  next();
+};
+
+vi.mock('../../src/middleware/loggingMiddleware.js', () => ({
+  attachRequestLogger,
 }));
 
-describe('User Routes', () => {
+describe('User Routes - WITH REAL AUTH', () => {
   let app;
-  let userRoutes;
   let UserController;
+  let adminUser;
+  let teamOwnerUser;
+  let teamViewerUser;
+
+  beforeAll(async () => {
+    // Setup test infrastructure (creates test org, teams, users)
+    await setupTestAuth();
+
+    // Create test users in the database
+    adminUser = await createTestUser('admin');
+    teamOwnerUser = await createTestUser('teamOwner');
+    teamViewerUser = await createTestUser('teamViewer');
+  });
+
+  afterAll(async () => {
+    // Cleanup all test data
+    await cleanupTestAuth();
+  });
 
   beforeEach(async () => {
     vi.clearAllMocks();
 
-    // Create a fresh Express app for each test
+    // Create fresh Express app with REAL middleware
     app = express();
     app.use(express.json());
-
-    // Add logging middleware
-    const { attachRequestLogger } = await import(
-      '../../src/middleware/loggingMiddleware.js'
-    );
-    app.use(attachRequestLogger);
+    app.use(attachRequestLogger); // Use mocked logging middleware
 
     // Import controller for verification
     const controllerModule = await import(
@@ -154,18 +191,97 @@ describe('User Routes', () => {
     );
     UserController = controllerModule.default;
 
-    // Import routes
-    const routesModule = await import('../../src/routes/userRoutes.js');
-    userRoutes = routesModule.default;
-
-    // Mount routes
+    // Import routes with REAL auth middleware
+    const { default: userRoutes } = await import(
+      '../../src/routes/userRoutes.js'
+    );
     app.use('/api/users', userRoutes);
   });
 
-  describe('GET /api/users/:userId/team-memberships', () => {
-    it('should get user team memberships', async () => {
+  describe('Authentication Requirements', () => {
+    it('should reject unauthenticated requests to team memberships', async () => {
+      const response = await request(app).get(
+        '/api/users/some-user-id/team-memberships',
+      );
+
+      // Debug: Log the error if we get 500
+      if (response.status === 500) {
+        console.log('500 Error Response:', response.body);
+      }
+
+      expect(response.status).toBe(401);
+      expect(UserController.getUserTeamMemberships).not.toHaveBeenCalled();
+    });
+
+    it('should reject unauthenticated requests to set initial password', async () => {
+      await request(app)
+        .post('/api/users/set-initial-password')
+        .send({ newPassword: 'securePassword123!' })
+        .expect(401);
+
+      expect(UserController.setInitialPassword).not.toHaveBeenCalled();
+    });
+
+    it('should reject unauthenticated requests to admin routes', async () => {
+      await request(app)
+        .post('/api/users/add-to-organization')
+        .send({ userId: 'user-123', organizationId: 'org-123' })
+        .expect(401);
+
+      await request(app)
+        .post('/api/users/assign-teams')
+        .send({ userId: 'user-123', teamAssignments: [] })
+        .expect(401);
+
+      await request(app)
+        .put('/api/users/user-123/team-assignments')
+        .send({ teamAssignments: [] })
+        .expect(401);
+
+      await request(app)
+        .put('/api/users/user-123/organization-role')
+        .send({ organizationId: 'org-123', role: 'admin' })
+        .expect(401);
+
+      await request(app).delete('/api/users/user-123/organization').expect(401);
+
+      await request(app)
+        .post('/api/users/force-logout/user-123')
+        .send({ reason: 'test' })
+        .expect(401);
+
+      expect(UserController.addToOrganization).not.toHaveBeenCalled();
+      expect(UserController.assignUserToTeams).not.toHaveBeenCalled();
+      expect(UserController.updateUserTeamAssignments).not.toHaveBeenCalled();
+      expect(UserController.updateUserOrganizationRole).not.toHaveBeenCalled();
+      expect(UserController.removeUserFromOrganization).not.toHaveBeenCalled();
+      expect(UserController.forceLogout).not.toHaveBeenCalled();
+    });
+
+    it('should allow authenticated requests with valid session', async () => {
+      const cookie = await getSessionCookie('teamOwner');
+      console.log('Test cookie:', cookie);
+      console.log('TeamOwner user:', teamOwnerUser);
+
       const response = await request(app)
-        .get('/api/users/user-123/team-memberships')
+        .get(`/api/users/${teamOwnerUser.id}/team-memberships`)
+        .set('Cookie', cookie);
+
+      console.log('Response status:', response.status);
+      console.log('Response body:', response.body);
+
+      expect(response.status).toBe(200);
+      expect(UserController.getUserTeamMemberships).toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /api/users/:userId/team-memberships - Self-Service', () => {
+    it('should allow users to view their own team memberships', async () => {
+      const cookie = await getSessionCookie('teamOwner');
+
+      const response = await request(app)
+        .get(`/api/users/${teamOwnerUser.id}/team-memberships`)
+        .set('Cookie', cookie)
         .expect(200);
 
       expect(response.body).toEqual({
@@ -183,26 +299,48 @@ describe('User Routes', () => {
       expect(UserController.getUserTeamMemberships).toHaveBeenCalled();
     });
 
-    it('should validate userId parameter', async () => {
-      await request(app).get('/api/users/valid-user-id/team-memberships');
+    it('should deny users from viewing other users team memberships', async () => {
+      const viewerCookie = await getSessionCookie('teamViewer');
+
+      // teamViewer trying to view teamOwner's memberships
+      await request(app)
+        .get(`/api/users/${teamOwnerUser.id}/team-memberships`)
+        .set('Cookie', viewerCookie)
+        .expect(403);
+
+      expect(UserController.getUserTeamMemberships).not.toHaveBeenCalled();
+    });
+
+    it('should allow admin to view any user team memberships', async () => {
+      const adminCookie = await getSessionCookie('admin');
+
+      await request(app)
+        .get(`/api/users/${teamOwnerUser.id}/team-memberships`)
+        .set('Cookie', adminCookie)
+        .expect(200);
 
       expect(UserController.getUserTeamMemberships).toHaveBeenCalled();
     });
 
-    it('should return team data for user', async () => {
-      const response = await request(app)
-        .get('/api/users/user-123/team-memberships')
+    it('should allow users to view their own memberships even if they are a viewer', async () => {
+      const viewerCookie = await getSessionCookie('teamViewer');
+
+      await request(app)
+        .get(`/api/users/${teamViewerUser.id}/team-memberships`)
+        .set('Cookie', viewerCookie)
         .expect(200);
 
-      expect(response.body.data.teams).toBeDefined();
-      expect(Array.isArray(response.body.data.teams)).toBe(true);
+      expect(UserController.getUserTeamMemberships).toHaveBeenCalled();
     });
   });
 
-  describe('POST /api/users/set-initial-password', () => {
-    it('should set initial password', async () => {
+  describe('POST /api/users/set-initial-password - Self-Service', () => {
+    it('should allow any authenticated user to set initial password', async () => {
+      const cookie = await getSessionCookie('teamViewer');
+
       const response = await request(app)
         .post('/api/users/set-initial-password')
+        .set('Cookie', cookie)
         .send({ newPassword: 'securePassword123!' })
         .expect(200);
 
@@ -213,27 +351,38 @@ describe('User Routes', () => {
       expect(UserController.setInitialPassword).toHaveBeenCalled();
     });
 
-    it('should apply user operation limiter', async () => {
+    it('should allow admin to set initial password', async () => {
+      const adminCookie = await getSessionCookie('admin');
+
       await request(app)
         .post('/api/users/set-initial-password')
-        .send({ newPassword: 'newPass123' });
+        .set('Cookie', adminCookie)
+        .send({ newPassword: 'newPass123!' })
+        .expect(200);
 
       expect(UserController.setInitialPassword).toHaveBeenCalled();
     });
 
-    it('should validate request data', async () => {
+    it('should allow team owner to set initial password', async () => {
+      const ownerCookie = await getSessionCookie('teamOwner');
+
       await request(app)
         .post('/api/users/set-initial-password')
-        .send({ newPassword: 'validPassword' });
+        .set('Cookie', ownerCookie)
+        .send({ newPassword: 'anotherPass123!' })
+        .expect(200);
 
       expect(UserController.setInitialPassword).toHaveBeenCalled();
     });
   });
 
-  describe('POST /api/users/add-to-organization (admin only)', () => {
-    it('should add user to organization', async () => {
+  describe('POST /api/users/add-to-organization - Admin Only', () => {
+    it('should allow admin to add user to organization', async () => {
+      const adminCookie = await getSessionCookie('admin');
+
       const response = await request(app)
         .post('/api/users/add-to-organization')
+        .set('Cookie', adminCookie)
         .send({
           userId: 'user-123',
           organizationId: 'org-123',
@@ -248,36 +397,62 @@ describe('User Routes', () => {
       expect(UserController.addToOrganization).toHaveBeenCalled();
     });
 
-    it('should apply user operation limiter', async () => {
+    it('should deny team owner from adding user to organization', async () => {
+      const ownerCookie = await getSessionCookie('teamOwner');
+
       await request(app)
         .post('/api/users/add-to-organization')
-        .send({ userId: 'user-1', organizationId: 'org-1', role: 'admin' });
+        .set('Cookie', ownerCookie)
+        .send({
+          userId: 'user-123',
+          organizationId: 'org-123',
+          role: 'member',
+        })
+        .expect(403);
 
-      expect(UserController.addToOrganization).toHaveBeenCalled();
+      expect(UserController.addToOrganization).not.toHaveBeenCalled();
     });
 
-    it('should validate organization role', async () => {
+    it('should deny team viewer from adding user to organization', async () => {
+      const viewerCookie = await getSessionCookie('teamViewer');
+
       await request(app)
         .post('/api/users/add-to-organization')
-        .send({ userId: 'user-1', organizationId: 'org-1', role: 'member' });
+        .set('Cookie', viewerCookie)
+        .send({
+          userId: 'user-123',
+          organizationId: 'org-123',
+          role: 'member',
+        })
+        .expect(403);
 
-      expect(UserController.addToOrganization).toHaveBeenCalled();
+      expect(UserController.addToOrganization).not.toHaveBeenCalled();
     });
 
-    it('should require admin access', async () => {
-      // Admin middleware is applied via router.use(requireAdmin)
+    it('should deny user with no team access from adding user to organization', async () => {
+      const noAccessCookie = await getSessionCookie('noAccess');
+
       await request(app)
         .post('/api/users/add-to-organization')
-        .send({ userId: 'user-1', organizationId: 'org-1' });
+        .set('Cookie', noAccessCookie)
+        .send({
+          userId: 'user-123',
+          organizationId: 'org-123',
+          role: 'member',
+        })
+        .expect(403);
 
-      expect(UserController.addToOrganization).toHaveBeenCalled();
+      expect(UserController.addToOrganization).not.toHaveBeenCalled();
     });
   });
 
-  describe('POST /api/users/assign-teams (admin only)', () => {
-    it('should assign user to teams', async () => {
+  describe('POST /api/users/assign-teams - Admin Only', () => {
+    it('should allow admin to assign user to teams', async () => {
+      const adminCookie = await getSessionCookie('admin');
+
       const response = await request(app)
         .post('/api/users/assign-teams')
+        .set('Cookie', adminCookie)
         .send({
           userId: 'user-123',
           teamAssignments: [
@@ -302,52 +477,59 @@ describe('User Routes', () => {
       expect(UserController.assignUserToTeams).toHaveBeenCalled();
     });
 
-    it('should apply user operation limiter', async () => {
+    it('should deny team owner from assigning users to teams', async () => {
+      const ownerCookie = await getSessionCookie('teamOwner');
+
       await request(app)
         .post('/api/users/assign-teams')
+        .set('Cookie', ownerCookie)
         .send({
-          userId: 'user-1',
+          userId: 'user-123',
           teamAssignments: [{ teamId: 'team-1', permissions: [] }],
-        });
+        })
+        .expect(403);
 
-      expect(UserController.assignUserToTeams).toHaveBeenCalled();
+      expect(UserController.assignUserToTeams).not.toHaveBeenCalled();
     });
 
-    it('should validate team assignments', async () => {
+    it('should deny team editor from assigning users to teams', async () => {
+      const editorCookie = await getSessionCookie('teamEditor');
+
       await request(app)
         .post('/api/users/assign-teams')
+        .set('Cookie', editorCookie)
         .send({
-          userId: 'user-1',
-          teamAssignments: [
-            {
-              teamId: 'team-1',
-              permissions: ['view_analyses', 'run_analyses'],
-            },
-          ],
-        });
+          userId: 'user-123',
+          teamAssignments: [{ teamId: 'team-1', permissions: [] }],
+        })
+        .expect(403);
 
-      expect(UserController.assignUserToTeams).toHaveBeenCalled();
+      expect(UserController.assignUserToTeams).not.toHaveBeenCalled();
     });
 
-    it('should handle multiple team assignments', async () => {
+    it('should deny team viewer from assigning users to teams', async () => {
+      const viewerCookie = await getSessionCookie('teamViewer');
+
       await request(app)
         .post('/api/users/assign-teams')
+        .set('Cookie', viewerCookie)
         .send({
-          userId: 'user-1',
-          teamAssignments: [
-            { teamId: 'team-1', permissions: ['view_analyses'] },
-            { teamId: 'team-2', permissions: ['run_analyses'] },
-          ],
-        });
+          userId: 'user-123',
+          teamAssignments: [{ teamId: 'team-1', permissions: [] }],
+        })
+        .expect(403);
 
-      expect(UserController.assignUserToTeams).toHaveBeenCalled();
+      expect(UserController.assignUserToTeams).not.toHaveBeenCalled();
     });
   });
 
-  describe('PUT /api/users/:userId/team-assignments (admin only)', () => {
-    it('should update user team assignments', async () => {
+  describe('PUT /api/users/:userId/team-assignments - Admin Only', () => {
+    it('should allow admin to update user team assignments', async () => {
+      const adminCookie = await getSessionCookie('admin');
+
       const response = await request(app)
         .put('/api/users/user-123/team-assignments')
+        .set('Cookie', adminCookie)
         .send({
           teamAssignments: [
             { teamId: 'team-1', permissions: ['view_analyses'] },
@@ -371,39 +553,51 @@ describe('User Routes', () => {
       expect(UserController.updateUserTeamAssignments).toHaveBeenCalled();
     });
 
-    it('should apply user operation limiter', async () => {
+    it('should deny team owner from updating user team assignments', async () => {
+      const ownerCookie = await getSessionCookie('teamOwner');
+
       await request(app)
         .put('/api/users/user-1/team-assignments')
-        .send({ teamAssignments: [] });
+        .set('Cookie', ownerCookie)
+        .send({ teamAssignments: [] })
+        .expect(403);
 
-      expect(UserController.updateUserTeamAssignments).toHaveBeenCalled();
+      expect(UserController.updateUserTeamAssignments).not.toHaveBeenCalled();
     });
 
-    it('should validate userId parameter', async () => {
-      await request(app)
-        .put('/api/users/valid-user-id/team-assignments')
-        .send({ teamAssignments: [] });
+    it('should deny team viewer from updating user team assignments', async () => {
+      const viewerCookie = await getSessionCookie('teamViewer');
 
-      expect(UserController.updateUserTeamAssignments).toHaveBeenCalled();
-    });
-
-    it('should replace existing team assignments', async () => {
       await request(app)
         .put('/api/users/user-1/team-assignments')
-        .send({
-          teamAssignments: [
-            { teamId: 'team-2', permissions: ['edit_analyses'] },
-          ],
-        });
+        .set('Cookie', viewerCookie)
+        .send({ teamAssignments: [] })
+        .expect(403);
 
-      expect(UserController.updateUserTeamAssignments).toHaveBeenCalled();
+      expect(UserController.updateUserTeamAssignments).not.toHaveBeenCalled();
+    });
+
+    it('should deny regular users from updating their own team assignments', async () => {
+      const ownerCookie = await getSessionCookie('teamOwner');
+
+      // Even trying to update their own assignments should be denied
+      await request(app)
+        .put(`/api/users/${teamOwnerUser.id}/team-assignments`)
+        .set('Cookie', ownerCookie)
+        .send({ teamAssignments: [] })
+        .expect(403);
+
+      expect(UserController.updateUserTeamAssignments).not.toHaveBeenCalled();
     });
   });
 
-  describe('PUT /api/users/:userId/organization-role (admin only)', () => {
-    it('should update user organization role', async () => {
+  describe('PUT /api/users/:userId/organization-role - Admin Only', () => {
+    it('should allow admin to update user organization role', async () => {
+      const adminCookie = await getSessionCookie('admin');
+
       const response = await request(app)
         .put('/api/users/user-123/organization-role')
+        .set('Cookie', adminCookie)
         .send({
           organizationId: 'org-123',
           role: 'admin',
@@ -417,35 +611,50 @@ describe('User Routes', () => {
       expect(UserController.updateUserOrganizationRole).toHaveBeenCalled();
     });
 
-    it('should apply user operation limiter', async () => {
+    it('should deny team owner from updating user organization role', async () => {
+      const ownerCookie = await getSessionCookie('teamOwner');
+
       await request(app)
         .put('/api/users/user-1/organization-role')
-        .send({ organizationId: 'org-1', role: 'member' });
+        .set('Cookie', ownerCookie)
+        .send({ organizationId: 'org-1', role: 'member' })
+        .expect(403);
 
-      expect(UserController.updateUserOrganizationRole).toHaveBeenCalled();
+      expect(UserController.updateUserOrganizationRole).not.toHaveBeenCalled();
     });
 
-    it('should validate role values', async () => {
+    it('should deny team viewer from updating user organization role', async () => {
+      const viewerCookie = await getSessionCookie('teamViewer');
+
       await request(app)
         .put('/api/users/user-1/organization-role')
-        .send({ organizationId: 'org-1', role: 'owner' });
+        .set('Cookie', viewerCookie)
+        .send({ organizationId: 'org-1', role: 'member' })
+        .expect(403);
 
-      expect(UserController.updateUserOrganizationRole).toHaveBeenCalled();
+      expect(UserController.updateUserOrganizationRole).not.toHaveBeenCalled();
     });
 
-    it('should validate userId parameter', async () => {
-      await request(app)
-        .put('/api/users/valid-user/organization-role')
-        .send({ organizationId: 'org-1', role: 'admin' });
+    it('should deny users from updating their own organization role', async () => {
+      const ownerCookie = await getSessionCookie('teamOwner');
 
-      expect(UserController.updateUserOrganizationRole).toHaveBeenCalled();
+      await request(app)
+        .put(`/api/users/${teamOwnerUser.id}/organization-role`)
+        .set('Cookie', ownerCookie)
+        .send({ organizationId: 'org-1', role: 'admin' })
+        .expect(403);
+
+      expect(UserController.updateUserOrganizationRole).not.toHaveBeenCalled();
     });
   });
 
-  describe('DELETE /api/users/:userId/organization (admin only)', () => {
-    it('should remove user from organization', async () => {
+  describe('DELETE /api/users/:userId/organization - Admin Only', () => {
+    it('should allow admin to remove user from organization', async () => {
+      const adminCookie = await getSessionCookie('admin');
+
       const response = await request(app)
         .delete('/api/users/user-123/organization')
+        .set('Cookie', adminCookie)
         .expect(200);
 
       expect(response.body).toEqual({
@@ -455,216 +664,314 @@ describe('User Routes', () => {
       expect(UserController.removeUserFromOrganization).toHaveBeenCalled();
     });
 
-    it('should apply user operation limiter', async () => {
-      await request(app).delete('/api/users/user-1/organization');
+    it('should deny team owner from removing users from organization', async () => {
+      const ownerCookie = await getSessionCookie('teamOwner');
 
-      expect(UserController.removeUserFromOrganization).toHaveBeenCalled();
+      await request(app)
+        .delete('/api/users/user-1/organization')
+        .set('Cookie', ownerCookie)
+        .expect(403);
+
+      expect(UserController.removeUserFromOrganization).not.toHaveBeenCalled();
     });
 
-    it('should validate userId parameter', async () => {
-      await request(app).delete('/api/users/valid-user-id/organization');
+    it('should deny team viewer from removing users from organization', async () => {
+      const viewerCookie = await getSessionCookie('teamViewer');
 
-      expect(UserController.removeUserFromOrganization).toHaveBeenCalled();
+      await request(app)
+        .delete('/api/users/user-1/organization')
+        .set('Cookie', viewerCookie)
+        .expect(403);
+
+      expect(UserController.removeUserFromOrganization).not.toHaveBeenCalled();
     });
 
-    it('should delete user after organization removal', async () => {
-      // This route triggers user deletion via hook
-      await request(app).delete('/api/users/user-1/organization');
+    it('should deny users from removing themselves from organization', async () => {
+      const ownerCookie = await getSessionCookie('teamOwner');
 
-      expect(UserController.removeUserFromOrganization).toHaveBeenCalled();
+      await request(app)
+        .delete(`/api/users/${teamOwnerUser.id}/organization`)
+        .set('Cookie', ownerCookie)
+        .expect(403);
+
+      expect(UserController.removeUserFromOrganization).not.toHaveBeenCalled();
     });
   });
 
-  describe('authentication and authorization', () => {
-    it('should require authentication for all routes', async () => {
-      // All routes should pass through authMiddleware
-      await request(app).get('/api/users/user-1/team-memberships');
-      await request(app)
-        .post('/api/users/set-initial-password')
-        .send({ newPassword: 'pass' });
-      await request(app)
-        .post('/api/users/add-to-organization')
-        .send({ userId: 'u1', organizationId: 'o1' });
+  describe('POST /api/users/force-logout/:userId - Admin Only', () => {
+    it('should allow admin to force logout a user', async () => {
+      const adminCookie = await getSessionCookie('admin');
 
-      expect(UserController.getUserTeamMemberships).toHaveBeenCalled();
-      expect(UserController.setInitialPassword).toHaveBeenCalled();
-      expect(UserController.addToOrganization).toHaveBeenCalled();
+      const response = await request(app)
+        .post('/api/users/force-logout/user-123')
+        .set('Cookie', adminCookie)
+        .send({ reason: 'Security concern' })
+        .expect(200);
+
+      expect(response.body).toEqual({
+        success: true,
+        data: { closedConnections: 1 },
+      });
+      expect(UserController.forceLogout).toHaveBeenCalled();
     });
 
-    it('should require admin for admin-only routes', async () => {
-      // Admin routes applied after authMiddleware
+    it('should deny team owner from forcing logout', async () => {
+      const ownerCookie = await getSessionCookie('teamOwner');
+
+      await request(app)
+        .post('/api/users/force-logout/user-123')
+        .set('Cookie', ownerCookie)
+        .send({ reason: 'test' })
+        .expect(403);
+
+      expect(UserController.forceLogout).not.toHaveBeenCalled();
+    });
+
+    it('should deny team viewer from forcing logout', async () => {
+      const viewerCookie = await getSessionCookie('teamViewer');
+
+      await request(app)
+        .post('/api/users/force-logout/user-123')
+        .set('Cookie', viewerCookie)
+        .send({ reason: 'test' })
+        .expect(403);
+
+      expect(UserController.forceLogout).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Admin-Only Routes - Comprehensive Coverage', () => {
+    it('should verify all admin-only routes reject team editor', async () => {
+      const editorCookie = await getSessionCookie('teamEditor');
+
       await request(app)
         .post('/api/users/add-to-organization')
-        .send({ userId: 'u1', organizationId: 'o1' });
+        .set('Cookie', editorCookie)
+        .send({ userId: 'u1', organizationId: 'o1' })
+        .expect(403);
+
       await request(app)
         .post('/api/users/assign-teams')
-        .send({ userId: 'u1', teamAssignments: [] });
+        .set('Cookie', editorCookie)
+        .send({ userId: 'u1', teamAssignments: [] })
+        .expect(403);
+
       await request(app)
         .put('/api/users/u1/team-assignments')
-        .send({ teamAssignments: [] });
+        .set('Cookie', editorCookie)
+        .send({ teamAssignments: [] })
+        .expect(403);
+
       await request(app)
         .put('/api/users/u1/organization-role')
-        .send({ organizationId: 'o1', role: 'admin' });
-      await request(app).delete('/api/users/u1/organization');
+        .set('Cookie', editorCookie)
+        .send({ organizationId: 'o1', role: 'admin' })
+        .expect(403);
 
+      await request(app)
+        .delete('/api/users/u1/organization')
+        .set('Cookie', editorCookie)
+        .expect(403);
+
+      await request(app)
+        .post('/api/users/force-logout/u1')
+        .set('Cookie', editorCookie)
+        .send({ reason: 'test' })
+        .expect(403);
+
+      // Verify NO admin-only controllers were called
+      expect(UserController.addToOrganization).not.toHaveBeenCalled();
+      expect(UserController.assignUserToTeams).not.toHaveBeenCalled();
+      expect(UserController.updateUserTeamAssignments).not.toHaveBeenCalled();
+      expect(UserController.updateUserOrganizationRole).not.toHaveBeenCalled();
+      expect(UserController.removeUserFromOrganization).not.toHaveBeenCalled();
+      expect(UserController.forceLogout).not.toHaveBeenCalled();
+    });
+
+    it('should verify all admin-only routes reject team runner', async () => {
+      const runnerCookie = await getSessionCookie('teamRunner');
+
+      await request(app)
+        .post('/api/users/add-to-organization')
+        .set('Cookie', runnerCookie)
+        .send({ userId: 'u1', organizationId: 'o1' })
+        .expect(403);
+
+      await request(app)
+        .post('/api/users/assign-teams')
+        .set('Cookie', runnerCookie)
+        .send({ userId: 'u1', teamAssignments: [] })
+        .expect(403);
+
+      await request(app)
+        .put('/api/users/u1/team-assignments')
+        .set('Cookie', runnerCookie)
+        .send({ teamAssignments: [] })
+        .expect(403);
+
+      await request(app)
+        .put('/api/users/u1/organization-role')
+        .set('Cookie', runnerCookie)
+        .send({ organizationId: 'o1', role: 'admin' })
+        .expect(403);
+
+      await request(app)
+        .delete('/api/users/u1/organization')
+        .set('Cookie', runnerCookie)
+        .expect(403);
+
+      await request(app)
+        .post('/api/users/force-logout/u1')
+        .set('Cookie', runnerCookie)
+        .send({ reason: 'test' })
+        .expect(403);
+
+      expect(UserController.addToOrganization).not.toHaveBeenCalled();
+      expect(UserController.assignUserToTeams).not.toHaveBeenCalled();
+      expect(UserController.updateUserTeamAssignments).not.toHaveBeenCalled();
+      expect(UserController.updateUserOrganizationRole).not.toHaveBeenCalled();
+      expect(UserController.removeUserFromOrganization).not.toHaveBeenCalled();
+      expect(UserController.forceLogout).not.toHaveBeenCalled();
+    });
+
+    it('should verify all admin-only routes accept admin', async () => {
+      const adminCookie = await getSessionCookie('admin');
+
+      await request(app)
+        .post('/api/users/add-to-organization')
+        .set('Cookie', adminCookie)
+        .send({ userId: 'u1', organizationId: 'o1' })
+        .expect(200);
+
+      await request(app)
+        .post('/api/users/assign-teams')
+        .set('Cookie', adminCookie)
+        .send({ userId: 'u1', teamAssignments: [] })
+        .expect(200);
+
+      await request(app)
+        .put('/api/users/u1/team-assignments')
+        .set('Cookie', adminCookie)
+        .send({ teamAssignments: [] })
+        .expect(200);
+
+      await request(app)
+        .put('/api/users/u1/organization-role')
+        .set('Cookie', adminCookie)
+        .send({ organizationId: 'o1', role: 'admin' })
+        .expect(200);
+
+      await request(app)
+        .delete('/api/users/u1/organization')
+        .set('Cookie', adminCookie)
+        .expect(200);
+
+      await request(app)
+        .post('/api/users/force-logout/u1')
+        .set('Cookie', adminCookie)
+        .send({ reason: 'test' })
+        .expect(200);
+
+      // Verify all admin-only controllers were called
       expect(UserController.addToOrganization).toHaveBeenCalled();
       expect(UserController.assignUserToTeams).toHaveBeenCalled();
       expect(UserController.updateUserTeamAssignments).toHaveBeenCalled();
       expect(UserController.updateUserOrganizationRole).toHaveBeenCalled();
       expect(UserController.removeUserFromOrganization).toHaveBeenCalled();
-    });
-
-    it('should allow non-admin users to access own memberships', async () => {
-      // getUserTeamMemberships is before requireAdmin middleware
-      await request(app).get('/api/users/test-user/team-memberships');
-
-      expect(UserController.getUserTeamMemberships).toHaveBeenCalled();
-    });
-
-    it('should allow non-admin users to set initial password', async () => {
-      // setInitialPassword is before requireAdmin middleware
-      await request(app)
-        .post('/api/users/set-initial-password')
-        .send({ newPassword: 'newPass' });
-
-      expect(UserController.setInitialPassword).toHaveBeenCalled();
+      expect(UserController.forceLogout).toHaveBeenCalled();
     });
   });
 
-  describe('error handling', () => {
+  describe('Error Handling', () => {
     it('should handle 404 for unknown routes', async () => {
-      await request(app).get('/api/users/unknown').expect(404);
+      const adminCookie = await getSessionCookie('admin');
+
+      await request(app)
+        .get('/api/users/unknown')
+        .set('Cookie', adminCookie)
+        .expect(404);
     });
 
-    it('should handle 404 for invalid user operations', async () => {
-      await request(app).patch('/api/users/user-1').expect(404);
-    });
-  });
+    it('should handle 404 for invalid HTTP methods', async () => {
+      const adminCookie = await getSessionCookie('admin');
 
-  describe('middleware chain', () => {
-    it('should apply rate limiters to all write operations', async () => {
-      // Password setting
       await request(app)
-        .post('/api/users/set-initial-password')
-        .send({ newPassword: 'pass' });
-      // Organization operations
-      await request(app)
-        .post('/api/users/add-to-organization')
-        .send({ userId: 'u1', organizationId: 'o1' });
-      // Team assignments
-      await request(app)
-        .post('/api/users/assign-teams')
-        .send({ userId: 'u1', teamAssignments: [] });
-      // Updates
-      await request(app)
-        .put('/api/users/u1/team-assignments')
-        .send({ teamAssignments: [] });
-      // Deletion
-      await request(app).delete('/api/users/u1/organization');
+        .delete('/api/users/u1/team-memberships')
+        .set('Cookie', adminCookie)
+        .expect(404);
 
-      expect(UserController.setInitialPassword).toHaveBeenCalled();
-      expect(UserController.addToOrganization).toHaveBeenCalled();
-      expect(UserController.assignUserToTeams).toHaveBeenCalled();
-      expect(UserController.updateUserTeamAssignments).toHaveBeenCalled();
-      expect(UserController.removeUserFromOrganization).toHaveBeenCalled();
-    });
+      await request(app)
+        .get('/api/users/set-initial-password')
+        .set('Cookie', adminCookie)
+        .expect(404);
 
-    it('should validate requests with schemas', async () => {
       await request(app)
-        .post('/api/users/set-initial-password')
-        .send({ newPassword: 'valid' });
-      await request(app)
-        .post('/api/users/add-to-organization')
-        .send({ userId: 'u1', organizationId: 'o1', role: 'member' });
-      await request(app)
-        .post('/api/users/assign-teams')
-        .send({ userId: 'u1', teamAssignments: [] });
-
-      expect(UserController.setInitialPassword).toHaveBeenCalled();
-      expect(UserController.addToOrganization).toHaveBeenCalled();
-      expect(UserController.assignUserToTeams).toHaveBeenCalled();
+        .post('/api/users/u1/organization')
+        .set('Cookie', adminCookie)
+        .expect(404);
     });
   });
 
-  describe('HTTP methods', () => {
-    it('should support correct HTTP methods', async () => {
-      // GET
-      await request(app).get('/api/users/u1/team-memberships').expect(200);
+  describe('User Management Workflows', () => {
+    it('should support admin complete user onboarding flow', async () => {
+      const adminCookie = await getSessionCookie('admin');
 
-      // POST
-      await request(app)
-        .post('/api/users/set-initial-password')
-        .send({ newPassword: 'p' })
-        .expect(200);
-      await request(app)
-        .post('/api/users/add-to-organization')
-        .send({ userId: 'u', organizationId: 'o' })
-        .expect(200);
-
-      // PUT
-      await request(app)
-        .put('/api/users/u1/team-assignments')
-        .send({ teamAssignments: [] })
-        .expect(200);
-      await request(app)
-        .put('/api/users/u1/organization-role')
-        .send({ organizationId: 'o', role: 'admin' })
-        .expect(200);
-
-      // DELETE
-      await request(app).delete('/api/users/u1/organization').expect(200);
-    });
-
-    it('should reject incorrect HTTP methods', async () => {
-      await request(app).delete('/api/users/u1/team-memberships').expect(404);
-      await request(app).get('/api/users/set-initial-password').expect(404);
-      await request(app).post('/api/users/u1/organization').expect(404);
-    });
-  });
-
-  describe('user management workflows', () => {
-    it('should support complete user onboarding flow', async () => {
-      // Set initial password
-      await request(app)
-        .post('/api/users/set-initial-password')
-        .send({ newPassword: 'secure123' });
       // Add to organization
       await request(app)
         .post('/api/users/add-to-organization')
-        .send({ userId: 'new-user', organizationId: 'org-1', role: 'member' });
+        .set('Cookie', adminCookie)
+        .send({ userId: 'new-user', organizationId: 'org-1', role: 'member' })
+        .expect(200);
+
       // Assign to teams
       await request(app)
         .post('/api/users/assign-teams')
+        .set('Cookie', adminCookie)
         .send({
           userId: 'new-user',
           teamAssignments: [{ teamId: 'team-1', permissions: [] }],
-        });
+        })
+        .expect(200);
 
-      expect(UserController.setInitialPassword).toHaveBeenCalled();
       expect(UserController.addToOrganization).toHaveBeenCalled();
       expect(UserController.assignUserToTeams).toHaveBeenCalled();
     });
 
-    it('should support user permission management', async () => {
+    it('should support admin user permission management', async () => {
+      const adminCookie = await getSessionCookie('admin');
+
       // Get current memberships
-      await request(app).get('/api/users/user-1/team-memberships');
+      await request(app)
+        .get('/api/users/user-1/team-memberships')
+        .set('Cookie', adminCookie)
+        .expect(200);
+
       // Update team assignments
       await request(app)
         .put('/api/users/user-1/team-assignments')
-        .send({ teamAssignments: [] });
+        .set('Cookie', adminCookie)
+        .send({ teamAssignments: [] })
+        .expect(200);
+
       // Update organization role
       await request(app)
         .put('/api/users/user-1/organization-role')
-        .send({ organizationId: 'org-1', role: 'admin' });
+        .set('Cookie', adminCookie)
+        .send({ organizationId: 'org-1', role: 'admin' })
+        .expect(200);
 
       expect(UserController.getUserTeamMemberships).toHaveBeenCalled();
       expect(UserController.updateUserTeamAssignments).toHaveBeenCalled();
       expect(UserController.updateUserOrganizationRole).toHaveBeenCalled();
     });
 
-    it('should support user removal workflow', async () => {
-      // Remove from organization (triggers deletion)
-      await request(app).delete('/api/users/user-1/organization');
+    it('should support admin user removal workflow', async () => {
+      const adminCookie = await getSessionCookie('admin');
+
+      await request(app)
+        .delete('/api/users/user-1/organization')
+        .set('Cookie', adminCookie)
+        .expect(200);
 
       expect(UserController.removeUserFromOrganization).toHaveBeenCalled();
     });

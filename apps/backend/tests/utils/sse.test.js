@@ -711,8 +711,9 @@ describe('sse', () => {
 
       // Get mocked modules
       mockAuthDatabase = await import('../../src/utils/authDatabase.js');
-      mockAnalysisService = (await import('../../src/services/analysisService.js'))
-        .analysisService;
+      mockAnalysisService = (
+        await import('../../src/services/analysisService.js')
+      ).analysisService;
       mockTeamService = (await import('../../src/services/teamService.js'))
         .default;
       mockGetUserTeamIds = (
@@ -919,10 +920,7 @@ describe('sse', () => {
       });
 
       // Spy on sendStatusUpdate
-      const sendStatusUpdateSpy = vi.spyOn(
-        sse.sseManager,
-        'sendStatusUpdate',
-      );
+      const sendStatusUpdateSpy = vi.spyOn(sse.sseManager, 'sendStatusUpdate');
 
       await sse.sseManager.sendInitialData(client);
 
@@ -938,8 +936,9 @@ describe('sse', () => {
     beforeEach(async () => {
       // Get mocked modules
       mockAuthDatabase = await import('../../src/utils/authDatabase.js');
-      mockAnalysisService = (await import('../../src/services/analysisService.js'))
-        .analysisService;
+      mockAnalysisService = (
+        await import('../../src/services/analysisService.js')
+      ).analysisService;
       mockTeamService = (await import('../../src/services/teamService.js'))
         .default;
     });

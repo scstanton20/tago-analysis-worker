@@ -72,10 +72,7 @@ export const PermissionsProvider = ({ children }) => {
           { credentials: 'include' },
         );
 
-        if (
-          teamMembershipsData.success &&
-          teamMembershipsData.data?.teams
-        ) {
+        if (teamMembershipsData.success && teamMembershipsData.data?.teams) {
           setUserTeams(teamMembershipsData.data.teams);
           const isAdminUser = user.role === 'admin';
           logger.log(

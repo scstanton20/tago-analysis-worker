@@ -395,3 +395,52 @@ export const requireAnyTeamPermission = (permission) => {
     }
   };
 };
+
+// Middleware to require user is accessing their own resource or is an admin
+export const requireSelfOrAdmin = async (req, res, next) => {
+  const logger =
+    req.log?.child({ middleware: 'requireSelfOrAdmin' }) || console;
+
+  try {
+    if (!req.user) {
+      logger.warn({ action: 'checkSelfOrAdmin' }, 'No user found');
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const targetUserId = req.params.userId;
+    const isOwnResource = req.user.id === targetUserId;
+    const isAdmin = req.user.role === 'admin';
+
+    if (isOwnResource || isAdmin) {
+      logger.info(
+        {
+          action: 'checkSelfOrAdmin',
+          userId: req.user.id,
+          targetUserId,
+          isOwnResource,
+          isAdmin,
+        },
+        'Access granted',
+      );
+      return next();
+    }
+
+    logger.warn(
+      {
+        action: 'checkSelfOrAdmin',
+        userId: req.user.id,
+        targetUserId,
+      },
+      'Access denied: user can only access their own resource',
+    );
+    return res
+      .status(403)
+      .json({ error: 'Access denied: you can only access your own resource' });
+  } catch (error) {
+    logger.error(
+      { action: 'checkSelfOrAdmin', err: error },
+      'requireSelfOrAdmin middleware error',
+    );
+    return res.status(403).json({ error: 'Access denied' });
+  }
+};

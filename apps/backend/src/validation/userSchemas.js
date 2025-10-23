@@ -55,13 +55,19 @@ export const userValidationSchemas = {
 
   /**
    * PATCH /api/users/:userId/organization-role - Update user organization role
+   * Note: organizationId can be null/undefined and will default to 'main' organization
+   * Note: Team assignments should be updated via separate endpoints (assignUserToTeams, updateUserTeamAssignments)
    */
   updateUserOrganizationRole: {
     params: z.object({
       userId: z.string().min(1, 'userId is required'),
     }),
     body: z.object({
-      organizationId: z.string().min(1, 'organizationId is required'),
+      organizationId: z
+        .string()
+        .min(1, 'organizationId must not be empty')
+        .nullable()
+        .optional(),
       role: organizationRoleSchema,
     }),
   },

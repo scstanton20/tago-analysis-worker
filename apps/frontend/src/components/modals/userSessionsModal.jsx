@@ -107,7 +107,9 @@ export default function UserSessionsModal({ opened, onClose, user }) {
           user.id,
           'Your session has been revoked by an administrator',
         );
-        logger.log(`✓ Forced logout for user ${user.id} after session revocation`);
+        logger.log(
+          `✓ Forced logout for user ${user.id} after session revocation`,
+        );
       } catch (logoutError) {
         logger.warn('Failed to force logout user:', logoutError);
         // Continue even if force logout fails
@@ -171,7 +173,9 @@ export default function UserSessionsModal({ opened, onClose, user }) {
           user.id,
           'All your sessions have been revoked by an administrator',
         );
-        logger.log(`✓ Forced logout for user ${user.id} after all sessions revocation`);
+        logger.log(
+          `✓ Forced logout for user ${user.id} after all sessions revocation`,
+        );
       } catch (logoutError) {
         logger.warn('Failed to force logout user:', logoutError);
         // Continue even if force logout fails

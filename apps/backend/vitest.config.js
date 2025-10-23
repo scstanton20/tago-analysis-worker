@@ -9,6 +9,16 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    // Global setup/teardown for test database
+    globalSetup: ['./tests/globalSetup.js'],
+    globalTeardown: ['./tests/globalTeardown.js'],
+    // Run tests sequentially to avoid database conflicts with shared auth.db
+    pool: 'forks',
+    poolOptions: {
+      forks: {
+        singleFork: true, // Run all tests in a single fork for database isolation
+      },
+    },
     exclude: [
       '**/node_modules/**',
       '**/dist/**',

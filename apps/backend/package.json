@@ -1,7 +1,7 @@
 {
   "name": "backend",
   "private": true,
-  "version": "2.5.14",
+  "version": "2.5.15",
   "type": "module",
   "engines": {
     "node": ">=22.0.0"
@@ -12,7 +12,9 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "vitest",
+    "test": "pnpm test:unit && pnpm test:integration",
+    "test:unit": "vitest run tests --exclude='tests/integration/**' --exclude='tests/routes/**'",
+    "test:integration": "vitest run tests/integration tests/routes",
     "test:run": "vitest run",
     "test:watch": "vitest watch",
     "test:ui": "vitest --ui",

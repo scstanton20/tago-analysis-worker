@@ -19,10 +19,10 @@ vi.mock('fs', () => ({
 vi.mock('../../src/config/default.js', () => ({
   default: {
     paths: {
-      analysis: '/app/analyses-storage',
+      analysis: '/tmp/test-analyses-storage/analyses',
     },
     storage: {
-      base: '/app',
+      base: '/tmp/test-analyses-storage',
     },
   },
 }));
@@ -39,8 +39,9 @@ describe('safePath', () => {
 
   describe('isPathSafe', () => {
     it('should allow paths within base directory', () => {
-      const targetPath = '/app/analyses-storage/my-analysis/index.js';
-      const basePath = '/app/analyses-storage';
+      const targetPath =
+        '/tmp/test-analyses-storage/analyses/my-analysis/index.js';
+      const basePath = '/tmp/test-analyses-storage/analyses';
 
       const result = safePath.isPathSafe(targetPath, basePath);
 
@@ -48,8 +49,9 @@ describe('safePath', () => {
     });
 
     it('should reject path traversal attempts with ..', () => {
-      const targetPath = '/app/analyses-storage/../../../etc/passwd';
-      const basePath = '/app/analyses-storage';
+      const targetPath =
+        '/tmp/test-analyses-storage/analyses/../../../etc/passwd';
+      const basePath = '/tmp/test-analyses-storage/analyses';
 
       const result = safePath.isPathSafe(targetPath, basePath);
 
@@ -58,7 +60,7 @@ describe('safePath', () => {
 
     it('should reject paths outside base directory', () => {
       const targetPath = '/etc/passwd';
-      const basePath = '/app/analyses-storage';
+      const basePath = '/tmp/test-analyses-storage/analyses';
 
       const result = safePath.isPathSafe(targetPath, basePath);
 
@@ -168,8 +170,8 @@ describe('safePath', () => {
 
   describe('safeMkdir', () => {
     it('should create directory if path is safe', async () => {
-      const dirPath = '/app/analyses-storage/new-analysis';
-      const basePath = '/app/analyses-storage';
+      const dirPath = '/tmp/test-analyses-storage/analyses/new-analysis';
+      const basePath = '/tmp/test-analyses-storage/analyses';
 
       await safePath.safeMkdir(dirPath, basePath, { recursive: true });
 
@@ -177,8 +179,8 @@ describe('safePath', () => {
     });
 
     it('should reject unsafe paths', async () => {
-      const dirPath = '/app/analyses-storage/../../../etc';
-      const basePath = '/app/analyses-storage';
+      const dirPath = '/tmp/test-analyses-storage/analyses/../../../etc';
+      const basePath = '/tmp/test-analyses-storage/analyses';
 
       await expect(
         safePath.safeMkdir(dirPath, basePath, { recursive: true }),
@@ -196,9 +198,9 @@ describe('safePath', () => {
 
   describe('safeWriteFile', () => {
     it('should write file if path is safe', async () => {
-      const filePath = '/app/analyses-storage/analysis/index.js';
+      const filePath = '/tmp/test-analyses-storage/analyses/analysis/index.js';
       const content = 'console.log("test");';
-      const basePath = '/app/analyses-storage';
+      const basePath = '/tmp/test-analyses-storage/analyses';
 
       await safePath.safeWriteFile(filePath, content, basePath, 'utf8');
 
@@ -206,9 +208,10 @@ describe('safePath', () => {
     });
 
     it('should reject unsafe paths', async () => {
-      const filePath = '/app/analyses-storage/../../../etc/passwd';
+      const filePath =
+        '/tmp/test-analyses-storage/analyses/../../../etc/passwd';
       const content = 'malicious content';
-      const basePath = '/app/analyses-storage';
+      const basePath = '/tmp/test-analyses-storage/analyses';
 
       await expect(
         safePath.safeWriteFile(filePath, content, basePath),
@@ -218,8 +221,8 @@ describe('safePath', () => {
 
   describe('safeReadFile', () => {
     it('should read file if path is safe', async () => {
-      const filePath = '/app/analyses-storage/analysis/index.js';
-      const basePath = '/app/analyses-storage';
+      const filePath = '/tmp/test-analyses-storage/analyses/analysis/index.js';
+      const basePath = '/tmp/test-analyses-storage/analyses';
 
       // Mock needs to return the value for this specific call
       fs.readFile.mockResolvedValueOnce('mock content');
@@ -231,8 +234,9 @@ describe('safePath', () => {
     });
 
     it('should reject unsafe paths', async () => {
-      const filePath = '/app/analyses-storage/../../../etc/passwd';
-      const basePath = '/app/analyses-storage';
+      const filePath =
+        '/tmp/test-analyses-storage/analyses/../../../etc/passwd';
+      const basePath = '/tmp/test-analyses-storage/analyses';
 
       await expect(
         safePath.safeReadFile(filePath, basePath, 'utf8'),
@@ -242,13 +246,13 @@ describe('safePath', () => {
 
   describe('safeReaddir', () => {
     it('should read directory if path is safe', async () => {
-      const dirPath = '/app/analyses-storage';
+      const dirPath = '/tmp/test-analyses-storage/analyses';
 
       // Mock needs to return the value for this specific call
       fs.readdir.mockResolvedValueOnce([]);
 
       // safeReaddir signature is (dirPath, basePath, options)
-      // The default basePath is config.paths.analysis which is '/app/analyses-storage'
+      // The default basePath is config.paths.analysis which is '/tmp/test-analyses-storage/analyses'
       const files = await safePath.safeReaddir(dirPath);
 
       // It should be called with dirPath and options (empty object by default)
@@ -257,7 +261,7 @@ describe('safePath', () => {
     });
 
     it('should reject unsafe paths', async () => {
-      const dirPath = '/app/analyses-storage/../../../etc';
+      const dirPath = '/tmp/test-analyses-storage/analyses/../../../etc';
 
       await expect(safePath.safeReaddir(dirPath)).rejects.toThrow(
         'Path traversal attempt detected',
@@ -267,8 +271,8 @@ describe('safePath', () => {
 
   describe('safeStat', () => {
     it('should stat file if path is safe', async () => {
-      const filePath = '/app/analyses-storage/analysis/index.js';
-      const basePath = '/app/analyses-storage';
+      const filePath = '/tmp/test-analyses-storage/analyses/analysis/index.js';
+      const basePath = '/tmp/test-analyses-storage/analyses';
 
       // Mock needs to return the stat object for this specific call
       const mockStats = {
@@ -284,8 +288,9 @@ describe('safePath', () => {
     });
 
     it('should reject unsafe paths', async () => {
-      const filePath = '/app/analyses-storage/../../../etc/passwd';
-      const basePath = '/app/analyses-storage';
+      const filePath =
+        '/tmp/test-analyses-storage/analyses/../../../etc/passwd';
+      const basePath = '/tmp/test-analyses-storage/analyses';
 
       await expect(safePath.safeStat(filePath, basePath)).rejects.toThrow(
         'Path traversal attempt detected',
@@ -295,8 +300,8 @@ describe('safePath', () => {
 
   describe('safeUnlink', () => {
     it('should delete file if path is safe', async () => {
-      const filePath = '/app/analyses-storage/analysis/temp.log';
-      const basePath = '/app/analyses-storage';
+      const filePath = '/tmp/test-analyses-storage/analyses/analysis/temp.log';
+      const basePath = '/tmp/test-analyses-storage/analyses';
 
       await safePath.safeUnlink(filePath, basePath);
 
@@ -304,8 +309,9 @@ describe('safePath', () => {
     });
 
     it('should reject unsafe paths', async () => {
-      const filePath = '/app/analyses-storage/../../../etc/passwd';
-      const basePath = '/app/analyses-storage';
+      const filePath =
+        '/tmp/test-analyses-storage/analyses/../../../etc/passwd';
+      const basePath = '/tmp/test-analyses-storage/analyses';
 
       await expect(safePath.safeUnlink(filePath, basePath)).rejects.toThrow(
         'Path traversal attempt detected',
@@ -315,9 +321,9 @@ describe('safePath', () => {
 
   describe('safeRename', () => {
     it('should rename file if paths are safe', async () => {
-      const oldPath = '/app/analyses-storage/old-name';
-      const newPath = '/app/analyses-storage/new-name';
-      const basePath = '/app/analyses-storage';
+      const oldPath = '/tmp/test-analyses-storage/analyses/old-name';
+      const newPath = '/tmp/test-analyses-storage/analyses/new-name';
+      const basePath = '/tmp/test-analyses-storage/analyses';
 
       await safePath.safeRename(oldPath, newPath, basePath);
 
@@ -325,9 +331,9 @@ describe('safePath', () => {
     });
 
     it('should reject unsafe old paths', async () => {
-      const oldPath = '/app/analyses-storage/../../../etc/passwd';
-      const newPath = '/app/analyses-storage/new-name';
-      const basePath = '/app/analyses-storage';
+      const oldPath = '/tmp/test-analyses-storage/analyses/../../../etc/passwd';
+      const newPath = '/tmp/test-analyses-storage/analyses/new-name';
+      const basePath = '/tmp/test-analyses-storage/analyses';
 
       await expect(
         safePath.safeRename(oldPath, newPath, basePath),
@@ -335,9 +341,9 @@ describe('safePath', () => {
     });
 
     it('should reject unsafe new paths', async () => {
-      const oldPath = '/app/analyses-storage/old-name';
-      const newPath = '/app/analyses-storage/../../../etc/passwd';
-      const basePath = '/app/analyses-storage';
+      const oldPath = '/tmp/test-analyses-storage/analyses/old-name';
+      const newPath = '/tmp/test-analyses-storage/analyses/../../../etc/passwd';
+      const basePath = '/tmp/test-analyses-storage/analyses';
 
       await expect(
         safePath.safeRename(oldPath, newPath, basePath),
@@ -351,7 +357,7 @@ describe('safePath', () => {
 
       const result = safePath.getAnalysisPath(analysisName);
 
-      expect(result).toBe('/app/analyses-storage/my-analysis');
+      expect(result).toBe('/tmp/test-analyses-storage/analyses/my-analysis');
     });
 
     it('should handle analysis names with hyphens', () => {
@@ -454,7 +460,7 @@ describe('safePath', () => {
 
     it('should still enforce basePath restrictions when basePath is provided', () => {
       const filePath = '/etc/ssl/certs/cert.pem';
-      const basePath = '/app/analyses-storage';
+      const basePath = '/tmp/test-analyses-storage/analyses';
 
       expect(() => {
         safePath.safeReadFileSync(filePath, basePath, 'utf8');

@@ -1,7 +1,10 @@
 // routes/settingsRoutes.js
 import { Router } from 'express';
 import SettingsController from '../controllers/settingsController.js';
-import { authMiddleware } from '../middleware/betterAuthMiddleware.js';
+import {
+  authMiddleware,
+  requireAdmin,
+} from '../middleware/betterAuthMiddleware.js';
 import { validateRequest } from '../middleware/validateRequest.js';
 import { settingsValidationSchemas } from '../validation/settingsSchemas.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -9,8 +12,9 @@ import { settingsOperationLimiter } from '../middleware/rateLimiter.js';
 
 const router = Router();
 
-// Apply authentication to all settings routes
+// Apply authentication and admin authorization to all settings routes
 router.use(authMiddleware);
+router.use(requireAdmin);
 
 // DNS Cache Settings Routes
 /**

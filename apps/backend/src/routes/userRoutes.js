@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   authMiddleware,
   requireAdmin,
+  requireSelfOrAdmin,
 } from '../middleware/betterAuthMiddleware.js';
 import UserController from '../controllers/userController.js';
 import { validateRequest } from '../middleware/validateRequest.js';
@@ -98,6 +99,7 @@ router.use(authMiddleware);
  */
 router.get(
   '/:userId/team-memberships',
+  requireSelfOrAdmin,
   validateRequest(userValidationSchemas.getUserTeamMemberships),
   asyncHandler(UserController.getUserTeamMemberships),
 );

@@ -94,7 +94,9 @@ function MessageRouter({ children }) {
         // Note: Backend already sends a fresh 'init' message after role updates
         // via refreshInitDataForUser(), so we don't need to trigger 'auth-change'
         // which would clear PermissionsContext data and cause a race condition
-        logger.log('SSE: User role updated - new init message will arrive with updated permissions');
+        logger.log(
+          'SSE: User role updated - new init message will arrive with updated permissions',
+        );
         break;
 
       case 'forceLogout':

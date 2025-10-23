@@ -1,28 +1,51 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+/**
+ * SSE Routes Integration Tests
+ *
+ * - Uses REAL better-auth authentication (no mocks)
+ * - Tests multiple user roles can access SSE
+ * - Includes negative test cases (401)
+ * - SSE accessible to all authenticated users
+ * - Uses real database sessions
+ */
+
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeAll,
+  afterAll,
+  beforeEach,
+} from 'vitest';
 import express from 'express';
 import request from 'supertest';
+import {
+  setupTestAuth,
+  cleanupTestAuth,
+  getSessionCookie,
+} from '../utils/authHelpers.js';
 
-// Mock dependencies
-vi.mock('../../src/utils/sse.js', () => ({
-  authenticateSSE: vi.fn((req, res, next) => {
-    req.user = { id: 'test-user', role: 'admin' };
-    next();
-  }),
-  handleSSEConnection: vi.fn((req, res) => {
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.write('data: {"type":"init"}\n\n');
-    res.end();
-  }),
-  sseManager: {
-    sendToUser: vi.fn(),
-    addClient: vi.fn(),
-    removeClient: vi.fn(),
-    broadcastUpdate: vi.fn(),
-  },
-}));
-
+// Mock only SSE connection handler - NOT authentication!
+vi.mock('../../src/utils/sse.js', async () => {
+  const actual = await vi.importActual('../../src/utils/sse.js');
+  return {
+    ...actual,
+    handleSSEConnection: vi.fn((req, res) => {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.write('data: {"type":"init"}\n\n');
+      res.end();
+    }),
+    sseManager: {
+      sendToUser: vi.fn(),
+      addClient: vi.fn(),
+      removeClient: vi.fn(),
+      broadcastUpdate: vi.fn(),
+      updateContainerState: vi.fn(),
+    },
+  };
+});
 
 vi.mock('../../src/utils/logging/logger.js', () => ({
   createChildLogger: vi.fn(() => ({
@@ -33,144 +56,311 @@ vi.mock('../../src/utils/logging/logger.js', () => ({
   })),
 }));
 
-vi.mock('../../src/middleware/loggingMiddleware.js', () => ({
-  attachRequestLogger: (req, res, next) => {
-    req.log = {
+// Logging middleware mock - provides req.log
+const attachRequestLogger = (req, res, next) => {
+  req.log = {
+    info: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+    child: vi.fn(() => ({
       info: vi.fn(),
       error: vi.fn(),
       warn: vi.fn(),
       debug: vi.fn(),
-      child: vi.fn(() => ({
-        info: vi.fn(),
-        error: vi.fn(),
-        warn: vi.fn(),
-        debug: vi.fn(),
-      })),
-    };
-    next();
-  },
+    })),
+  };
+  next();
+};
+
+vi.mock('../../src/middleware/loggingMiddleware.js', () => ({
+  attachRequestLogger,
 }));
 
-describe('SSE Routes', () => {
+vi.mock('../../src/middleware/compression.js', () => ({
+  sseCompression: () => (req, res, next) => next(),
+}));
+
+describe('SSE Routes - WITH REAL AUTH', () => {
   let app;
-  let sseRoutes;
-  let authenticateSSE;
   let handleSSEConnection;
   let sseManager;
+
+  beforeAll(async () => {
+    // Setup test infrastructure (creates test org, teams, users)
+    await setupTestAuth();
+  });
+
+  afterAll(async () => {
+    // Cleanup all test data
+    await cleanupTestAuth();
+  });
 
   beforeEach(async () => {
     vi.clearAllMocks();
 
-    // Create a fresh Express app for each test
+    // Create fresh Express app with REAL middleware
     app = express();
     app.use(express.json());
-
-    // Add logging middleware
-    const { attachRequestLogger } = await import(
-      '../../src/middleware/loggingMiddleware.js'
-    );
-    app.use(attachRequestLogger);
+    app.use(attachRequestLogger); // Use mocked logging middleware
 
     // Import SSE utilities
     const sseModule = await import('../../src/utils/sse.js');
-    authenticateSSE = sseModule.authenticateSSE;
     handleSSEConnection = sseModule.handleSSEConnection;
     sseManager = sseModule.sseManager;
 
-    // Import routes
-    const routesModule = await import('../../src/routes/sseRoutes.js');
-    sseRoutes = routesModule.default;
-
-    // Mount routes
+    // Import routes with REAL auth middleware
+    const { default: sseRoutes } = await import(
+      '../../src/routes/sseRoutes.js'
+    );
     app.use('/api/sse', sseRoutes);
   });
 
-  describe('GET /api/sse/events', () => {
-    it('should establish SSE connection', async () => {
-      const response = await request(app).get('/api/sse/events').expect(200);
+  describe('Authentication Requirements', () => {
+    it('should reject unauthenticated requests to SSE events', async () => {
+      await request(app).get('/api/sse/events').expect(401);
+
+      expect(handleSSEConnection).not.toHaveBeenCalled();
+    });
+
+    it('should allow authenticated users to connect to SSE', async () => {
+      const adminCookie = await getSessionCookie('admin');
+
+      const response = await request(app)
+        .get('/api/sse/events')
+        .set('Cookie', adminCookie)
+        .expect(200);
+
+      expect(response.headers['content-type']).toContain('text/event-stream');
+      expect(handleSSEConnection).toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /api/sse/events - All Authenticated Users', () => {
+    it('should allow admin to establish SSE connection', async () => {
+      const adminCookie = await getSessionCookie('admin');
+
+      const response = await request(app)
+        .get('/api/sse/events')
+        .set('Cookie', adminCookie)
+        .expect(200);
 
       expect(response.headers['content-type']).toContain('text/event-stream');
       expect(response.headers['cache-control']).toBe('no-cache');
       expect(response.headers['connection']).toBe('keep-alive');
-      expect(authenticateSSE).toHaveBeenCalled();
+      expect(handleSSEConnection).toHaveBeenCalled();
+    });
+
+    it('should allow team owner to connect to SSE', async () => {
+      const ownerCookie = await getSessionCookie('teamOwner');
+
+      const response = await request(app)
+        .get('/api/sse/events')
+        .set('Cookie', ownerCookie)
+        .expect(200);
+
+      expect(response.headers['content-type']).toContain('text/event-stream');
+      expect(handleSSEConnection).toHaveBeenCalled();
+    });
+
+    it('should allow team editor to connect to SSE', async () => {
+      const editorCookie = await getSessionCookie('teamEditor');
+
+      await request(app)
+        .get('/api/sse/events')
+        .set('Cookie', editorCookie)
+        .expect(200);
+
+      expect(handleSSEConnection).toHaveBeenCalled();
+    });
+
+    it('should allow team viewer to connect to SSE', async () => {
+      const viewerCookie = await getSessionCookie('teamViewer');
+
+      await request(app)
+        .get('/api/sse/events')
+        .set('Cookie', viewerCookie)
+        .expect(200);
+
+      expect(handleSSEConnection).toHaveBeenCalled();
+    });
+
+    it('should allow team runner to connect to SSE', async () => {
+      const runnerCookie = await getSessionCookie('teamRunner');
+
+      await request(app)
+        .get('/api/sse/events')
+        .set('Cookie', runnerCookie)
+        .expect(200);
+
+      expect(handleSSEConnection).toHaveBeenCalled();
+    });
+
+    it('should allow user with no team access to connect to SSE', async () => {
+      const noAccessCookie = await getSessionCookie('noAccess');
+
+      await request(app)
+        .get('/api/sse/events')
+        .set('Cookie', noAccessCookie)
+        .expect(200);
+
+      expect(handleSSEConnection).toHaveBeenCalled();
+    });
+
+    it('should allow multi-team user to connect to SSE', async () => {
+      const multiTeamCookie = await getSessionCookie('multiTeamUser');
+
+      await request(app)
+        .get('/api/sse/events')
+        .set('Cookie', multiTeamCookie)
+        .expect(200);
+
       expect(handleSSEConnection).toHaveBeenCalled();
     });
 
     it('should send initial data event', async () => {
-      const response = await request(app).get('/api/sse/events').expect(200);
+      const adminCookie = await getSessionCookie('admin');
+
+      const response = await request(app)
+        .get('/api/sse/events')
+        .set('Cookie', adminCookie)
+        .expect(200);
 
       expect(response.text).toContain('data: {"type":"init"}');
     });
-
-    it('should require authentication', async () => {
-      await request(app).get('/api/sse/events');
-
-      expect(authenticateSSE).toHaveBeenCalled();
-    });
-
-    it('should set correct SSE headers', async () => {
-      const response = await request(app).get('/api/sse/events').expect(200);
-
-      expect(response.headers['content-type']).toMatch(/text\/event-stream/);
-      expect(response.headers['cache-control']).toBe('no-cache');
-    });
   });
 
-  describe('authentication and authorization', () => {
-    it('should authenticate SSE connections', async () => {
-      await request(app).get('/api/sse/events');
-
-      expect(authenticateSSE).toHaveBeenCalled();
-    });
-  });
-
-  describe('error handling', () => {
-    it('should handle 404 for unknown routes', async () => {
-      await request(app).get('/api/sse/unknown').expect(404);
-    });
-  });
-
-  describe('SSE protocol compliance', () => {
+  describe('SSE Protocol Compliance', () => {
     it('should use event-stream content type', async () => {
-      const response = await request(app).get('/api/sse/events').expect(200);
+      const viewerCookie = await getSessionCookie('teamViewer');
+
+      const response = await request(app)
+        .get('/api/sse/events')
+        .set('Cookie', viewerCookie)
+        .expect(200);
 
       expect(response.headers['content-type']).toMatch(/^text\/event-stream/);
     });
 
     it('should disable caching for SSE stream', async () => {
-      const response = await request(app).get('/api/sse/events').expect(200);
+      const editorCookie = await getSessionCookie('teamEditor');
+
+      const response = await request(app)
+        .get('/api/sse/events')
+        .set('Cookie', editorCookie)
+        .expect(200);
 
       expect(response.headers['cache-control']).toBe('no-cache');
     });
 
     it('should maintain keep-alive connection', async () => {
-      const response = await request(app).get('/api/sse/events').expect(200);
+      const ownerCookie = await getSessionCookie('teamOwner');
 
+      const response = await request(app)
+        .get('/api/sse/events')
+        .set('Cookie', ownerCookie)
+        .expect(200);
+
+      expect(response.headers['connection']).toBe('keep-alive');
+    });
+
+    it('should set correct SSE headers', async () => {
+      const adminCookie = await getSessionCookie('admin');
+
+      const response = await request(app)
+        .get('/api/sse/events')
+        .set('Cookie', adminCookie)
+        .expect(200);
+
+      expect(response.headers['content-type']).toMatch(/text\/event-stream/);
+      expect(response.headers['cache-control']).toBe('no-cache');
       expect(response.headers['connection']).toBe('keep-alive');
     });
   });
 
-  describe('middleware chain', () => {
-    it('should authenticate before handling SSE connection', async () => {
-      await request(app).get('/api/sse/events');
+  describe('Error Handling', () => {
+    it('should handle 404 for unknown routes', async () => {
+      const adminCookie = await getSessionCookie('admin');
 
-      expect(authenticateSSE).toHaveBeenCalled();
-      expect(handleSSEConnection).toHaveBeenCalled();
+      await request(app)
+        .get('/api/sse/unknown')
+        .set('Cookie', adminCookie)
+        .expect(404);
     });
   });
 
-  describe('HTTP methods', () => {
+  describe('HTTP Methods', () => {
     it('should only accept GET for events endpoint', async () => {
-      await request(app).get('/api/sse/events').expect(200);
-      await request(app).post('/api/sse/events').expect(404);
-      await request(app).put('/api/sse/events').expect(404);
-      await request(app).delete('/api/sse/events').expect(404);
+      const adminCookie = await getSessionCookie('admin');
+
+      await request(app)
+        .get('/api/sse/events')
+        .set('Cookie', adminCookie)
+        .expect(200);
+
+      await request(app)
+        .post('/api/sse/events')
+        .set('Cookie', adminCookie)
+        .expect(404);
+
+      await request(app)
+        .put('/api/sse/events')
+        .set('Cookie', adminCookie)
+        .expect(404);
+
+      await request(app)
+        .delete('/api/sse/events')
+        .set('Cookie', adminCookie)
+        .expect(404);
     });
   });
 
-  describe('real-time events', () => {
-    it('should handle SSE event streaming', async () => {
-      const response = await request(app).get('/api/sse/events').expect(200);
+  describe('Multiple User Roles - Comprehensive Coverage', () => {
+    it('should verify all authenticated users can connect to SSE', async () => {
+      const userRoles = [
+        'admin',
+        'teamOwner',
+        'teamEditor',
+        'teamViewer',
+        'teamRunner',
+        'noAccess',
+        'multiTeamUser',
+      ];
+
+      for (const role of userRoles) {
+        vi.clearAllMocks();
+        const cookie = await getSessionCookie(role);
+
+        await request(app)
+          .get('/api/sse/events')
+          .set('Cookie', cookie)
+          .expect(200);
+
+        expect(handleSSEConnection).toHaveBeenCalled();
+      }
+    });
+  });
+
+  describe('Real-time Events', () => {
+    it('should handle SSE event streaming for admin', async () => {
+      const adminCookie = await getSessionCookie('admin');
+
+      const response = await request(app)
+        .get('/api/sse/events')
+        .set('Cookie', adminCookie)
+        .expect(200);
+
+      expect(handleSSEConnection).toHaveBeenCalled();
+      expect(response.headers['content-type']).toContain('text/event-stream');
+    });
+
+    it('should handle SSE event streaming for regular users', async () => {
+      const viewerCookie = await getSessionCookie('teamViewer');
+
+      const response = await request(app)
+        .get('/api/sse/events')
+        .set('Cookie', viewerCookie)
+        .expect(200);
 
       expect(handleSSEConnection).toHaveBeenCalled();
       expect(response.headers['content-type']).toContain('text/event-stream');

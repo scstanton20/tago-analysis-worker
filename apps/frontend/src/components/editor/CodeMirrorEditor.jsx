@@ -8,7 +8,7 @@
  * @module components/editor/CodeMirrorEditor
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { basicSetup } from 'codemirror';
 import { EditorView } from '@codemirror/view';
@@ -51,8 +51,8 @@ export function CodeMirrorEditor({
   const onViewReadyRef = useRef(onViewReady);
   const { colorScheme } = useMantineColorScheme();
 
-  // Keep refs current
-  useEffect(() => {
+  // Keep refs current - useLayoutEffect ensures refs are updated before any effects run
+  useLayoutEffect(() => {
     onChangeRef.current = onChange;
     readOnlyRef.current = readOnly;
     languageRef.current = language;

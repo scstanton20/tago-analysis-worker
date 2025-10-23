@@ -4,7 +4,7 @@
  * @module hooks/useAutoScroll
  */
 
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useLayoutEffect, useCallback } from 'react';
 
 /**
  * Hook for managing auto-scroll behavior
@@ -27,8 +27,9 @@ export function useAutoScroll({
   /**
    * Auto-scroll to bottom when new items arrive
    * Only triggers for live updates after initial load
+   * Uses useLayoutEffect to prevent visual flickering by scrolling before paint
    */
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (
       shouldAutoScroll.current &&
       scrollRef.current &&
@@ -37,12 +38,8 @@ export function useAutoScroll({
       isMountedRef.current
     ) {
       const element = scrollRef.current;
-      // Use requestAnimationFrame for better performance
-      requestAnimationFrame(() => {
-        if (element && isMountedRef.current) {
-          element.scrollTop = element.scrollHeight;
-        }
-      });
+      // useLayoutEffect fires before paint, so no need for requestAnimationFrame
+      element.scrollTop = element.scrollHeight;
     }
   }, [items, scrollRef, hasLoadedInitial, isMountedRef]);
 

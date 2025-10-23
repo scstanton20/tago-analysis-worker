@@ -696,7 +696,32 @@ class UserController {
    */
   static async updateUserOrganizationRole(req, res) {
     const { userId } = req.params;
-    const { organizationId, role } = req.body;
+    let { organizationId, role } = req.body;
+
+    // If organizationId is null or undefined, use the main organization
+    if (!organizationId) {
+      const mainOrg = executeQuery(
+        'SELECT id FROM organization WHERE slug = ?',
+        ['main'],
+        'fetching main organization for user role update',
+      );
+
+      if (!mainOrg) {
+        req.log.error(
+          { action: 'updateUserOrganizationRole', userId },
+          'Main organization not found',
+        );
+        return res.status(404).json({
+          error: 'Main organization not found',
+        });
+      }
+
+      organizationId = mainOrg.id;
+      req.log.info(
+        { action: 'updateUserOrganizationRole', organizationId },
+        'Using main organization',
+      );
+    }
 
     // Validation handled by middleware
     req.log.info(
