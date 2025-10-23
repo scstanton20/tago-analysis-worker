@@ -33,6 +33,7 @@ export function useUserManagement({
   const [showSessionsModal, setShowSessionsModal] = useState(false);
   const [selectedUserForSessions, setSelectedUserForSessions] = useState(null);
   const [actions, setActions] = useState([]);
+  const [currentUserMemberRole, setCurrentUserMemberRole] = useState(null);
 
   // Convert teams from SSE object to array format for dropdown
   const availableTeams = useMemo(() => {
@@ -119,6 +120,31 @@ export function useUserManagement({
       setActions([]);
     }
   }, []);
+
+  // Fetch current user's member role on mount
+  useEffect(() => {
+    const fetchMemberRole = async () => {
+      try {
+        const { data, error } =
+          await authClient.organization.getActiveMemberRole();
+        if (!error && data?.role) {
+          setCurrentUserMemberRole(data.role);
+        }
+      } catch (err) {
+        logger.error('Error fetching member role:', err);
+      }
+    };
+
+    fetchMemberRole();
+  }, []);
+
+  // Check if the current user is the root user editing their own account
+  // Root users (member role 'owner') cannot change their own role
+  const isRootUser = useMemo(
+    () =>
+      currentUserMemberRole === 'owner' && editingUser?.id === currentUser?.id,
+    [currentUserMemberRole, editingUser, currentUser],
+  );
 
   // Validation functions
   const validateUsername = useCallback(
@@ -620,17 +646,9 @@ export function useUserManagement({
           throw new Error(result.error.message);
         }
 
-        // Force logout the deleted user
-        try {
-          await userService.forceLogout(
-            user.id,
-            'Your account has been deleted by an administrator',
-          );
-          logger.log(`✓ Forced logout for deleted user ${user.id}`);
-        } catch (logoutError) {
-          logger.warn('Failed to force logout deleted user:', logoutError);
-          // Continue even if force logout fails
-        }
+        // Note: SSE connections are automatically closed by the backend
+        // afterRemoveMember hook, so no need to call forceLogout separately
+
         notify.showNotification({
           title: 'Success',
           message: `User ${user.name || user.email} deleted successfully.`,
@@ -860,6 +878,7 @@ export function useUserManagement({
     availableTeams,
     actions,
     form,
+    isRootUser,
     // Functions
     loadUsers,
     loadActions,

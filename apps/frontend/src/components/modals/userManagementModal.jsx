@@ -57,6 +57,7 @@ export default function UserManagementModal({ opened, onClose }) {
     availableTeams,
     actions,
     form,
+    isRootUser,
     // Functions
     loadUsers,
     loadActions,
@@ -237,6 +238,7 @@ export default function UserManagementModal({ opened, onClose }) {
                 editingUser={editingUser}
                 currentUser={currentUser}
                 isOnlyAdmin={isOnlyAdmin()}
+                isRootUser={isRootUser}
                 availableTeams={availableTeams}
                 availableActions={actions}
                 onSubmit={handleSubmit}

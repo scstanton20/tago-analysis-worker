@@ -696,7 +696,8 @@ class UserController {
    */
   static async updateUserOrganizationRole(req, res) {
     const { userId } = req.params;
-    let { organizationId, role } = req.body;
+    let { organizationId } = req.body;
+    const { role } = req.body;
 
     // If organizationId is null or undefined, use the main organization
     if (!organizationId) {
@@ -816,18 +817,24 @@ class UserController {
    * @param {Object} req - Express request object
    * @param {Object} req.params - URL parameters
    * @param {string} req.params.userId - User ID to remove
+   * @param {Object} req.body - Request body
+   * @param {string|null} req.body.organizationId - Organization ID (nullable)
    * @param {Object} req.headers - Request headers (for Better Auth)
    * @param {Object} req.log - Request-scoped logger
    * @param {Object} res - Express response object
    * @returns {Promise<void>}
    *
-   * Side effects:
-   * - Removes user from Better Auth organization
-   * - Broadcasts 'userRemoved' SSE event with logout action
+   * Side effects (via afterRemoveMember hook in auth.js):
+   * - Closes all SSE connections for the user (forceLogout)
+   * - Deletes user record from user table
+   * - Deletes all team memberships from teamMember table
+   * - Deletes all sessions from session table
+   * - Better Auth automatically deletes from account table
    *
    * Security:
    * - Validation handled by middleware
    * - Better Auth handles authorization
+   * - Admin access required (enforced by router)
    */
   static async removeUserFromOrganization(req, res) {
     try {
@@ -878,13 +885,34 @@ class UserController {
       // Remove from organization using Better Auth
       req.log.info(
         { action: 'removeUserFromOrganization', userId, organizationId },
+        'Finding member record for removal',
+      );
+
+      // First, find the member record by userId and organizationId
+      // Better Auth removeMember expects member.id, not user.id
+      const member = await executeQuery(
+        'SELECT id FROM member WHERE userId = ? AND organizationId = ?',
+        [userId, organizationId],
+        `finding member for user ${userId} in org ${organizationId}`,
+      );
+
+      if (!member) {
+        req.log.error(
+          { userId, organizationId },
+          'Member not found in organization',
+        );
+        return res.status(404).json({ error: 'Member not found' });
+      }
+
+      req.log.info(
+        { userId, memberId: member.id, organizationId },
         'Removing user from organization',
       );
 
       const result = await auth.api.removeMember({
         headers: req.headers,
         body: {
-          memberIdOrEmail: userId,
+          memberIdOrEmail: member.id,
           organizationId,
         },
       });

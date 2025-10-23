@@ -308,6 +308,29 @@ export const auth = betterAuth({
               '🗑️ Auto-deleting user after removal from organization',
             );
 
+            // Force logout user by closing SSE connections (before deletion)
+            // Use dynamic import to avoid circular dependency
+            try {
+              const { sseManager } = await import('../utils/sse.js');
+              const closedConnections = await sseManager.forceUserLogout(
+                member.userId,
+                'Your account has been deleted by an administrator',
+              );
+              authLogger.info(
+                { userId: member.userId, closedConnections },
+                '✓ Closed SSE connections for deleted user',
+              );
+            } catch (sseError) {
+              authLogger.warn(
+                {
+                  error: sseError.message || sseError.toString(),
+                  userId: member.userId,
+                },
+                'Failed to close SSE connections - continuing with deletion',
+              );
+              // Continue with deletion even if SSE cleanup fails
+            }
+
             // Delete user directly from database to avoid circular dependency
             executeUpdate(
               'DELETE FROM user WHERE id = ?',

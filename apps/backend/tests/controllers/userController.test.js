@@ -858,6 +858,9 @@ describe('UserController', () => {
       });
       const res = createMockResponse();
 
+      // Mock the database query to find the member record
+      executeQuery.mockResolvedValue({ id: 'member-456' });
+
       auth.api.removeMember.mockResolvedValue({
         data: {},
         error: null,
@@ -865,10 +868,18 @@ describe('UserController', () => {
 
       await UserController.removeUserFromOrganization(req, res);
 
+      // Verify that executeQuery was called to find the member
+      expect(executeQuery).toHaveBeenCalledWith(
+        'SELECT id FROM member WHERE userId = ? AND organizationId = ?',
+        ['user-123', 'org-123'],
+        'finding member for user user-123 in org org-123',
+      );
+
+      // Verify that removeMember was called with the member.id
       expect(auth.api.removeMember).toHaveBeenCalledWith({
         headers: req.headers,
         body: {
-          memberIdOrEmail: 'user-123',
+          memberIdOrEmail: 'member-456',
           organizationId: 'org-123',
         },
       });
@@ -904,15 +915,46 @@ describe('UserController', () => {
       });
     });
 
-    it('should handle errors when removing user', async () => {
+    it('should return 404 when member not found in database', async () => {
       const req = createMockRequest({
         params: { userId: 'user-123' },
         body: { organizationId: 'org-123' },
       });
       const res = createMockResponse();
 
+      // Mock the database query to return null (member not found)
+      executeQuery.mockResolvedValue(null);
+
+      await UserController.removeUserFromOrganization(req, res);
+
+      // Verify that executeQuery was called to find the member
+      expect(executeQuery).toHaveBeenCalledWith(
+        'SELECT id FROM member WHERE userId = ? AND organizationId = ?',
+        ['user-123', 'org-123'],
+        'finding member for user user-123 in org org-123',
+      );
+
+      // Verify that removeMember was NOT called
+      expect(auth.api.removeMember).not.toHaveBeenCalled();
+
+      // Verify that a 404 error was returned
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Member not found' });
+    });
+
+    it('should handle errors when removing user from Better Auth', async () => {
+      const req = createMockRequest({
+        params: { userId: 'user-123' },
+        body: { organizationId: 'org-123' },
+      });
+      const res = createMockResponse();
+
+      // Mock the database query to find the member
+      executeQuery.mockResolvedValue({ id: 'member-456' });
+
+      // Mock Better Auth error
       auth.api.removeMember.mockResolvedValue({
-        error: { message: 'User not found' },
+        error: { message: 'Better Auth error' },
       });
 
       await UserController.removeUserFromOrganization(req, res);

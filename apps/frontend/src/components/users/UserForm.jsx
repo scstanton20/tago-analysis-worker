@@ -20,6 +20,7 @@ export default function UserForm({
   editingUser,
   currentUser,
   isOnlyAdmin,
+  isRootUser,
   availableTeams,
   availableActions,
   onSubmit,
@@ -44,6 +45,15 @@ export default function UserForm({
               As an admin, you can change this user's role and reset their
               password. The user must update their own name, email, and username
               through their profile settings.
+            </Text>
+          </Alert>
+        )}
+
+        {isRootUser && (
+          <Alert color="orange" variant="light">
+            <Text size="sm">
+              This is the root administrator account. The administrator role
+              cannot be changed to maintain system security.
             </Text>
           </Alert>
         )}
@@ -103,20 +113,30 @@ export default function UserForm({
           placeholder="Select role"
           required
           disabled={
-            editingUser?.id === currentUser?.id &&
-            editingUser?.role === 'admin' &&
-            isOnlyAdmin
+            isRootUser ||
+            (editingUser?.id === currentUser?.id &&
+              editingUser?.role === 'admin' &&
+              isOnlyAdmin)
           }
-          data={[
-            {
-              value: 'user',
-              label: 'User - Specific department assignments',
-            },
-            {
-              value: 'admin',
-              label: 'Administrator - Full system access',
-            },
-          ]}
+          data={
+            isRootUser
+              ? [
+                  {
+                    value: 'admin',
+                    label: 'Administrator - Full system access',
+                  },
+                ]
+              : [
+                  {
+                    value: 'user',
+                    label: 'User - Specific department assignments',
+                  },
+                  {
+                    value: 'admin',
+                    label: 'Administrator - Full system access',
+                  },
+                ]
+          }
           {...form.getInputProps('role')}
         />
 
@@ -140,7 +160,9 @@ export default function UserForm({
         {editingUser &&
           editingUser.id === currentUser?.id &&
           editingUser.role === 'admin' &&
-          form.values.role !== 'admin' && (
+          form.values.role !== 'admin' &&
+          !isRootUser &&
+          isOnlyAdmin && (
             <Alert color="orange" variant="light">
               Warning: There must be at least one administrator. Since you are
               the only admin, you cannot change your own role.
@@ -181,6 +203,7 @@ UserForm.propTypes = {
     errors: PropTypes.object.isRequired,
     getInputProps: PropTypes.func.isRequired,
     onSubmit: PropTypes.func.isRequired,
+    isDirty: PropTypes.func.isRequired,
   }).isRequired,
   editingUser: PropTypes.shape({
     id: PropTypes.string.isRequired,
@@ -191,6 +214,7 @@ UserForm.propTypes = {
     role: PropTypes.string,
   }),
   isOnlyAdmin: PropTypes.bool.isRequired,
+  isRootUser: PropTypes.bool.isRequired,
   availableTeams: PropTypes.arrayOf(
     PropTypes.shape({
       value: PropTypes.string.isRequired,
