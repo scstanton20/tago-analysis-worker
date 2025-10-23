@@ -1,8 +1,6 @@
 // frontend/src/contexts/sseContext/compositeProvider.jsx
 import { useCallback, useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
-import { notifications } from '@mantine/notifications';
-import { IconCheck } from '@tabler/icons-react';
 import { SSEConnectionProvider } from './connection/index.js';
 import { SSEAnalysesProvider } from './analyses/index.js';
 import { SSETeamsProvider } from './teams/index.js';
@@ -11,6 +9,7 @@ import { useAnalyses } from './analyses/index.js';
 import { useTeams } from './teams/index.js';
 import { useBackend } from './backend/index.js';
 import logger from '../../utils/logger.js';
+import { showSuccess } from '../../utils/notificationService.jsx';
 
 // Message router component that distributes messages to appropriate contexts
 function MessageRouter({ children }) {
@@ -83,13 +82,7 @@ function MessageRouter({ children }) {
       case 'userRoleUpdated':
         // Show notification to user about role changes
         if (data.data?.showNotification && data.data?.message) {
-          notifications.show({
-            title: 'Role Updated',
-            message: data.data.message,
-            icon: <IconCheck size={16} />,
-            color: 'green',
-            autoClose: 5000,
-          });
+          showSuccess(data.data.message, 'Role Updated', 5000);
         }
         // Note: Backend already sends a fresh 'init' message after role updates
         // via refreshInitDataForUser(), so we don't need to trigger 'auth-change'

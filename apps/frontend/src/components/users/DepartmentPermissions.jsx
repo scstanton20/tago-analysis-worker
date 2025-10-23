@@ -8,7 +8,9 @@ import {
   Box,
   Checkbox,
   Divider,
+  Alert,
 } from '@mantine/core';
+import { IconAlertCircle } from '@tabler/icons-react';
 
 /**
  * Department Permissions Component
@@ -21,6 +23,7 @@ export default function DepartmentPermissions({
   departmentPermissions,
   onToggleDepartment,
   onTogglePermission,
+  error,
 }) {
   return (
     <Stack gap="md">
@@ -33,6 +36,16 @@ export default function DepartmentPermissions({
         Select departments and assign specific permissions for each. View
         analyses is automatically assigned when a department is enabled.
       </Text>
+
+      {error && (
+        <Alert
+          icon={<IconAlertCircle size="1rem" />}
+          color="red"
+          variant="light"
+        >
+          {error}
+        </Alert>
+      )}
 
       <Stack gap="xs" mah="40vh" style={{ overflow: 'auto' }}>
         {availableTeams.map((team) => {
@@ -146,4 +159,5 @@ DepartmentPermissions.propTypes = {
   ).isRequired,
   onToggleDepartment: PropTypes.func.isRequired,
   onTogglePermission: PropTypes.func.isRequired,
+  error: PropTypes.string,
 };

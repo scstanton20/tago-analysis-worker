@@ -2,9 +2,9 @@
 import { Modal, TextInput, Button, Stack, Text } from '@mantine/core';
 import { useState } from 'react';
 import PropTypes from 'prop-types';
-import { notifications } from '@mantine/notifications';
 import teamService from '../../services/teamService';
 import logger from '../../utils/logger';
+import { useNotifications } from '../../hooks/useNotifications';
 
 export default function CreateFolderModal({
   opened,
@@ -14,16 +14,13 @@ export default function CreateFolderModal({
   parentFolderName = null,
   onCreatePending = null,
 }) {
+  const notify = useNotifications();
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleCreate = async () => {
     if (!name.trim()) {
-      notifications.show({
-        title: 'Error',
-        message: 'Folder name is required',
-        color: 'red',
-      });
+      notify.error('Folder name is required');
       return;
     }
 
@@ -45,21 +42,13 @@ export default function CreateFolderModal({
         parentFolderId: parentFolderId || undefined,
       });
 
-      notifications.show({
-        title: 'Success',
-        message: `Folder "${name}" created successfully`,
-        color: 'green',
-      });
+      notify.success(`Folder "${name}" created successfully`);
 
       setName('');
       onClose();
     } catch (error) {
       logger.error('Error creating folder:', error);
-      notifications.show({
-        title: 'Error',
-        message: error.message || 'Failed to create folder',
-        color: 'red',
-      });
+      notify.error(error.message || 'Failed to create folder');
     } finally {
       setLoading(false);
     }

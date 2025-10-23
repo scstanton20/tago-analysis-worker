@@ -115,11 +115,7 @@ export default function UserSessionsModal({ opened, onClose, user }) {
         // Continue even if force logout fails
       }
 
-      notify.showNotification({
-        title: 'Success',
-        message: 'Session revoked successfully',
-        color: 'green',
-      });
+      notify.success('Session revoked successfully');
 
       // Reload sessions to see if it's actually gone
       logger.log('Reloading sessions after revocation...');
@@ -181,11 +177,7 @@ export default function UserSessionsModal({ opened, onClose, user }) {
         // Continue even if force logout fails
       }
 
-      notify.showNotification({
-        title: 'Success',
-        message: `All sessions revoked for ${user.name || user.email}`,
-        color: 'green',
-      });
+      notify.success(`All sessions revoked for ${user.name || user.email}`);
 
       // Reload sessions to verify they're gone
       logger.log('Reloading sessions after revoking all...');

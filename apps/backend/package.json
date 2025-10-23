@@ -1,7 +1,7 @@
 {
   "name": "backend",
   "private": true,
-  "version": "2.5.15",
+  "version": "2.5.16",
   "type": "module",
   "engines": {
     "node": ">=22.0.0"
@@ -26,6 +26,7 @@
     "@tago-io/sdk": "^12.2.1",
     "better-auth": "^1.3.27",
     "better-sqlite3": "^12.4.1",
+    "better-sse": "^0.15.1",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
     "express": "^5.1.0",

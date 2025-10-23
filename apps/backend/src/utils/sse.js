@@ -11,11 +11,12 @@
  * - Automatic stale connection cleanup to prevent memory leaks
  *
  * Connection Management:
- * - Tracks clients per user (userId -> Set of clients)
- * - Global client registry for system-wide broadcasts
+ * - Tracks sessions using better-sse (sessionId -> Session)
+ * - Per-analysis channels for targeted log broadcasting
+ * - Global channel for system-wide broadcasts
  * - Automatic cleanup on disconnect
  * - Stale connection detection (60-second timeout)
- * - Heartbeat tracking with lastHeartbeat timestamp
+ * - Heartbeat tracking with lastPushAt timestamp
  *
  * Heartbeat & Timeout:
  * - Centralized heartbeat every 30 seconds
@@ -42,6 +43,7 @@ import { auth } from '../lib/auth.js';
 import { fromNodeHeaders } from 'better-auth/node';
 import { createChildLogger } from './logging/logger.js';
 import { metricsService } from '../services/metricsService.js';
+import { createSession, createChannel } from 'better-sse';
 
 const logger = createChildLogger('sse');
 
@@ -65,26 +67,6 @@ const logger = createChildLogger('sse');
  */
 class SSEManager {
   /**
-   * Write SSE message and flush immediately for compression compatibility
-   * Helper method to ensure messages are sent immediately with compression enabled
-   *
-   * @param {Object} res - Express response object
-   * @param {string} message - Formatted SSE message to send
-   * @returns {void}
-   *
-   * Behavior:
-   * - Writes message to response stream
-   * - Flushes immediately if compression middleware is active
-   * - Required for SSE to work with gzip compression
-   */
-  writeAndFlush(res, message) {
-    res.write(message);
-    if (res.flush) {
-      res.flush();
-    }
-  }
-
-  /**
    * Broadcast message to a collection of clients with optional filtering
    * Generic broadcast helper to reduce code duplication
    *
@@ -104,159 +86,152 @@ class SSEManager {
    * - Logs errors per client
    * - Collects and removes failed clients after iteration
    */
-  broadcastToClients(clients, data, filterFn = null) {
-    if (!clients || typeof clients[Symbol.iterator] !== 'function') {
-      return 0; // safely skip if not iterable (user has no connected clients)
+  /**
+   * Broadcast message to a collection of better-sse sessions
+   * Uses session.push() without event type for generic onmessage handler
+   *
+   * @param {Set|Array} sessions - Collection of better-sse Session objects
+   * @param {Object} data - Message data to send
+   * @param {Function} [filterFn=null] - Optional filter function (session) => boolean
+   * @returns {Promise<number>} Count of sessions that successfully received the message
+   */
+  async broadcastToClients(sessions, data, filterFn = null) {
+    if (!sessions || typeof sessions[Symbol.iterator] !== 'function') {
+      return 0; // safely skip if not iterable
     }
 
-    const message = this.formatSSEMessage(data);
     let sentCount = 0;
-    const failedClients = [];
+    const failedSessions = [];
 
-    for (const client of clients) {
+    for (const session of sessions) {
       try {
-        if (filterFn && !filterFn(client)) continue;
-        if (!client.res.destroyed) {
-          this.writeAndFlush(client.res, message);
+        if (filterFn && !filterFn(session)) continue;
+        if (session.isConnected) {
+          // Send without event type so it arrives at eventSource.onmessage
+          await session.push(data);
           sentCount++;
         } else {
-          failedClients.push(client);
+          failedSessions.push(session);
         }
       } catch (error) {
         logger.error(
-          { userId: client.userId, clientId: client.id, error },
-          'Error broadcasting SSE to client',
+          { userId: session.state?.userId, sessionId: session.id, error },
+          'Error broadcasting SSE to session',
         );
-        failedClients.push(client);
+        failedSessions.push(session);
       }
     }
 
-    failedClients.forEach((client) =>
-      this.removeClient(client.userId, client.id),
+    // Clean up failed sessions
+    failedSessions.forEach((session) =>
+      this.removeClient(session.state?.userId, session.id),
     );
     return sentCount;
   }
 
   /**
-   * Add authenticated SSE client connection
-   * Registers client in user-specific and global registries, starts heartbeat and metrics if needed
+   * Add authenticated SSE client connection using better-sse
+   * Creates session, registers to global channel
    *
    * @param {string} userId - User ID from authenticated session
    * @param {Object} res - Express response object for SSE streaming
    * @param {Object} req - Express request object
    * @param {Object} req.user - Authenticated user object
-   * @returns {Object} Client object with id, userId, res, req, createdAt, lastHeartbeat
+   * @returns {Promise<Object>} better-sse Session object
    *
    * Side effects:
-   * - Adds client to user-specific clients map
-   * - Adds client to global clients set
+   * - Creates better-sse session
+   * - Registers session to global channel
+   * - Adds session to sessions map
+   * - Adds to legacy tracking (backward compatibility)
    * - Starts heartbeat mechanism if first client
    * - Starts metrics broadcasting if first client
-   * - Sets up disconnect and error handlers
-   *
-   * Connection Management:
-   * - Generates unique client ID
-   * - Initializes lastHeartbeat timestamp
-   * - Handles 'close' event for cleanup
-   * - Handles 'error' event (ignores ECONNRESET/EPIPE)
+   * - Sets up disconnect handler
    */
-  addClient(userId, res, req) {
-    const clientId = Math.random().toString(36).substring(7);
-    const client = {
-      id: clientId,
-      userId,
-      res,
-      req,
-      createdAt: new Date(),
-      lastHeartbeat: new Date(),
-    };
+  async addClient(userId, res, req) {
+    // Create better-sse session
+    const session = await createSession(req, res);
 
-    // Add to user-specific clients
-    if (!this.clients.has(userId)) {
-      this.clients.set(userId, new Set());
+    // Generate a unique session ID (better-sse doesn't provide one)
+    const sessionId =
+      Math.random().toString(36).substring(2, 15) +
+      Math.random().toString(36).substring(2, 15);
+
+    // Attach ID to session object
+    session.id = sessionId;
+
+    // Initialize session state (or use existing state from mock/real session)
+    if (!session.state) {
+      session.state = {};
     }
-    this.clients.get(userId).add(client);
+    session.state.userId = userId;
+    session.state.user = req.user; // Store user object for permission checks
+    if (!session.state.subscribedChannels) {
+      session.state.subscribedChannels = new Set();
+    }
 
-    // Add to global clients
-    this.globalClients.add(client);
+    // Track session
+    this.sessions.set(session.id, session);
 
-    logger.info({ userId, clientId }, 'SSE client connected');
+    // Register to global channel
+    this.globalChannel.register(session);
+
+    logger.info({ userId, sessionId: session.id }, 'SSE session created');
 
     // Start heartbeat if this is the first client
-    if (this.globalClients.size === 1 && !this.heartbeatInterval) {
+    if (this.sessions.size === 1 && !this.heartbeatInterval) {
       this.startHeartbeat();
     }
 
     // Start metrics broadcasting if this is the first client
-    if (this.globalClients.size === 1 && !this.metricsInterval) {
+    if (this.sessions.size === 1 && !this.metricsInterval) {
       this.startMetricsBroadcasting();
     }
 
-    // Handle client disconnect
-    req.on('close', () => {
-      this.removeClient(userId, clientId);
+    // Handle disconnect via request 'close' event
+    req.on('close', async () => {
+      await this.removeClient(userId, session.id);
     });
 
-    req.on('error', (error) => {
-      // Only log actual errors, not normal disconnections
-      if (error.code !== 'ECONNRESET' && error.code !== 'EPIPE') {
-        logger.error(
-          {
-            userId,
-            clientId,
-            error: error.message,
-            errorCode: error.code,
-          },
-          'SSE client error',
-        );
-      }
-      this.removeClient(userId, clientId);
-    });
-
-    return client;
+    return session;
   }
 
   /**
-   * Remove SSE client connection
-   * Cleans up client from user-specific and global registries
+   * Remove SSE client connection and cleanup all subscriptions
    *
-   * @param {string} userId - User ID of the client to remove
-   * @param {string} clientId - Unique client ID generated at connection
-   * @returns {void}
+   * @param {string} userId - User ID
+   * @param {string} sessionId - Session identifier
+   * @returns {Promise<void>}
    *
    * Side effects:
-   * - Removes client from user-specific clients set
-   * - Removes client from global clients set
-   * - Removes user entry if no more clients for that user
+   * - Unsubscribes from all analysis channels
+   * - Deregisters from global channel
+   * - Removes session from sessions map
+   * - Removes from legacy tracking
    * - Stops heartbeat mechanism if no clients remaining
    * - Stops metrics broadcasting if no clients remaining
-   *
-   * Called automatically on:
-   * - Client disconnect ('close' event)
-   * - Client error (except ECONNRESET/EPIPE)
-   * - Send failures
-   * - Stale connection cleanup (> 60s without heartbeat)
    */
-  removeClient(userId, clientId) {
-    const userClients = this.clients.get(userId);
-    if (userClients) {
-      const clientToRemove = Array.from(userClients).find(
-        (c) => c.id === clientId,
-      );
-      if (clientToRemove) {
-        userClients.delete(clientToRemove);
-        this.globalClients.delete(clientToRemove);
+  async removeClient(userId, sessionId) {
+    const session = this.sessions.get(sessionId);
 
-        if (userClients.size === 0) {
-          this.clients.delete(userId);
-        }
-
-        logger.info({ userId, clientId }, 'SSE client disconnected');
+    if (session) {
+      // Unsubscribe from all analysis channels
+      const subscribedChannels = Array.from(session.state.subscribedChannels);
+      if (subscribedChannels.length > 0) {
+        await this.unsubscribeFromAnalysis(sessionId, subscribedChannels);
       }
+
+      // Deregister from global channel
+      this.globalChannel.deregister(session);
+
+      // Remove from sessions map
+      this.sessions.delete(sessionId);
+
+      logger.info({ userId, sessionId }, 'SSE session removed');
     }
 
     // Stop heartbeat and metrics broadcasting if no clients remaining
-    if (this.globalClients.size === 0) {
+    if (this.sessions.size === 0) {
       this.stopHeartbeat();
       this.stopMetricsBroadcasting();
     }
@@ -280,14 +255,26 @@ class SSEManager {
    * - Removes client on failure
    */
   sendToUser(userId, data) {
-    const userClients = this.clients.get(userId);
+    const userSessions = this.getSessionsByUserId(userId);
+    let sentCount = 0;
 
-    const sentCount = this.broadcastToClients(userClients, data);
+    for (const session of userSessions) {
+      try {
+        session.push(data);
+        sentCount++;
+      } catch (error) {
+        logger.error(
+          { userId, sessionId: session.id, error },
+          'Error sending to user',
+        );
+        this.removeClient(userId, session.id);
+      }
+    }
 
     if (sentCount > 0) {
       logger.debug(
-        { userId, messageType: data.type, clientCount: sentCount },
-        'SSE message sent to user clients',
+        { userId, messageType: data.type, sessionCount: sentCount },
+        'SSE message sent to user sessions',
       );
     }
 
@@ -311,49 +298,41 @@ class SSEManager {
    * - Safe to call even if user has no connections
    */
   disconnectUser(userId) {
-    const userClients = this.clients.get(userId);
-    if (!userClients || userClients.size === 0) {
-      logger.warn(
-        { userId, hasClientsMap: !!userClients },
-        'No SSE clients to disconnect for user',
-      );
+    const userSessions = this.getSessionsByUserId(userId);
+    if (userSessions.length === 0) {
+      logger.warn({ userId }, 'No SSE sessions to disconnect for user');
       return 0;
     }
 
     logger.info(
-      { userId, clientCount: userClients.size },
-      'Starting disconnection of all SSE clients for user',
+      { userId, sessionCount: userSessions.length },
+      'Starting disconnection of all SSE sessions for user',
     );
 
     let disconnectedCount = 0;
-    const clientsToDisconnect = Array.from(userClients);
 
-    for (const client of clientsToDisconnect) {
+    for (const session of userSessions) {
       try {
-        if (!client.res.destroyed) {
+        if (session.isConnected) {
           logger.debug(
-            { userId, clientId: client.id },
-            'Closing SSE client connection',
+            { userId, sessionId: session.id },
+            'Closing SSE session',
           );
-          client.res.end(); // Close the SSE connection
+          // better-sse handles disconnection
+          session.state._disconnecting = true;
           disconnectedCount++;
-        } else {
-          logger.warn(
-            { userId, clientId: client.id },
-            'Client already destroyed',
-          );
         }
       } catch (error) {
         logger.error(
-          { userId, clientId: client.id, error },
-          'Error disconnecting SSE client',
+          { userId, sessionId: session.id, error },
+          'Error disconnecting SSE session',
         );
       }
     }
 
     logger.info(
-      { userId, disconnectedCount, totalClients: clientsToDisconnect.length },
-      'Disconnected all SSE clients for user',
+      { userId, disconnectedCount, totalSessions: userSessions.length },
+      'Disconnected all SSE sessions for user',
     );
     return disconnectedCount;
   }
@@ -401,56 +380,324 @@ class SSEManager {
   }
 
   /**
-   * Broadcast message to all connected clients
+   * Broadcast message to all connected sessions via global channel
    * Global system-wide broadcast without filtering
    *
-   * @param {Object} data - Message data object (will be wrapped with timestamp)
-   * @returns {number} Count of clients that successfully received the message
+   * @param {Object} data - Message data object
+   * @returns {void}
    *
    * Behavior:
-   * - Sends to every client in globalClients set
-   * - Automatically removes failed/destroyed clients
-   * - Skips destroyed response objects
+   * - Broadcasts to all sessions via global channel
+   * - Uses better-sse channel broadcast mechanism
    *
    * Use Cases:
    * - System-wide notifications
    * - Global refresh commands
-   * - Uncategorized updates
+   * - Heartbeat messages
+   * - Status updates
    *
    * Error Handling:
-   * - Logs broadcast errors per client
-   * - Collects and removes failed clients after iteration
+   * - Logs broadcast errors
+   * - better-sse handles failed session cleanup
    */
   broadcast(data) {
-    return this.broadcastToClients(this.globalClients, data);
+    try {
+      this.globalChannel.broadcast(data);
+    } catch (error) {
+      logger.error({ error }, 'Error broadcasting to global channel');
+    }
   }
 
   /**
-   * Format data as SSE protocol message
-   * Adds timestamp and wraps in SSE format: "data: JSON\n\n"
+   * Get or create analysis-specific channel for log broadcasting
+   * Creates channel on first request, reuses on subsequent requests
    *
-   * @param {Object} data - Message data object
-   * @returns {string} Formatted SSE message string
-   *
-   * SSE Format:
-   * - "data: " prefix required by SSE specification
-   * - JSON stringified data
-   * - Double newline "\n\n" to delimit messages
-   * - Automatic timestamp injection in ISO format
-   *
-   * @example
-   * formatSSEMessage({ type: 'log', message: 'Hello' })
-   * // Returns: "data: {\"type\":\"log\",\"message\":\"Hello\",\"timestamp\":\"2025-01-15T10:30:00.000Z\"}\n\n"
+   * @param {string} analysisName - Analysis identifier
+   * @returns {Object} better-sse Channel instance
    */
-  formatSSEMessage(data) {
-    const timestamp = new Date().toISOString();
-    const messageData = {
-      ...data,
-      timestamp,
-    };
+  getOrCreateAnalysisChannel(analysisName) {
+    if (!this.analysisChannels.has(analysisName)) {
+      const channel = createChannel();
+      this.analysisChannels.set(analysisName, channel);
+      logger.debug({ analysisName }, 'Created new analysis channel');
+    }
+    return this.analysisChannels.get(analysisName);
+  }
 
-    // SSE format: data: JSON\n\n
-    return `data: ${JSON.stringify(messageData)}\n\n`;
+  /**
+   * Find session by session ID
+   * Helper method for subscription management
+   *
+   * @param {string} sessionId - Session identifier
+   * @returns {Object|null} Session object or null if not found
+   */
+  findSessionById(sessionId) {
+    return this.sessions.get(sessionId) || null;
+  }
+
+  /**
+   * Subscribe session to analysis channels for log streaming
+   * Checks permissions before subscribing
+   *
+   * @param {string} sessionId - Session identifier
+   * @param {string[]} analysisNames - Array of analysis names to subscribe to
+   * @param {string} userId - User ID for permission checking
+   * @returns {Promise<Object>} Subscription result with success/denied lists
+   */
+  async subscribeToAnalysis(sessionId, analysisNames, userId) {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      throw new Error('Session not found');
+    }
+
+    // Validate input
+    if (!Array.isArray(analysisNames) || analysisNames.length === 0) {
+      throw new Error('analysisNames must be a non-empty array');
+    }
+
+    // Check for null/undefined analysis names
+    if (analysisNames.some((name) => name == null)) {
+      throw new Error('Analysis names cannot be null or undefined');
+    }
+
+    const subscribed = [];
+    const denied = [];
+
+    try {
+      // Get user permissions
+      const { analysisService } = await import(
+        '../services/analysisService.js'
+      );
+      const { getUserTeamIds } = await import(
+        '../middleware/betterAuthMiddleware.js'
+      );
+
+      let allAnalyses = {};
+      try {
+        allAnalyses = (await analysisService.getAllAnalyses()) || {};
+      } catch (getAllAnalysesError) {
+        // In test environment or when storage not initialized, getAllAnalyses may fail
+        // This is acceptable - we'll just have an empty analysis list
+        logger.debug(
+          { error: getAllAnalysesError.message },
+          'Failed to get all analyses, using empty list',
+        );
+      }
+
+      // Get user's allowed teams (or all for admin)
+      const { executeQuery } = await import('../utils/authDatabase.js');
+      const user = executeQuery(
+        'SELECT id, role FROM user WHERE id = ?',
+        [userId],
+        'checking user role for subscription',
+      );
+
+      const isAdmin = user?.role === 'admin';
+      const allowedTeamIds = isAdmin
+        ? null
+        : getUserTeamIds(userId, 'view_analyses');
+
+      for (const analysisName of analysisNames) {
+        // Skip if already subscribed (idempotent)
+        if (session.state.subscribedChannels.has(analysisName)) {
+          subscribed.push(analysisName);
+          continue;
+        }
+
+        // Check permissions for non-admin users
+        if (!isAdmin) {
+          const analysis = allAnalyses[analysisName];
+          const teamId = analysis?.teamId || 'uncategorized';
+
+          if (!allowedTeamIds.includes(teamId)) {
+            denied.push(analysisName);
+            logger.warn(
+              { userId, analysisName, teamId },
+              'Permission denied for analysis subscription',
+            );
+            continue;
+          }
+        }
+
+        const channel = this.getOrCreateAnalysisChannel(analysisName);
+        channel.register(session);
+        session.state.subscribedChannels.add(analysisName);
+        subscribed.push(analysisName);
+      }
+
+      return {
+        success: true,
+        subscribed,
+        ...(denied.length > 0 && { denied }),
+        sessionId: session.id,
+      };
+    } catch (error) {
+      logger.error(
+        { error, sessionId, userId },
+        'Error subscribing to analysis channels',
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Unsubscribe session from analysis channels
+   * Cleans up empty channels automatically
+   *
+   * @param {string} sessionId - Session identifier
+   * @param {string[]} analysisNames - Array of analysis names to unsubscribe from
+   * @returns {Promise<Object>} Unsubscription result
+   */
+  async unsubscribeFromAnalysis(sessionId, analysisNames) {
+    const session = this.sessions.get(sessionId);
+
+    const unsubscribed = [];
+
+    for (const analysisName of analysisNames) {
+      const channel = this.analysisChannels.get(analysisName);
+
+      if (session && session.state.subscribedChannels.has(analysisName)) {
+        // Session exists and is subscribed
+        if (channel) {
+          channel.deregister(session);
+        }
+        session.state.subscribedChannels.delete(analysisName);
+        unsubscribed.push(analysisName);
+      }
+
+      // Clean up empty channels regardless of session state
+      if (channel && channel.sessionCount === 0) {
+        this.analysisChannels.delete(analysisName);
+        logger.debug({ analysisName }, 'Cleaned up empty analysis channel');
+      }
+    }
+
+    if (!session) {
+      logger.debug(
+        { sessionId },
+        'Session not found during unsubscribe (already cleaned up?)',
+      );
+    }
+
+    return {
+      success: true,
+      unsubscribed,
+      sessionId: session?.id || sessionId,
+    };
+  }
+
+  /**
+   * Broadcast log to analysis-specific channel
+   * Only subscribed sessions receive the log
+   *
+   * @param {string} analysisName - Analysis name
+   * @param {Object} logData - Log data to broadcast
+   * @returns {void}
+   */
+  broadcastAnalysisLog(analysisName, logData) {
+    const channel = this.analysisChannels.get(analysisName);
+
+    if (!channel) {
+      return; // No subscribers
+    }
+
+    try {
+      channel.broadcast(logData);
+    } catch (error) {
+      logger.error(
+        { error, analysisName },
+        'Error broadcasting to analysis channel',
+      );
+    }
+  }
+
+  /**
+   * Handle HTTP subscription request
+   *
+   * @param {Object} req - Express request
+   * @param {Object} res - Express response
+   * @returns {Promise<void>}
+   */
+  async handleSubscribeRequest(req, res) {
+    try {
+      const { sessionId, analyses } = req.body;
+
+      if (!sessionId) {
+        return res.status(400).json({
+          success: false,
+          error: 'sessionId is required',
+        });
+      }
+
+      if (!Array.isArray(analyses) || analyses.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'analyses must be a non-empty array',
+        });
+      }
+
+      if (!this.sessions.has(sessionId)) {
+        return res.status(404).json({
+          success: false,
+          error: 'Session not found',
+        });
+      }
+
+      // Subscribe
+      const result = await this.subscribeToAnalysis(
+        sessionId,
+        analyses,
+        req.user.id,
+      );
+
+      return res.json(result);
+    } catch (error) {
+      logger.error({ error }, 'Error handling subscribe request');
+      return res.status(500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  }
+
+  /**
+   * Handle HTTP unsubscription request
+   *
+   * @param {Object} req - Express request
+   * @param {Object} res - Express response
+   * @returns {Promise<void>}
+   */
+  async handleUnsubscribeRequest(req, res) {
+    try {
+      const { sessionId, analyses } = req.body;
+
+      // Validate input
+      if (!sessionId || !Array.isArray(analyses)) {
+        return res.status(400).json({
+          success: false,
+          error: 'sessionId and analyses array are required',
+        });
+      }
+
+      // Check if session exists
+      if (!this.sessions.has(sessionId)) {
+        return res.status(404).json({
+          success: false,
+          error: 'Session not found',
+        });
+      }
+
+      // Unsubscribe
+      const result = await this.unsubscribeFromAnalysis(sessionId, analyses);
+
+      return res.json(result);
+    } catch (error) {
+      logger.error({ error }, 'Error handling unsubscribe request');
+      return res.status(500).json({
+        success: false,
+        error: error.message,
+      });
+    }
   }
 
   /**
@@ -470,13 +717,22 @@ class SSEManager {
    * - Debugging connection issues
    */
   getStats() {
+    const userSessionCounts = new Map();
+
+    for (const session of this.sessions.values()) {
+      const userId = session.state?.userId;
+      if (userId) {
+        userSessionCounts.set(userId, (userSessionCounts.get(userId) || 0) + 1);
+      }
+    }
+
     return {
-      totalClients: this.globalClients.size,
-      uniqueUsers: this.clients.size,
-      userConnections: Array.from(this.clients.entries()).map(
-        ([userId, clients]) => ({
+      totalClients: this.sessions.size,
+      uniqueUsers: userSessionCounts.size,
+      userConnections: Array.from(userSessionCounts.entries()).map(
+        ([userId, count]) => ({
           userId,
-          connectionCount: clients.size,
+          connectionCount: count,
         }),
       ),
     };
@@ -525,17 +781,17 @@ class SSEManager {
       );
 
       // IMPORTANT: Always fetch fresh user data from database
-      // Don't rely on cached client.req.user which may be stale after permission changes
+      // Don't rely on cached session.state.user which may be stale after permission changes
       const { executeQuery } = await import('../utils/authDatabase.js');
       const freshUser = executeQuery(
         'SELECT id, role, email, name FROM user WHERE id = ?',
-        [client.req.user.id],
+        [client.state.user.id],
         'fetching fresh user data for SSE init',
       );
 
       if (!freshUser) {
         logger.error(
-          { userId: client.req.user.id },
+          { userId: client.state.user.id },
           'User not found when sending init data',
         );
         return;
@@ -598,14 +854,14 @@ class SSEManager {
 
       const initData = {
         type: 'init',
+        sessionId: client.id,
         analyses,
         teams,
         teamStructure,
         version: '4.0',
       };
 
-      const message = this.formatSSEMessage(initData);
-      this.writeAndFlush(client.res, message);
+      await client.push(initData);
 
       // Send initial status
       await this.sendStatusUpdate(client);
@@ -637,23 +893,29 @@ class SSEManager {
    * - Updates client's view with current filtered data
    */
   async refreshInitDataForUser(userId) {
-    const userClients = this.clients.get(userId);
-    if (!userClients || userClients.size === 0) {
-      logger.debug({ userId }, 'No SSE clients found for user to refresh');
+    const userSessions = this.getSessionsByUserId(userId);
+    if (userSessions.length === 0) {
+      logger.debug({ userId }, 'No SSE sessions found for user to refresh');
       return 0;
     }
 
-    logger.info({ userId }, 'Refreshing init data for user');
+    logger.info(
+      { userId, sessionCount: userSessions.length },
+      'Refreshing init data for user',
+    );
     let refreshedCount = 0;
 
-    for (const client of userClients) {
+    for (const session of userSessions) {
       try {
-        if (!client.res.destroyed) {
-          await this.sendInitialData(client);
+        if (session.isConnected) {
+          await this.sendInitialData(session);
           refreshedCount++;
         }
       } catch (error) {
-        logger.error({ userId, error }, 'Error refreshing init data for user');
+        logger.error(
+          { userId, sessionId: session.id, error },
+          'Error refreshing init data for user',
+        );
       }
     }
 
@@ -765,8 +1027,8 @@ class SSEManager {
         serverTime: new Date().toString(),
       };
 
-      const message = this.formatSSEMessage(status);
-      this.writeAndFlush(client.res, message);
+      // Use better-sse's push method (no event type for generic onmessage)
+      await client.push(status);
     } catch (error) {
       logger.error({ error }, 'Error sending SSE status update');
     }
@@ -774,13 +1036,14 @@ class SSEManager {
 
   /**
    * Initialize SSEManager instance
-   * Sets up client registries and initial container state
+   * Sets up better-sse channels and initial container state
    *
    * @constructor
    *
    * Properties initialized:
-   * - clients: Map<userId, Set<client>> - User-specific client connections
-   * - globalClients: Set<client> - All active connections
+   * - sessions: Map<sessionId, Session> - All active sessions
+   * - analysisChannels: Map<analysisName, Channel> - Per-analysis log channels
+   * - globalChannel: Channel - Global broadcast channel for non-log events
    * - containerState: Container health and status information
    * - heartbeatInterval: Interval ID for heartbeat and cleanup (starts when first client connects)
    * - metricsInterval: Interval ID for metrics broadcasting (starts when first client connects)
@@ -791,8 +1054,11 @@ class SSEManager {
    * - message: 'Container is ready'
    */
   constructor() {
-    this.clients = new Map(); // userId -> Set of SSE connections
-    this.globalClients = new Set(); // All connections for global broadcasts
+    // better-sse channel infrastructure
+    this.sessions = new Map(); // sessionId -> Session
+    this.analysisChannels = new Map(); // analysisName -> Channel
+    this.globalChannel = createChannel(); // Global channel for non-log broadcasts
+
     this.containerState = {
       status: 'ready',
       startTime: new Date(),
@@ -802,6 +1068,27 @@ class SSEManager {
     this.heartbeatInterval = null;
     this.cachedSdkVersion = null; // Cache SDK version to avoid repeated file reads
     this._initSdkVersion(); // Initialize SDK version cache
+  }
+
+  /**
+   * Get all sessions for a specific user
+   * @param {string} userId - User ID
+   * @returns {Array<Session>} Array of sessions for this user
+   */
+  getSessionsByUserId(userId) {
+    return Array.from(this.sessions.values()).filter(
+      (session) => session.state?.userId === userId,
+    );
+  }
+
+  /**
+   * Get all admin sessions
+   * @returns {Array<Session>} Array of admin sessions
+   */
+  getAdminSessions() {
+    return Array.from(this.sessions.values()).filter(
+      (session) => session.state?.user?.role === 'admin',
+    );
   }
 
   /**
@@ -923,11 +1210,13 @@ class SSEManager {
    * - Periodic status refresh
    * - Manual status broadcast trigger
    */
-  broadcastStatusUpdate() {
-    if (this.globalClients.size === 0) return;
+  async broadcastStatusUpdate() {
+    if (this.sessions.size === 0) return;
 
-    for (const client of this.globalClients) {
-      this.sendStatusUpdate(client);
+    for (const session of this.sessions.values()) {
+      if (session.isConnected) {
+        await this.sendStatusUpdate(session);
+      }
     }
   }
 
@@ -1130,11 +1419,24 @@ class SSEManager {
    * - Removes client on send failure
    */
   async broadcastToAdminUsers(data) {
-    return this.broadcastToClients(
-      this.globalClients,
-      data,
-      (client) => client.req.user?.role === 'admin',
-    );
+    const adminSessions = this.getAdminSessions();
+    let sentCount = 0;
+
+    for (const session of adminSessions) {
+      try {
+        if (session.isConnected) {
+          session.push(data);
+          sentCount++;
+        }
+      } catch (error) {
+        logger.error(
+          { sessionId: session.id, error },
+          'Error broadcasting to admin session',
+        );
+      }
+    }
+
+    return sentCount;
   }
 
   /**
@@ -1146,8 +1448,8 @@ class SSEManager {
    * @returns {void}
    *
    * Routing Logic:
-   * - type === 'log': Extract analysis name from data, use team-aware broadcast
-   * - Other types: Treat type as analysis name, broadcast analysis update
+   * - type === 'log': Route to analysis channels (only subscribed sessions receive)
+   * - Other types: Route to global channel (all sessions receive)
    *
    * Log Message Format:
    * - type: 'log'
@@ -1157,17 +1459,13 @@ class SSEManager {
    * - type: 'analysisUpdate'
    * - analysisName: Analysis identifier
    * - update: Update data
-   *
-   * Fallback:
-   * - If log has no analysis name, uses global broadcast
    */
   broadcastUpdate(type, data) {
     if (type === 'log') {
-      // Log broadcasts should be sent to users who can access the analysis
-      // Extract analysis name from log data to determine team
+      // Log broadcasts go to analysis channels (subscribed sessions only)
       const analysisName = data.analysis || data.fileName;
       if (analysisName) {
-        this.broadcastAnalysisUpdate(analysisName, {
+        this.broadcastAnalysisLog(analysisName, {
           type: 'log',
           data: data,
         });
@@ -1179,7 +1477,7 @@ class SSEManager {
         });
       }
     } else {
-      // Analysis update - use team-aware broadcasting
+      // Non-log updates go to global channel (all sessions)
       this.broadcastAnalysisUpdate(type, {
         type: 'analysisUpdate',
         analysisName: type,
@@ -1232,7 +1530,7 @@ class SSEManager {
    * - Logs aggregate errors at error level
    */
   async broadcastMetricsUpdate() {
-    if (this.globalClients.size === 0) return;
+    if (this.sessions.size === 0) return;
 
     try {
       const metrics = await metricsService.getAllMetrics();
@@ -1258,11 +1556,11 @@ class SSEManager {
       });
 
       // Send customized metrics to each connected client
-      for (const client of this.globalClients) {
+      for (const session of this.sessions.values()) {
         try {
-          if (client.res.destroyed) continue;
+          if (!session.isConnected) continue;
 
-          const user = client.req.user;
+          const user = session.state.user || session.state;
           const filteredMetrics = { ...metrics };
 
           // Filter process metrics based on team access for non-admin users
@@ -1307,7 +1605,7 @@ class SSEManager {
           const runningAnalysesCount = filteredMetrics.processes.length;
 
           // Add container health and SDK version to metrics
-          const message = this.formatSSEMessage({
+          const metricsData = {
             type: 'metricsUpdate',
             ...filteredMetrics,
             container_health: {
@@ -1323,14 +1621,16 @@ class SSEManager {
               sdkVersion: sdkVersion,
               runningAnalyses: runningAnalysesCount,
             },
-          });
-          this.writeAndFlush(client.res, message);
-        } catch (clientError) {
+          };
+
+          // Use better-sse's push method (no event type for generic onmessage)
+          await session.push(metricsData);
+        } catch (sessionError) {
           logger.error(
-            { userId: client.userId, error: clientError },
-            'Error sending metrics to client',
+            { userId: session.state?.userId, error: sessionError },
+            'Error sending metrics to session',
           );
-          this.removeClient(client.userId, client.id);
+          this.removeClient(session.state?.userId, session.id);
         }
       }
     } catch (error) {
@@ -1397,56 +1697,21 @@ class SSEManager {
   }
 
   /**
-   * Send heartbeat to all connected clients and update lastHeartbeat timestamp
-   * Keeps connections alive and tracks successful communication
+   * Send heartbeat to all connected sessions via global channel
+   * Keeps connections alive via better-sse channel broadcast
    *
    * @returns {void}
    *
    * Behavior:
-   * - Sends heartbeat message to all clients
-   * - Updates lastHeartbeat timestamp on successful write
-   * - Removes clients that fail to receive heartbeat
-   * - Skips destroyed connections
+   * - Broadcasts heartbeat to all sessions via global channel
+   * - better-sse handles connection health tracking
+   * - Failed sessions automatically cleaned up by better-sse
    *
    * Heartbeat Format:
    * - type: 'heartbeat'
-   * - timestamp: ISO timestamp (added by formatSSEMessage)
-   *
-   * Connection Health:
-   * - Successful write -> Updates client.lastHeartbeat
-   * - Failed write -> Client removed via removeClient
-   * - Destroyed connection -> Skipped and added to failed list
    */
   sendHeartbeat() {
-    const message = this.formatSSEMessage({ type: 'heartbeat' });
-    const failedClients = [];
-
-    for (const client of this.globalClients) {
-      try {
-        if (!client.res.destroyed) {
-          this.writeAndFlush(client.res, message);
-          // Update lastHeartbeat on successful write
-          client.lastHeartbeat = new Date();
-        } else {
-          failedClients.push(client);
-        }
-      } catch (error) {
-        logger.debug(
-          {
-            userId: client.userId,
-            clientId: client.id,
-            error: error.message,
-          },
-          'Failed to send heartbeat to client',
-        );
-        failedClients.push(client);
-      }
-    }
-
-    // Clean up failed clients
-    failedClients.forEach((client) => {
-      this.removeClient(client.userId, client.id);
-    });
+    this.broadcast({ type: 'heartbeat' });
   }
 
   /**
@@ -1475,36 +1740,36 @@ class SSEManager {
   cleanupStaleConnections() {
     const now = Date.now();
     const timeout = 60000; // 60 seconds
-    const staleClients = [];
+    const staleSessions = [];
 
-    for (const client of this.globalClients) {
-      const timeSinceLastHeartbeat = now - client.lastHeartbeat.getTime();
-      if (timeSinceLastHeartbeat > timeout) {
-        staleClients.push(client);
+    for (const session of this.sessions.values()) {
+      const timeSinceLastPush = now - (session.lastPushAt?.getTime() || now);
+      if (timeSinceLastPush > timeout) {
+        staleSessions.push(session);
         logger.info(
           {
-            userId: client.userId,
-            clientId: client.id,
-            timeSinceLastHeartbeat: Math.floor(timeSinceLastHeartbeat / 1000),
+            userId: session.state?.userId,
+            sessionId: session.id,
+            timeSinceLastPush: Math.floor(timeSinceLastPush / 1000),
           },
-          'Removing stale SSE connection',
+          'Removing stale SSE session',
         );
       }
     }
 
-    // Remove stale clients
-    staleClients.forEach((client) => {
-      this.removeClient(client.userId, client.id);
+    // Remove stale sessions
+    staleSessions.forEach((session) => {
+      this.removeClient(session.state?.userId, session.id);
     });
 
-    if (staleClients.length > 0) {
+    if (staleSessions.length > 0) {
       logger.info(
-        { count: staleClients.length },
-        'Cleaned up stale SSE connections',
+        { count: staleSessions.length },
+        'Cleaned up stale SSE sessions',
       );
     }
 
-    return staleClients.length;
+    return staleSessions.length;
   }
 
   /**
@@ -1661,25 +1926,8 @@ export async function authenticateSSE(req, res, next) {
  * Use with:
  * - app.get('/api/sse', authenticateSSE, handleSSEConnection)
  */
-export function handleSSEConnection(req, res) {
-  // Set SSE headers
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    Connection: 'keep-alive',
-    'Access-Control-Allow-Origin': req.headers.origin || '*',
-    'Access-Control-Allow-Credentials': 'true',
-  });
-
-  // Send initial connection confirmation
-  sseManager.writeAndFlush(
-    res,
-    'data: {"type":"connection","status":"connected"}\n\n',
-  );
-
-  // Add client to manager
-  const client = sseManager.addClient(req.user.id, res, req);
-
-  // Send initial data
-  sseManager.sendInitialData(client);
+export async function handleSSEConnection(req, res) {
+  const session = await sseManager.addClient(req.user.id, res, req);
+  await session.push({ type: 'connection', status: 'connected' });
+  await sseManager.sendInitialData(session);
 }

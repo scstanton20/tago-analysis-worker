@@ -1,17 +1,18 @@
 // frontend/src/contexts/sseContext/connection/provider.jsx
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import PropTypes from 'prop-types';
-import { notifications } from '@mantine/notifications';
 import { SSEConnectionContext } from './context';
 import { useAuth } from '../../../hooks/useAuth';
 import logger from '../../../utils/logger';
 import { isDevelopment, API_URL } from '../../../config/env.js';
+import { showError } from '../../../utils/notificationService.jsx';
 
 export function SSEConnectionProvider({ children, onMessage }) {
   const { isAuthenticated } = useAuth();
   const [connectionStatus, setConnectionStatus] = useState('connecting');
   const [hasInitialData, setHasInitialData] = useState(false);
   const [serverShutdown, setServerShutdown] = useState(false);
+  const [sessionId, setSessionId] = useState(null);
 
   const eventSourceRef = useRef(null);
   const reconnectAttemptsRef = useRef(0);
@@ -20,6 +21,7 @@ export function SSEConnectionProvider({ children, onMessage }) {
   const maxReconnectDelay = 30000;
   const mountedRef = useRef(true);
   const connectionStatusRef = useRef('connecting');
+  const subscribedAnalyses = useRef(new Set());
 
   const getSSEUrl = useCallback(() => {
     if (!isAuthenticated) return null;
@@ -67,14 +69,12 @@ export function SSEConnectionProvider({ children, onMessage }) {
     }
 
     // Show notification about session revocation
-    notifications.show({
-      title: 'Session Revoked',
-      message:
-        data.reason ||
+    showError(
+      data.reason ||
         'Your session has been revoked by an administrator. You will be logged out.',
-      color: 'red',
-      autoClose: false,
-    });
+      'Session Revoked',
+      false,
+    );
   }, []);
 
   const handleMessage = useCallback(
@@ -89,9 +89,13 @@ export function SSEConnectionProvider({ children, onMessage }) {
           return;
         }
 
-        // Handle init message to set hasInitialData
+        // Handle init message to set hasInitialData and capture sessionId
         if (data.type === 'init') {
           setHasInitialData(true);
+
+          if (data.sessionId) {
+            setSessionId(data.sessionId);
+          }
         }
 
         // Handle session invalidation locally
@@ -140,7 +144,7 @@ export function SSEConnectionProvider({ children, onMessage }) {
 
       eventSource.onopen = () => {
         clearTimeout(connectionTimeout);
-        logger.log('SSE connection established');
+        logger.info('Live SSE Connected');
 
         if (mountedRef.current) {
           setConnectionStatus('connected');
@@ -304,14 +308,110 @@ export function SSEConnectionProvider({ children, onMessage }) {
     };
   }, [createConnection, reconnect, isAuthenticated, serverShutdown]);
 
+  // Subscribe to analysis channels for log streaming
+  const subscribeToAnalysis = useCallback(
+    async (analysisNames) => {
+      if (!sessionId || !isAuthenticated) {
+        return { success: false, error: 'Not connected' };
+      }
+
+      if (!Array.isArray(analysisNames) || analysisNames.length === 0) {
+        return { success: false, error: 'Invalid analysis names' };
+      }
+
+      try {
+        const response = await fetch('/api/sse/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ sessionId, analyses: analysisNames }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          logger.error('Subscribe failed:', error);
+          return { success: false, error: error.error || 'Subscribe failed' };
+        }
+
+        const result = await response.json();
+
+        // Track subscriptions locally
+        result.subscribed?.forEach((name) => {
+          subscribedAnalyses.current.add(name);
+        });
+
+        return result;
+      } catch (error) {
+        logger.error('Error subscribing to analyses:', error);
+        return { success: false, error: error.message };
+      }
+    },
+    [sessionId, isAuthenticated],
+  );
+
+  // Unsubscribe from analysis channels
+  const unsubscribeFromAnalysis = useCallback(
+    async (analysisNames) => {
+      if (!sessionId || !isAuthenticated) {
+        logger.warn('Cannot unsubscribe: No session ID or not authenticated');
+        return { success: false, error: 'Not connected' };
+      }
+
+      if (!Array.isArray(analysisNames) || analysisNames.length === 0) {
+        logger.warn('Cannot unsubscribe: Invalid analysisNames');
+        return { success: false, error: 'Invalid analysis names' };
+      }
+
+      try {
+        const response = await fetch('/api/sse/unsubscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ sessionId, analyses: analysisNames }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          logger.error('Unsubscribe failed:', error);
+          return { success: false, error: error.error || 'Unsubscribe failed' };
+        }
+
+        const result = await response.json();
+        logger.log('Unsubscribed from analyses:', result);
+
+        // Remove from local tracking
+        result.unsubscribed?.forEach((name) => {
+          subscribedAnalyses.current.delete(name);
+        });
+
+        return result;
+      } catch (error) {
+        logger.error('Error unsubscribing from analyses:', error);
+        return { success: false, error: error.message };
+      }
+    },
+    [sessionId, isAuthenticated],
+  );
+
   const value = useMemo(
     () => ({
       connectionStatus,
       hasInitialData,
       serverShutdown,
       requestStatusUpdate,
+      sessionId,
+      subscribeToAnalysis,
+      unsubscribeFromAnalysis,
     }),
-    [connectionStatus, hasInitialData, serverShutdown, requestStatusUpdate],
+    [
+      connectionStatus,
+      hasInitialData,
+      serverShutdown,
+      requestStatusUpdate,
+      sessionId,
+      subscribeToAnalysis,
+      unsubscribeFromAnalysis,
+    ],
   );
 
   return (

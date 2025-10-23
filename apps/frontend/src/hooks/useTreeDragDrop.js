@@ -6,7 +6,7 @@
 
 import { useState, useCallback } from 'react';
 import { closestCenter, pointerWithin, rectIntersection } from '@dnd-kit/core';
-import { notifications } from '@mantine/notifications';
+import { useNotifications } from './useNotifications';
 import teamService from '../services/teamService';
 import logger from '../utils/logger';
 
@@ -25,6 +25,7 @@ export function useTreeDragDrop({
   reorderMode,
   onPendingReorder,
 }) {
+  const notify = useNotifications();
   const [activeId, setActiveId] = useState(null);
 
   /**
@@ -173,18 +174,10 @@ export function useTreeDragDrop({
           } else {
             try {
               await teamService.moveItem(teamId, active.id, null, items.length);
-              notifications.show({
-                title: 'Success',
-                message: 'Moved to root level',
-                color: 'green',
-              });
+              notify.success('Moved to root level');
             } catch (error) {
               logger.error('Failed to move item:', error);
-              notifications.show({
-                title: 'Error',
-                message: error.message || 'Failed to move item',
-                color: 'red',
-              });
+              notify.error(error.message || 'Failed to move item');
             }
           }
           return;
@@ -198,11 +191,7 @@ export function useTreeDragDrop({
       // Prevent dropping folder into itself or its descendants
       if (activeData.isFolder && overData?.isFolder && !isRootDrop) {
         if (active.id === over.id || isDescendant(items, active.id, over.id)) {
-          notifications.show({
-            title: 'Invalid Move',
-            message: 'Cannot move a folder into itself or its descendants',
-            color: 'red',
-          });
+          notify.error('Cannot move a folder into itself or its descendants');
           return;
         }
       }
@@ -253,18 +242,10 @@ export function useTreeDragDrop({
             targetParentId,
             targetIndex,
           );
-          notifications.show({
-            title: 'Success',
-            message: 'Item moved successfully',
-            color: 'green',
-          });
+          notify.success('Item moved successfully');
         } catch (error) {
           logger.error('Failed to move item:', error);
-          notifications.show({
-            title: 'Error',
-            message: error.message || 'Failed to move item',
-            color: 'red',
-          });
+          notify.error(error.message || 'Failed to move item');
         }
       }
     },
@@ -275,6 +256,7 @@ export function useTreeDragDrop({
       isDescendant,
       reorderMode,
       onPendingReorder,
+      notify,
     ],
   );
 

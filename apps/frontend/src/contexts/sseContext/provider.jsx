@@ -5,6 +5,13 @@ import { SSEContext } from './context';
 import { useAuth } from '../../hooks/useAuth';
 import logger from '../../utils/logger';
 import { isDevelopment, API_URL } from '../../config/env.js';
+import {
+  showLoading,
+  updateNotification,
+  showSuccess,
+  showInfo,
+  showError,
+} from '../../utils/notificationService.jsx';
 
 export function SSEProvider({ children }) {
   const { isAuthenticated } = useAuth();
@@ -19,6 +26,7 @@ export function SSEProvider({ children }) {
   const [hasInitialData, setHasInitialData] = useState(false);
   const [dnsCache, setDnsCache] = useState(null);
   const [metricsData, setMetricsData] = useState(null);
+  const [sessionId, setSessionId] = useState(null);
 
   const eventSourceRef = useRef(null);
   const reconnectAttemptsRef = useRef(0);
@@ -30,6 +38,7 @@ export function SSEProvider({ children }) {
   const logSequences = useRef(new Map());
   const analysisStartTimes = useRef(new Map()); // Track when analyses start
   const analysisStartTimeouts = useRef(new Map()); // Track success notification timeouts
+  const subscribedAnalyses = useRef(new Set()); // Track subscribed analyses
 
   const addLoadingAnalysis = useCallback((analysisName) => {
     setLoadingAnalyses((prev) => new Set([...prev, analysisName]));
@@ -84,6 +93,12 @@ export function SSEProvider({ children }) {
 
   // Message Handlers - extracted for better dependency tracking
   const handleInitMessage = useCallback((data) => {
+    // Capture sessionId from init message
+    if (data.sessionId) {
+      setSessionId(data.sessionId);
+      logger.log('SSE session ID received:', data.sessionId);
+    }
+
     // Handle analyses - always store as object
     let analysesObj = {};
     if (data.analyses) {
@@ -155,34 +170,24 @@ export function SSEProvider({ children }) {
         analysisStartTimes.current.set(data.analysisName, startTime);
 
         // Show "Starting..." notification
-        import('@mantine/notifications').then(({ notifications }) => {
-          const notifId = `${data.analysisName}-starting`;
-          notifications.show({
-            id: notifId,
-            title: 'Starting...',
-            message: `${data.analysisName}`,
-            color: 'blue',
-            loading: true,
-            autoClose: false,
-          });
-        });
+        const notifId = `${data.analysisName}-starting`;
+        showLoading(`${data.analysisName}`, notifId, 'Starting...');
 
         // Schedule success notification after 1 second
-        const timeoutId = setTimeout(() => {
+        const timeoutId = setTimeout(async () => {
           const currentStartTime = analysisStartTimes.current.get(
             data.analysisName,
           );
           if (currentStartTime === startTime) {
             // Still running - show success
-            import('@mantine/notifications').then(({ notifications }) => {
-              notifications.update({
-                id: `${data.analysisName}-starting`,
-                title: 'Started',
-                message: `${data.analysisName} is running`,
-                color: 'green',
-                loading: false,
-                autoClose: 3000,
-              });
+            const { IconCheck } = await import('@tabler/icons-react');
+            updateNotification(`${data.analysisName}-starting`, {
+              title: 'Started',
+              message: `${data.analysisName} is running`,
+              color: 'green',
+              icon: <IconCheck size={16} />,
+              loading: false,
+              autoClose: 3000,
             });
             analysisStartTimes.current.delete(data.analysisName);
             analysisStartTimeouts.current.delete(data.analysisName);
@@ -216,18 +221,17 @@ export function SSEProvider({ children }) {
             // Exited within 1 second - this is always a failure for listeners
             // (they should stay running continuously)
             // Small delay to ensure the "Starting..." notification was created
-            setTimeout(() => {
-              import('@mantine/notifications').then(({ notifications }) => {
-                const exitCode = data.update.exitCode;
+            setTimeout(async () => {
+              const exitCode = data.update.exitCode;
+              const { IconX } = await import('@tabler/icons-react');
 
-                notifications.update({
-                  id: `${data.analysisName}-starting`,
-                  title: 'Failed to Start',
-                  message: `${data.analysisName} exited with code ${exitCode} after ${runDuration}ms`,
-                  color: 'red',
-                  loading: false,
-                  autoClose: 5000,
-                });
+              updateNotification(`${data.analysisName}-starting`, {
+                title: 'Failed to Start',
+                message: `${data.analysisName} exited with code ${exitCode} after ${runDuration}ms`,
+                color: 'red',
+                icon: <IconX size={16} />,
+                loading: false,
+                autoClose: 5000,
               });
             }, 50); // 50ms delay to ensure notification was created
           }
@@ -459,15 +463,7 @@ export function SSEProvider({ children }) {
   const handleUserTeamsUpdated = useCallback((data) => {
     // Show notification to user about team changes
     if (data.data?.showNotification && data.data?.message) {
-      // Import notifications dynamically to avoid circular dependencies
-      import('@mantine/notifications').then(({ notifications }) => {
-        notifications.show({
-          title: 'Team Access Updated',
-          message: data.data.message,
-          color: 'blue',
-          autoClose: 5000,
-        });
-      });
+      showInfo(data.data.message, 'Team Access Updated', 5000);
     }
 
     // When user's team assignments change, trigger auth refresh
@@ -486,15 +482,7 @@ export function SSEProvider({ children }) {
   const handleUserRoleUpdated = useCallback((data) => {
     // Show notification to user about role changes
     if (data.data?.showNotification && data.data?.message) {
-      // Import notifications dynamically to avoid circular dependencies
-      import('@mantine/notifications').then(({ notifications }) => {
-        notifications.show({
-          title: 'Role Updated',
-          message: data.data.message,
-          color: 'green',
-          autoClose: 5000,
-        });
-      });
+      showSuccess(data.data.message, 'Role Updated', 5000);
     }
 
     // When user's role changes, trigger auth refresh
@@ -600,16 +588,11 @@ export function SSEProvider({ children }) {
     }
 
     // Show notification about session revocation
-    import('@mantine/notifications').then(({ notifications }) => {
-      notifications.show({
-        title: 'Session Revoked',
-        message:
-          data.reason ||
-          'Your session has been revoked by an administrator. You will be logged out.',
-        color: 'red',
-        autoClose: false,
-      });
-    });
+    showError(
+      data.reason ||
+        'Your session has been revoked by an administrator. You will be logged out.',
+      'Session Revoked',
+    );
 
     // Redirect to login after showing notification
     setTimeout(() => {
@@ -947,6 +930,104 @@ export function SSEProvider({ children }) {
     };
   }, [createConnection, reconnect, isAuthenticated, serverShutdown]);
 
+  // Subscribe to analysis channels for log streaming
+  const subscribeToAnalysis = useCallback(
+    async (analysisNames) => {
+      if (!sessionId || !isAuthenticated) {
+        logger.warn('Cannot subscribe: No session ID or not authenticated');
+        return { success: false, error: 'Not connected' };
+      }
+
+      if (!Array.isArray(analysisNames) || analysisNames.length === 0) {
+        logger.warn('Cannot subscribe: Invalid analysisNames');
+        return { success: false, error: 'Invalid analysis names' };
+      }
+
+      try {
+        const response = await fetch('/api/sse/subscribe', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            sessionId,
+            analyses: analysisNames,
+          }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          logger.error('Subscribe failed:', error);
+          return { success: false, error: error.error || 'Subscribe failed' };
+        }
+
+        const result = await response.json();
+        logger.log('Subscribed to analyses:', result);
+
+        // Track subscriptions locally
+        result.subscribed?.forEach((name) => {
+          subscribedAnalyses.current.add(name);
+        });
+
+        return result;
+      } catch (error) {
+        logger.error('Error subscribing to analyses:', error);
+        return { success: false, error: error.message };
+      }
+    },
+    [sessionId, isAuthenticated],
+  );
+
+  // Unsubscribe from analysis channels
+  const unsubscribeFromAnalysis = useCallback(
+    async (analysisNames) => {
+      if (!sessionId || !isAuthenticated) {
+        logger.warn('Cannot unsubscribe: No session ID or not authenticated');
+        return { success: false, error: 'Not connected' };
+      }
+
+      if (!Array.isArray(analysisNames) || analysisNames.length === 0) {
+        logger.warn('Cannot unsubscribe: Invalid analysisNames');
+        return { success: false, error: 'Invalid analysis names' };
+      }
+
+      try {
+        const response = await fetch('/api/sse/unsubscribe', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            sessionId,
+            analyses: analysisNames,
+          }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          logger.error('Unsubscribe failed:', error);
+          return { success: false, error: error.error || 'Unsubscribe failed' };
+        }
+
+        const result = await response.json();
+        logger.log('Unsubscribed from analyses:', result);
+
+        // Remove from local tracking
+        result.unsubscribed?.forEach((name) => {
+          subscribedAnalyses.current.delete(name);
+        });
+
+        return result;
+      } catch (error) {
+        logger.error('Error unsubscribing from analyses:', error);
+        return { success: false, error: error.message };
+      }
+    },
+    [sessionId, isAuthenticated],
+  );
+
   // Request status updates periodically (fallback)
   useEffect(() => {
     if (connectionStatus === 'connected') {
@@ -975,6 +1056,9 @@ export function SSEProvider({ children }) {
       serverShutdown,
       dnsCache,
       metricsData,
+      sessionId,
+      subscribeToAnalysis,
+      unsubscribeFromAnalysis,
     }),
     [
       analyses,
@@ -992,6 +1076,9 @@ export function SSEProvider({ children }) {
       serverShutdown,
       dnsCache,
       metricsData,
+      sessionId,
+      subscribeToAnalysis,
+      unsubscribeFromAnalysis,
     ],
   );
 

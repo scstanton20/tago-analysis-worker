@@ -37,8 +37,12 @@ import {
   IconCheck,
   IconX,
 } from '@tabler/icons-react';
-import { notifications } from '@mantine/notifications';
 import teamService from '../../services/teamService';
+import {
+  showSuccess,
+  showError,
+  showInfo,
+} from '../../utils/notificationService.jsx';
 
 export default function AnalysisList({
   analyses = null,
@@ -271,30 +275,21 @@ export default function AnalysisList({
                   }),
                 );
 
-                notifications.show({
-                  title: isTempFolder
-                    ? 'Folder Removed'
-                    : 'Folder Marked for Deletion',
-                  message: isTempFolder
+                showInfo(
+                  isTempFolder
                     ? `"${folder.name}" removed from preview`
                     : `"${folder.name}" will be deleted when you click Done`,
-                  color: 'blue',
-                });
+                  isTempFolder
+                    ? 'Folder Removed'
+                    : 'Folder Marked for Deletion',
+                );
               } else {
                 // Not in reorder mode - delete immediately
                 try {
                   await teamService.deleteFolder(selectedTeam, folder.id);
-                  notifications.show({
-                    title: 'Success',
-                    message: `Folder "${folder.name}" deleted`,
-                    color: 'green',
-                  });
+                  showSuccess(`Folder "${folder.name}" deleted`);
                 } catch (error) {
-                  notifications.show({
-                    title: 'Error',
-                    message: error.message || 'Failed to delete folder',
-                    color: 'red',
-                  });
+                  showError(error.message || 'Failed to delete folder');
                 }
               }
             },
@@ -450,11 +445,7 @@ export default function AnalysisList({
         );
       }
 
-      notifications.show({
-        title: 'Success',
-        message: 'Changes applied successfully',
-        color: 'green',
-      });
+      showSuccess('Changes applied successfully');
 
       setPendingReorders([]);
       setPendingFolders([]);
@@ -464,11 +455,7 @@ export default function AnalysisList({
       setLocalStructure(null);
     } catch (error) {
       logger.error('Failed to apply changes:', error);
-      notifications.show({
-        title: 'Error',
-        message: error.message || 'Failed to apply changes',
-        color: 'red',
-      });
+      showError(error.message || 'Failed to apply changes');
     }
   }, [pendingReorders, pendingFolders, pendingFolderDeletions, selectedTeam]);
 

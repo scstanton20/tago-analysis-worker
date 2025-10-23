@@ -19,7 +19,7 @@ import {
   Divider,
   Progress,
 } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
+import { useNotifications } from '../../../hooks/useNotifications';
 import {
   IconTransfer,
   IconTrash,
@@ -36,6 +36,7 @@ import { useAuth } from '../../../hooks/useAuth';
 export default function DNSCacheSettings() {
   const { dnsCache } = useBackend();
   const { isAuthenticated } = useAuth();
+  const notify = useNotifications();
   const [loading, setLoading] = useState(false);
   const [entries, setEntries] = useState([]);
   const [showEntries, setShowEntries] = useState(false);
@@ -59,6 +60,7 @@ export default function DNSCacheSettings() {
     if (isAuthenticated) {
       loadConfig();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated]);
 
   // Initialize pending values when config is first loaded
@@ -120,13 +122,11 @@ export default function DNSCacheSettings() {
       setValidationErrors({});
     } catch (error) {
       const isAuthError = error?.response?.status === 401;
-      notifications.show({
-        title: 'Error',
-        message: isAuthError
+      notify.error(
+        isAuthError
           ? 'Authentication required. Please refresh the page and try again.'
           : 'Failed to load DNS cache configuration',
-        color: 'red',
-      });
+      );
     } finally {
       setLoading(false);
     }
@@ -138,11 +138,7 @@ export default function DNSCacheSettings() {
       const data = await dnsService.getCacheEntries();
       setEntries(data.entries);
     } catch {
-      notifications.show({
-        title: 'Error',
-        message: 'Failed to load DNS cache entries',
-        color: 'red',
-      });
+      notify.error('Failed to load DNS cache entries');
     } finally {
       setEntriesLoading(false);
     }
@@ -154,18 +150,11 @@ export default function DNSCacheSettings() {
       await dnsService.updateConfig({ enabled });
       // SSE will update the config automatically
 
-      notifications.show({
-        title: 'Success',
-        message: `DNS cache ${enabled ? 'enabled' : 'disabled'}`,
-        color: 'green',
-      });
+      notify.success(`DNS cache ${enabled ? 'enabled' : 'disabled'}`);
     } catch (error) {
-      notifications.show({
-        title: 'Error',
-        message:
-          error.response?.data?.error || 'Failed to update configuration',
-        color: 'red',
-      });
+      notify.error(
+        error.response?.data?.error || 'Failed to update configuration',
+      );
     }
   };
 
@@ -177,11 +166,7 @@ export default function DNSCacheSettings() {
 
     if (ttlError || maxEntriesError) {
       setValidationErrors({ ttl: ttlError, maxEntries: maxEntriesError });
-      notifications.show({
-        title: 'Validation Error',
-        message: 'Please fix validation errors before saving',
-        color: 'red',
-      });
+      notify.error('Please fix validation errors before saving');
       return;
     }
 
@@ -195,17 +180,11 @@ export default function DNSCacheSettings() {
       setHasUnsavedChanges(false);
       setValidationErrors({});
 
-      notifications.show({
-        title: 'Success',
-        message: 'DNS cache configuration saved',
-        color: 'green',
-      });
+      notify.success('DNS cache configuration saved');
     } catch (error) {
-      notifications.show({
-        title: 'Error',
-        message: error.response?.data?.error || 'Failed to save configuration',
-        color: 'red',
-      });
+      notify.error(
+        error.response?.data?.error || 'Failed to save configuration',
+      );
     }
   };
 
@@ -214,17 +193,9 @@ export default function DNSCacheSettings() {
       const data = await dnsService.clearCache();
       // SSE will update the stats automatically
       setEntries([]);
-      notifications.show({
-        title: 'Success',
-        message: `Cleared ${data.entriesCleared} cache entries`,
-        color: 'green',
-      });
+      notify.success(`Cleared ${data.entriesCleared} cache entries`);
     } catch {
-      notifications.show({
-        title: 'Error',
-        message: 'Failed to clear DNS cache',
-        color: 'red',
-      });
+      notify.error('Failed to clear DNS cache');
     }
   };
 
@@ -232,37 +203,21 @@ export default function DNSCacheSettings() {
     try {
       await dnsService.resetStats();
       // SSE will update the stats automatically
-      notifications.show({
-        title: 'Success',
-        message: 'DNS cache statistics reset',
-        color: 'green',
-      });
+      notify.success('DNS cache statistics reset');
     } catch {
-      notifications.show({
-        title: 'Error',
-        message: 'Failed to reset statistics',
-        color: 'red',
-      });
+      notify.error('Failed to reset statistics');
     }
   };
 
   const handleDeleteEntry = async (key) => {
     try {
       await dnsService.deleteCacheEntry(key);
-      notifications.show({
-        title: 'Success',
-        message: 'Cache entry deleted',
-        color: 'green',
-      });
+      notify.success('Cache entry deleted');
       // Reload entries to reflect the change
       loadEntries();
       // Stats will be updated via SSE
     } catch {
-      notifications.show({
-        title: 'Error',
-        message: 'Failed to delete cache entry',
-        color: 'red',
-      });
+      notify.error('Failed to delete cache entry');
     }
   };
 

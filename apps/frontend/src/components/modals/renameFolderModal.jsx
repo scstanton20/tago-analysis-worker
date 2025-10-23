@@ -2,9 +2,9 @@
 import { Modal, TextInput, Button, Stack } from '@mantine/core';
 import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
-import { notifications } from '@mantine/notifications';
 import teamService from '../../services/teamService';
 import logger from '../../utils/logger';
+import { useNotifications } from '../../hooks/useNotifications';
 
 export default function RenameFolderModal({
   opened,
@@ -13,6 +13,7 @@ export default function RenameFolderModal({
   folderId,
   currentName,
 }) {
+  const notify = useNotifications();
   const [name, setName] = useState(currentName || '');
   const [loading, setLoading] = useState(false);
 
@@ -23,11 +24,7 @@ export default function RenameFolderModal({
 
   const handleRename = async () => {
     if (!name.trim()) {
-      notifications.show({
-        title: 'Error',
-        message: 'Folder name is required',
-        color: 'red',
-      });
+      notify.error('Folder name is required');
       return;
     }
 
@@ -42,20 +39,12 @@ export default function RenameFolderModal({
         name: name.trim(),
       });
 
-      notifications.show({
-        title: 'Success',
-        message: `Folder renamed to "${name}"`,
-        color: 'green',
-      });
+      notify.success(`Folder renamed to "${name}"`);
 
       onClose();
     } catch (error) {
       logger.error('Error renaming folder:', error);
-      notifications.show({
-        title: 'Error',
-        message: error.message || 'Failed to rename folder',
-        color: 'red',
-      });
+      notify.error(error.message || 'Failed to rename folder');
     } finally {
       setLoading(false);
     }

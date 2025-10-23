@@ -1,9 +1,12 @@
 // backend/src/routes/sseRoutes.js
 import { Router } from 'express';
-import { authenticateSSE, handleSSEConnection } from '../utils/sse.js';
+import { handleSSEConnection, sseManager } from '../utils/sse.js';
 import { sseCompression } from '../middleware/compression.js';
+import { authMiddleware } from '../middleware/betterAuthMiddleware.js';
 
 const router = Router();
+
+router.use(authMiddleware);
 
 /**
  * @swagger
@@ -81,6 +84,138 @@ const router = Router();
  *                 value:
  *                   error: "Invalid user"
  */
-router.get('/events', authenticateSSE, sseCompression(), handleSSEConnection);
+router.get('/events', sseCompression(), handleSSEConnection);
+
+/**
+ * @swagger
+ * /sse/subscribe:
+ *   post:
+ *     summary: Subscribe to analysis channels for log streaming
+ *     description: |
+ *       Subscribe an SSE session to receive real-time logs from specific analyses.
+ *       Only logs from subscribed analyses will be sent to the session.
+ *
+ *       **Permission Checking:**
+ *       - Admin users can subscribe to any analysis
+ *       - Regular users can only subscribe to analyses in teams they have access to
+ *       - Uncategorized analyses are accessible to all users
+ *
+ *       **Use Case:** When user opens an analysis view, frontend subscribes to that analysis
+ *     tags: [Real-time Events]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - sessionId
+ *               - analyses
+ *             properties:
+ *               sessionId:
+ *                 type: string
+ *                 description: SSE session ID from the connection
+ *                 example: "abc123xyz"
+ *               analyses:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Array of analysis names to subscribe to
+ *                 example: ["my-analysis.js", "another-analysis.js"]
+ *     responses:
+ *       200:
+ *         description: Subscription successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 subscribed:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                   description: Analyses successfully subscribed to
+ *                 denied:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                   description: Analyses that were denied due to permissions
+ *                 sessionId:
+ *                   type: string
+ *                   description: The session ID that was subscribed
+ *       400:
+ *         description: Invalid request (missing sessionId or analyses)
+ *       404:
+ *         description: Session not found
+ *       401:
+ *         description: Authentication required
+ */
+router.post('/subscribe', async (req, res) => {
+  await sseManager.handleSubscribeRequest(req, res);
+});
+
+/**
+ * @swagger
+ * /sse/unsubscribe:
+ *   post:
+ *     summary: Unsubscribe from analysis channels
+ *     description: |
+ *       Unsubscribe an SSE session from receiving logs from specific analyses.
+ *       This stops log streaming for the specified analyses.
+ *
+ *       **Use Case:** When user closes an analysis view, frontend unsubscribes from that analysis
+ *     tags: [Real-time Events]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - sessionId
+ *               - analyses
+ *             properties:
+ *               sessionId:
+ *                 type: string
+ *                 description: SSE session ID from the connection
+ *                 example: "abc123xyz"
+ *               analyses:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Array of analysis names to unsubscribe from
+ *                 example: ["my-analysis.js", "another-analysis.js"]
+ *     responses:
+ *       200:
+ *         description: Unsubscription successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 unsubscribed:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                   description: Analyses successfully unsubscribed from
+ *                 sessionId:
+ *                   type: string
+ *                   description: The session ID that was unsubscribed
+ *       400:
+ *         description: Invalid request
+ *       404:
+ *         description: Session not found
+ *       401:
+ *         description: Authentication required
+ */
+router.post('/unsubscribe', async (req, res) => {
+  await sseManager.handleUnsubscribeRequest(req, res);
+});
 
 export default router;

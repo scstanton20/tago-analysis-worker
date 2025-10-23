@@ -53,6 +53,9 @@ export function useSSE() {
       hasInitialData: connection.hasInitialData,
       serverShutdown: connection.serverShutdown,
       requestStatusUpdate: connection.requestStatusUpdate,
+      sessionId: connection.sessionId,
+      subscribeToAnalysis: connection.subscribeToAnalysis,
+      unsubscribeFromAnalysis: connection.unsubscribeFromAnalysis,
 
       // Backend state
       backendStatus: backend.backendStatus,

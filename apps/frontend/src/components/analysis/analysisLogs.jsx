@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useMountedRef } from '../../hooks/useMountedRef';
 import { useAutoScroll } from '../../hooks/useAutoScroll';
+import { useSSE } from '../../contexts/sseContext';
 import { analysisService } from '../../services/analysisService';
 import logger from '../../utils/logger';
 import {
@@ -21,6 +22,7 @@ import {
 const LOGS_PER_PAGE = 100;
 
 const AnalysisLogs = ({ analysis }) => {
+  const { subscribeToAnalysis, unsubscribeFromAnalysis, sessionId } = useSSE();
   const [height, setHeight] = useState(384);
   const [isResizing, setIsResizing] = useState(false);
   const [initialLogs, setInitialLogs] = useState([]);
@@ -74,6 +76,19 @@ const AnalysisLogs = ({ analysis }) => {
       }
     }
   }, [analysis.name, isMountedRef]);
+
+  // Subscribe to analysis log channel when component mounts
+  useEffect(() => {
+    if (!sessionId || !analysis.name) {
+      return;
+    }
+
+    subscribeToAnalysis([analysis.name]);
+
+    return () => {
+      unsubscribeFromAnalysis([analysis.name]);
+    };
+  }, [analysis.name, sessionId, subscribeToAnalysis, unsubscribeFromAnalysis]);
 
   // Load initial logs on mount or analysis change
   useEffect(() => {

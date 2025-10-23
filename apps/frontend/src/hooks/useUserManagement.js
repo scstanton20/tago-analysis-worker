@@ -77,6 +77,17 @@ export function useUserManagement({
     },
     validate: {
       name: (value) => (!value ? 'Name is required' : null),
+      role: (value) => (!value ? 'Role is required' : null),
+      departmentPermissions: (value, values) => {
+        // Only validate team selection for 'user' role during creation
+        if (values.role === 'user' && !editingUser) {
+          const hasTeams = Object.values(value).some((dept) => dept.enabled);
+          if (!hasTeams) {
+            return 'At least one team must be selected for users with the User role';
+          }
+        }
+        return null;
+      },
     },
   });
 
@@ -388,11 +399,11 @@ export function useUserManagement({
                     ? `User permissions updated successfully for ${assignedTeams} team${assignedTeams !== 1 ? 's' : ''}.`
                     : 'User access to all teams has been removed.';
 
-                notify.showNotification({
-                  title: 'Permissions Updated',
-                  message,
-                  color: assignedTeams > 0 ? 'blue' : 'orange',
-                });
+                if (assignedTeams > 0) {
+                  notify.success(message, 'Permissions Updated');
+                } else {
+                  notify.warning(message, 'Permissions Updated');
+                }
               } catch (teamError) {
                 logger.warn('Failed to update team assignments:', teamError);
               }
@@ -402,11 +413,7 @@ export function useUserManagement({
           }
 
           if (needsUpdate) {
-            notify.showNotification({
-              title: 'Success',
-              message: `User ${values.name} updated successfully.`,
-              color: 'green',
-            });
+            notify.success(`User ${values.name} updated successfully.`);
 
             if (editingUser.id === currentUser?.id) {
               logger.log('Refreshing current user data after update');
@@ -535,11 +542,7 @@ export function useUserManagement({
             }
           }
 
-          notify.showNotification({
-            title: 'Success',
-            message: `User ${values.name} created successfully.`,
-            color: 'green',
-          });
+          notify.success(`User ${values.name} created successfully.`);
 
           setCreatedUserInfo({
             name: values.name,
@@ -649,11 +652,7 @@ export function useUserManagement({
         // Note: SSE connections are automatically closed by the backend
         // afterRemoveMember hook, so no need to call forceLogout separately
 
-        notify.showNotification({
-          title: 'Success',
-          message: `User ${user.name || user.email} deleted successfully.`,
-          color: 'green',
-        });
+        notify.success(`User ${user.name || user.email} deleted successfully.`);
 
         await loadUsers();
       } catch (err) {
@@ -687,11 +686,7 @@ export function useUserManagement({
           throw new Error(result.error.message);
         }
 
-        notify.showNotification({
-          title: 'Success',
-          message: `Now impersonating ${user.name || user.email}`,
-          color: 'blue',
-        });
+        notify.info(`Now impersonating ${user.name || user.email}`, 'Success');
 
         // Refetch session to get updated user from Better Auth
         // This will trigger PermissionsContext to auto-reload permissions via useEffect
@@ -746,11 +741,10 @@ export function useUserManagement({
           // Continue even if force logout fails
         }
 
-        notify.showNotification({
-          title: 'Success',
-          message: `User ${user.name || user.email} has been banned`,
-          color: 'orange',
-        });
+        notify.warning(
+          `User ${user.name || user.email} has been banned`,
+          'Success',
+        );
 
         await loadUsers();
       } catch (err) {
@@ -759,7 +753,7 @@ export function useUserManagement({
         setLoading(false);
       }
     },
-    [notify, loadUsers],
+    [loadUsers, notify],
   );
 
   const handleUnbanUser = useCallback(
@@ -775,11 +769,7 @@ export function useUserManagement({
           throw new Error(result.error.message);
         }
 
-        notify.showNotification({
-          title: 'Success',
-          message: `User ${user.name || user.email} has been unbanned`,
-          color: 'green',
-        });
+        notify.success(`User ${user.name || user.email} has been unbanned`);
 
         await loadUsers();
       } catch (err) {

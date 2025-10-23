@@ -1,10 +1,9 @@
 // frontend/src/contexts/sseContext/teams/provider.jsx
 import { useState, useCallback, useMemo } from 'react';
 import PropTypes from 'prop-types';
-import { notifications } from '@mantine/notifications';
-import { IconLoader } from '@tabler/icons-react';
 import { SSETeamsContext } from './context';
 import logger from '../../../utils/logger';
+import { showInfo } from '../../../utils/notificationService.jsx';
 
 export function SSETeamsProvider({ children }) {
   const [teams, setTeams] = useState({});
@@ -92,13 +91,7 @@ export function SSETeamsProvider({ children }) {
   const handleUserTeamsUpdated = useCallback((data) => {
     // Show notification to user about team changes
     if (data.data?.showNotification && data.data?.message) {
-      notifications.show({
-        title: 'Team Access Updated',
-        message: data.data.message,
-        icon: <IconLoader size={16} />,
-        color: 'blue',
-        autoClose: 5000,
-      });
+      showInfo(data.data.message, 'Team Access Updated', 5000);
     }
 
     // Note: Backend already sends a fresh 'init' message after team updates

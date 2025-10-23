@@ -7,7 +7,7 @@
 import { useState, useCallback } from 'react';
 import { Text } from '@mantine/core';
 import { modals } from '@mantine/modals';
-import { notifications } from '@mantine/notifications';
+import { useNotifications } from './useNotifications';
 import logger from '../utils/logger';
 import teamService from '../services/teamService';
 
@@ -20,6 +20,7 @@ import teamService from '../services/teamService';
  * @returns {Object} State and handlers
  */
 export function useAnalysisListState({ analysesArray, getTeam, selectedTeam }) {
+  const notify = useNotifications();
   const [openLogIds, setOpenLogIds] = useState(new Set());
   const [folderModalOpen, setFolderModalOpen] = useState(false);
   const [renameModalOpen, setRenameModalOpen] = useState(false);
@@ -125,17 +126,9 @@ export function useAnalysisListState({ analysesArray, getTeam, selectedTeam }) {
             onConfirm: async () => {
               try {
                 await teamService.deleteFolder(selectedTeam, folder.id);
-                notifications.show({
-                  title: 'Success',
-                  message: `Folder "${folder.name}" deleted`,
-                  color: 'green',
-                });
+                notify.success(`Folder "${folder.name}" deleted`);
               } catch (error) {
-                notifications.show({
-                  title: 'Error',
-                  message: error.message || 'Failed to delete folder',
-                  color: 'red',
-                });
+                notify.error(error.message || 'Failed to delete folder');
               }
             },
           });
@@ -145,7 +138,7 @@ export function useAnalysisListState({ analysesArray, getTeam, selectedTeam }) {
           logger.warn('Unknown folder action:', action);
       }
     },
-    [selectedTeam, handleCreateFolder],
+    [selectedTeam, handleCreateFolder, notify],
   );
 
   return {

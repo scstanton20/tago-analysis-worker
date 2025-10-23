@@ -1,10 +1,13 @@
 // frontend/src/contexts/sseContext/analyses/provider.jsx
 import { useState, useCallback, useRef, useMemo } from 'react';
 import PropTypes from 'prop-types';
-import { notifications } from '@mantine/notifications';
-import { IconCheck, IconX, IconLoader } from '@tabler/icons-react';
 import { SSEAnalysesContext } from './context';
 import logger from '../../../utils/logger';
+import {
+  showSuccess,
+  showError,
+  showInfo,
+} from '../../../utils/notificationService.jsx';
 
 export function SSEAnalysesProvider({ children }) {
   const [analyses, setAnalyses] = useState({});
@@ -98,36 +101,22 @@ export function SSEAnalysesProvider({ children }) {
 
         // Show notifications for status changes
         if (data.update.status === 'running') {
-          notifications.show({
-            title: 'Started',
-            message: `${data.analysisName} is now running`,
-            icon: <IconCheck size={16} />,
-            color: 'green',
-            autoClose: 3000,
-          });
+          showSuccess(`${data.analysisName} is now running`, 'Started', 3000);
         } else if (
           data.update.status === 'stopped' &&
           data.update.exitCode !== undefined
         ) {
           // Analysis stopped
           if (data.update.exitCode === 0) {
-            // Normal exit
-            notifications.show({
-              title: 'Stopped',
-              message: `${data.analysisName} stopped`,
-              icon: <IconLoader size={16} />,
-              color: 'blue',
-              autoClose: 3000,
-            });
+            // Normal exit - use info notification with X icon for stopped
+            showInfo(`${data.analysisName} stopped`, 'Stopped', 3000);
           } else {
             // Error exit
-            notifications.show({
-              title: 'Failed',
-              message: `${data.analysisName} exited with code ${data.update.exitCode}`,
-              icon: <IconX size={16} />,
-              color: 'red',
-              autoClose: 5000,
-            });
+            showError(
+              `${data.analysisName} exited with code ${data.update.exitCode}`,
+              'Failed',
+              5000,
+            );
           }
         }
       }

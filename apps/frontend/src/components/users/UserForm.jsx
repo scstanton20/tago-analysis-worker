@@ -112,6 +112,8 @@ export default function UserForm({
           label="Role"
           placeholder="Select role"
           required
+          clearable={false}
+          allowDeselect={false}
           disabled={
             isRootUser ||
             (editingUser?.id === currentUser?.id &&
@@ -154,6 +156,7 @@ export default function UserForm({
             departmentPermissions={form.values.departmentPermissions}
             onToggleDepartment={onToggleDepartment}
             onTogglePermission={onTogglePermission}
+            error={form.errors.departmentPermissions}
           />
         )}
 

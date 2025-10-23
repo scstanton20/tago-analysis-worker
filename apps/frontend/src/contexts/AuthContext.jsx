@@ -6,7 +6,7 @@ import {
   useEffect,
 } from 'react';
 import { useSession, signOut, authClient } from '../lib/auth.js';
-import { notifications } from '@mantine/notifications';
+import { showError, showInfo } from '../utils/notificationService';
 import { useEventListener } from '../hooks/useEventListener';
 import PasswordOnboarding from '../components/auth/passwordOnboarding.jsx';
 import { fetchWithHeaders, handleResponse } from '../utils/apiUtils.js';
@@ -86,12 +86,7 @@ export const AuthProvider = ({ children }) => {
     logger.log('Force logout event detected:', reason);
 
     // Show notification
-    notifications.show({
-      title: 'Session Terminated',
-      message: reason,
-      color: 'red',
-      autoClose: 5000,
-    });
+    await showError(reason, 'Session Terminated');
 
     // Sign out and reload
     try {
@@ -210,12 +205,10 @@ export const AuthProvider = ({ children }) => {
         }
 
         // Show notification that user must log back in
-        notifications.show({
-          title: 'Password Changed Successfully',
-          message: 'Your password has been changed. You must log back in.',
-          color: 'blue',
-          autoClose: 3000,
-        });
+        await showInfo(
+          'Your password has been changed. You must log back in.',
+          'Password Changed Successfully',
+        );
 
         await signOut();
 

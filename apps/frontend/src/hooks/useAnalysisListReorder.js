@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { notifications } from '@mantine/notifications';
+import { useNotifications } from './useNotifications';
 import logger from '../utils/logger';
 import teamService from '../services/teamService';
 import {
@@ -20,6 +20,7 @@ import {
  * @returns {Object} Reorder state and handlers
  */
 export function useAnalysisListReorder(selectedTeam, teamStructure) {
+  const notify = useNotifications();
   const [reorderMode, setReorderMode] = useState(false);
   const [pendingReorders, setPendingReorders] = useState([]);
   const [reorderModeKey, setReorderModeKey] = useState(0);
@@ -115,11 +116,7 @@ export function useAnalysisListReorder(selectedTeam, teamStructure) {
         );
       }
 
-      notifications.show({
-        title: 'Success',
-        message: 'Changes applied successfully',
-        color: 'green',
-      });
+      notify.success('Changes applied successfully');
 
       setPendingReorders([]);
       setPendingFolders([]);
@@ -128,13 +125,9 @@ export function useAnalysisListReorder(selectedTeam, teamStructure) {
       setLocalStructure(null);
     } catch (error) {
       logger.error('Failed to apply changes:', error);
-      notifications.show({
-        title: 'Error',
-        message: error.message || 'Failed to apply changes',
-        color: 'red',
-      });
+      notify.error(error.message || 'Failed to apply changes');
     }
-  }, [pendingReorders, pendingFolders, selectedTeam]);
+  }, [pendingReorders, pendingFolders, selectedTeam, notify]);
 
   /**
    * Enter reorder mode
