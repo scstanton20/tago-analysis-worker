@@ -39,8 +39,6 @@
  * @module sse
  */
 // backend/src/utils/sse.js
-import { auth } from '../lib/auth.js';
-import { fromNodeHeaders } from 'better-auth/node';
 import { createChildLogger } from './logging/logger.js';
 import { metricsService } from '../services/metricsService.js';
 import { createSession, createChannel } from 'better-sse';
@@ -1837,61 +1835,11 @@ class SSEManager {
 export const sseManager = new SSEManager();
 
 /**
- * Authentication middleware for SSE connections
- * Validates Better Auth session and attaches user to request
- *
- * @param {Object} req - Express request object
- * @param {Object} req.headers - HTTP headers containing session cookie
- * @param {Object} res - Express response object
- * @param {Function} next - Express next middleware function
- * @returns {Promise<void>}
- *
- * Authentication Flow:
- * 1. Extract session from Better Auth using request headers
- * 2. Validate session and user exist
- * 3. Attach user object to req.user
- * 4. Call next() to continue to SSE handler
- *
- * Security:
- * - Validates Better Auth session cookie
- * - Requires both session and user to exist
- * - Returns 401 if authentication fails
- *
- * Response on Failure:
- * - Status 401: Unauthorized
- * - JSON: { error: 'Authentication required' } or { error: 'Authentication failed' }
- *
- * Use with:
- * - app.get('/api/sse', authenticateSSE, handleSSEConnection)
- *
- * @throws {Object} 401 response if authentication fails
- */
-export async function authenticateSSE(req, res, next) {
-  try {
-    const session = await auth.api.getSession({
-      headers: fromNodeHeaders(req.headers),
-    });
-
-    if (!session?.session || !session?.user) {
-      logger.warn('SSE authentication failed: No valid session');
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-
-    // Attach user to request
-    Object.assign(req, { user: session.user });
-    next();
-  } catch (error) {
-    logger.error({ error: error.message }, 'SSE authentication failed');
-    return res.status(401).json({ error: 'Authentication failed' });
-  }
-}
-
-/**
  * SSE connection route handler
  * Establishes Server-Sent Events stream and manages connection lifecycle
  *
  * @param {Object} req - Express request object
- * @param {Object} req.user - Authenticated user (attached by authenticateSSE)
+ * @param {Object} req.user - Authenticated user
  * @param {string} req.user.id - User ID for connection tracking
  * @param {Object} res - Express response object
  * @returns {void}
@@ -1924,10 +1872,13 @@ export async function authenticateSSE(req, res, next) {
  * - Disconnect: Cleanup via 'close' event handler or stale connection cleanup
  *
  * Use with:
- * - app.get('/api/sse', authenticateSSE, handleSSEConnection)
+ * - app.get('/api/sse', handleSSEConnection)
  */
 export async function handleSSEConnection(req, res) {
   const session = await sseManager.addClient(req.user.id, res, req);
   await session.push({ type: 'connection', status: 'connected' });
   await sseManager.sendInitialData(session);
 }
+
+// DNS stats are now included in metricsUpdate broadcasts via metricsService.getAllMetrics()
+// No need for separate dnsStatsUpdate - clients receive DNS stats in the 'dns' field of metricsUpdate

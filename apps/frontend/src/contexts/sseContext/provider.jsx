@@ -635,6 +635,23 @@ export function SSEProvider({ children }) {
         processes: data.processes,
         timestamp: data.timestamp,
       });
+
+      // Extract and update backend status from consolidated metricsUpdate
+      if (data.container_health && data.tagoConnection) {
+        setBackendStatus({
+          container_health: data.container_health,
+          tagoConnection: data.tagoConnection,
+          serverTime: data.timestamp,
+        });
+      }
+
+      // Extract and update DNS stats from metricsUpdate (new unified approach)
+      if (data.dns) {
+        setDnsCache((prev) => ({
+          ...(prev || {}),
+          stats: data.dns,
+        }));
+      }
     }
   }, []);
 
@@ -672,7 +689,6 @@ export function SSEProvider({ children }) {
       dnsConfigUpdated: handleDnsConfigUpdated,
       dnsCacheCleared: handleDnsStatsUpdate,
       dnsStatsReset: handleDnsStatsUpdate,
-      dnsStatsUpdate: handleDnsStatsUpdate,
       metricsUpdate: handleMetricsUpdate,
     }),
     [

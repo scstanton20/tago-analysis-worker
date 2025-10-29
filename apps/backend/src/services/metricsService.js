@@ -357,11 +357,16 @@ class MetricsService {
         childrenMetrics,
       );
 
+      // Get DNS cache stats (no circular dependency - dnsCache doesn't import metrics)
+      const dnsCache = (await import('../services/dnsCache.js')).default;
+      const dnsStats = dnsCache.getStats();
+
       return {
         total: totalMetrics,
         container: containerMetrics,
         children: childrenMetrics,
         processes: processMetrics,
+        dns: dnsStats,
         timestamp: new Date().toISOString(),
       };
     } catch (error) {

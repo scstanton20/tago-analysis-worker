@@ -52,9 +52,8 @@ import { DNS_CACHE } from '../constants.js';
 const logger = createChildLogger('dns-cache');
 const DNS_CONFIG_FILE = path.join(config.paths.config, 'dns-cache-config.json');
 
-// Import SSE manager for broadcasting stats (lazy import to avoid circular dependency)
-let SSEManager = null;
-let sseManagerPromise = null;
+// DNS stats included in metrics SSE broadcasts via metricsService.getAllMetrics()
+// No circular dependency: metricsService dynamically imports dnsCache
 
 /**
  * DNS Cache Service class for caching DNS resolutions with SSRF protection
@@ -829,72 +828,28 @@ class DNSCacheService {
     logger.info('DNS cache stats reset');
   }
 
-  // Lazy import SSE manager to avoid circular dependency
-  async getSSEManager() {
-    if (SSEManager) {
-      return SSEManager;
-    }
-
-    if (sseManagerPromise) {
-      await sseManagerPromise;
-      return SSEManager;
-    }
-
-    sseManagerPromise = (async () => {
-      const { sseManager } = await import('../utils/sse.js');
-      SSEManager = sseManager;
-      sseManagerPromise = null; // Clear the promise after successful load
-      return SSEManager;
-    })();
-
-    await sseManagerPromise;
-    return SSEManager;
-  }
-
-  // Check if stats have changed significantly and broadcast if needed
-  async checkAndBroadcastStats() {
+  // Stats are included in metricsService.getAllMetrics() and broadcast via metricsUpdate SSE
+  // No need for event emission - metrics system polls getStats() periodically
+  updateStatsSnapshot() {
     const currentStats = this.getStats();
-    const lastStats = this.lastStatsSnapshot;
-
-    // Check if stats changed significantly
-    const hitsChanged = currentStats.hits !== lastStats.hits;
-    const missesChanged = currentStats.misses !== lastStats.misses;
-    const errorsChanged = currentStats.errors !== lastStats.errors;
-    const sizeChanged = currentStats.cacheSize !== lastStats.cacheSize;
-
-    if (hitsChanged || missesChanged || errorsChanged || sizeChanged) {
-      try {
-        const sse = await this.getSSEManager();
-        sse.broadcastToAdminUsers({
-          type: 'dnsStatsUpdate',
-          data: {
-            stats: currentStats,
-          },
-        });
-
-        // Update snapshot
-        this.lastStatsSnapshot = {
-          hits: currentStats.hits,
-          misses: currentStats.misses,
-          errors: currentStats.errors,
-          evictions: currentStats.evictions,
-          cacheSize: currentStats.cacheSize,
-        };
-      } catch (error) {
-        logger.error({ err: error }, 'Failed to broadcast DNS stats update');
-      }
-    }
+    this.lastStatsSnapshot = {
+      hits: currentStats.hits,
+      misses: currentStats.misses,
+      errors: currentStats.errors,
+      evictions: currentStats.evictions,
+      cacheSize: currentStats.cacheSize,
+    };
   }
 
-  // Start periodic stats broadcasting
+  // Start periodic stats snapshot updates (no SSE broadcasting)
   startStatsBroadcasting() {
     if (this.statsBroadcastTimer) {
       clearInterval(this.statsBroadcastTimer);
     }
 
-    // Broadcast stats periodically if they changed
+    // Update stats snapshot periodically
     this.statsBroadcastTimer = setInterval(() => {
-      this.checkAndBroadcastStats();
+      this.updateStatsSnapshot();
     }, DNS_CACHE.STATS_BROADCAST_INTERVAL_MS);
   }
 

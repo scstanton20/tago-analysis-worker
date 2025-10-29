@@ -761,139 +761,9 @@ describe('DNSCacheService', () => {
     });
   });
 
-  describe('checkAndBroadcastStats', () => {
-    it('should broadcast stats when hits changed', async () => {
-      const mockSSE = {
-        broadcastToAdminUsers: vi.fn(),
-      };
-
-      vi.spyOn(dnsCache, 'getSSEManager').mockResolvedValue(mockSSE);
-
-      dnsCache.stats.hits = 10;
-      dnsCache.lastStatsSnapshot.hits = 5;
-
-      await dnsCache.checkAndBroadcastStats();
-
-      expect(mockSSE.broadcastToAdminUsers).toHaveBeenCalledWith({
-        type: 'dnsStatsUpdate',
-        data: {
-          stats: expect.objectContaining({
-            hits: 10,
-          }),
-        },
-      });
-
-      expect(dnsCache.lastStatsSnapshot.hits).toBe(10);
-    });
-
-    it('should broadcast stats when misses changed', async () => {
-      const mockSSE = {
-        broadcastToAdminUsers: vi.fn(),
-      };
-
-      vi.spyOn(dnsCache, 'getSSEManager').mockResolvedValue(mockSSE);
-
-      dnsCache.stats.misses = 20;
-      dnsCache.lastStatsSnapshot.misses = 10;
-
-      await dnsCache.checkAndBroadcastStats();
-
-      expect(mockSSE.broadcastToAdminUsers).toHaveBeenCalled();
-      expect(dnsCache.lastStatsSnapshot.misses).toBe(20);
-    });
-
-    it('should broadcast stats when errors changed', async () => {
-      const mockSSE = {
-        broadcastToAdminUsers: vi.fn(),
-      };
-
-      vi.spyOn(dnsCache, 'getSSEManager').mockResolvedValue(mockSSE);
-
-      dnsCache.stats.errors = 5;
-      dnsCache.lastStatsSnapshot.errors = 2;
-
-      await dnsCache.checkAndBroadcastStats();
-
-      expect(mockSSE.broadcastToAdminUsers).toHaveBeenCalled();
-      expect(dnsCache.lastStatsSnapshot.errors).toBe(5);
-    });
-
-    it('should broadcast stats when cache size changed', async () => {
-      const mockSSE = {
-        broadcastToAdminUsers: vi.fn(),
-      };
-
-      vi.spyOn(dnsCache, 'getSSEManager').mockResolvedValue(mockSSE);
-
-      dnsCache.addToCache('key1', { value: 1 });
-      dnsCache.addToCache('key2', { value: 2 });
-      dnsCache.lastStatsSnapshot.cacheSize = 0;
-
-      await dnsCache.checkAndBroadcastStats();
-
-      expect(mockSSE.broadcastToAdminUsers).toHaveBeenCalled();
-      expect(dnsCache.lastStatsSnapshot.cacheSize).toBe(2);
-    });
-
-    it('should not broadcast when stats unchanged', async () => {
-      const mockSSE = {
-        broadcastToAdminUsers: vi.fn(),
-      };
-
-      vi.spyOn(dnsCache, 'getSSEManager').mockResolvedValue(mockSSE);
-
-      // Set current stats to match snapshot
-      dnsCache.stats.hits = 10;
-      dnsCache.stats.misses = 5;
-      dnsCache.stats.errors = 2;
-      dnsCache.lastStatsSnapshot = {
-        hits: 10,
-        misses: 5,
-        errors: 2,
-        evictions: 0,
-        cacheSize: 0,
-      };
-
-      await dnsCache.checkAndBroadcastStats();
-
-      expect(mockSSE.broadcastToAdminUsers).not.toHaveBeenCalled();
-    });
-
-    it('should handle broadcast errors gracefully', async () => {
-      const mockSSE = {
-        broadcastToAdminUsers: vi
-          .fn()
-          .mockRejectedValue(new Error('Broadcast failed')),
-      };
-
-      vi.spyOn(dnsCache, 'getSSEManager').mockResolvedValue(mockSSE);
-
-      dnsCache.stats.hits = 10;
-      dnsCache.lastStatsSnapshot.hits = 5;
-
-      // Should not throw
-      await expect(dnsCache.checkAndBroadcastStats()).resolves.toBeUndefined();
-    });
-
-    it('should handle SSE manager import errors', async () => {
-      vi.spyOn(dnsCache, 'getSSEManager').mockRejectedValue(
-        new Error('Failed to import SSE manager'),
-      );
-
-      dnsCache.stats.hits = 10;
-      dnsCache.lastStatsSnapshot.hits = 5;
-
-      // Should not throw
-      await expect(dnsCache.checkAndBroadcastStats()).resolves.toBeUndefined();
-    });
-
-    it('should update all snapshot fields after broadcast', async () => {
-      const mockSSE = {
-        broadcastToAdminUsers: vi.fn(),
-      };
-
-      vi.spyOn(dnsCache, 'getSSEManager').mockResolvedValue(mockSSE);
-
+  // Stats snapshot tests - DNS stats are broadcast via metricsUpdate SSE (not separate events)
+  describe('updateStatsSnapshot', () => {
+    it('should update snapshot with current stats', () => {
       dnsCache.stats = {
         hits: 100,
         misses: 50,
@@ -901,15 +771,8 @@ describe('DNSCacheService', () => {
         evictions: 5,
       };
       dnsCache.addToCache('key', { value: 1 });
-      dnsCache.lastStatsSnapshot = {
-        hits: 0,
-        misses: 0,
-        errors: 0,
-        evictions: 0,
-        cacheSize: 0,
-      };
 
-      await dnsCache.checkAndBroadcastStats();
+      dnsCache.updateStatsSnapshot();
 
       expect(dnsCache.lastStatsSnapshot).toEqual({
         hits: 100,
@@ -918,6 +781,20 @@ describe('DNSCacheService', () => {
         evictions: 5,
         cacheSize: 1,
       });
+    });
+
+    it('should update all snapshot fields', () => {
+      dnsCache.stats.hits = 42;
+      dnsCache.stats.misses = 13;
+      dnsCache.stats.errors = 3;
+      dnsCache.addToCache('test-key', { value: 'test' });
+
+      dnsCache.updateStatsSnapshot();
+
+      expect(dnsCache.lastStatsSnapshot.hits).toBe(42);
+      expect(dnsCache.lastStatsSnapshot.misses).toBe(13);
+      expect(dnsCache.lastStatsSnapshot.errors).toBe(3);
+      expect(dnsCache.lastStatsSnapshot.cacheSize).toBe(1);
     });
   });
 });

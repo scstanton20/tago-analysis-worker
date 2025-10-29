@@ -56,6 +56,14 @@ export function SSEBackendProvider({ children }) {
           serverTime: data.timestamp,
         });
       }
+
+      // Extract and update DNS stats from metricsUpdate (new unified approach)
+      if (data.dns) {
+        setDnsCache((prev) => ({
+          ...(prev || {}),
+          stats: data.dns,
+        }));
+      }
     }
   }, []);
 
@@ -71,7 +79,6 @@ export function SSEBackendProvider({ children }) {
           break;
         case 'dnsCacheCleared':
         case 'dnsStatsReset':
-        case 'dnsStatsUpdate':
           handleDnsStatsUpdate(data);
           break;
         case 'metricsUpdate':

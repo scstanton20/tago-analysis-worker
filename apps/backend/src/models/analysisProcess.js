@@ -1,4 +1,4 @@
-// Enhanced AnalysisProcess.js
+// AnalysisProcess.js
 import path from 'path';
 import { fork } from 'child_process';
 import {
@@ -8,12 +8,62 @@ import {
   safeReadFile,
 } from '../utils/safePath.js';
 import { fileURLToPath } from 'url';
-import { sseManager } from '../utils/sse.js';
 import config from '../config/default.js';
 import { createChildLogger } from '../utils/logging/logger.js';
 import pino from 'pino';
-import dnsCache from '../services/dnsCache.js';
 import { ANALYSIS_PROCESS } from '../constants.js';
+
+// Lazy-load sseManager to avoid circular dependency
+// analysisService -> AnalysisProcess -> sse -> analysisService
+// Uses promise pattern to prevent race conditions on concurrent calls
+let _sseManager = null;
+let _sseManagerPromise = null;
+async function getSseManager() {
+  if (_sseManager) {
+    return _sseManager;
+  }
+
+  if (_sseManagerPromise) {
+    await _sseManagerPromise;
+    return _sseManager;
+  }
+
+  _sseManagerPromise = (async () => {
+    const { sseManager } = await import('../utils/sse.js');
+    _sseManager = sseManager;
+    _sseManagerPromise = null;
+    return _sseManager;
+  })();
+
+  await _sseManagerPromise;
+  return _sseManager;
+}
+
+// Lazy-load dnsCache to avoid circular dependency
+// analysisService -> AnalysisProcess -> dnsCache -> sse -> analysisService
+// Uses promise pattern to prevent race conditions on concurrent calls
+let _dnsCache = null;
+let _dnsCachePromise = null;
+async function getDnsCache() {
+  if (_dnsCache) {
+    return _dnsCache;
+  }
+
+  if (_dnsCachePromise) {
+    await _dnsCachePromise;
+    return _dnsCache;
+  }
+
+  _dnsCachePromise = (async () => {
+    const { default: dnsCache } = await import('../services/dnsCache.js');
+    _dnsCache = dnsCache;
+    _dnsCachePromise = null;
+    return _dnsCache;
+  })();
+
+  await _dnsCachePromise;
+  return _dnsCache;
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -162,6 +212,7 @@ class AnalysisProcess {
     }
 
     // Use team-aware broadcasting for log messages
+    const sseManager = await getSseManager();
     sseManager.broadcastUpdate('log', {
       fileName: this.analysisName,
       analysis: this.analysisName,
@@ -288,6 +339,8 @@ class AnalysisProcess {
 
     // Listen for IPC messages from child process
     this.process.on('message', async (message) => {
+      const dnsCache = await getDnsCache();
+
       if (message.type === 'DNS_LOOKUP_REQUEST') {
         // Handle shared DNS lookup request
         const result = await dnsCache.handleDNSLookupRequest(
@@ -417,6 +470,7 @@ class AnalysisProcess {
       this.updateStatus('running', true);
 
       // Send SSE notification to frontend that analysis has started
+      const sseManager = await getSseManager();
       sseManager.broadcastAnalysisUpdate(this.analysisName, {
         type: 'analysisUpdate',
         analysisName: this.analysisName,
@@ -574,6 +628,7 @@ class AnalysisProcess {
 
     // Send SSE notification to frontend that analysis has stopped
     // Include timestamp to ensure each exit is treated as a unique event
+    const sseManager = await getSseManager();
     sseManager.broadcastAnalysisUpdate(this.analysisName, {
       type: 'analysisUpdate',
       analysisName: this.analysisName,

@@ -74,7 +74,6 @@ function MessageRouter({ children }) {
       case 'dnsConfigUpdated':
       case 'dnsCacheCleared':
       case 'dnsStatsReset':
-      case 'dnsStatsUpdate':
       case 'metricsUpdate':
         backendRef.current.handleMessage(data);
         break;

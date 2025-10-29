@@ -151,6 +151,7 @@ describe('SSE Channel-Based Subscription Management', () => {
 
     // Import SSE module once (don't reset modules - it breaks mocks for dynamic imports)
     if (!sse) {
+      // eslint-disable-next-line require-atomic-updates
       sse = await import('../../src/utils/sse.js');
     }
 
