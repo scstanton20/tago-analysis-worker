@@ -44,6 +44,9 @@ let httpsServer;
 const serverLogger = createChildLogger('server');
 const processLogger = createChildLogger('process-restart');
 
+// Test log to verify Loki is working
+serverLogger.info('Server module initialized - testing Loki logging');
+
 // Initialize container state
 sseManager.updateContainerState({
   status: 'starting',

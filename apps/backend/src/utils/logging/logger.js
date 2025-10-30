@@ -1,4 +1,5 @@
 import pino from 'pino';
+import { LokiTransport } from './lokiTransport.js';
 
 // Determine environment from NODE_ENV
 const env = process.env.NODE_ENV || 'development';
@@ -62,90 +63,7 @@ const serializers = {
   },
 };
 
-// Pino configuration based on environment
-const pinoConfig = {
-  level: process.env.LOG_LEVEL || (env === 'development' ? 'debug' : 'info'),
-  serializers,
-  formatters: {
-    level: (label) => ({ level: label.toUpperCase() }),
-    log: (object) => ({
-      ...object,
-      hostname: undefined, // Remove hostname for cleaner logs
-      pid: undefined, // Remove pid for cleaner logs
-    }),
-  },
-  timestamp: pino.stdTimeFunctions.isoTime,
-  base: {}, // Remove all base fields for cleaner logs
-};
-
-// Configure transports
-const transports = [];
-
-// Pretty printing for development
-if (env === 'development') {
-  const ignoreFields = ['pid', 'hostname'];
-
-  // Hide module and analysis fields from console unless LOG_INCLUDE_MODULE is true
-  if (process.env.LOG_INCLUDE_MODULE !== 'true') {
-    ignoreFields.push('module', 'analysis');
-  }
-
-  transports.push({
-    target: 'pino-pretty',
-    options: {
-      colorize: true,
-      translateTime: 'yyyy-mm-dd HH:MM:ss',
-      ignore: ignoreFields.join(','),
-      messageFormat: '{msg}',
-      errorLikeObjectKeys: ['err', 'error'],
-    },
-  });
-}
-
-// Grafana Loki transport (if configured)
-if (process.env.LOG_LOKI_URL) {
-  try {
-    transports.push({
-      target: 'pino-loki',
-      options: {
-        host: process.env.LOG_LOKI_URL,
-        basicAuth:
-          process.env.LOG_LOKI_USERNAME && process.env.LOG_LOKI_PASSWORD
-            ? {
-                username: process.env.LOG_LOKI_USERNAME,
-                password: process.env.LOG_LOKI_PASSWORD,
-              }
-            : undefined,
-        labels: {
-          application: 'tago-analysis-worker',
-          environment: env,
-          service: 'backend',
-          // Parse additional labels from LOG_LOKI_LABELS (format: key1=value1,key2=value2)
-          ...parseLokiLabels(process.env.LOG_LOKI_LABELS),
-        },
-        batching: process.env.LOG_LOKI_BATCHING !== 'false',
-        interval: parseInt(process.env.LOG_LOKI_INTERVAL || '5000'),
-        timeout: parseInt(process.env.LOG_LOKI_TIMEOUT || '30000'),
-      },
-    });
-    console.log('✓ Grafana Loki logging transport configured');
-  } catch (error) {
-    console.error('⚠️ Loki transport configuration error:', error.message);
-  }
-}
-
-// Apply transports to pino config
-if (transports.length > 0) {
-  if (transports.length === 1) {
-    pinoConfig.transport = transports[0];
-  } else {
-    pinoConfig.transport = {
-      targets: transports,
-    };
-  }
-}
-
-// Helper function to parse Loki labels
+// Helper function to parse Loki labels (moved up to be available earlier)
 function parseLokiLabels(labelString) {
   if (!labelString) return {};
 
@@ -164,8 +82,83 @@ function parseLokiLabels(labelString) {
   }
 }
 
-// Create the main logger
-const logger = pino(pinoConfig);
+// Configure streams for multistream
+const streams = [];
+
+// Console output
+if (env === 'development' && !process.env.LOG_LOKI_URL) {
+  // Pretty printing for development (only when Loki is not configured)
+  const ignoreFields = ['pid', 'hostname'];
+  if (process.env.LOG_INCLUDE_MODULE !== 'true') {
+    ignoreFields.push('module', 'analysis');
+  }
+
+  streams.push({
+    level: process.env.LOG_LEVEL || 'debug',
+    stream: pino.transport({
+      target: 'pino-pretty',
+      options: {
+        colorize: true,
+        translateTime: 'yyyy-mm-dd HH:MM:ss',
+        ignore: ignoreFields.join(','),
+        messageFormat: '{msg}',
+        errorLikeObjectKeys: ['err', 'error'],
+      },
+    }),
+  });
+} else {
+  // Raw JSON to console when Loki is enabled or in production
+  streams.push({
+    level: process.env.LOG_LEVEL || (env === 'development' ? 'debug' : 'info'),
+    stream: process.stdout,
+  });
+}
+
+// Grafana Loki stream (if configured)
+if (process.env.LOG_LOKI_URL) {
+  try {
+    const lokiOptions = {
+      host: process.env.LOG_LOKI_URL,
+      basicAuth:
+        process.env.LOG_LOKI_USERNAME && process.env.LOG_LOKI_PASSWORD
+          ? {
+              username: process.env.LOG_LOKI_USERNAME,
+              password: process.env.LOG_LOKI_PASSWORD,
+            }
+          : undefined,
+      labels: {
+        application: 'tago-analysis-worker',
+        environment: env,
+        service: 'backend',
+        // Parse additional labels from LOG_LOKI_LABELS (format: key1=value1,key2=value2)
+        ...parseLokiLabels(process.env.LOG_LOKI_LABELS),
+      },
+      batching: false, // Send logs immediately without batching
+      timeout: parseInt(process.env.LOG_LOKI_TIMEOUT || '30000'),
+    };
+
+    streams.push({
+      level:
+        process.env.LOG_LEVEL || (env === 'development' ? 'debug' : 'info'),
+      stream: new LokiTransport(lokiOptions),
+    });
+
+    console.log('✓ Grafana Loki logging configured');
+  } catch (error) {
+    console.error('⚠️ Loki configuration error:', error.message);
+  }
+}
+
+// Create the main logger with multistream
+const logger = pino(
+  {
+    level: process.env.LOG_LEVEL || (env === 'development' ? 'debug' : 'info'),
+    serializers,
+    timestamp: pino.stdTimeFunctions.isoTime,
+    base: {}, // Remove all base fields for cleaner logs
+  },
+  pino.multistream(streams),
+);
 
 // Create child logger factory
 export const createChildLogger = (name, additionalContext = {}) => {
@@ -185,53 +178,65 @@ export const createAnalysisLogger = (analysisName, additionalContext = {}) => {
     ...additionalContext,
   };
 
-  // Create a dedicated logger for this analysis with file transport
-  const analysisTransports = [];
+  // Create streams for analysis logger using multistream
+  const analysisStreams = [];
 
-  // Include the same transports as the main logger
-  if (env === 'development') {
+  // Console output (raw JSON when Loki is enabled)
+  if (env === 'development' && !process.env.LOG_LOKI_URL) {
     const ignoreFields = ['pid', 'hostname'];
     if (process.env.LOG_INCLUDE_MODULE !== 'true') {
       ignoreFields.push('module', 'analysis');
     }
 
-    analysisTransports.push({
-      target: 'pino-pretty',
-      options: {
-        colorize: true,
-        translateTime: 'yyyy-mm-dd HH:MM:ss',
-        ignore: ignoreFields.join(','),
-        messageFormat: '{msg}',
-        errorLikeObjectKeys: ['err', 'error'],
-      },
+    analysisStreams.push({
+      level: process.env.LOG_LEVEL || 'debug',
+      stream: pino.transport({
+        target: 'pino-pretty',
+        options: {
+          colorize: true,
+          translateTime: 'yyyy-mm-dd HH:MM:ss',
+          ignore: ignoreFields.join(','),
+          messageFormat: '{msg}',
+          errorLikeObjectKeys: ['err', 'error'],
+        },
+      }),
+    });
+  } else {
+    // Raw JSON to console
+    analysisStreams.push({
+      level:
+        process.env.LOG_LEVEL || (env === 'development' ? 'debug' : 'info'),
+      stream: process.stdout,
     });
   }
 
-  // Add Loki transport if configured
+  // Add Loki stream if configured (using custom LokiTransport)
   if (process.env.LOG_LOKI_URL) {
     try {
-      analysisTransports.push({
-        target: 'pino-loki',
-        options: {
-          host: process.env.LOG_LOKI_URL,
-          basicAuth:
-            process.env.LOG_LOKI_USERNAME && process.env.LOG_LOKI_PASSWORD
-              ? {
-                  username: process.env.LOG_LOKI_USERNAME,
-                  password: process.env.LOG_LOKI_PASSWORD,
-                }
-              : undefined,
-          labels: {
-            application: 'tago-analysis-worker',
-            environment: env,
-            service: 'backend',
-            analysis: analysisName, // Add analysis name as Loki label
-            ...parseLokiLabels(process.env.LOG_LOKI_LABELS),
-          },
-          batching: process.env.LOG_LOKI_BATCHING !== 'false',
-          interval: parseInt(process.env.LOG_LOKI_INTERVAL || '5000'),
-          timeout: parseInt(process.env.LOG_LOKI_TIMEOUT || '30000'),
+      const lokiOptions = {
+        host: process.env.LOG_LOKI_URL,
+        basicAuth:
+          process.env.LOG_LOKI_USERNAME && process.env.LOG_LOKI_PASSWORD
+            ? {
+                username: process.env.LOG_LOKI_USERNAME,
+                password: process.env.LOG_LOKI_PASSWORD,
+              }
+            : undefined,
+        labels: {
+          application: 'tago-analysis-worker',
+          environment: env,
+          service: 'backend',
+          analysis: analysisName, // Add analysis name as Loki label
+          ...parseLokiLabels(process.env.LOG_LOKI_LABELS),
         },
+        batching: false, // Send logs immediately without batching
+        timeout: parseInt(process.env.LOG_LOKI_TIMEOUT || '30000'),
+      };
+
+      analysisStreams.push({
+        level:
+          process.env.LOG_LEVEL || (env === 'development' ? 'debug' : 'info'),
+        stream: new LokiTransport(lokiOptions),
       });
     } catch (error) {
       console.error(
@@ -241,39 +246,30 @@ export const createAnalysisLogger = (analysisName, additionalContext = {}) => {
     }
   }
 
-  // Add file transport for individual analysis log
+  // Add file stream for individual analysis log
   if (additionalContext.logFile) {
-    analysisTransports.push({
-      target: 'pino/file',
-      options: {
-        destination: additionalContext.logFile,
-        mkdir: true,
+    analysisStreams.push({
+      level:
+        process.env.LOG_LEVEL || (env === 'development' ? 'debug' : 'info'),
+      stream: pino.destination({
+        dest: additionalContext.logFile,
         sync: false, // Async for better performance
-      },
+        mkdir: true,
+      }),
     });
   }
 
-  // Create analysis-specific logger with its own transports
-  const analysisLogger = pino({
-    level: process.env.LOG_LEVEL || (env === 'development' ? 'debug' : 'info'),
-    serializers,
-    formatters: {
-      level: (label) => ({ level: label.toUpperCase() }),
-      log: (object) => ({
-        ...object,
-        hostname: undefined,
-        pid: undefined,
-      }),
+  // Create analysis-specific logger with multistream
+  const analysisLogger = pino(
+    {
+      level:
+        process.env.LOG_LEVEL || (env === 'development' ? 'debug' : 'info'),
+      serializers,
+      timestamp: pino.stdTimeFunctions.isoTime,
+      base: childContext,
     },
-    timestamp: pino.stdTimeFunctions.isoTime,
-    base: childContext,
-    transport:
-      analysisTransports.length === 1
-        ? analysisTransports[0]
-        : {
-            targets: analysisTransports,
-          },
-  });
+    pino.multistream(analysisStreams),
+  );
 
   return analysisLogger;
 };
