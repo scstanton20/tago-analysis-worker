@@ -30,17 +30,6 @@ export function useInterval(callback, delay, immediate = false) {
 }
 
 /**
- * Hook for polling data with automatic cleanup
- */
-export function usePolling(callback, interval = 30000, condition = true) {
-  useInterval(
-    callback,
-    condition ? interval : null,
-    false, // Don't run immediately for polling
-  );
-}
-
-/**
  * Hook for timeout with cleanup
  */
 export function useTimeout(callback, delay) {

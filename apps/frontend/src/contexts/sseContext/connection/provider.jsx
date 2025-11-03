@@ -1,11 +1,18 @@
 // frontend/src/contexts/sseContext/connection/provider.jsx
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import PropTypes from 'prop-types';
-import { SSEConnectionContext } from './context';
+import { createSSEContext } from '../utils/createSSEContext.js';
 import { useAuth } from '../../../hooks/useAuth';
 import logger from '../../../utils/logger';
 import { isDevelopment, API_URL } from '../../../config/env.js';
 import { showError } from '../../../utils/notificationService.jsx';
+
+// Create context locally for this provider
+const { Context: SSEConnectionContext, useContextHook: useConnection } =
+  createSSEContext('Connection');
+
+// Export both the Context and the hook for use in index.js
+export { SSEConnectionContext, useConnection };
 
 export function SSEConnectionProvider({ children, onMessage }) {
   const { isAuthenticated } = useAuth();

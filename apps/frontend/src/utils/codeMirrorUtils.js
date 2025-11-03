@@ -7,11 +7,10 @@ import { EditorView, lineNumbers, keymap } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
 import { linter } from '@codemirror/lint';
 import * as prettier from 'prettier';
-import prettierPluginBabel from 'prettier/plugins/babel';
-import prettierPluginEstree from 'prettier/plugins/estree';
 import { Linter } from 'eslint-linter-browserify';
 import { eslintConfig } from '../config/eslintConfig';
 import logger from './logger';
+import { PRETTIER_CONFIG } from './prettierConfig';
 
 /**
  * Custom read-only setup with line numbers and syntax highlighting
@@ -31,14 +30,7 @@ export const readOnlySetup = [
 export async function formatCode(view) {
   try {
     const code = view.state.doc.toString();
-    const formatted = await prettier.format(code, {
-      parser: 'babel',
-      plugins: [prettierPluginBabel, prettierPluginEstree],
-      semi: true,
-      singleQuote: true,
-      tabWidth: 2,
-      trailingComma: 'all',
-    });
+    const formatted = await prettier.format(code, PRETTIER_CONFIG);
 
     // Replace entire document with formatted code
     view.dispatch({
@@ -124,14 +116,7 @@ export async function checkFormatChanges(content) {
   if (!content) return false;
 
   try {
-    const formatted = await prettier.format(content, {
-      parser: 'babel',
-      plugins: [prettierPluginBabel, prettierPluginEstree],
-      semi: true,
-      singleQuote: true,
-      tabWidth: 2,
-      trailingComma: 'all',
-    });
+    const formatted = await prettier.format(content, PRETTIER_CONFIG);
 
     return formatted !== content;
   } catch {

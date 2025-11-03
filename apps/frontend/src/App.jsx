@@ -2,11 +2,12 @@
 import { useState, lazy, Suspense } from 'react';
 import { AppShell, Text, Burger, Group } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
-import { SSEProvider, useAnalyses, useConnection } from './contexts/sseContext';
+import { SSEProvider, useConnection } from './contexts/sseContext';
 import { CombinedAuthProvider } from './contexts/CombinedAuthProvider';
 import { PermissionsProvider } from './contexts/PermissionsContext/index.js';
 import { useAuth } from './hooks/useAuth';
 import { usePermissions } from './hooks/usePermissions';
+import { useFilteredAnalyses } from './hooks/useFilteredAnalyses';
 // Import core components directly to avoid context timing issues
 import TeamSidebar from './components/layout/teamSidebar';
 // Lazy load heavy components that make API calls
@@ -21,60 +22,17 @@ import ImpersonationBanner from './components/layout/impersonationBanner';
 import ThemeSelector from './components/ui/themeSelector';
 import ErrorBoundary from './components/ErrorBoundary';
 import AppLoadingOverlay from './components/common/AppLoadingOverlay';
-import ChunkLoadErrorBoundary from './components/common/ChunkLoadErrorBoundary';
 
 function AppContent() {
-  const { analyses } = useAnalyses();
   const { connectionStatus } = useConnection();
-  const { isAdmin } = useAuth();
-  const { canUploadToAnyTeam, isTeamMember } = usePermissions();
+  const { canUploadToAnyTeam } = usePermissions();
 
   const [selectedTeam, setSelectedTeam] = useState(null);
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure();
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
 
-  const getFilteredAnalyses = () => {
-    // For admins, show all analyses
-    if (isAdmin) {
-      if (!selectedTeam) {
-        return analyses;
-      }
-      // Filter by selected department only
-      const filteredAnalyses = {};
-      Object.entries(analyses).forEach(([name, analysis]) => {
-        if (analysis.teamId === selectedTeam) {
-          filteredAnalyses[name] = analysis;
-        }
-      });
-      return filteredAnalyses;
-    }
-
-    // For non-admin users, only show analyses from teams they have access to
-    const filteredAnalyses = {};
-    Object.entries(analyses).forEach(([name, analysis]) => {
-      // If a specific team is selected, filter by that team
-      if (selectedTeam) {
-        if (
-          analysis.teamId === selectedTeam ||
-          (selectedTeam === 'uncategorized' &&
-            (!analysis.teamId || analysis.teamId === 'uncategorized'))
-        ) {
-          filteredAnalyses[name] = analysis;
-        }
-      } else {
-        // For "All Analyses", only show analyses from teams user has access to
-        if (
-          // Analysis has no team (uncategorized) and user has access to uncategorized
-          (!analysis.teamId && isTeamMember('uncategorized')) ||
-          // Analysis has team and user is member of that team
-          (analysis.teamId && isTeamMember(analysis.teamId))
-        ) {
-          filteredAnalyses[name] = analysis;
-        }
-      }
-    });
-    return filteredAnalyses;
-  };
+  // Use custom hook for filtered analyses
+  const filteredAnalyses = useFilteredAnalyses(selectedTeam);
 
   const connectionFailed = connectionStatus === 'failed';
 
@@ -148,7 +106,7 @@ function AppContent() {
           }}
         >
           {canUploadToAnyTeam() && (
-            <ChunkLoadErrorBoundary componentName="Analysis Creator">
+            <ErrorBoundary variant="component" componentName="Analysis Creator">
               <Suspense
                 fallback={
                   <AppLoadingOverlay
@@ -167,9 +125,9 @@ function AppContent() {
               >
                 <AnalysisCreator targetTeam={selectedTeam} />
               </Suspense>
-            </ChunkLoadErrorBoundary>
+            </ErrorBoundary>
           )}
-          <ChunkLoadErrorBoundary componentName="Analysis List">
+          <ErrorBoundary variant="component" componentName="Analysis List">
             <Suspense
               fallback={
                 <AppLoadingOverlay
@@ -187,12 +145,12 @@ function AppContent() {
               }
             >
               <AnalysisList
-                analyses={getFilteredAnalyses()}
+                analyses={filteredAnalyses}
                 showTeamLabels={!selectedTeam}
                 selectedTeam={selectedTeam}
               />
             </Suspense>
-          </ChunkLoadErrorBoundary>
+          </ErrorBoundary>
         </AppShell.Main>
       </AppShell>
     </>
@@ -231,11 +189,11 @@ function AppRouter() {
 
   if (!isAuthenticated) {
     return (
-      <ChunkLoadErrorBoundary componentName="Login Page">
+      <ErrorBoundary variant="component" componentName="Login Page">
         <Suspense fallback={<AppLoadingOverlay message="Loading..." />}>
           <LoginPage />
         </Suspense>
-      </ChunkLoadErrorBoundary>
+      </ErrorBoundary>
     );
   }
 

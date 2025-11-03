@@ -1,5 +1,5 @@
 // frontend/src/components/teamSidebar.jsx
-import { useState, useMemo, useCallback, lazy, Suspense } from 'react';
+import { useState, lazy } from 'react';
 import PropTypes from 'prop-types';
 import {
   DndContext,
@@ -16,7 +16,8 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useConnection, useAnalyses } from '../../contexts/sseContext/index';
+import { useConnection } from '../../contexts/sseContext/index';
+import { useVisibleTeams } from '../../hooks/useVisibleTeams';
 import {
   Box,
   Stack,
@@ -45,8 +46,7 @@ import { teamService } from '../../services/teamService';
 import { useAuth } from '../../hooks/useAuth';
 import { usePermissions } from '../../hooks/usePermissions';
 import logger from '../../utils/logger';
-import AppLoadingOverlay from '../common/AppLoadingOverlay';
-import ChunkLoadErrorBoundary from '../common/ChunkLoadErrorBoundary';
+import LazyModal from '../common/LazyModal';
 
 // Sortable Team Item
 const SortableTeamItem = ({ team, isSelected, onClick, analysisCount }) => {
@@ -180,10 +180,12 @@ SortableTeamItem.propTypes = {
 
 // Main Team Sidebar Component
 export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
-  const { analyses } = useAnalyses();
   const { hasInitialData } = useConnection();
   const { user, logout, isAdmin } = useAuth();
-  const { getViewableTeams, isAdmin: hasAdminPerms } = usePermissions();
+  const { isAdmin: hasAdminPerms } = usePermissions();
+
+  // Use custom hook for visible teams and analysis counts
+  const { teamsArray, teamsObject, getTeamAnalysisCount } = useVisibleTeams();
 
   const [showManageModal, setShowManageModal] = useState(false);
   const [showUserModal, setShowUserModal] = useState(false);
@@ -191,42 +193,7 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
   const [draggedAnalysis, setDraggedAnalysis] = useState(null);
   const [activeTeamId, setActiveTeamId] = useState(null);
 
-  // Helper function to count analyses per team
-  const getTeamAnalysisCount = useCallback(
-    (teamId) => {
-      return Object.values(analyses).filter(
-        (analysis) => analysis.teamId === teamId,
-      ).length;
-    },
-    [analyses],
-  );
-
-  // Get viewable teams and filter based on business rules for sidebar display
-  const teamsArray = useMemo(() => {
-    const allTeams = getViewableTeams();
-
-    // Filter teams based on business rules
-    return allTeams.filter((team) => {
-      // Hide Uncategorized team if it has no analyses
-      if (team.isSystem && team.name === 'Uncategorized') {
-        return getTeamAnalysisCount(team.id) > 0;
-      }
-      return true;
-    });
-  }, [getViewableTeams, getTeamAnalysisCount]);
-
-  // Convert ALL teams to object format for TeamManagementModal
-  // Modal should show all teams including Uncategorized even when empty
-  const teamsObject = useMemo(() => {
-    const allTeams = getViewableTeams();
-    const obj = {};
-    allTeams.forEach((team) => {
-      obj[team.id] = team;
-    });
-    return obj;
-  }, [getViewableTeams]);
-
-  // Use the efficient count function from SSE hook
+  // Wrapper for analysis count (maintains API compatibility)
   const getAnalysisCount = (teamId) => {
     return getTeamAnalysisCount(teamId);
   };
@@ -442,51 +409,32 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
       </Box>
 
       {/* Team Management Modal */}
-      {showManageModal && (
-        <ChunkLoadErrorBoundary componentName="Team Management Modal">
-          <Suspense
-            fallback={
-              <AppLoadingOverlay message="Loading team management..." />
-            }
-          >
-            <TeamManagementModal
-              opened={showManageModal}
-              onClose={() => setShowManageModal(false)}
-              teams={teamsObject}
-            />
-          </Suspense>
-        </ChunkLoadErrorBoundary>
-      )}
+      <LazyModal
+        show={showManageModal}
+        onClose={() => setShowManageModal(false)}
+        Component={TeamManagementModal}
+        componentName="Team Management Modal"
+        loadingMessage="Loading team management..."
+        teams={teamsObject}
+      />
 
       {/* User Management Modal */}
-      {showUserModal && (
-        <ChunkLoadErrorBoundary componentName="User Management Modal">
-          <Suspense
-            fallback={
-              <AppLoadingOverlay message="Loading user management..." />
-            }
-          >
-            <UserManagementModal
-              opened={showUserModal}
-              onClose={() => setShowUserModal(false)}
-            />
-          </Suspense>
-        </ChunkLoadErrorBoundary>
-      )}
+      <LazyModal
+        show={showUserModal}
+        onClose={() => setShowUserModal(false)}
+        Component={UserManagementModal}
+        componentName="User Management Modal"
+        loadingMessage="Loading user management..."
+      />
 
       {/* Profile Modal */}
-      {showProfileModal && (
-        <ChunkLoadErrorBoundary componentName="Profile Modal">
-          <Suspense
-            fallback={<AppLoadingOverlay message="Loading profile..." />}
-          >
-            <ProfileModal
-              opened={showProfileModal}
-              onClose={() => setShowProfileModal(false)}
-            />
-          </Suspense>
-        </ChunkLoadErrorBoundary>
-      )}
+      <LazyModal
+        show={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+        Component={ProfileModal}
+        componentName="Profile Modal"
+        loadingMessage="Loading profile..."
+      />
     </Stack>
   );
 }

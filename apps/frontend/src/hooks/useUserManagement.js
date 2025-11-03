@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useForm } from '@mantine/form';
+import { modals } from '@mantine/modals';
 import { admin, authClient } from '../lib/auth';
 import { userService } from '../services/userService';
 import logger from '../utils/logger.js';
@@ -628,77 +629,82 @@ export function useUserManagement({
 
   const handleDelete = useCallback(
     async (user) => {
-      if (
-        !confirm(
-          `Are you sure you want to delete user "${user.name || user.email}"?`,
-        )
-      ) {
-        return;
-      }
+      modals.openConfirmModal({
+        title: 'Delete User',
+        children: `Are you sure you want to delete user "${user.name || user.email}"?`,
+        labels: { confirm: 'Delete', cancel: 'Cancel' },
+        confirmProps: { color: 'red' },
+        onConfirm: async () => {
+          try {
+            setLoading(true);
+            setError('');
 
-      try {
-        setLoading(true);
-        setError('');
+            const result = await userService.removeUserFromOrganization(
+              user.id,
+              organizationId,
+            );
 
-        const result = await userService.removeUserFromOrganization(
-          user.id,
-          organizationId,
-        );
+            if (result.error) {
+              throw new Error(result.error.message);
+            }
 
-        if (result.error) {
-          throw new Error(result.error.message);
-        }
+            // Note: SSE connections are automatically closed by the backend
+            // afterRemoveMember hook, so no need to call forceLogout separately
 
-        // Note: SSE connections are automatically closed by the backend
-        // afterRemoveMember hook, so no need to call forceLogout separately
+            notify.success(
+              `User ${user.name || user.email} deleted successfully.`,
+            );
 
-        notify.success(`User ${user.name || user.email} deleted successfully.`);
-
-        await loadUsers();
-      } catch (err) {
-        setError(err.message || 'Failed to delete user');
-      } finally {
-        setLoading(false);
-      }
+            await loadUsers();
+          } catch (err) {
+            setError(err.message || 'Failed to delete user');
+          } finally {
+            setLoading(false);
+          }
+        },
+      });
     },
-    [notify, loadUsers, organizationId],
+    [notify, loadUsers, organizationId, setLoading, setError],
   );
 
   const handleImpersonate = useCallback(
     async (user) => {
-      if (
-        !confirm(
-          `Are you sure you want to impersonate "${user.name || user.email}"? You will be logged in as this user.`,
-        )
-      ) {
-        return;
-      }
+      modals.openConfirmModal({
+        title: 'Impersonate User',
+        children: `Are you sure you want to impersonate "${user.name || user.email}"? You will be logged in as this user.`,
+        labels: { confirm: 'Impersonate', cancel: 'Cancel' },
+        confirmProps: { color: 'blue' },
+        onConfirm: async () => {
+          try {
+            setLoading(true);
+            setError('');
 
-      try {
-        setLoading(true);
-        setError('');
+            const result = await admin.impersonateUser({
+              userId: user.id,
+            });
 
-        const result = await admin.impersonateUser({
-          userId: user.id,
-        });
+            if (result.error) {
+              throw new Error(result.error.message);
+            }
 
-        if (result.error) {
-          throw new Error(result.error.message);
-        }
+            notify.info(
+              `Now impersonating ${user.name || user.email}`,
+              'Success',
+            );
 
-        notify.info(`Now impersonating ${user.name || user.email}`, 'Success');
-
-        // Refetch session to get updated user from Better Auth
-        // This will trigger PermissionsContext to auto-reload permissions via useEffect
-        await refetchSession();
-        logger.log('✓ Session refetched after impersonation start');
-      } catch (err) {
-        setError(err.message || 'Failed to impersonate user');
-      } finally {
-        setLoading(false);
-      }
+            // Refetch session to get updated user from Better Auth
+            // This will trigger PermissionsContext to auto-reload permissions via useEffect
+            await refetchSession();
+            logger.log('✓ Session refetched after impersonation start');
+          } catch (err) {
+            setError(err.message || 'Failed to impersonate user');
+          } finally {
+            setLoading(false);
+          }
+        },
+      });
     },
-    [refetchSession, notify],
+    [refetchSession, notify, setLoading, setError],
   );
 
   const handleManageSessions = useCallback((user) => {
@@ -708,50 +714,50 @@ export function useUserManagement({
 
   const handleBanUser = useCallback(
     async (user) => {
-      if (
-        !confirm(
-          `Are you sure you want to ban "${user.name || user.email}"? This will immediately log them out and prevent them from signing in.`,
-        )
-      ) {
-        return;
-      }
+      modals.openConfirmModal({
+        title: 'Ban User',
+        children: `Are you sure you want to ban "${user.name || user.email}"? This will immediately log them out and prevent them from signing in.`,
+        labels: { confirm: 'Ban User', cancel: 'Cancel' },
+        confirmProps: { color: 'red' },
+        onConfirm: async () => {
+          try {
+            setLoading(true);
+            setError('');
 
-      try {
-        setLoading(true);
-        setError('');
+            const result = await admin.banUser({
+              userId: user.id,
+              banReason: 'Banned by administrator',
+            });
 
-        const result = await admin.banUser({
-          userId: user.id,
-          banReason: 'Banned by administrator',
-        });
+            if (result.error) {
+              throw new Error(result.error.message);
+            }
 
-        if (result.error) {
-          throw new Error(result.error.message);
-        }
+            // Force logout the banned user
+            try {
+              await userService.forceLogout(
+                user.id,
+                'Your account has been banned by an administrator',
+              );
+              logger.log(`✓ Forced logout for banned user ${user.id}`);
+            } catch (logoutError) {
+              logger.warn('Failed to force logout banned user:', logoutError);
+              // Continue even if force logout fails
+            }
 
-        // Force logout the banned user
-        try {
-          await userService.forceLogout(
-            user.id,
-            'Your account has been banned by an administrator',
-          );
-          logger.log(`✓ Forced logout for banned user ${user.id}`);
-        } catch (logoutError) {
-          logger.warn('Failed to force logout banned user:', logoutError);
-          // Continue even if force logout fails
-        }
+            notify.warning(
+              `User ${user.name || user.email} has been banned`,
+              'Success',
+            );
 
-        notify.warning(
-          `User ${user.name || user.email} has been banned`,
-          'Success',
-        );
-
-        await loadUsers();
-      } catch (err) {
-        setError(err.message || 'Failed to ban user');
-      } finally {
-        setLoading(false);
-      }
+            await loadUsers();
+          } catch (err) {
+            setError(err.message || 'Failed to ban user');
+          } finally {
+            setLoading(false);
+          }
+        },
+      });
     },
     [loadUsers, notify],
   );

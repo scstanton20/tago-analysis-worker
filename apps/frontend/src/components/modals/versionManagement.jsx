@@ -29,7 +29,7 @@ import { analysisService } from '../../services/analysisService';
 import { useNotifications } from '../../hooks/useNotifications';
 import { useModalDataLoader } from '../../hooks/useModalDataLoader';
 import logger from '../../utils/logger';
-const AnalysisEditModal = lazy(() => import('../modals/codeMirrorCommon'));
+const AnalysisEditModal = lazy(() => import('./AnalysisEditModal.jsx'));
 
 export default function VersionManagementModal({
   isOpen,
@@ -142,6 +142,7 @@ export default function VersionManagementModal({
     <Modal
       opened={isOpen}
       onClose={onClose}
+      closeOnEscape={false}
       aria-labelledby="version-management-modal-title"
       title={
         <Group gap="sm">

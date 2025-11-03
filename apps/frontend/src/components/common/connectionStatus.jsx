@@ -13,8 +13,7 @@ import {
   Indicator,
 } from '@mantine/core';
 import { IconRefresh, IconSettings } from '@tabler/icons-react';
-import AppLoadingOverlay from '../common/AppLoadingOverlay';
-import ChunkLoadErrorBoundary from '../common/ChunkLoadErrorBoundary';
+import LazyModal from '../common/LazyModal';
 
 // Lazy load settings modal
 const SettingsModal = lazy(() => import('../modals/settingsModal'));
@@ -294,18 +293,13 @@ const ConnectionStatus = () => {
         </Popover.Dropdown>
       </Popover>
 
-      {settingsModalOpened && (
-        <ChunkLoadErrorBoundary componentName="Settings Modal">
-          <Suspense
-            fallback={<AppLoadingOverlay message="Loading settings..." />}
-          >
-            <SettingsModal
-              opened={settingsModalOpened}
-              onClose={() => setSettingsModalOpened(false)}
-            />
-          </Suspense>
-        </ChunkLoadErrorBoundary>
-      )}
+      <LazyModal
+        show={settingsModalOpened}
+        onClose={() => setSettingsModalOpened(false)}
+        Component={SettingsModal}
+        componentName="Settings Modal"
+        loadingMessage="Loading settings..."
+      />
     </>
   );
 };

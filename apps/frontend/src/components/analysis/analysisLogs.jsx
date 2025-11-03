@@ -3,7 +3,7 @@ import PropTypes from 'prop-types';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useMountedRef } from '../../hooks/useMountedRef';
 import { useAutoScroll } from '../../hooks/useAutoScroll';
-import { useSSE } from '../../contexts/sseContext';
+import { useConnection } from '../../contexts/sseContext';
 import { analysisService } from '../../services/analysisService';
 import logger from '../../utils/logger';
 import {
@@ -22,7 +22,8 @@ import {
 const LOGS_PER_PAGE = 100;
 
 const AnalysisLogs = ({ analysis }) => {
-  const { subscribeToAnalysis, unsubscribeFromAnalysis, sessionId } = useSSE();
+  const { subscribeToAnalysis, unsubscribeFromAnalysis, sessionId } =
+    useConnection();
   const [height, setHeight] = useState(384);
   const [isResizing, setIsResizing] = useState(false);
   const [initialLogs, setInitialLogs] = useState([]);

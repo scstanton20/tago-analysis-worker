@@ -14,6 +14,7 @@ import {
   LoadingOverlay,
   Box,
 } from '@mantine/core';
+import { modals } from '@mantine/modals';
 import {
   IconDeviceLaptop,
   IconDeviceMobile,
@@ -80,10 +81,18 @@ export default function UserSessionsModal({ opened, onClose, user }) {
   useModalDataLoader(opened, loadSessions, user);
 
   const handleRevokeSession = async (sessionToken) => {
-    if (!confirm('Are you sure you want to revoke this session?')) {
-      return;
-    }
+    modals.openConfirmModal({
+      title: 'Revoke Session',
+      children: 'Are you sure you want to revoke this session?',
+      labels: { confirm: 'Revoke', cancel: 'Cancel' },
+      confirmProps: { color: 'red' },
+      onConfirm: async () => {
+        await executeRevokeSession(sessionToken);
+      },
+    });
+  };
 
+  const executeRevokeSession = async (sessionToken) => {
     try {
       setLoading(true);
       setError('');
@@ -138,14 +147,18 @@ export default function UserSessionsModal({ opened, onClose, user }) {
   };
 
   const handleRevokeAllSessions = async () => {
-    if (
-      !confirm(
-        `Are you sure you want to revoke ALL sessions for ${user.name || user.email}? This will log them out of all devices.`,
-      )
-    ) {
-      return;
-    }
+    modals.openConfirmModal({
+      title: 'Revoke All Sessions',
+      children: `Are you sure you want to revoke ALL sessions for ${user.name || user.email}? This will log them out of all devices.`,
+      labels: { confirm: 'Revoke All', cancel: 'Cancel' },
+      confirmProps: { color: 'red' },
+      onConfirm: async () => {
+        await executeRevokeAllSessions();
+      },
+    });
+  };
 
+  const executeRevokeAllSessions = async () => {
     try {
       setLoading(true);
       setError('');
@@ -235,6 +248,7 @@ export default function UserSessionsModal({ opened, onClose, user }) {
     <Modal
       opened={opened}
       onClose={onClose}
+      closeOnEscape={false}
       aria-labelledby="user-sessions-modal-title"
       title={
         <Group gap="xs">

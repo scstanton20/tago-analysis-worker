@@ -8,6 +8,7 @@ import {
   hideNotification,
   showNotification,
 } from '../utils/notificationService.jsx';
+import { generateStandardPresets } from '../utils/notificationPresets.js';
 
 /**
  * Notification hook that provides notification utilities and promise-based operation helpers.
@@ -157,124 +158,9 @@ export const useNotifications = () => {
     }
   };
 
-  // Predefined notification presets for common operations
-  const presets = {
-    // Auth operations
-    login: (promise) =>
-      executeWithNotification(promise, {
-        loading: 'Signing in...',
-        success: 'Welcome back! You have been signed in successfully.',
-      }),
-
-    logout: (promise) =>
-      executeWithNotification(promise, {
-        loading: 'Signing out...',
-        success: 'You have been signed out successfully.',
-      }),
-
-    passwordChange: (promise) =>
-      executeWithNotification(promise, {
-        loading: 'Updating password...',
-        success: 'Password updated successfully.',
-      }),
-
-    profileUpdate: (promise) =>
-      executeWithNotification(promise, {
-        loading: 'Updating profile...',
-        success: 'Profile updated successfully.',
-      }),
-
-    // Analysis operations
-    uploadAnalysis: (promise, filename) =>
-      executeWithNotification(promise, {
-        loading: `Uploading ${filename}...`,
-        success: `${filename} uploaded successfully.`,
-      }),
-
-    runAnalysis: async (promise) => {
-      // Don't show success notification - SSE will handle actual start/fail notifications
-      // Just execute the promise and let errors bubble up
-      try {
-        const result = await promise;
-        return result;
-      } catch (err) {
-        // Show error notification only if API call fails
-        const { showError } = await import('../utils/notificationService.jsx');
-        await showError(err.message || 'Failed to start analysis');
-        throw err;
-      }
-    },
-
-    stopAnalysis: async (promise) => {
-      // Don't show success notification - SSE will handle actual stop notifications
-      // Just execute the promise and let errors bubble up
-      try {
-        const result = await promise;
-        return result;
-      } catch (err) {
-        // Show error notification only if API call fails
-        const { showError } = await import('../utils/notificationService.jsx');
-        await showError(err.message || 'Failed to stop analysis');
-        throw err;
-      }
-    },
-
-    updateAnalysis: (promise, analysisName) =>
-      executeWithNotification(promise, {
-        loading: `Updating ${analysisName}...`,
-        success: `${analysisName} updated successfully.`,
-      }),
-
-    deleteAnalysis: (promise, analysisName) =>
-      executeWithNotification(promise, {
-        loading: `Deleting ${analysisName}...`,
-        success: `${analysisName} deleted successfully.`,
-      }),
-
-    downloadAnalysis: (promise, analysisName) =>
-      executeWithNotification(promise, {
-        loading: `Downloading ${analysisName}...`,
-        success: `${analysisName} downloaded successfully.`,
-      }),
-
-    // Team operations
-    createTeam: (promise, teamName) =>
-      executeWithNotification(promise, {
-        loading: `Creating team ${teamName}...`,
-        success: `Team ${teamName} created successfully.`,
-      }),
-
-    updateTeam: (promise, teamName) =>
-      executeWithNotification(promise, {
-        loading: `Updating team ${teamName}...`,
-        success: `Team ${teamName} updated successfully.`,
-      }),
-
-    deleteTeam: (promise, teamName) =>
-      executeWithNotification(promise, {
-        loading: `Deleting team ${teamName}...`,
-        success: `Team ${teamName} deleted successfully.`,
-      }),
-
-    // Legacy department operations (for backward compatibility)
-    createDepartment: (promise, departmentName) =>
-      executeWithNotification(promise, {
-        loading: `Creating team ${departmentName}...`,
-        success: `Team ${departmentName} created successfully.`,
-      }),
-
-    updateDepartment: (promise, departmentName) =>
-      executeWithNotification(promise, {
-        loading: `Updating team ${departmentName}...`,
-        success: `Team ${departmentName} updated successfully.`,
-      }),
-
-    deleteDepartment: (promise, departmentName) =>
-      executeWithNotification(promise, {
-        loading: `Deleting team ${departmentName}...`,
-        success: `Team ${departmentName} deleted successfully.`,
-      }),
-  };
+  // Generate standard notification presets using factory functions
+  // This reduces code duplication and ensures consistency across operations
+  const presets = generateStandardPresets(executeWithNotification);
 
   // Fire-and-forget helper functions for simple notifications
   // These handle async internally and don't require await

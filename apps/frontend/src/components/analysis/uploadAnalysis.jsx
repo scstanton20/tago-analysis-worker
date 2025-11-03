@@ -6,7 +6,7 @@ import logger from '../../utils/logger';
 import { useAnalyses } from '../../contexts/sseContext/index';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import { usePermissions } from '../../hooks/usePermissions.js';
-import { CodeMirrorEditor } from '../modals/codeMirrorCommon';
+import { CodeMirrorEditor } from '../editor/CodeMirrorEditor.jsx';
 import {
   Paper,
   Stack,

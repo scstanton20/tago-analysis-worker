@@ -5,7 +5,6 @@
  */
 
 import { useState, useMemo, useRef, useCallback } from 'react';
-import { useKeyPress } from './useEventListener';
 import { teamService } from '../services/teamService';
 import { useNotifications } from './useNotifications.jsx';
 import logger from '../utils/logger';
@@ -22,23 +21,11 @@ export function useTeamManagement({ teams }) {
   const [editingId, setEditingId] = useState(null);
   const [editingName, setEditingName] = useState('');
   const [editingColor, setEditingColor] = useState('');
-  const [deletingId, setDeletingId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const notify = useNotifications();
 
-  // Refs for click outside functionality
+  // Ref for click outside functionality in edit mode
   const editingRef = useRef();
-  const deletingRef = useRef();
-
-  // Escape key handler for deleting mode
-  const handleEscape = useCallback(() => {
-    if (deletingId) {
-      setDeletingId(null);
-    }
-  }, [deletingId]);
-
-  // Only listen for escape when in deleting mode
-  useKeyPress('Escape', handleEscape);
 
   // Convert teams object to sorted array for display
   const teamsArray = useMemo(
@@ -178,6 +165,7 @@ export function useTeamManagement({ teams }) {
 
   /**
    * Delete a team
+   * Note: Confirmation is now handled by Mantine's modals.openConfirmModal()
    */
   const handleDelete = useCallback(
     async (id) => {
@@ -190,7 +178,6 @@ export function useTeamManagement({ teams }) {
           teamService.deleteTeam(id, 'uncategorized'),
           currentTeam?.name || 'team',
         );
-        setDeletingId(null);
       } catch (error) {
         logger.error('Error deleting team:', error);
       } finally {
@@ -228,7 +215,6 @@ export function useTeamManagement({ teams }) {
     setEditingId(null);
     setEditingName('');
     setEditingColor('');
-    setDeletingId(null);
   }, []);
 
   /**
@@ -259,8 +245,6 @@ export function useTeamManagement({ teams }) {
     setEditingName,
     editingColor,
     setEditingColor,
-    deletingId,
-    setDeletingId,
     isLoading,
 
     // Computed values
@@ -270,7 +254,6 @@ export function useTeamManagement({ teams }) {
 
     // Refs
     editingRef,
-    deletingRef,
 
     // Handlers
     handleCreateTeam,

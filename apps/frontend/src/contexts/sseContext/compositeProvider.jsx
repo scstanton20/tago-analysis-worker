@@ -1,13 +1,10 @@
 // frontend/src/contexts/sseContext/compositeProvider.jsx
 import { useCallback, useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
-import { SSEConnectionProvider } from './connection/index.js';
-import { SSEAnalysesProvider } from './analyses/index.js';
-import { SSETeamsProvider } from './teams/index.js';
-import { SSEBackendProvider } from './backend/index.js';
-import { useAnalyses } from './analyses/index.js';
-import { useTeams } from './teams/index.js';
-import { useBackend } from './backend/index.js';
+import { SSEConnectionProvider } from './connection/provider.jsx';
+import { SSEAnalysesProvider, useAnalyses } from './analyses/provider.jsx';
+import { SSETeamsProvider, useTeams } from './teams/provider.jsx';
+import { SSEBackendProvider, useBackend } from './backend/provider.jsx';
 import logger from '../../utils/logger.js';
 import { showSuccess } from '../../utils/notificationService.jsx';
 
@@ -116,13 +113,6 @@ function MessageRouter({ children }) {
         break;
     }
   }, []); // Empty dependencies - stable function that uses refs
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      analyses.cleanup();
-    };
-  }, [analyses]);
 
   return (
     <SSEConnectionProvider onMessage={handleMessage}>

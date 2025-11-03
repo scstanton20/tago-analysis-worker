@@ -1,7 +1,14 @@
 // frontend/src/contexts/sseContext/backend/provider.jsx
 import { useState, useCallback, useMemo } from 'react';
 import PropTypes from 'prop-types';
-import { SSEBackendContext } from './context';
+import { createSSEContext } from '../utils/createSSEContext.js';
+
+// Create context locally for this provider
+const { Context: SSEBackendContext, useContextHook: useBackend } =
+  createSSEContext('Backend');
+
+// Export both the Context and the hook for use in index.js
+export { SSEBackendContext, useBackend };
 
 export function SSEBackendProvider({ children }) {
   const [backendStatus, setBackendStatus] = useState(null);

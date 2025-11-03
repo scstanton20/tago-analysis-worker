@@ -111,6 +111,7 @@ export default function UserManagementModal({ opened, onClose }) {
     <Modal
       opened={opened}
       onClose={handleModalClose}
+      closeOnEscape={false}
       aria-labelledby="user-management-modal-title"
       title={
         <Group gap="xs" justify="space-between" style={{ width: '100%' }}>

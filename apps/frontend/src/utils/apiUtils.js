@@ -7,6 +7,13 @@ import logger from './logger';
 import { isDevelopment, API_URL } from '../config/env.js';
 
 /**
+ * WeakSet to track retried requests without mutating options objects
+ * Using WeakSet prevents memory leaks and allows garbage collection
+ * @private
+ */
+const retriedRequests = new WeakSet();
+
+/**
  * Get the base URL for API requests based on environment
  * @private
  * @returns {string} Base URL for API requests
@@ -151,10 +158,10 @@ export async function handleResponse(response, originalUrl, originalOptions) {
       response.status === 401 &&
       !originalUrl?.includes('/auth/refresh') &&
       !originalUrl?.includes('/auth/login') &&
-      !originalOptions?._retry
+      !retriedRequests.has(originalOptions)
     ) {
-      // Add retry flag to prevent infinite loops
-      originalOptions._retry = true;
+      // Track retried request to prevent infinite loops (without mutating options)
+      retriedRequests.add(originalOptions);
 
       // Check if we have a refresh token available (stored as httpOnly cookie)
       const hasRefreshToken =

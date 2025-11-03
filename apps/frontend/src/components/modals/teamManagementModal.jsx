@@ -18,6 +18,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { Box, Stack, Text, Modal, Divider } from '@mantine/core';
+import { modals } from '@mantine/modals';
 import { useTeamManagement } from '../../hooks/useTeamManagement';
 import { TeamCreateForm } from '../teams/TeamCreateForm';
 import { TeamListItem } from '../teams/TeamListItem';
@@ -35,14 +36,11 @@ export default function TeamManagementModal({ opened, onClose, teams }) {
     editingName,
     setEditingName,
     editingColor,
-    deletingId,
-    setDeletingId,
     isLoading,
     teamsArray,
     usedColors,
     usedNames,
     editingRef,
-    deletingRef,
     handleCreateTeam,
     handleUpdateName,
     handleColorClick,
@@ -55,6 +53,17 @@ export default function TeamManagementModal({ opened, onClose, teams }) {
   } = useTeamManagement({ teams });
 
   const notify = useNotifications();
+
+  // Handle delete with confirmation modal
+  const handleDeleteTeam = (team) => {
+    modals.openConfirmModal({
+      title: 'Delete Team',
+      children: `Are you sure you want to delete "${team.name}"? All analyses will be moved to Uncategorized.`,
+      labels: { confirm: 'Delete', cancel: 'Cancel' },
+      confirmProps: { color: 'red' },
+      onConfirm: () => handleDelete(team.id),
+    });
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -95,6 +104,7 @@ export default function TeamManagementModal({ opened, onClose, teams }) {
     <Modal
       opened={opened}
       onClose={handleModalClose}
+      closeOnEscape={false}
       title={
         <Text fw={600} id="team-management-modal-title">
           Manage Teams
@@ -141,7 +151,6 @@ export default function TeamManagementModal({ opened, onClose, teams }) {
                     editingName={editingName}
                     setEditingName={setEditingName}
                     editingColor={editingColor}
-                    deletingId={deletingId}
                     usedColors={usedColors}
                     isLoading={isLoading}
                     isNameInUse={isNameUsed(editingName, team.id)}
@@ -150,11 +159,8 @@ export default function TeamManagementModal({ opened, onClose, teams }) {
                     onUpdateName={handleUpdateName}
                     onStartEdit={startEditingColor}
                     onCancelEdit={cancelEditing}
-                    onStartDelete={setDeletingId}
-                    onCancelDelete={() => setDeletingId(null)}
-                    onConfirmDelete={handleDelete}
+                    onDelete={() => handleDeleteTeam(team)}
                     editingRef={editingRef}
-                    deletingRef={deletingRef}
                   />
                 ))}
               </Stack>

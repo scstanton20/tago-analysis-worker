@@ -1,13 +1,20 @@
 // frontend/src/contexts/sseContext/analyses/provider.jsx
 import { useState, useCallback, useRef, useMemo } from 'react';
 import PropTypes from 'prop-types';
-import { SSEAnalysesContext } from './context';
+import { createSSEContext } from '../utils/createSSEContext.js';
 import logger from '../../../utils/logger';
 import {
   showSuccess,
   showError,
   showInfo,
 } from '../../../utils/notificationService.jsx';
+
+// Create context locally for this provider
+const { Context: SSEAnalysesContext, useContextHook: useAnalyses } =
+  createSSEContext('Analyses');
+
+// Export both the Context and the hook for use in index.js
+export { SSEAnalysesContext, useAnalyses };
 
 export function SSEAnalysesProvider({ children }) {
   const [analyses, setAnalyses] = useState({});
@@ -410,11 +417,6 @@ export function SSEAnalysesProvider({ children }) {
     ],
   );
 
-  // Cleanup effect
-  const cleanup = useCallback(() => {
-    // No cleanup needed
-  }, []);
-
   const value = useMemo(
     () => ({
       analyses,
@@ -425,7 +427,6 @@ export function SSEAnalysesProvider({ children }) {
       getAnalysisNames,
       filterAnalyses,
       handleMessage,
-      cleanup,
     }),
     [
       analyses,
@@ -436,7 +437,6 @@ export function SSEAnalysesProvider({ children }) {
       getAnalysisNames,
       filterAnalyses,
       handleMessage,
-      cleanup,
     ],
   );
 

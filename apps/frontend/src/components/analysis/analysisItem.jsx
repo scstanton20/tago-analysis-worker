@@ -31,11 +31,10 @@ import { useNotifications } from '../../hooks/useNotifications.jsx';
 import AnalysisLogs from './analysisLogs';
 import StatusBadge from './statusBadge';
 import logger from '../../utils/logger';
-import AppLoadingOverlay from '../common/AppLoadingOverlay';
-import ChunkLoadErrorBoundary from '../common/ChunkLoadErrorBoundary';
+import LazyModal from '../common/LazyModal';
 
 // Lazy load all modal components
-const AnalysisEditModal = lazy(() => import('../modals/codeMirrorCommon'));
+const AnalysisEditModal = lazy(() => import('../modals/AnalysisEditModal.jsx'));
 const LogDownloadDialog = lazy(() => import('../modals/logDownload'));
 const TeamSelectModal = lazy(() => import('../modals/changeTeamModal'));
 const VersionManagementModal = lazy(
@@ -150,12 +149,10 @@ export default function AnalysisItem({
 
   const handleDownloadLogs = async (timeRange) => {
     try {
-      await notify.executeWithNotification(
+      await notify.downloadLogs(
         analysisService.downloadLogs(analysis.name, timeRange),
-        {
-          loading: `Downloading logs for ${analysis.name}...`,
-          success: 'Logs downloaded successfully.',
-        },
+        analysis.name,
+        timeRange,
       );
     } catch (error) {
       logger.error('Failed to download logs:', error);
@@ -170,12 +167,9 @@ export default function AnalysisItem({
       confirmProps: { color: 'red' },
       onConfirm: async () => {
         try {
-          await notify.executeWithNotification(
+          await notify.deleteLogs(
             analysisService.deleteLogs(analysis.name),
-            {
-              loading: `Deleting logs for ${analysis.name}...`,
-              success: 'All logs deleted successfully.',
-            },
+            analysis.name,
           );
 
           // SSE will automatically update the logs component with empty logs
@@ -188,12 +182,9 @@ export default function AnalysisItem({
 
   const handleDownloadAnalysis = async () => {
     try {
-      await notify.executeWithNotification(
+      await notify.downloadAnalysis(
         analysisService.downloadAnalysis(analysis.name),
-        {
-          loading: `Downloading ${analysis.name}...`,
-          success: 'Analysis file downloaded successfully.',
-        },
+        analysis.name,
       );
     } catch (error) {
       logger.error('Failed to download analysis:', error);
@@ -202,12 +193,13 @@ export default function AnalysisItem({
 
   const handleTeamChange = async (teamId) => {
     try {
-      await notify.executeWithNotification(
+      const targetTeam = teamsArray.find((t) => t.id === teamId);
+      const teamName = targetTeam?.name || 'selected team';
+
+      await notify.moveAnalysis(
         teamService.moveAnalysisToTeam(analysis.name, teamId),
-        {
-          loading: `Moving ${analysis.name} to team...`,
-          success: 'Analysis moved to team successfully.',
-        },
+        analysis.name,
+        teamName,
       );
       setShowTeamModal(false);
     } catch (error) {
@@ -464,77 +456,50 @@ export default function AnalysisItem({
       </Stack>
 
       {/* Edit Modal - Render if user can view analyses */}
-      {editModalType && canViewAnalyses(analysis) && (
-        <ChunkLoadErrorBoundary
+      {canViewAnalyses(analysis) && (
+        <LazyModal
+          show={!!editModalType}
+          onClose={() => setEditModalType(null)}
+          Component={AnalysisEditModal}
           componentName={
             editModalType === 'analysis'
               ? 'Analysis Editor'
               : 'Environment Editor'
           }
-        >
-          <Suspense
-            fallback={
-              <AppLoadingOverlay
-                message={`Loading ${editModalType === 'analysis' ? 'analysis editor' : 'environment editor'}...`}
-              />
-            }
-          >
-            <AnalysisEditModal
-              analysis={analysis}
-              onClose={() => setEditModalType(null)}
-              readOnly={!canEditAnalyses(analysis)}
-              type={editModalType}
-            />
-          </Suspense>
-        </ChunkLoadErrorBoundary>
+          loadingMessage={`Loading ${editModalType === 'analysis' ? 'analysis editor' : 'environment editor'}...`}
+          analysis={analysis}
+          readOnly={!canEditAnalyses(analysis)}
+          type={editModalType}
+        />
       )}
-      {showLogDownloadDialog && (
-        <ChunkLoadErrorBoundary componentName="Log Download Dialog">
-          <Suspense
-            fallback={
-              <AppLoadingOverlay message="Loading log download options..." />
-            }
-          >
-            <LogDownloadDialog
-              isOpen={showLogDownloadDialog}
-              onClose={() => setShowLogDownloadDialog(false)}
-              onDownload={handleDownloadLogs}
-            />
-          </Suspense>
-        </ChunkLoadErrorBoundary>
-      )}
-      {showTeamModal && (
-        <ChunkLoadErrorBoundary componentName="Team Selection Modal">
-          <Suspense
-            fallback={<AppLoadingOverlay message="Loading team selection..." />}
-          >
-            <TeamSelectModal
-              isOpen={showTeamModal}
-              onClose={() => setShowTeamModal(false)}
-              onSelect={handleTeamChange}
-              teams={teamsArray}
-              currentTeam={analysis.teamId || analysis.team}
-              analysisName={analysis.name}
-            />
-          </Suspense>
-        </ChunkLoadErrorBoundary>
-      )}
-      {showVersionModal && (
-        <ChunkLoadErrorBoundary componentName="Version History Modal">
-          <Suspense
-            fallback={
-              <AppLoadingOverlay message="Loading version history..." />
-            }
-          >
-            <VersionManagementModal
-              isOpen={showVersionModal}
-              onClose={() => setShowVersionModal(false)}
-              analysis={analysis}
-              onVersionRollback={handleVersionRollback}
-            />
-          </Suspense>
-        </ChunkLoadErrorBoundary>
-      )}
+      <LazyModal
+        show={showLogDownloadDialog}
+        onClose={() => setShowLogDownloadDialog(false)}
+        Component={LogDownloadDialog}
+        componentName="Log Download Dialog"
+        loadingMessage="Loading log download options..."
+        onDownload={handleDownloadLogs}
+      />
+      <LazyModal
+        show={showTeamModal}
+        onClose={() => setShowTeamModal(false)}
+        Component={TeamSelectModal}
+        componentName="Team Selection Modal"
+        loadingMessage="Loading team selection..."
+        onSelect={handleTeamChange}
+        teams={teamsArray}
+        currentTeam={analysis.teamId || analysis.team}
+        analysisName={analysis.name}
+      />
+      <LazyModal
+        show={showVersionModal}
+        onClose={() => setShowVersionModal(false)}
+        Component={VersionManagementModal}
+        componentName="Version History Modal"
+        loadingMessage="Loading version history..."
+        analysis={analysis}
+        onVersionRollback={handleVersionRollback}
+      />
     </Paper>
   );
 }
@@ -554,8 +519,4 @@ AnalysisItem.propTypes = {
   showLogs: PropTypes.bool.isRequired,
   onToggleLogs: PropTypes.func.isRequired,
   reorderMode: PropTypes.bool,
-  teamInfo: PropTypes.shape({
-    name: PropTypes.string,
-    color: PropTypes.string,
-  }),
 };

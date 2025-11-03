@@ -64,17 +64,19 @@ export function CodeMirrorEditor({
   useEffect(() => {
     if (!editorRef.current || viewRef.current) return;
 
-    // Determine theme based on current color scheme
-    const isDark =
+    // Get appropriate theme for CodeMirror (external library needs explicit theme objects)
+    const theme =
       colorScheme === 'dark' ||
       (colorScheme === 'auto' &&
-        window.matchMedia('(prefers-color-scheme: dark)').matches);
+        window.matchMedia('(prefers-color-scheme: dark)').matches)
+        ? vsCodeDark
+        : vsCodeLight;
 
     if (diffMode && originalContent) {
       // Create unified diff view (inline diff)
       const extensions = [
         readOnlySetup, // Use consistent read-only setup for diff views
-        isDark ? vsCodeDark : vsCodeLight,
+        theme,
         unifiedMergeView({
           original: value || '', // Current version as original
           mergeControls: false, // Disable accept/reject controls for read-only viewing
@@ -107,7 +109,7 @@ export function CodeMirrorEditor({
       // Create regular editor
       const extensions = [
         readOnlyRef.current ? readOnlySetup : basicSetup,
-        isDark ? vsCodeDark : vsCodeLight,
+        theme,
       ];
 
       // Add update listener for editable editors
@@ -181,10 +183,13 @@ export function CodeMirrorEditor({
   // Update theme when colorScheme changes
   useEffect(() => {
     if (viewRef.current) {
-      const isDark =
+      // Get appropriate theme for CodeMirror (external library needs explicit theme objects)
+      const theme =
         colorScheme === 'dark' ||
         (colorScheme === 'auto' &&
-          window.matchMedia('(prefers-color-scheme: dark)').matches);
+          window.matchMedia('(prefers-color-scheme: dark)').matches)
+          ? vsCodeDark
+          : vsCodeLight;
 
       // For theme changes, we need to recreate the editor with the new theme
       // This is the correct way to handle theme switching in CodeMirror 6
@@ -200,7 +205,7 @@ export function CodeMirrorEditor({
         // Recreate unified diff view
         const extensions = [
           readOnlySetup, // Use consistent read-only setup for diff views
-          isDark ? vsCodeDark : vsCodeLight,
+          theme,
           unifiedMergeView({
             original: currentContent || '', // Current version as original
             mergeControls: false, // Disable accept/reject controls
@@ -232,7 +237,7 @@ export function CodeMirrorEditor({
         // Recreate regular editor
         const extensions = [
           readOnlyRef.current ? readOnlySetup : basicSetup,
-          isDark ? vsCodeDark : vsCodeLight,
+          theme,
         ];
 
         // Add update listener for editable editors
@@ -289,16 +294,19 @@ export function CodeMirrorEditor({
         if (viewRef.current.state.doc.toString() !== value) {
           // Recreate the unified diff view with new content
           const parent = viewRef.current.dom.parentNode;
-          const isDark =
+          // Get appropriate theme for CodeMirror (external library needs explicit theme objects)
+          const theme =
             colorScheme === 'dark' ||
             (colorScheme === 'auto' &&
-              window.matchMedia('(prefers-color-scheme: dark)').matches);
+              window.matchMedia('(prefers-color-scheme: dark)').matches)
+              ? vsCodeDark
+              : vsCodeLight;
 
           viewRef.current.destroy();
 
           const extensions = [
             readOnlySetup, // Use consistent read-only setup for diff views
-            isDark ? vsCodeDark : vsCodeLight,
+            theme,
             unifiedMergeView({
               original: value || '', // Current version as original
               mergeControls: false, // Disable accept/reject controls

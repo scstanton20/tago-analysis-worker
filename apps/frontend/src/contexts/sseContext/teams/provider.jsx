@@ -1,9 +1,16 @@
 // frontend/src/contexts/sseContext/teams/provider.jsx
 import { useState, useCallback, useMemo } from 'react';
 import PropTypes from 'prop-types';
-import { SSETeamsContext } from './context';
+import { createSSEContext } from '../utils/createSSEContext.js';
 import logger from '../../../utils/logger';
 import { showInfo } from '../../../utils/notificationService.jsx';
+
+// Create context locally for this provider
+const { Context: SSETeamsContext, useContextHook: useTeams } =
+  createSSEContext('Teams');
+
+// Export both the Context and the hook for use in index.js
+export { SSETeamsContext, useTeams };
 
 export function SSETeamsProvider({ children }) {
   const [teams, setTeams] = useState({});

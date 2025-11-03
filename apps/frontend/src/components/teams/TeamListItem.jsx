@@ -182,64 +182,7 @@ TeamEditMode.propTypes = {
   editingRef: PropTypes.object,
 };
 
-/**
- * Team list item in delete confirmation mode
- */
-function TeamDeleteMode({
-  team,
-  isLoading,
-  onConfirmDelete,
-  onCancel,
-  deletingRef,
-}) {
-  return (
-    <Stack gap="sm" ref={deletingRef}>
-      <Group gap="sm" align="center">
-        <ColorSwatch color={team.color} size={20} />
-        <Text size="sm" style={{ flex: 1 }}>
-          {team.name}
-        </Text>
-      </Group>
-      <Paper p="sm" withBorder>
-        <Text size="sm" c="red.8" mb="sm">
-          Are you sure you want to delete this team? All analyses will be moved
-          to Uncategorized.
-        </Text>
-        <Group gap="xs">
-          <Button
-            size="xs"
-            color="red"
-            onClick={() => onConfirmDelete(team.id)}
-            loading={isLoading}
-            disabled={isLoading}
-          >
-            Delete
-          </Button>
-          <Button
-            size="xs"
-            variant="default"
-            onClick={onCancel}
-            disabled={isLoading}
-          >
-            Cancel
-          </Button>
-        </Group>
-      </Paper>
-    </Stack>
-  );
-}
-
-TeamDeleteMode.propTypes = {
-  team: PropTypes.shape({
-    id: PropTypes.string.isRequired,
-    name: PropTypes.string.isRequired,
-    color: PropTypes.string.isRequired,
-  }).isRequired,
-  isLoading: PropTypes.bool,
-  onConfirmDelete: PropTypes.func.isRequired,
-  onCancel: PropTypes.func.isRequired,
-  deletingRef: PropTypes.object,
-};
+// TeamDeleteMode removed - now using Mantine's modals.openConfirmModal()
 
 /**
  * Main team list item component that switches between modes
@@ -250,7 +193,6 @@ export function TeamListItem({
   editingName,
   setEditingName,
   editingColor,
-  deletingId,
   usedColors,
   isLoading,
   isNameInUse,
@@ -259,14 +201,10 @@ export function TeamListItem({
   onUpdateName,
   onStartEdit,
   onCancelEdit,
-  onStartDelete,
-  onCancelDelete,
-  onConfirmDelete,
+  onDelete,
   editingRef,
-  deletingRef,
 }) {
   const isEditing = editingId === team.id;
-  const isDeleting = deletingId === team.id;
 
   return (
     <Paper key={team.id} p="sm" withBorder>
@@ -285,20 +223,12 @@ export function TeamListItem({
           onCancel={onCancelEdit}
           editingRef={editingRef}
         />
-      ) : isDeleting ? (
-        <TeamDeleteMode
-          team={team}
-          isLoading={isLoading}
-          onConfirmDelete={onConfirmDelete}
-          onCancel={onCancelDelete}
-          deletingRef={deletingRef}
-        />
       ) : (
         <TeamDisplayMode
           team={team}
           isLoading={isLoading}
           onEdit={onStartEdit}
-          onDelete={onStartDelete}
+          onDelete={onDelete}
         />
       )}
     </Paper>
@@ -316,7 +246,6 @@ TeamListItem.propTypes = {
   editingName: PropTypes.string,
   setEditingName: PropTypes.func.isRequired,
   editingColor: PropTypes.string,
-  deletingId: PropTypes.string,
   usedColors: PropTypes.instanceOf(Set).isRequired,
   isLoading: PropTypes.bool,
   isNameInUse: PropTypes.bool,
@@ -325,9 +254,6 @@ TeamListItem.propTypes = {
   onUpdateName: PropTypes.func.isRequired,
   onStartEdit: PropTypes.func.isRequired,
   onCancelEdit: PropTypes.func.isRequired,
-  onStartDelete: PropTypes.func.isRequired,
-  onCancelDelete: PropTypes.func.isRequired,
-  onConfirmDelete: PropTypes.func.isRequired,
+  onDelete: PropTypes.func.isRequired,
   editingRef: PropTypes.object,
-  deletingRef: PropTypes.object,
 };

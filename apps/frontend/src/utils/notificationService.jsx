@@ -72,32 +72,73 @@ const getNotificationsAPI = async () => {
 };
 
 /**
+ * Configuration for different notification types
+ * @type {Object.<string, {iconName: string, color: string, defaultTitle: string, defaultAutoClose: number}>}
+ */
+const NOTIFICATION_CONFIGS = {
+  success: {
+    iconName: 'IconCheck',
+    color: 'green',
+    defaultTitle: 'Success',
+    defaultAutoClose: 4000,
+  },
+  error: {
+    iconName: 'IconX',
+    color: 'red',
+    defaultTitle: 'Error',
+    defaultAutoClose: 6000,
+  },
+  info: {
+    iconName: 'IconInfoCircle',
+    color: 'blue',
+    defaultTitle: 'Info',
+    defaultAutoClose: 4000,
+  },
+  warning: {
+    iconName: 'IconAlertTriangle',
+    color: 'orange',
+    defaultTitle: 'Warning',
+    defaultAutoClose: 5000,
+  },
+};
+
+/**
+ * Internal helper to show a typed notification
+ * @private
+ * @param {string} type - Notification type (success, error, info, warning)
+ * @param {string} message - The notification message
+ * @param {string} title - The notification title (optional, uses default if not provided)
+ * @param {number} autoClose - Auto close delay in ms (optional, uses default if not provided)
+ * @returns {Promise<string>} The notification ID
+ */
+const showTypedNotification = async (type, message, title, autoClose) => {
+  const config = NOTIFICATION_CONFIGS[type];
+  const notifications = await getNotificationsAPI();
+  const icons = await import('@tabler/icons-react');
+  const IconComponent = icons[config.iconName];
+
+  const id = `notification-${type}-${Date.now()}`;
+  notifications.show({
+    id,
+    title: title ?? config.defaultTitle,
+    message,
+    icon: <IconComponent size={16} />,
+    color: config.color,
+    autoClose: autoClose ?? config.defaultAutoClose,
+  });
+
+  return id;
+};
+
+/**
  * Display a success notification with a checkmark icon
  * @param {string} message - The notification message
  * @param {string} title - The notification title (default: 'Success')
  * @param {number} autoClose - Auto close delay in ms (default: 4000)
  * @returns {Promise<string>} The notification ID
  */
-export const showSuccess = async (
-  message,
-  title = 'Success',
-  autoClose = 4000,
-) => {
-  const notifications = await getNotificationsAPI();
-  const { IconCheck } = await import('@tabler/icons-react');
-
-  const id = `notification-success-${Date.now()}`;
-  notifications.show({
-    id,
-    title,
-    message,
-    icon: <IconCheck size={16} />,
-    color: 'green',
-    autoClose,
-  });
-
-  return id;
-};
+export const showSuccess = (message, title, autoClose) =>
+  showTypedNotification('success', message, title, autoClose);
 
 /**
  * Display an error notification with an X icon
@@ -106,22 +147,8 @@ export const showSuccess = async (
  * @param {number} autoClose - Auto close delay in ms (default: 6000)
  * @returns {Promise<string>} The notification ID
  */
-export const showError = async (message, title = 'Error', autoClose = 6000) => {
-  const notifications = await getNotificationsAPI();
-  const { IconX } = await import('@tabler/icons-react');
-
-  const id = `notification-error-${Date.now()}`;
-  notifications.show({
-    id,
-    title,
-    message,
-    icon: <IconX size={16} />,
-    color: 'red',
-    autoClose,
-  });
-
-  return id;
-};
+export const showError = (message, title, autoClose) =>
+  showTypedNotification('error', message, title, autoClose);
 
 /**
  * Display an info notification with an info circle icon
@@ -130,22 +157,8 @@ export const showError = async (message, title = 'Error', autoClose = 6000) => {
  * @param {number} autoClose - Auto close delay in ms (default: 4000)
  * @returns {Promise<string>} The notification ID
  */
-export const showInfo = async (message, title = 'Info', autoClose = 4000) => {
-  const notifications = await getNotificationsAPI();
-  const { IconInfoCircle } = await import('@tabler/icons-react');
-
-  const id = `notification-info-${Date.now()}`;
-  notifications.show({
-    id,
-    title,
-    message,
-    icon: <IconInfoCircle size={16} />,
-    color: 'blue',
-    autoClose,
-  });
-
-  return id;
-};
+export const showInfo = (message, title, autoClose) =>
+  showTypedNotification('info', message, title, autoClose);
 
 /**
  * Display a warning notification with a warning icon
@@ -154,26 +167,8 @@ export const showInfo = async (message, title = 'Info', autoClose = 4000) => {
  * @param {number} autoClose - Auto close delay in ms (default: 5000)
  * @returns {Promise<string>} The notification ID
  */
-export const showWarning = async (
-  message,
-  title = 'Warning',
-  autoClose = 5000,
-) => {
-  const notifications = await getNotificationsAPI();
-  const { IconAlertTriangle } = await import('@tabler/icons-react');
-
-  const id = `notification-warning-${Date.now()}`;
-  notifications.show({
-    id,
-    title,
-    message,
-    icon: <IconAlertTriangle size={16} />,
-    color: 'orange',
-    autoClose,
-  });
-
-  return id;
-};
+export const showWarning = (message, title, autoClose) =>
+  showTypedNotification('warning', message, title, autoClose);
 
 /**
  * Display a loading notification with a spinner icon

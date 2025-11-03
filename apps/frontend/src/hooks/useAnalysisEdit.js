@@ -6,11 +6,10 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import * as prettier from 'prettier';
-import prettierPluginBabel from 'prettier/plugins/babel';
-import prettierPluginEstree from 'prettier/plugins/estree';
 import { analysisService } from '../services/analysisService';
 import { checkFormatChanges } from '../utils/codeMirrorUtils';
 import logger from '../utils/logger';
+import { PRETTIER_CONFIG } from '../utils/prettierConfig';
 
 /**
  * Hook for managing analysis edit modal operations
@@ -213,14 +212,7 @@ export function useAnalysisEdit({
       } else {
         // Auto-format JavaScript before saving
         try {
-          contentToSave = await prettier.format(content, {
-            parser: 'babel',
-            plugins: [prettierPluginBabel, prettierPluginEstree],
-            semi: true,
-            singleQuote: true,
-            tabWidth: 2,
-            trailingComma: 'all',
-          });
+          contentToSave = await prettier.format(content, PRETTIER_CONFIG);
         } catch (formatError) {
           logger.warn('Formatting failed, saving unformatted:', formatError);
           // Continue with unformatted content if formatting fails

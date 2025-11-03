@@ -8,15 +8,99 @@ import {
   Stack,
   Paper,
   Code,
+  Group,
 } from '@mantine/core';
-import { IconAlertTriangle } from '@tabler/icons-react';
+import {
+  IconAlertTriangle,
+  IconAlertCircle,
+  IconRefresh,
+} from '@tabler/icons-react';
 import logger from '../utils/logger';
 
 /**
- * Error fallback UI component
- * Displays when the error boundary catches an error
+ * Detect if an error is a chunk loading error
  */
-function ErrorFallback({ error, reset }) {
+function isChunkLoadError(error) {
+  return (
+    error?.name === 'ChunkLoadError' ||
+    error?.message?.includes('Failed to fetch dynamically imported module') ||
+    error?.message?.includes('Importing a module script failed') ||
+    error?.message?.includes('Loading chunk')
+  );
+}
+
+/**
+ * Component-level error fallback (for lazy-loaded components)
+ * Compact inline error display with retry functionality
+ */
+function ComponentErrorFallback({ error, reset, componentName }) {
+  const isChunkError = isChunkLoadError(error);
+
+  return (
+    <Paper
+      p="md"
+      withBorder
+      radius="md"
+      style={{
+        borderLeft: '3px solid var(--mantine-color-red-6)',
+        backgroundColor: 'var(--mantine-color-red-0)',
+      }}
+    >
+      <Stack gap="md">
+        <Group gap="xs">
+          <IconAlertCircle size={24} color="var(--mantine-color-red-6)" />
+          <Text size="md" fw={600} c="red.7">
+            Failed to load {componentName || 'component'}
+          </Text>
+        </Group>
+
+        <Text size="sm" c="dimmed">
+          {isChunkError
+            ? 'The component could not be loaded. This might be due to a network issue or an outdated browser cache.'
+            : 'An unexpected error occurred while loading this component.'}
+        </Text>
+
+        {error && (
+          <Text size="xs" c="dimmed" ff="monospace">
+            {error.toString()}
+          </Text>
+        )}
+
+        <Group gap="xs">
+          <Button
+            onClick={reset}
+            size="sm"
+            variant="light"
+            color="red"
+            leftSection={<IconRefresh size={16} />}
+          >
+            Retry
+          </Button>
+          <Button
+            onClick={() => window.location.reload()}
+            size="sm"
+            variant="subtle"
+            color="gray"
+          >
+            Reload Page
+          </Button>
+        </Group>
+      </Stack>
+    </Paper>
+  );
+}
+
+ComponentErrorFallback.propTypes = {
+  error: PropTypes.instanceOf(Error),
+  reset: PropTypes.func.isRequired,
+  componentName: PropTypes.string,
+};
+
+/**
+ * Global error fallback (for app-level errors)
+ * Full-page centered error display
+ */
+function GlobalErrorFallback({ error, reset }) {
   return (
     <Container size="sm" py="xl">
       <Paper shadow="md" p="xl" radius="md" withBorder>
@@ -33,7 +117,14 @@ function ErrorFallback({ error, reset }) {
           </Text>
 
           {error && (
-            <Paper p="md" radius="sm" w="100%">
+            <Paper
+              p="md"
+              radius="sm"
+              w="100%"
+              style={{
+                backgroundColor: 'var(--mantine-color-default)',
+              }}
+            >
               <Text size="sm" fw={600} mb="xs">
                 Error Details:
               </Text>
@@ -55,15 +146,22 @@ function ErrorFallback({ error, reset }) {
   );
 }
 
-ErrorFallback.propTypes = {
+GlobalErrorFallback.propTypes = {
   error: PropTypes.instanceOf(Error),
   reset: PropTypes.func.isRequired,
 };
 
 /**
- * Error Boundary Component
+ * Universal Error Boundary Component
  * Catches JavaScript errors anywhere in the component tree
- * and displays a fallback UI instead of crashing the entire app
+ * and displays appropriate fallback UI based on context
+ *
+ * @param {Object} props
+ * @param {ReactNode} props.children - Child components to wrap
+ * @param {string} [props.variant="global"] - "global" for full-page errors, "component" for inline errors
+ * @param {string} [props.componentName] - Name of the component (for better error messages)
+ * @param {Function} [props.fallback] - Custom fallback render function
+ * @param {Function} [props.onReset] - Custom reset handler
  */
 class ErrorBoundary extends Component {
   constructor(props) {
@@ -77,17 +175,55 @@ class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    // Log the error to console for debugging
-    logger.error('Error boundary caught:', error, errorInfo);
+    // Log the error
+    const context =
+      this.props.variant === 'component'
+        ? `Component error (${this.props.componentName || 'unknown'})`
+        : 'Global error';
+    logger.error(`${context} boundary caught:`, error, errorInfo);
 
-    // You could also log to an external error tracking service here
-    // e.g., Sentry, LogRocket, etc.
+    // Special handling for chunk loading errors
+    if (isChunkLoadError(error)) {
+      logger.warn(
+        `Chunk loading failed${this.props.componentName ? ` for ${this.props.componentName}` : ''}. User may need to refresh.`,
+      );
+    }
   }
+
+  resetErrorBoundary = () => {
+    this.setState({ hasError: false, error: null });
+
+    // Call custom reset handler if provided
+    if (this.props.onReset) {
+      this.props.onReset();
+    }
+  };
 
   render() {
     if (this.state.hasError) {
+      // Allow custom fallback component
+      if (this.props.fallback) {
+        return this.props.fallback({
+          error: this.state.error,
+          reset: this.resetErrorBoundary,
+        });
+      }
+
+      // Choose appropriate fallback based on variant
+      const isComponentLevel = this.props.variant === 'component';
+
+      if (isComponentLevel) {
+        return (
+          <ComponentErrorFallback
+            error={this.state.error}
+            reset={this.resetErrorBoundary}
+            componentName={this.props.componentName}
+          />
+        );
+      }
+
       return (
-        <ErrorFallback
+        <GlobalErrorFallback
           error={this.state.error}
           reset={() => window.location.reload()}
         />
@@ -100,6 +236,14 @@ class ErrorBoundary extends Component {
 
 ErrorBoundary.propTypes = {
   children: PropTypes.node.isRequired,
+  variant: PropTypes.oneOf(['global', 'component']),
+  componentName: PropTypes.string,
+  fallback: PropTypes.func,
+  onReset: PropTypes.func,
+};
+
+ErrorBoundary.defaultProps = {
+  variant: 'global',
 };
 
 export default ErrorBoundary;

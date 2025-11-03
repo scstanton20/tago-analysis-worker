@@ -1,15 +1,11 @@
 // frontend/src/contexts/sseContext/index.js
 
-// New modular exports - preferred for new code
+// SSE Context - Modular exports
 export { SSEProvider } from './compositeProvider.jsx';
-export { useConnection } from './connection/index.js';
-export { useAnalyses } from './analyses/index.js';
-export { useTeams } from './teams/index.js';
-export { useBackend } from './backend/index.js';
-
-// Backward compatibility - for gradual migration
-export { useSSE } from './hook.js';
-
-// Keep old exports for reference (deprecated)
-export { SSEContext } from './context.js';
-export { SSEProvider as LegacySSEProvider } from './provider.jsx';
+export {
+  useConnection,
+  SSEConnectionProvider,
+} from './connection/provider.jsx';
+export { useAnalyses, SSEAnalysesProvider } from './analyses/provider.jsx';
+export { useTeams, SSETeamsProvider } from './teams/provider.jsx';
+export { useBackend, SSEBackendProvider } from './backend/provider.jsx';
