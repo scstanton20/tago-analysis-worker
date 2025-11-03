@@ -4,8 +4,6 @@
  * @module utils/reorderUtils
  */
 
-import { produce } from 'immer';
-
 /**
  * Find an item and its parent in a tree structure
  * @param {Array} items - Root level items
@@ -38,52 +36,54 @@ export function findItemWithParent(items, itemId, parent = null) {
  * @returns {Object} New structure with reorder applied
  */
 export function applyReorderToStructure(structure, reorder, selectedTeam) {
-  return produce(structure, (draft) => {
-    const items = draft?.[selectedTeam]?.items || [];
+  // Deep clone the structure to avoid mutations
+  const newStructure = structuredClone(structure);
+  const items = newStructure?.[selectedTeam]?.items || [];
 
-    // Find the item to move
-    const activeInfo = findItemWithParent(items, reorder.itemId);
-    if (!activeInfo) return;
+  // Find the item to move
+  const activeInfo = findItemWithParent(items, reorder.itemId);
+  if (!activeInfo) return newStructure;
 
-    // Remove item from its current location
-    const removeFromParent = (items, itemId) => {
-      for (let i = 0; i < items.length; i++) {
-        if (items[i].id === itemId) {
-          return items.splice(i, 1)[0];
+  // Remove item from its current location
+  const removeFromParent = (items, itemId) => {
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].id === itemId) {
+        return items.splice(i, 1)[0];
+      }
+      if (items[i].type === 'folder' && items[i].items) {
+        const removed = removeFromParent(items[i].items, itemId);
+        if (removed) return removed;
+      }
+    }
+    return null;
+  };
+
+  const itemToMove = removeFromParent(items, reorder.itemId);
+  if (!itemToMove) return newStructure;
+
+  // Insert item at new location
+  if (reorder.targetParentId) {
+    // Find target folder and insert
+    const findAndInsert = (itemsList) => {
+      for (const item of itemsList) {
+        if (item.id === reorder.targetParentId && item.type === 'folder') {
+          item.items = item.items || [];
+          item.items.splice(reorder.targetIndex, 0, itemToMove);
+          return true;
         }
-        if (items[i].type === 'folder' && items[i].items) {
-          const removed = removeFromParent(items[i].items, itemId);
-          if (removed) return removed;
+        if (item.type === 'folder' && item.items) {
+          if (findAndInsert(item.items)) return true;
         }
       }
-      return null;
+      return false;
     };
+    findAndInsert(items);
+  } else {
+    // Insert at root level
+    items.splice(reorder.targetIndex, 0, itemToMove);
+  }
 
-    const itemToMove = removeFromParent(items, reorder.itemId);
-    if (!itemToMove) return;
-
-    // Insert item at new location
-    if (reorder.targetParentId) {
-      // Find target folder and insert
-      const findAndInsert = (itemsList) => {
-        for (const item of itemsList) {
-          if (item.id === reorder.targetParentId && item.type === 'folder') {
-            item.items = item.items || [];
-            item.items.splice(reorder.targetIndex, 0, itemToMove);
-            return true;
-          }
-          if (item.type === 'folder' && item.items) {
-            if (findAndInsert(item.items)) return true;
-          }
-        }
-        return false;
-      };
-      findAndInsert(items);
-    } else {
-      // Insert at root level
-      items.splice(reorder.targetIndex, 0, itemToMove);
-    }
-  });
+  return newStructure;
 }
 
 /**
@@ -107,28 +107,30 @@ export function addPendingFolderToStructure(
     items: [],
   };
 
-  return produce(structure, (draft) => {
-    const teamItems = draft[selectedTeam]?.items || [];
+  // Deep clone the structure to avoid mutations
+  const newStructure = structuredClone(structure);
+  const teamItems = newStructure[selectedTeam]?.items || [];
 
-    if (folderInfo.parentFolderId) {
-      // Add to parent folder
-      const findAndAdd = (items) => {
-        for (const item of items) {
-          if (item.id === folderInfo.parentFolderId) {
-            item.items = item.items || [];
-            item.items.push(newFolder);
-            return true;
-          }
-          if (item.type === 'folder' && item.items) {
-            if (findAndAdd(item.items)) return true;
-          }
+  if (folderInfo.parentFolderId) {
+    // Add to parent folder
+    const findAndAdd = (items) => {
+      for (const item of items) {
+        if (item.id === folderInfo.parentFolderId) {
+          item.items = item.items || [];
+          item.items.push(newFolder);
+          return true;
         }
-        return false;
-      };
-      findAndAdd(teamItems);
-    } else {
-      // Add to root
-      teamItems.push(newFolder);
-    }
-  });
+        if (item.type === 'folder' && item.items) {
+          if (findAndAdd(item.items)) return true;
+        }
+      }
+      return false;
+    };
+    findAndAdd(teamItems);
+  } else {
+    // Add to root
+    teamItems.push(newFolder);
+  }
+
+  return newStructure;
 }

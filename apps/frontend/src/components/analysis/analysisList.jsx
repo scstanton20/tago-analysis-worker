@@ -1,7 +1,6 @@
 // frontend/src/components/analysis/analysisList.jsx
 import { useState, useMemo, useCallback } from 'react';
 import PropTypes from 'prop-types';
-import { produce } from 'immer';
 import {
   useAnalyses,
   useTeams,
@@ -9,6 +8,10 @@ import {
 } from '../../contexts/sseContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import logger from '../../utils/logger';
+import {
+  applyReorderToStructure,
+  addPendingFolderToStructure,
+} from '../../utils/reorderUtils';
 import AnalysisItem from './analysisItem';
 import AnalysisTree from './analysisTree';
 import CreateFolderModal from '../modals/createFolderModal';
@@ -61,7 +64,6 @@ export default function AnalysisList({
   const [currentFolder, setCurrentFolder] = useState(null);
   const [reorderMode, setReorderMode] = useState(false);
   const [pendingReorders, setPendingReorders] = useState([]);
-  const [reorderModeKey, setReorderModeKey] = useState(0);
   const [localStructure, setLocalStructure] = useState(null);
   const [pendingFolders, setPendingFolders] = useState([]);
   const [pendingFolderDeletions, setPendingFolderDeletions] = useState([]);
@@ -70,12 +72,6 @@ export default function AnalysisList({
   const handleCreatePendingFolder = useCallback(
     (folderInfo) => {
       const tempId = `temp-${crypto.randomUUID()}`;
-      const newFolder = {
-        id: tempId,
-        type: 'folder',
-        name: folderInfo.name,
-        items: [],
-      };
 
       // Add to pending folders list
       setPendingFolders((prev) => [
@@ -87,36 +83,10 @@ export default function AnalysisList({
         },
       ]);
 
-      // Add to local structure
+      // Add to local structure using the utility function
       setLocalStructure((prev) =>
-        produce(prev, (draft) => {
-          const teamItems = draft[selectedTeam]?.items || [];
-
-          if (folderInfo.parentFolderId) {
-            // Add to parent folder
-            const findAndAdd = (items) => {
-              for (const item of items) {
-                if (item.id === folderInfo.parentFolderId) {
-                  item.items = item.items || [];
-                  item.items.push(newFolder);
-                  return true;
-                }
-                if (item.type === 'folder' && item.items) {
-                  if (findAndAdd(item.items)) return true;
-                }
-              }
-              return false;
-            };
-            findAndAdd(teamItems);
-          } else {
-            // Add to root
-            teamItems.push(newFolder);
-          }
-        }),
+        addPendingFolderToStructure(prev, folderInfo, tempId, selectedTeam),
       );
-
-      // Restart animations
-      setReorderModeKey((prev) => prev + 1);
     },
     [selectedTeam],
   );
@@ -250,30 +220,31 @@ export default function AnalysisList({
                 }
 
                 // Update local structure immediately
-                setLocalStructure((prev) =>
-                  produce(prev, (draft) => {
-                    const items = draft?.[selectedTeam]?.items || [];
+                setLocalStructure((prev) => {
+                  // Deep clone the structure to avoid mutations
+                  const newStructure = structuredClone(prev);
+                  const items = newStructure?.[selectedTeam]?.items || [];
 
-                    // Find and remove the folder, moving its items to parent
-                    const removeFolder = (itemsList) => {
-                      for (let i = 0; i < itemsList.length; i++) {
-                        const item = itemsList[i];
-                        if (item.id === folder.id) {
-                          // Move folder's items to parent
-                          const folderItems = item.items || [];
-                          itemsList.splice(i, 1, ...folderItems);
-                          return true;
-                        }
-                        if (item.type === 'folder' && item.items) {
-                          if (removeFolder(item.items)) return true;
-                        }
+                  // Find and remove the folder, moving its items to parent
+                  const removeFolder = (itemsList) => {
+                    for (let i = 0; i < itemsList.length; i++) {
+                      const item = itemsList[i];
+                      if (item.id === folder.id) {
+                        // Move folder's items to parent
+                        const folderItems = item.items || [];
+                        itemsList.splice(i, 1, ...folderItems);
+                        return true;
                       }
-                      return false;
-                    };
+                      if (item.type === 'folder' && item.items) {
+                        if (removeFolder(item.items)) return true;
+                      }
+                    }
+                    return false;
+                  };
 
-                    removeFolder(items);
-                  }),
-                );
+                  removeFolder(items);
+                  return newStructure;
+                });
 
                 showInfo(
                   isTempFolder
@@ -310,88 +281,16 @@ export default function AnalysisList({
     ],
   );
 
-  // Helper to find item and its parent in structure
-  const findItemWithParent = useCallback((items, itemId, parent = null) => {
-    const search = (itemsList, currentParent) => {
-      for (let i = 0; i < itemsList.length; i++) {
-        const item = itemsList[i];
-        if (item.id === itemId) {
-          return { item, parent: currentParent, index: i };
-        }
-        if (item.type === 'folder' && item.items) {
-          const found = search(item.items, item);
-          if (found) return found;
-        }
-      }
-      return null;
-    };
-    return search(items, parent);
-  }, []);
-
-  // Apply a single reorder to a structure (returns new structure)
-  const applyReorderToStructure = useCallback(
-    (structure, reorder) => {
-      return produce(structure, (draft) => {
-        const items = draft?.[selectedTeam]?.items || [];
-
-        // Find the item to move
-        const activeInfo = findItemWithParent(items, reorder.itemId);
-        if (!activeInfo) return;
-
-        // Remove item from its current location
-        const removeFromParent = (items, itemId) => {
-          for (let i = 0; i < items.length; i++) {
-            if (items[i].id === itemId) {
-              return items.splice(i, 1)[0];
-            }
-            if (items[i].type === 'folder' && items[i].items) {
-              const removed = removeFromParent(items[i].items, itemId);
-              if (removed) return removed;
-            }
-          }
-          return null;
-        };
-
-        const itemToMove = removeFromParent(items, reorder.itemId);
-        if (!itemToMove) return;
-
-        // Insert item at new location
-        if (reorder.targetParentId) {
-          // Find target folder and insert
-          const findAndInsert = (itemsList) => {
-            for (const item of itemsList) {
-              if (
-                item.id === reorder.targetParentId &&
-                item.type === 'folder'
-              ) {
-                item.items = item.items || [];
-                item.items.splice(reorder.targetIndex, 0, itemToMove);
-                return true;
-              }
-              if (item.type === 'folder' && item.items) {
-                if (findAndInsert(item.items)) return true;
-              }
-            }
-            return false;
-          };
-          findAndInsert(items);
-        } else {
-          // Insert at root level
-          items.splice(reorder.targetIndex, 0, itemToMove);
-        }
-      });
-    },
-    [selectedTeam, findItemWithParent],
-  );
-
   // Reorder handlers
   const handlePendingReorder = useCallback(
     (reorderInfo) => {
       setPendingReorders((prev) => [...prev, reorderInfo]);
       // Apply to local structure immediately
-      setLocalStructure((prev) => applyReorderToStructure(prev, reorderInfo));
+      setLocalStructure((prev) =>
+        applyReorderToStructure(prev, reorderInfo, selectedTeam),
+      );
     },
-    [applyReorderToStructure],
+    [selectedTeam],
   );
 
   const handleCancelReorder = useCallback(() => {
@@ -399,7 +298,6 @@ export default function AnalysisList({
     setPendingFolders([]);
     setPendingFolderDeletions([]);
     setReorderMode(false);
-    setReorderModeKey(0);
     setLocalStructure(null);
   }, []);
 
@@ -410,7 +308,6 @@ export default function AnalysisList({
       pendingFolderDeletions.length === 0
     ) {
       setReorderMode(false);
-      setReorderModeKey(0);
       setLocalStructure(null);
       return;
     }
@@ -451,7 +348,6 @@ export default function AnalysisList({
       setPendingFolders([]);
       setPendingFolderDeletions([]);
       setReorderMode(false);
-      setReorderModeKey(0);
       setLocalStructure(null);
     } catch (error) {
       logger.error('Failed to apply changes:', error);
@@ -610,7 +506,6 @@ export default function AnalysisList({
                         // Capture current structure for local editing
                         setLocalStructure(structuredClone(teamStructure));
                         setReorderMode(true);
-                        setReorderModeKey((prev) => prev + 1);
                       }}
                     >
                       Reorganize List
@@ -674,7 +569,6 @@ export default function AnalysisList({
                 onToggleAnalysisLogs={toggleLog}
                 reorderMode={reorderMode}
                 onPendingReorder={handlePendingReorder}
-                reorderModeKey={reorderModeKey}
               />
             </>
           ) : hasAnalyses ? (

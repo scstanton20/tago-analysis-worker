@@ -37,10 +37,8 @@ export default function AnalysisTree({
   onToggleAnalysisLogs,
   reorderMode = false,
   onPendingReorder = null,
-  reorderModeKey = 0,
 }) {
   const [expandedFolders, setExpandedFolders] = useState({});
-  const [animationCounter, setAnimationCounter] = useState(0);
 
   // Make the entire tree area a droppable zone for moving items to root
   const rootDropId = useMemo(() => `root-${teamId}`, [teamId]);
@@ -74,27 +72,6 @@ export default function AnalysisTree({
     onPendingReorder,
   });
 
-  // Add shake animation for reorder mode - use stable key based on reorder mode state
-  const animationKey = reorderMode
-    ? `active-${reorderModeKey}-${animationCounter}`
-    : 'inactive';
-  const treeItemStyles = useMemo(
-    () => `
-    @keyframes shake-${animationKey} {
-      0%, 100% { transform: rotate(0deg); }
-      25% { transform: rotate(-1deg); }
-      50% { transform: rotate(0deg); }
-      75% { transform: rotate(1deg); }
-    }
-
-    .tree-item-reorder[data-reorder-key="${reorderModeKey}"] {
-      animation: ${activeId ? 'none' : `shake-${animationKey} 1.5s linear infinite`};
-      animation-fill-mode: both;
-    }
-  `,
-    [animationKey, reorderModeKey, activeId],
-  );
-
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -103,19 +80,12 @@ export default function AnalysisTree({
     }),
   );
 
-  const handleToggle = useCallback(
-    (folderId, newState) => {
-      setExpandedFolders((prev) => ({
-        ...prev,
-        [folderId]: newState,
-      }));
-      // Increment animation counter to restart animations on newly visible items
-      if (reorderMode) {
-        setAnimationCounter((prev) => prev + 1);
-      }
-    },
-    [reorderMode],
-  );
+  const handleToggle = useCallback((folderId, newState) => {
+    setExpandedFolders((prev) => ({
+      ...prev,
+      [folderId]: newState,
+    }));
+  }, []);
 
   // Find active item for drag overlay
   const activeItem = activeId
@@ -132,7 +102,6 @@ export default function AnalysisTree({
 
   return (
     <>
-      <style>{treeItemStyles}</style>
       <DndContext
         sensors={sensors}
         collisionDetection={customCollisionDetection}
@@ -179,7 +148,6 @@ export default function AnalysisTree({
                   expandedAnalyses={expandedAnalyses}
                   onToggleAnalysisLogs={onToggleAnalysisLogs}
                   reorderMode={reorderMode}
-                  reorderModeKey={reorderModeKey}
                 />
               ))}
             </Stack>
@@ -253,7 +221,6 @@ AnalysisTree.propTypes = {
   onToggleAnalysisLogs: PropTypes.func.isRequired,
   reorderMode: PropTypes.bool,
   onPendingReorder: PropTypes.func,
-  reorderModeKey: PropTypes.number,
 };
 
 AnalysisTree.defaultProps = {

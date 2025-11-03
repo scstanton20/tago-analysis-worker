@@ -44,7 +44,12 @@ const VersionManagementModal = lazy(
 import { useAnalyses, useTeams } from '../../contexts/sseContext';
 import { usePermissions } from '../../hooks/usePermissions';
 
-export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
+export default function AnalysisItem({
+  analysis,
+  showLogs,
+  onToggleLogs,
+  reorderMode = false,
+}) {
   const [editModalType, setEditModalType] = useState(null); // null, 'analysis', or 'env'
   const [showLogDownloadDialog, setShowLogDownloadDialog] = useState(false);
   const [showTeamModal, setShowTeamModal] = useState(false);
@@ -222,9 +227,25 @@ export default function AnalysisItem({ analysis, showLogs, onToggleLogs }) {
       withBorder
       radius="md"
       className="analysis-card"
+      onClick={
+        !reorderMode
+          ? (e) => {
+              // Don't toggle if clicking on buttons or interactive elements
+              if (
+                e.target.closest('button') ||
+                e.target.closest('[role="button"]') ||
+                e.target.closest('a')
+              ) {
+                return;
+              }
+              onToggleLogs();
+            }
+          : undefined
+      }
       style={{
         borderLeft: '3px solid var(--mantine-color-brand-4)',
         transition: 'all 0.3s ease',
+        cursor: !reorderMode ? 'pointer' : 'default',
       }}
     >
       <Stack>
@@ -532,6 +553,7 @@ AnalysisItem.propTypes = {
   }).isRequired,
   showLogs: PropTypes.bool.isRequired,
   onToggleLogs: PropTypes.func.isRequired,
+  reorderMode: PropTypes.bool,
   teamInfo: PropTypes.shape({
     name: PropTypes.string,
     color: PropTypes.string,

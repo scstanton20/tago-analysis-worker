@@ -26,6 +26,7 @@ import {
   IconEdit,
   IconTrash,
   IconFolderPlus,
+  IconGripVertical,
 } from '@tabler/icons-react';
 import {
   SortableContext,
@@ -49,7 +50,6 @@ export default function TreeItem({
   expandedAnalyses,
   onToggleAnalysisLogs,
   reorderMode = false,
-  reorderModeKey = 0,
 }) {
   const isFolder = item.type === 'folder';
 
@@ -119,8 +119,6 @@ export default function TreeItem({
           gap="xs"
           mb="xs"
           wrap="nowrap"
-          className={reorderMode ? 'tree-item-reorder' : ''}
-          data-reorder-key={reorderModeKey}
           onClick={(e) => {
             // Don't toggle if clicking on menu or other interactive elements
             if (
@@ -141,7 +139,7 @@ export default function TreeItem({
             borderRadius: 'var(--mantine-radius-md)',
             transition: 'all 0.3s ease',
             padding: '12px',
-            cursor: reorderMode ? 'default' : 'pointer',
+            cursor: 'pointer',
             border: isOver
               ? '1px solid var(--mantine-color-brand-6)'
               : reorderMode
@@ -152,10 +150,24 @@ export default function TreeItem({
               : undefined,
           }}
         >
+          {/* Drag handle - only visible in reorder mode */}
+          {reorderMode && (
+            <Box
+              {...attributes}
+              {...listeners}
+              style={{
+                cursor: 'grab',
+                display: 'flex',
+                alignItems: 'center',
+                padding: '4px',
+              }}
+            >
+              <IconGripVertical size={18} opacity={0.6} />
+            </Box>
+          )}
+
           <Box
-            {...(reorderMode ? { ...attributes, ...listeners } : {})}
             style={{
-              cursor: reorderMode ? 'grab' : 'inherit',
               display: 'flex',
               alignItems: 'center',
             }}
@@ -178,9 +190,7 @@ export default function TreeItem({
           </Box>
 
           <Box
-            {...(reorderMode ? { ...attributes, ...listeners } : {})}
             style={{
-              cursor: reorderMode ? 'grab' : 'inherit',
               display: 'flex',
               alignItems: 'center',
             }}
@@ -203,9 +213,7 @@ export default function TreeItem({
           </Box>
 
           <Box
-            {...(reorderMode ? { ...attributes, ...listeners } : {})}
             style={{
-              cursor: reorderMode ? 'grab' : 'inherit',
               flex: 1,
               minWidth: 0,
             }}
@@ -298,7 +306,6 @@ export default function TreeItem({
                       expandedAnalyses={expandedAnalyses}
                       onToggleAnalysisLogs={onToggleAnalysisLogs}
                       reorderMode={reorderMode}
-                      reorderModeKey={reorderModeKey}
                     />
                   ))}
                 </Stack>
@@ -327,28 +334,40 @@ export default function TreeItem({
   }
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...(reorderMode ? { ...attributes, ...listeners } : {})}
-    >
+    <div ref={setNodeRef} style={style}>
       <Group
         gap="xs"
         wrap="nowrap"
-        className={reorderMode ? 'tree-item-reorder' : ''}
-        data-reorder-key={reorderModeKey}
         style={{
           borderRadius: 'var(--mantine-radius-sm)',
           transition: 'background-color 0.2s',
           padding: '4px',
-          cursor: reorderMode ? 'grab' : 'default',
         }}
       >
+        {/* Drag handle - only visible in reorder mode */}
+        {reorderMode && (
+          <Box
+            {...attributes}
+            {...listeners}
+            style={{
+              cursor: 'grab',
+              display: 'flex',
+              alignItems: 'center',
+              padding: '4px',
+              alignSelf: 'flex-start',
+              marginTop: '12px',
+            }}
+          >
+            <IconGripVertical size={18} opacity={0.6} />
+          </Box>
+        )}
+
         <Box style={{ flex: 1, minWidth: 0 }}>
           <AnalysisItem
             analysis={{ ...analysis, name: item.analysisName }}
             showLogs={expandedAnalyses[item.analysisName] || false}
             onToggleLogs={() => onToggleAnalysisLogs(item.analysisName)}
+            reorderMode={reorderMode}
           />
         </Box>
       </Group>
@@ -373,5 +392,4 @@ TreeItem.propTypes = {
   expandedAnalyses: PropTypes.object.isRequired,
   onToggleAnalysisLogs: PropTypes.func.isRequired,
   reorderMode: PropTypes.bool,
-  reorderModeKey: PropTypes.number,
 };
