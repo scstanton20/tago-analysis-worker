@@ -1,5 +1,9 @@
 import pino from 'pino';
-import { LokiTransport } from './lokiTransport.js';
+import {
+  createConsoleStream,
+  createLokiStream,
+  createFileStream,
+} from './streamFactories.js';
 
 // Determine environment from NODE_ENV
 const env = process.env.NODE_ENV || 'development';
@@ -63,90 +67,14 @@ const serializers = {
   },
 };
 
-// Helper function to parse Loki labels (moved up to be available earlier)
-function parseLokiLabels(labelString) {
-  if (!labelString) return {};
+// Configure streams for multistream using factory functions
+const streams = [createConsoleStream(env)];
 
-  try {
-    const labels = {};
-    labelString.split(',').forEach((pair) => {
-      const [key, value] = pair.split('=');
-      if (key && value) {
-        labels[key.trim()] = value.trim();
-      }
-    });
-    return labels;
-  } catch (error) {
-    console.error(`Error parsing Loki labels "${labelString}":`, error.message);
-    return {};
-  }
-}
-
-// Configure streams for multistream
-const streams = [];
-
-// Console output
-if (env === 'development' && !process.env.LOG_LOKI_URL) {
-  // Pretty printing for development (only when Loki is not configured)
-  const ignoreFields = ['pid', 'hostname'];
-  if (process.env.LOG_INCLUDE_MODULE !== 'true') {
-    ignoreFields.push('module', 'analysis');
-  }
-
-  streams.push({
-    level: process.env.LOG_LEVEL || 'debug',
-    stream: pino.transport({
-      target: 'pino-pretty',
-      options: {
-        colorize: true,
-        translateTime: 'yyyy-mm-dd HH:MM:ss',
-        ignore: ignoreFields.join(','),
-        messageFormat: '{msg}',
-        errorLikeObjectKeys: ['err', 'error'],
-      },
-    }),
-  });
-} else {
-  // Raw JSON to console when Loki is enabled or in production
-  streams.push({
-    level: process.env.LOG_LEVEL || (env === 'development' ? 'debug' : 'info'),
-    stream: process.stdout,
-  });
-}
-
-// Grafana Loki stream (if configured)
-if (process.env.LOG_LOKI_URL) {
-  try {
-    const lokiOptions = {
-      host: process.env.LOG_LOKI_URL,
-      basicAuth:
-        process.env.LOG_LOKI_USERNAME && process.env.LOG_LOKI_PASSWORD
-          ? {
-              username: process.env.LOG_LOKI_USERNAME,
-              password: process.env.LOG_LOKI_PASSWORD,
-            }
-          : undefined,
-      labels: {
-        application: 'tago-analysis-worker',
-        environment: env,
-        service: 'backend',
-        // Parse additional labels from LOG_LOKI_LABELS (format: key1=value1,key2=value2)
-        ...parseLokiLabels(process.env.LOG_LOKI_LABELS),
-      },
-      batching: false, // Send logs immediately without batching
-      timeout: parseInt(process.env.LOG_LOKI_TIMEOUT || '30000'),
-    };
-
-    streams.push({
-      level:
-        process.env.LOG_LEVEL || (env === 'development' ? 'debug' : 'info'),
-      stream: new LokiTransport(lokiOptions),
-    });
-
-    console.log('✓ Grafana Loki logging configured');
-  } catch (error) {
-    console.error('⚠️ Loki configuration error:', error.message);
-  }
+// Add Loki stream if configured
+const lokiStream = createLokiStream(env);
+if (lokiStream) {
+  streams.push(lokiStream);
+  console.log('✓ Grafana Loki logging configured');
 }
 
 // Create the main logger with multistream
@@ -178,85 +106,19 @@ export const createAnalysisLogger = (analysisName, additionalContext = {}) => {
     ...additionalContext,
   };
 
-  // Create streams for analysis logger using multistream
-  const analysisStreams = [];
+  // Create streams for analysis logger using factory functions
+  const analysisStreams = [createConsoleStream(env)];
 
-  // Console output (raw JSON when Loki is enabled)
-  if (env === 'development' && !process.env.LOG_LOKI_URL) {
-    const ignoreFields = ['pid', 'hostname'];
-    if (process.env.LOG_INCLUDE_MODULE !== 'true') {
-      ignoreFields.push('module', 'analysis');
-    }
-
-    analysisStreams.push({
-      level: process.env.LOG_LEVEL || 'debug',
-      stream: pino.transport({
-        target: 'pino-pretty',
-        options: {
-          colorize: true,
-          translateTime: 'yyyy-mm-dd HH:MM:ss',
-          ignore: ignoreFields.join(','),
-          messageFormat: '{msg}',
-          errorLikeObjectKeys: ['err', 'error'],
-        },
-      }),
-    });
-  } else {
-    // Raw JSON to console
-    analysisStreams.push({
-      level:
-        process.env.LOG_LEVEL || (env === 'development' ? 'debug' : 'info'),
-      stream: process.stdout,
-    });
-  }
-
-  // Add Loki stream if configured (using custom LokiTransport)
-  if (process.env.LOG_LOKI_URL) {
-    try {
-      const lokiOptions = {
-        host: process.env.LOG_LOKI_URL,
-        basicAuth:
-          process.env.LOG_LOKI_USERNAME && process.env.LOG_LOKI_PASSWORD
-            ? {
-                username: process.env.LOG_LOKI_USERNAME,
-                password: process.env.LOG_LOKI_PASSWORD,
-              }
-            : undefined,
-        labels: {
-          application: 'tago-analysis-worker',
-          environment: env,
-          service: 'backend',
-          analysis: analysisName, // Add analysis name as Loki label
-          ...parseLokiLabels(process.env.LOG_LOKI_LABELS),
-        },
-        batching: false, // Send logs immediately without batching
-        timeout: parseInt(process.env.LOG_LOKI_TIMEOUT || '30000'),
-      };
-
-      analysisStreams.push({
-        level:
-          process.env.LOG_LEVEL || (env === 'development' ? 'debug' : 'info'),
-        stream: new LokiTransport(lokiOptions),
-      });
-    } catch (error) {
-      console.error(
-        `⚠️ Loki transport error for analysis ${analysisName}:`,
-        error.message,
-      );
-    }
+  // Add Loki stream if configured
+  const lokiStream = createLokiStream(env, { analysis: analysisName });
+  if (lokiStream) {
+    analysisStreams.push(lokiStream);
   }
 
   // Add file stream for individual analysis log
-  if (additionalContext.logFile) {
-    analysisStreams.push({
-      level:
-        process.env.LOG_LEVEL || (env === 'development' ? 'debug' : 'info'),
-      stream: pino.destination({
-        dest: additionalContext.logFile,
-        sync: false, // Async for better performance
-        mkdir: true,
-      }),
-    });
+  const fileStream = createFileStream(additionalContext.logFile, env);
+  if (fileStream) {
+    analysisStreams.push(fileStream);
   }
 
   // Create analysis-specific logger with multistream

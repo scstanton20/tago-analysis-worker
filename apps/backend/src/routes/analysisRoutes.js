@@ -15,6 +15,7 @@ import {
   versionOperationLimiter,
 } from '../middleware/rateLimiter.js';
 import { validateRequest } from '../middleware/validateRequest.js';
+import { sanitizeFilenameParam } from '../middleware/sanitizeParams.js';
 import { analysisValidationSchemas } from '../validation/analysisSchemas.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
@@ -167,6 +168,7 @@ router.get(
 router.post(
   '/:fileName/run',
   analysisRunLimiter,
+  sanitizeFilenameParam(),
   validateRequest(analysisValidationSchemas.runAnalysis),
   extractAnalysisTeam,
   requireTeamPermission('run_analyses'),
@@ -212,6 +214,7 @@ router.post(
 router.post(
   '/:fileName/stop',
   analysisRunLimiter,
+  sanitizeFilenameParam(),
   validateRequest(analysisValidationSchemas.stopAnalysis),
   extractAnalysisTeam,
   requireTeamPermission('run_analyses'),
@@ -254,6 +257,7 @@ router.post(
 router.delete(
   '/:fileName',
   deletionLimiter,
+  sanitizeFilenameParam(),
   validateRequest(analysisValidationSchemas.deleteAnalysis),
   extractAnalysisTeam,
   requireTeamPermission('delete_analyses'),
@@ -297,6 +301,7 @@ router.delete(
 router.get(
   '/:fileName/content',
   fileOperationLimiter,
+  sanitizeFilenameParam(),
   validateRequest(analysisValidationSchemas.getAnalysisContent),
   extractAnalysisTeam,
   requireTeamPermission('view_analyses'),
@@ -367,6 +372,7 @@ router.get(
 router.put(
   '/:fileName',
   fileOperationLimiter,
+  sanitizeFilenameParam(),
   validateRequest(analysisValidationSchemas.updateAnalysis),
   extractAnalysisTeam,
   requireTeamPermission('edit_analyses'),
@@ -437,6 +443,7 @@ router.put(
 router.put(
   '/:fileName/rename',
   fileOperationLimiter,
+  sanitizeFilenameParam(),
   validateRequest(analysisValidationSchemas.renameAnalysis),
   extractAnalysisTeam,
   requireTeamPermission('edit_analyses'),
@@ -499,6 +506,7 @@ router.put(
 router.get(
   '/:fileName/download',
   fileOperationLimiter,
+  sanitizeFilenameParam(),
   validateRequest(analysisValidationSchemas.downloadAnalysis),
   extractAnalysisTeam,
   requireTeamPermission('download_analyses'),
@@ -543,6 +551,7 @@ router.get(
 router.get(
   '/:fileName/environment',
   fileOperationLimiter,
+  sanitizeFilenameParam(),
   validateRequest(analysisValidationSchemas.getEnvironment),
   extractAnalysisTeam,
   requireTeamPermission('view_analyses'),
@@ -612,6 +621,7 @@ router.get(
 router.put(
   '/:fileName/environment',
   fileOperationLimiter,
+  sanitizeFilenameParam(),
   validateRequest(analysisValidationSchemas.updateEnvironment),
   extractAnalysisTeam,
   requireTeamPermission('edit_analyses'),
@@ -670,6 +680,7 @@ router.put(
  */
 router.get(
   '/:fileName/logs',
+  sanitizeFilenameParam(),
   validateRequest(analysisValidationSchemas.getLogs),
   extractAnalysisTeam,
   requireTeamPermission('view_analyses'),
@@ -732,6 +743,7 @@ router.get(
 router.get(
   '/:fileName/logs/download',
   fileOperationLimiter,
+  sanitizeFilenameParam(),
   validateRequest(analysisValidationSchemas.downloadLogs),
   extractAnalysisTeam,
   requireTeamPermission('view_analyses'),
@@ -774,6 +786,7 @@ router.get(
 router.delete(
   '/:fileName/logs',
   deletionLimiter,
+  sanitizeFilenameParam(),
   validateRequest(analysisValidationSchemas.clearLogs),
   extractAnalysisTeam,
   requireTeamPermission('edit_analyses'),
@@ -837,6 +850,7 @@ router.delete(
 router.get(
   '/:fileName/versions',
   versionOperationLimiter,
+  sanitizeFilenameParam(),
   validateRequest(analysisValidationSchemas.getVersions),
   extractAnalysisTeam,
   requireTeamPermission('view_analyses'),
@@ -912,6 +926,7 @@ router.get(
 router.post(
   '/:fileName/rollback',
   versionOperationLimiter,
+  sanitizeFilenameParam(),
   validateRequest(analysisValidationSchemas.rollbackToVersion),
   extractAnalysisTeam,
   requireTeamPermission('edit_analyses'),
