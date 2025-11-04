@@ -1,18 +1,11 @@
-// frontend/src/contexts/sseContext/connection/provider.jsx
+// frontend/src/contexts/sseContext/SSEConnectionProvider.jsx
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import PropTypes from 'prop-types';
-import { createSSEContext } from '../utils/createSSEContext.js';
-import { useAuth } from '../../../hooks/useAuth';
-import logger from '../../../utils/logger';
-import { isDevelopment, API_URL } from '../../../config/env.js';
-import { showError } from '../../../utils/notificationService.jsx';
-
-// Create context locally for this provider
-const { Context: SSEConnectionContext, useContextHook: useConnection } =
-  createSSEContext('Connection');
-
-// Export both the Context and the hook for use in index.js
-export { SSEConnectionContext, useConnection };
+import { ConnectionContext } from './contexts/ConnectionContext.js';
+import { useAuth } from '../../hooks/useAuth';
+import logger from '../../utils/logger';
+import { isDevelopment, API_URL } from '../../config/env.js';
+import { showError } from '../../utils/notificationService.jsx';
 
 export function SSEConnectionProvider({ children, onMessage }) {
   const { isAuthenticated } = useAuth();
@@ -422,9 +415,9 @@ export function SSEConnectionProvider({ children, onMessage }) {
   );
 
   return (
-    <SSEConnectionContext.Provider value={value}>
+    <ConnectionContext.Provider value={value}>
       {children}
-    </SSEConnectionContext.Provider>
+    </ConnectionContext.Provider>
   );
 }
 

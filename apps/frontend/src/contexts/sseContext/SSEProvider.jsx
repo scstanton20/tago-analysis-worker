@@ -1,10 +1,13 @@
-// frontend/src/contexts/sseContext/compositeProvider.jsx
+// frontend/src/contexts/sseContext/SSEProvider.jsx
 import { useCallback, useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
-import { SSEConnectionProvider } from './connection/provider.jsx';
-import { SSEAnalysesProvider, useAnalyses } from './analyses/provider.jsx';
-import { SSETeamsProvider, useTeams } from './teams/provider.jsx';
-import { SSEBackendProvider, useBackend } from './backend/provider.jsx';
+import { SSEConnectionProvider } from './SSEConnectionProvider.jsx';
+import { SSEAnalysesProvider } from './SSEAnalysesProvider.jsx';
+import { SSETeamsProvider } from './SSETeamsProvider.jsx';
+import { SSEBackendProvider } from './SSEBackendProvider.jsx';
+import { useAnalyses } from './hooks/useAnalyses.js';
+import { useTeams } from './hooks/useTeams.js';
+import { useBackend } from './hooks/useBackend.js';
 import logger from '../../utils/logger.js';
 import { showSuccess } from '../../utils/notificationService.jsx';
 

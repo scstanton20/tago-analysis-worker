@@ -38,7 +38,7 @@ class StatusController {
    * - System diagnostics
    */
   static async getSystemStatus(req, res) {
-    req.log.info({ action: 'getSystemStatus' }, 'Getting system status');
+    req.log.debug({ action: 'getSystemStatus' }, 'Getting system status');
 
     try {
       // Import analysisService directly instead of dependency injection
@@ -134,7 +134,7 @@ class StatusController {
         serverTime: new Date().toString(),
       };
 
-      req.log.info(
+      req.log.debug(
         {
           action: 'getSystemStatus',
           containerStatus: currentContainerState.status,

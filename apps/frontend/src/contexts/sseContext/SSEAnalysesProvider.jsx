@@ -1,20 +1,13 @@
-// frontend/src/contexts/sseContext/analyses/provider.jsx
+// frontend/src/contexts/sseContext/SSEAnalysesProvider.jsx
 import { useState, useCallback, useRef, useMemo } from 'react';
 import PropTypes from 'prop-types';
-import { createSSEContext } from '../utils/createSSEContext.js';
-import logger from '../../../utils/logger';
+import { AnalysesContext } from './contexts/AnalysesContext.js';
+import logger from '../../utils/logger';
 import {
   showSuccess,
   showError,
   showInfo,
-} from '../../../utils/notificationService.jsx';
-
-// Create context locally for this provider
-const { Context: SSEAnalysesContext, useContextHook: useAnalyses } =
-  createSSEContext('Analyses');
-
-// Export both the Context and the hook for use in index.js
-export { SSEAnalysesContext, useAnalyses };
+} from '../../utils/notificationService.jsx';
 
 export function SSEAnalysesProvider({ children }) {
   const [analyses, setAnalyses] = useState({});
@@ -441,9 +434,9 @@ export function SSEAnalysesProvider({ children }) {
   );
 
   return (
-    <SSEAnalysesContext.Provider value={value}>
+    <AnalysesContext.Provider value={value}>
       {children}
-    </SSEAnalysesContext.Provider>
+    </AnalysesContext.Provider>
   );
 }
 
