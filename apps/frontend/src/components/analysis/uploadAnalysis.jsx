@@ -1,12 +1,11 @@
 // frontend/src/components/analysis/uploadAnalysis.jsx
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, lazy } from 'react';
 import PropTypes from 'prop-types';
 import { analysisService } from '../../services/analysisService';
 import logger from '../../utils/logger';
 import { useAnalyses } from '../../contexts/sseContext/index';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import { usePermissions } from '../../hooks/usePermissions.js';
-import { CodeMirrorEditor } from '../editor/CodeMirrorEditor.jsx';
 import {
   Paper,
   Stack,
@@ -32,6 +31,13 @@ import {
   IconFileCode,
 } from '@tabler/icons-react';
 import sanitize from 'sanitize-filename';
+
+// Lazy load CodeMirror editor to reduce initial bundle size
+const CodeMirrorEditor = lazy(() =>
+  import('../editor/CodeMirrorEditor.jsx').then((m) => ({
+    default: m.CodeMirrorEditor,
+  })),
+);
 
 const DEFAULT_EDITOR_CONTENT = '// Write your analysis code here';
 

@@ -103,6 +103,20 @@ const NOTIFICATION_CONFIGS = {
 };
 
 /**
+ * Map of icon names to their dynamic imports
+ * This allows us to import only the specific icons we need
+ * @private
+ */
+const ICON_IMPORTS = {
+  IconCheck: () => import('@tabler/icons-react').then((m) => m.IconCheck),
+  IconX: () => import('@tabler/icons-react').then((m) => m.IconX),
+  IconInfoCircle: () =>
+    import('@tabler/icons-react').then((m) => m.IconInfoCircle),
+  IconAlertTriangle: () =>
+    import('@tabler/icons-react').then((m) => m.IconAlertTriangle),
+};
+
+/**
  * Internal helper to show a typed notification
  * @private
  * @param {string} type - Notification type (success, error, info, warning)
@@ -114,8 +128,7 @@ const NOTIFICATION_CONFIGS = {
 const showTypedNotification = async (type, message, title, autoClose) => {
   const config = NOTIFICATION_CONFIGS[type];
   const notifications = await getNotificationsAPI();
-  const icons = await import('@tabler/icons-react');
-  const IconComponent = icons[config.iconName];
+  const IconComponent = await ICON_IMPORTS[config.iconName]();
 
   const id = `notification-${type}-${Date.now()}`;
   notifications.show({

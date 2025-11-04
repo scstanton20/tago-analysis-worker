@@ -10,6 +10,7 @@
  */
 
 import PropTypes from 'prop-types';
+import { lazy } from 'react';
 import {
   Modal,
   Stack,
@@ -40,7 +41,13 @@ import {
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import { useAnalysisEdit } from '../../hooks/useAnalysisEdit';
 import { useDiagnostics } from '../../hooks/useDiagnostics';
-import { CodeMirrorEditor } from '../editor/CodeMirrorEditor';
+
+// Lazy load CodeMirror editor to reduce initial bundle size
+const CodeMirrorEditor = lazy(() =>
+  import('../editor/CodeMirrorEditor.jsx').then((m) => ({
+    default: m.CodeMirrorEditor,
+  })),
+);
 
 /**
  * Analysis Edit Modal Component

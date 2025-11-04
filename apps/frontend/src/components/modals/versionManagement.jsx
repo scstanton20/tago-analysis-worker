@@ -23,7 +23,6 @@ import {
   IconClock,
   IconFileText,
   IconEyeCode,
-  IconGitCompare,
 } from '@tabler/icons-react';
 import { analysisService } from '../../services/analysisService';
 import { useNotifications } from '../../hooks/useNotifications';

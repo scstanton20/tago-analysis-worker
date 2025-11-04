@@ -59,9 +59,7 @@ export default defineConfig({
           // Drag and drop
           dnd: ['@dnd-kit/core', '@dnd-kit/sortable', '@dnd-kit/utilities'],
           // Other utilities
-          utils: ['diff', 'sanitize-filename', 'react-use'],
-          // Icons
-          icons: ['@tabler/icons-react'],
+          utils: ['sanitize-filename'],
           // Auth
           auth: ['better-auth'],
         },

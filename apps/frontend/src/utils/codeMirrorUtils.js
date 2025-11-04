@@ -6,7 +6,7 @@
 import { EditorView, lineNumbers, keymap } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
 import { linter } from '@codemirror/lint';
-import * as prettier from 'prettier';
+import * as prettier from 'prettier/standalone';
 import { Linter } from 'eslint-linter-browserify';
 import { eslintConfig } from '../config/eslintConfig';
 import logger from './logger';
