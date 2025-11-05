@@ -8,7 +8,6 @@ import sanitize from 'sanitize-filename';
 import {
   safeWriteFile,
   safeUnlink,
-  isPathSafe,
   sanitizeAndValidateFilename,
 } from '../utils/safePath.js';
 import { handleError } from '../utils/responseHelpers.js';
@@ -216,18 +215,12 @@ class AnalysisController {
   static async runAnalysis(req, res) {
     const { fileName } = req.params;
 
-    req.log.info(
-      { action: 'runAnalysis', fileName },
-      'Running analysis',
-    );
+    req.log.info({ action: 'runAnalysis', fileName }, 'Running analysis');
 
     try {
       const result = await analysisService.runAnalysis(fileName);
 
-      req.log.info(
-        { action: 'runAnalysis', fileName },
-        'Analysis started',
-      );
+      req.log.info({ action: 'runAnalysis', fileName }, 'Analysis started');
 
       // No SSE broadcast needed here - the actual process lifecycle event
       // (analysisUpdate) will be sent from analysisProcess.js when the child process starts
@@ -259,18 +252,12 @@ class AnalysisController {
   static async stopAnalysis(req, res) {
     const { fileName } = req.params;
 
-    req.log.info(
-      { action: 'stopAnalysis', fileName },
-      'Stopping analysis',
-    );
+    req.log.info({ action: 'stopAnalysis', fileName }, 'Stopping analysis');
 
     try {
       const result = await analysisService.stopAnalysis(fileName);
 
-      req.log.info(
-        { action: 'stopAnalysis', fileName },
-        'Analysis stopped',
-      );
+      req.log.info({ action: 'stopAnalysis', fileName }, 'Analysis stopped');
 
       // No SSE broadcast needed here - the actual process lifecycle event
       // (analysisUpdate) will be sent from analysisProcess.js when the child process exits
@@ -304,10 +291,7 @@ class AnalysisController {
   static async deleteAnalysis(req, res) {
     const { fileName } = req.params;
 
-    req.log.info(
-      { action: 'deleteAnalysis', fileName },
-      'Deleting analysis',
-    );
+    req.log.info({ action: 'deleteAnalysis', fileName }, 'Deleting analysis');
 
     try {
       // Get analysis data before deletion for broadcast
@@ -461,10 +445,7 @@ class AnalysisController {
     const { content } = req.body;
 
     // Validation handled by middleware
-    req.log.info(
-      { action: 'updateAnalysis', fileName },
-      'Updating analysis',
-    );
+    req.log.info({ action: 'updateAnalysis', fileName }, 'Updating analysis');
 
     try {
       const result = await analysisService.updateAnalysis(fileName, {
@@ -617,11 +598,7 @@ class AnalysisController {
     );
 
     try {
-      const logs = await analysisService.getLogs(
-        fileName,
-        page,
-        limit,
-      );
+      const logs = await analysisService.getLogs(fileName, page, limit);
 
       req.log.info(
         {
@@ -669,7 +646,7 @@ class AnalysisController {
    * - Temporary files cleaned up after sending
    */
   static async downloadLogs(req, res) {
-    const { fileName } = req.params;
+    const fileName = sanitizeAndValidateFilename(req.params.fileName);
     const { timeRange } = req.query;
 
     // Validation handled by middleware
@@ -686,19 +663,13 @@ class AnalysisController {
       );
 
       if (timeRange === 'all') {
-        // For 'all' time range, construct the expected log file path securely
-        // instead of trusting the service-provided path
+        // Construct the log file path using sanitized fileName
         const expectedLogFile = path.join(
           config.paths.analysis,
           fileName,
           'logs',
           'analysis.log',
         );
-
-        // Validate that our expected path is within allowed directory
-        if (!isPathSafe(expectedLogFile, config.paths.analysis)) {
-          throw new Error('Path traversal attempt detected');
-        }
 
         // Verify the file exists before attempting to serve it
         try {
@@ -730,7 +701,7 @@ class AnalysisController {
         );
 
         // Stream the file directly - no memory loading
-        return res.sendFile(expectedLogFile, (err) => {
+        return res.sendFile(path.resolve(expectedLogFile), (err) => {
           if (err && !res.headersSent) {
             req.log.error(
               { action: 'downloadLogs', fileName, err },
@@ -744,33 +715,24 @@ class AnalysisController {
       // For filtered time ranges, use the content approach since files are smaller
       const { content } = result;
 
-      // Define log path inside the analysis subfolder with sanitized filename
-      const analysisLogsDir = path.join(
+      // Create temporary file path in the analysis logs directory
+      const tempLogFile = path.join(
         config.paths.analysis,
         fileName,
         'logs',
-      );
-
-      // Validate that the logs directory is within the expected analysis path
-      if (!isPathSafe(analysisLogsDir, config.paths.analysis)) {
-        throw new Error('Path traversal attempt detected');
-      }
-
-      // Create a temporary file in the correct logs directory with sanitized filename
-      const tempLogFile = path.join(
-        analysisLogsDir,
         `${sanitize(path.parse(fileName).name)}_${sanitize(timeRange)}_temp.log`,
       );
 
-      // Validate that the temp file path is within the expected directory
-      if (!isPathSafe(tempLogFile, analysisLogsDir)) {
-        throw new Error('Path traversal attempt detected');
-      }
+      const resolvedTempLogFile = path.resolve(tempLogFile);
 
       try {
-        await safeWriteFile(tempLogFile, content, config.paths.analysis);
+        await safeWriteFile(
+          resolvedTempLogFile,
+          content,
+          config.paths.analysis,
+        );
 
-        // Set the download filename using headers with sanitized name
+        // Set download headers
         const downloadFilename = `${sanitize(path.parse(fileName).name)}.log`;
         res.setHeader(
           'Content-Disposition',
@@ -783,10 +745,10 @@ class AnalysisController {
           'Sending filtered log file',
         );
 
-        // Send the file using the full tempLogFile path
-        res.sendFile(tempLogFile, (err) => {
-          // Clean up temp file using the already validated tempLogFile path
-          safeUnlink(tempLogFile, config.paths.analysis).catch(
+        // Send the file and clean up after
+        res.sendFile(resolvedTempLogFile, (err) => {
+          // Clean up temp file
+          safeUnlink(resolvedTempLogFile, config.paths.analysis).catch(
             (unlinkError) => {
               req.log.error(
                 {
@@ -829,17 +791,6 @@ class AnalysisController {
         return res.status(404).json({ error: error.message });
       }
 
-      if (
-        error.message.includes('Path traversal') ||
-        error.message.includes('Invalid filename')
-      ) {
-        req.log.warn(
-          { action: 'downloadLogs', fileName },
-          'Invalid file path',
-        );
-        return res.status(400).json({ error: 'Invalid file path' });
-      }
-
       handleError(res, error, 'downloading logs', { logger: req.logger });
     }
   }
@@ -865,18 +816,12 @@ class AnalysisController {
   static async clearLogs(req, res) {
     const { fileName } = req.params;
 
-    req.log.info(
-      { action: 'clearLogs', fileName },
-      'Clearing analysis logs',
-    );
+    req.log.info({ action: 'clearLogs', fileName }, 'Clearing analysis logs');
 
     try {
       const result = await analysisService.clearLogs(fileName);
 
-      req.log.info(
-        { action: 'clearLogs', fileName },
-        'Logs cleared',
-      );
+      req.log.info({ action: 'clearLogs', fileName }, 'Logs cleared');
 
       // Broadcast logs cleared with the "Log file cleared" message included
       // This avoids race conditions with separate log events
@@ -1133,10 +1078,7 @@ class AnalysisController {
     );
 
     try {
-      const result = await analysisService.updateEnvironment(
-        fileName,
-        env,
-      );
+      const result = await analysisService.updateEnvironment(fileName, env);
 
       req.log.info(
         {

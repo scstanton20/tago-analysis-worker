@@ -178,8 +178,6 @@ export const analysisService = {
 
   downloadLogs: withErrorHandling(async (fileName, timeRange) => {
     logger.debug('Downloading analysis logs', { fileName, timeRange });
-    // Sanitize the filename to prevent XSS
-    const safeFileName = sanitize(fileName);
 
     const response = await fetchWithHeaders(
       `/analyses/${fileName}/logs/download?timeRange=${timeRange}`,
@@ -195,7 +193,7 @@ export const analysisService = {
     }
 
     const blob = await response.blob();
-    downloadBlob(safeFileName, blob, '.log');
+    downloadBlob(sanitize(fileName), blob, '.log');
     logger.info('Analysis logs downloaded successfully', {
       fileName,
       timeRange,
@@ -279,9 +277,6 @@ export const analysisService = {
   }, 'update analysis environment variables'),
 
   async downloadAnalysis(fileName, version = null) {
-    // Sanitize the filename to prevent XSS
-    const safeFileName = sanitize(fileName);
-
     const versionParam = version ? `?version=${version}` : '';
     const response = await fetchWithHeaders(
       `/analyses/${fileName}/download${versionParam}`,
@@ -297,8 +292,10 @@ export const analysisService = {
     }
 
     const blob = await response.blob();
-    const versionSuffix = version ? `_v${version}` : '';
-    downloadBlob(`${safeFileName}${versionSuffix}`, blob, '.js');
+    // Sanitize version to prevent XSS - only allow numbers
+    const safeVersion = version ? String(version).replace(/[^0-9]/g, '') : '';
+    const versionSuffix = safeVersion ? `_v${safeVersion}` : '';
+    downloadBlob(sanitize(`${fileName}${versionSuffix}`), blob, '.js');
   },
 
   async getVersions(fileName) {

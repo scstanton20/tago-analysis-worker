@@ -298,7 +298,9 @@ export const requireTeamPermission = (permission) => {
           'Team permission check failed: no teamId',
         );
         return res.status(403).json({
-          error: `Team-specific permission required. Permission: ${permission}`,
+          error: 'Team-specific permission required',
+          code: 'TEAM_PERMISSION_REQUIRED',
+          details: { requiredPermission: permission },
         });
       }
 
@@ -326,7 +328,9 @@ export const requireTeamPermission = (permission) => {
         'Team permission denied',
       );
       return res.status(403).json({
-        error: `Insufficient permissions for team ${teamId}. Required: ${permission}`,
+        error: 'Insufficient team permissions',
+        code: 'INSUFFICIENT_TEAM_PERMISSIONS',
+        details: { teamId, requiredPermission: permission },
       });
     } catch (error) {
       logger.error(
@@ -384,7 +388,9 @@ export const requireAnyTeamPermission = (permission) => {
         'Permission denied in all teams',
       );
       return res.status(403).json({
-        error: `Insufficient permissions. Required: ${permission} in at least one team`,
+        error: 'Insufficient permissions',
+        code: 'INSUFFICIENT_PERMISSIONS',
+        details: { requiredPermission: permission, scope: 'any_team' },
       });
     } catch (error) {
       logger.error(

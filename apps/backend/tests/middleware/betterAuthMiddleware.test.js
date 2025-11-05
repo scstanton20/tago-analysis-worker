@@ -342,7 +342,9 @@ describe('betterAuthMiddleware', () => {
 
       expect(res.status).toHaveBeenCalledWith(403);
       expect(res.json).toHaveBeenCalledWith({
-        error: 'Team-specific permission required. Permission: view_analyses',
+        error: 'Team-specific permission required',
+        code: 'TEAM_PERMISSION_REQUIRED',
+        details: { requiredPermission: 'view_analyses' },
       });
       expect(next).not.toHaveBeenCalled();
       expect(req.log.warn).toHaveBeenCalledWith(
@@ -369,8 +371,9 @@ describe('betterAuthMiddleware', () => {
 
       expect(res.status).toHaveBeenCalledWith(403);
       expect(res.json).toHaveBeenCalledWith({
-        error:
-          'Insufficient permissions for team team-456. Required: delete_analyses',
+        error: 'Insufficient team permissions',
+        code: 'INSUFFICIENT_TEAM_PERMISSIONS',
+        details: { teamId: 'team-456', requiredPermission: 'delete_analyses' },
       });
       expect(next).not.toHaveBeenCalled();
       expect(req.log.warn).toHaveBeenCalledWith(
@@ -409,8 +412,9 @@ describe('betterAuthMiddleware', () => {
 
       expect(res.status).toHaveBeenCalledWith(403);
       expect(res.json).toHaveBeenCalledWith({
-        error:
-          'Insufficient permissions for team team-456. Required: view_analyses',
+        error: 'Insufficient team permissions',
+        code: 'INSUFFICIENT_TEAM_PERMISSIONS',
+        details: { teamId: 'team-456', requiredPermission: 'view_analyses' },
       });
       expect(next).not.toHaveBeenCalled();
     });
@@ -505,8 +509,9 @@ describe('betterAuthMiddleware', () => {
 
       expect(res.status).toHaveBeenCalledWith(403);
       expect(res.json).toHaveBeenCalledWith({
-        error:
-          'Insufficient permissions. Required: delete_analyses in at least one team',
+        error: 'Insufficient permissions',
+        code: 'INSUFFICIENT_PERMISSIONS',
+        details: { requiredPermission: 'delete_analyses', scope: 'any_team' },
       });
       expect(next).not.toHaveBeenCalled();
       expect(req.log.warn).toHaveBeenCalledWith(
@@ -556,8 +561,9 @@ describe('betterAuthMiddleware', () => {
 
       expect(res.status).toHaveBeenCalledWith(403);
       expect(res.json).toHaveBeenCalledWith({
-        error:
-          'Insufficient permissions. Required: view_analyses in at least one team',
+        error: 'Insufficient permissions',
+        code: 'INSUFFICIENT_PERMISSIONS',
+        details: { requiredPermission: 'view_analyses', scope: 'any_team' },
       });
       expect(next).not.toHaveBeenCalled();
     });

@@ -8,11 +8,11 @@ router.use(authMiddleware);
 // Prometheus metrics endpoint
 router.get('/metrics', async (req, res) => {
   try {
-    res.set('Content-Type', register.contentType);
     const metrics = await register.metrics();
+    res.set('Content-Type', register.contentType);
     res.end(metrics);
-  } catch (error) {
-    res.status(500).end(error.message);
+  } catch {
+    res.status(500).json({ error: 'Failed to retrieve metrics' });
   }
 });
 

@@ -226,7 +226,7 @@ describe('Metrics Routes - WITH REAL AUTH', () => {
         .set('Cookie', adminCookie)
         .expect(500);
 
-      expect(response.text).toBe('Metrics collection failed');
+      expect(response.body).toEqual({ error: 'Failed to retrieve metrics' });
     });
 
     it('should handle async errors gracefully', async () => {
@@ -240,7 +240,7 @@ describe('Metrics Routes - WITH REAL AUTH', () => {
         .set('Cookie', viewerCookie)
         .expect(500);
 
-      expect(response.text).toBe('Database connection failed');
+      expect(response.body).toEqual({ error: 'Failed to retrieve metrics' });
     });
   });
 

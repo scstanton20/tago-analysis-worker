@@ -5,6 +5,7 @@
  */
 import logger from './logger';
 import { isDevelopment, API_URL } from '../config/env.js';
+import sanitize from 'sanitize-filename';
 
 /**
  * WeakSet to track retried requests without mutating options objects
@@ -275,10 +276,27 @@ export async function handleResponse(response, originalUrl, originalOptions) {
  * @param {string} extension - File extension (e.g., '.js', '.log')
  */
 export function downloadBlob(fileName, blob, extension = '') {
-  const url = window.URL.createObjectURL(blob);
+  // Ensure extension is safe (alphanumeric + dot only)
+  const safeExtension = extension.match(/^\.?[a-zA-Z0-9]+$/) ? extension : '';
+
+  // Map extension to safe MIME type
+  const mimeTypeMap = {
+    '.js': 'application/javascript',
+    '.log': 'text/plain',
+  };
+  const mimeType = mimeTypeMap[safeExtension];
+
+  const safeBlob = new Blob([blob], { type: mimeType });
+
+  const url = window.URL.createObjectURL(safeBlob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${fileName}${extension}`;
+
+  const sanitizedFileName = sanitize(`${fileName}${safeExtension}`, {
+    replacement: '_',
+  });
+
+  a.setAttribute('download', sanitizedFileName);
   a.style.display = 'none';
   a.rel = 'noopener noreferrer';
 
