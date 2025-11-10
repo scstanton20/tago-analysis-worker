@@ -4,13 +4,20 @@ import {
   useCallback,
   useMemo,
   useEffect,
+  lazy,
+  Suspense,
 } from 'react';
 import { useSession, signOut, authClient } from '../lib/auth.js';
 import { showError, showInfo } from '../utils/notificationService';
 import { useEventListener } from '../hooks/useEventListener';
-import PasswordOnboarding from '../components/auth/passwordOnboarding.jsx';
 import { fetchWithHeaders, handleResponse } from '../utils/apiUtils.js';
 import logger from '../utils/logger.js';
+import AppLoadingOverlay from '../components/common/AppLoadingOverlay';
+
+// Lazy load PasswordOnboarding component
+const PasswordOnboarding = lazy(
+  () => import('../components/auth/passwordOnboarding.jsx'),
+);
 
 const AuthContext = createContext();
 
@@ -265,26 +272,30 @@ export const AuthProvider = ({ children }) => {
     <AuthContext.Provider value={contextValue}>
       {children}
       {showPasswordOnboarding && (
-        <PasswordOnboarding
-          username={passwordOnboardingUser}
-          passwordOnboarding={contextValue.passwordOnboarding}
-          onSuccess={async () => {
-            logger.log('🚨 AuthContext: PasswordOnboarding completed');
-            setShowPasswordOnboarding(false);
-            setPasswordOnboardingUser('');
+        <Suspense
+          fallback={<AppLoadingOverlay message="Loading password setup..." />}
+        >
+          <PasswordOnboarding
+            username={passwordOnboardingUser}
+            passwordOnboarding={contextValue.passwordOnboarding}
+            onSuccess={async () => {
+              logger.log('🚨 AuthContext: PasswordOnboarding completed');
+              setShowPasswordOnboarding(false);
+              setPasswordOnboardingUser('');
 
-            // Refresh session to remove requiresPasswordChange flag
-            try {
-              refetchSession();
-              logger.log('✓ Session refreshed after password change');
-            } catch (error) {
-              logger.error(
-                'Error refreshing session after password change:',
-                error,
-              );
-            }
-          }}
-        />
+              // Refresh session to remove requiresPasswordChange flag
+              try {
+                refetchSession();
+                logger.log('✓ Session refreshed after password change');
+              } catch (error) {
+                logger.error(
+                  'Error refreshing session after password change:',
+                  error,
+                );
+              }
+            }}
+          />
+        </Suspense>
       )}
     </AuthContext.Provider>
   );

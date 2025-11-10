@@ -28,12 +28,13 @@ import {
 import { analysisService } from '../../services/analysisService';
 import { teamService } from '../../services/teamService';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
-import AnalysisLogs from './analysisLogs';
 import StatusBadge from './statusBadge';
 import logger from '../../utils/logger';
 import LazyModal from '../common/LazyModal';
+import AppLoadingOverlay from '../common/AppLoadingOverlay';
 
-// Lazy load all modal components
+// Lazy load all modal components and AnalysisLogs
+const AnalysisLogs = lazy(() => import('./analysisLogs'));
 const AnalysisEditModal = lazy(() => import('../modals/AnalysisEditModal.jsx'));
 const LogDownloadDialog = lazy(() => import('../modals/logDownload'));
 const TeamSelectModal = lazy(() => import('../modals/changeTeamModal'));
@@ -452,7 +453,11 @@ export default function AnalysisItem({
         </Group>
 
         {/* Logs Section */}
-        {showLogs && <AnalysisLogs analysis={analysis} />}
+        {showLogs && (
+          <Suspense fallback={<AppLoadingOverlay message="Loading logs..." />}>
+            <AnalysisLogs analysis={analysis} />
+          </Suspense>
+        )}
       </Stack>
 
       {/* Edit Modal - Render if user can view analyses */}

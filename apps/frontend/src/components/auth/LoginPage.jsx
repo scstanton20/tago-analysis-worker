@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, lazy, Suspense } from 'react';
 import { useEventListener } from '../../hooks/useEventListener';
 import { useInterval, useTimeout } from '../../hooks/useInterval';
 import {
@@ -23,7 +23,10 @@ import { signIn, signInPasskey } from '../../lib/auth.js';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import logger from '../../utils/logger';
 import Logo from '../ui/logo';
-import PasswordOnboarding from './passwordOnboarding';
+import AppLoadingOverlay from '../common/AppLoadingOverlay';
+
+// Lazy load PasswordOnboarding component
+const PasswordOnboarding = lazy(() => import('./passwordOnboarding'));
 
 export default function LoginPage() {
   const notify = useNotifications();
@@ -178,10 +181,14 @@ export default function LoginPage() {
   // Show password onboarding if required
   if (showPasswordOnboarding) {
     return (
-      <PasswordOnboarding
-        username={passwordOnboardingUser}
-        onSuccess={handlePasswordOnboardingSuccess}
-      />
+      <Suspense
+        fallback={<AppLoadingOverlay message="Loading password setup..." />}
+      >
+        <PasswordOnboarding
+          username={passwordOnboardingUser}
+          onSuccess={handlePasswordOnboardingSuccess}
+        />
+      </Suspense>
     );
   }
 

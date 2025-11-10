@@ -1,5 +1,5 @@
 // frontend/src/components/analysis/uploadAnalysis.jsx
-import { useState, useMemo, useCallback, lazy } from 'react';
+import { useState, useMemo, useCallback, lazy, Suspense } from 'react';
 import PropTypes from 'prop-types';
 import { analysisService } from '../../services/analysisService';
 import logger from '../../utils/logger';
@@ -31,6 +31,7 @@ import {
   IconFileCode,
 } from '@tabler/icons-react';
 import sanitize from 'sanitize-filename';
+import AppLoadingOverlay from '../common/AppLoadingOverlay';
 
 // Lazy load CodeMirror editor to reduce initial bundle size
 const CodeMirrorEditor = lazy(() =>
@@ -530,13 +531,21 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
                       overflow: 'hidden',
                     }}
                   >
-                    <CodeMirrorEditor
-                      value={editorContent}
-                      onChange={handleEditorChange}
-                      readOnly={isInputDisabled}
-                      language="javascript"
-                      height="100%"
-                    />
+                    {mode === 'create' && isExpanded && (
+                      <Suspense
+                        fallback={
+                          <AppLoadingOverlay message="Loading editor..." />
+                        }
+                      >
+                        <CodeMirrorEditor
+                          value={editorContent}
+                          onChange={handleEditorChange}
+                          readOnly={isInputDisabled}
+                          language="javascript"
+                          height="100%"
+                        />
+                      </Suspense>
+                    )}
                   </Box>
                 </Stack>
               </Tabs.Panel>
