@@ -70,11 +70,15 @@ const SortableTeamItem = ({ team, isSelected, onClick, analysisCount }) => {
       style={style}
       onMouseEnter={(e) => {
         const handle = e.currentTarget.querySelector('.team-drag-handle');
+        const badge = e.currentTarget.querySelector('.team-analysis-count');
         if (handle) handle.style.opacity = '1';
+        if (badge && !team.isSystem) badge.style.marginRight = '28px';
       }}
       onMouseLeave={(e) => {
         const handle = e.currentTarget.querySelector('.team-drag-handle');
+        const badge = e.currentTarget.querySelector('.team-analysis-count');
         if (handle) handle.style.opacity = '0';
+        if (badge && !team.isSystem) badge.style.marginRight = '0';
       }}
     >
       <NavLink
@@ -99,11 +103,22 @@ const SortableTeamItem = ({ team, isSelected, onClick, analysisCount }) => {
           </Group>
         }
         rightSection={
-          <Group gap={4} align="center">
+          <Box
+            style={{
+              position: 'relative',
+              display: 'flex',
+              alignItems: 'center',
+            }}
+          >
             <Badge
+              className="team-analysis-count"
               size="md"
               variant={isSelected ? 'filled' : 'light'}
               color={isSelected ? 'brand' : 'gray'}
+              style={{
+                transition: 'margin-right 200ms ease',
+                marginRight: 0,
+              }}
             >
               {analysisCount}
             </Badge>
@@ -113,6 +128,8 @@ const SortableTeamItem = ({ team, isSelected, onClick, analysisCount }) => {
                 {...listeners}
                 className="team-drag-handle"
                 style={{
+                  position: 'absolute',
+                  right: 0,
                   cursor: 'grab',
                   opacity: 0,
                   transition: 'opacity 200ms',
@@ -127,7 +144,7 @@ const SortableTeamItem = ({ team, isSelected, onClick, analysisCount }) => {
                 <IconGripVertical size={16} />
               </Box>
             )}
-          </Group>
+          </Box>
         }
         styles={{
           root: {
