@@ -47,6 +47,7 @@ vi.mock('../../src/utils/responseHelpers.js', () => ({
   handleError: vi.fn((res, error) => {
     res.status(500).json({ error: error.message });
   }),
+  broadcastTeamStructureUpdate: vi.fn(),
 }));
 
 vi.mock('../../src/config/default.js', () => ({

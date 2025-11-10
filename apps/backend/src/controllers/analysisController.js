@@ -10,7 +10,10 @@ import {
   safeUnlink,
   sanitizeAndValidateFilename,
 } from '../utils/safePath.js';
-import { handleError } from '../utils/responseHelpers.js';
+import {
+  handleError,
+  broadcastTeamStructureUpdate,
+} from '../utils/responseHelpers.js';
 
 /**
  * Controller class for managing analysis operations
@@ -121,12 +124,7 @@ class AnalysisController {
       );
 
       // Broadcast team structure update
-      const config = await analysisService.getConfig();
-      sseManager.broadcastToTeamUsers(teamId, {
-        type: 'teamStructureUpdated',
-        teamId: teamId,
-        items: config.teamStructure[teamId]?.items || [],
-      });
+      await broadcastTeamStructureUpdate(sseManager, teamId);
 
       res.json(result);
     } catch (error) {
@@ -324,12 +322,7 @@ class AnalysisController {
 
       // Broadcast team structure update
       if (analysisToDelete?.teamId) {
-        const config = await analysisService.getConfig();
-        sseManager.broadcastToTeamUsers(analysisToDelete.teamId, {
-          type: 'teamStructureUpdated',
-          teamId: analysisToDelete.teamId,
-          items: config.teamStructure[analysisToDelete.teamId]?.items || [],
-        });
+        await broadcastTeamStructureUpdate(sseManager, analysisToDelete.teamId);
       }
 
       res.json({ success: true });
@@ -556,6 +549,11 @@ class AnalysisController {
           ...renamedAnalysis,
         },
       });
+
+      // Broadcast team structure update so team-based analysis lists update in real-time
+      if (renamedAnalysis?.teamId) {
+        await broadcastTeamStructureUpdate(sseManager, renamedAnalysis.teamId);
+      }
 
       res.json({
         success: true,

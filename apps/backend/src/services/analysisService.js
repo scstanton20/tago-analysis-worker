@@ -651,6 +651,35 @@ class AnalysisService {
       // Add the analysis with the new name
       this.analyses.set(newFileName, analysis);
 
+      // Update teamStructure to reference new analysis name
+      // This ensures both the analyses object key AND all teamStructure references are updated
+      const configData = await this.getConfig();
+      if (configData.teamStructure) {
+        const updateAnalysisNameInItems = (items) => {
+          for (const item of items) {
+            if (
+              item.type === 'analysis' &&
+              item.analysisName === analysisName
+            ) {
+              item.analysisName = newFileName;
+            }
+            if (item.type === 'folder' && item.items) {
+              updateAnalysisNameInItems(item.items);
+            }
+          }
+        };
+
+        // Update all team structures
+        for (const teamStructure of Object.values(configData.teamStructure)) {
+          if (teamStructure.items) {
+            updateAnalysisNameInItems(teamStructure.items);
+          }
+        }
+
+        // Update configCache with modified teamStructure
+        this.configCache = configData;
+      }
+
       // Log the rename operation
       await this.addLog(
         newFileName,
