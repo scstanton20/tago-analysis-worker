@@ -1,5 +1,5 @@
 // frontend/src/components/teamSidebar.jsx
-import { useState, lazy } from 'react';
+import { useState } from 'react';
 import PropTypes from 'prop-types';
 import {
   DndContext,
@@ -38,15 +38,11 @@ import {
   IconUserPlus,
   IconUserEdit,
 } from '@tabler/icons-react';
-// Lazy load modal components
-const TeamManagementModal = lazy(() => import('../modals/teamManagementModal'));
-const UserManagementModal = lazy(() => import('../modals/userManagementModal'));
-const ProfileModal = lazy(() => import('../modals/profileModal'));
 import { teamService } from '../../services/teamService';
 import { useAuth } from '../../hooks/useAuth';
 import { usePermissions } from '../../hooks/usePermissions';
 import logger from '../../utils/logger';
-import LazyModal from '../common/LazyModal';
+import { modalService } from '../../modals/modalService';
 
 // Sortable Team Item
 const SortableTeamItem = ({ team, isSelected, onClick, analysisCount }) => {
@@ -187,9 +183,6 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
   // Use custom hook for visible teams and analysis counts
   const { teamsArray, teamsObject, getTeamAnalysisCount } = useVisibleTeams();
 
-  const [showManageModal, setShowManageModal] = useState(false);
-  const [showUserModal, setShowUserModal] = useState(false);
-  const [showProfileModal, setShowProfileModal] = useState(false);
   const [draggedAnalysis, setDraggedAnalysis] = useState(null);
   const [activeTeamId, setActiveTeamId] = useState(null);
 
@@ -277,7 +270,7 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
                 variant="light"
                 color="brand"
                 size="lg"
-                onClick={() => setShowManageModal(true)}
+                onClick={() => modalService.openTeamManagement(teamsObject)}
                 aria-label="Manage teams"
               >
                 <IconBrandAsana size={18} aria-hidden="true" />
@@ -290,7 +283,7 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
                 variant="light"
                 color="accent"
                 size="lg"
-                onClick={() => setShowUserModal(true)}
+                onClick={() => modalService.openUserManagement()}
                 aria-label="Manage users"
               >
                 <IconUserPlus size={18} aria-hidden="true" />
@@ -387,7 +380,7 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
                 variant="light"
                 color="brand"
                 size="sm"
-                onClick={() => setShowProfileModal(true)}
+                onClick={() => modalService.openProfile()}
                 aria-label="Profile Settings"
               >
                 <IconUserEdit size={14} aria-hidden="true" />
@@ -407,34 +400,6 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
           </Group>
         </Group>
       </Box>
-
-      {/* Team Management Modal */}
-      <LazyModal
-        show={showManageModal}
-        onClose={() => setShowManageModal(false)}
-        Component={TeamManagementModal}
-        componentName="Team Management Modal"
-        loadingMessage="Loading team management..."
-        teams={teamsObject}
-      />
-
-      {/* User Management Modal */}
-      <LazyModal
-        show={showUserModal}
-        onClose={() => setShowUserModal(false)}
-        Component={UserManagementModal}
-        componentName="User Management Modal"
-        loadingMessage="Loading user management..."
-      />
-
-      {/* Profile Modal */}
-      <LazyModal
-        show={showProfileModal}
-        onClose={() => setShowProfileModal(false)}
-        Component={ProfileModal}
-        componentName="Profile Modal"
-        loadingMessage="Loading profile..."
-      />
     </Stack>
   );
 }

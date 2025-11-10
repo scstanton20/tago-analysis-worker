@@ -1,5 +1,5 @@
 // frontend/src/components/analysis/analysisItem.jsx
-import { useState, lazy, Suspense } from 'react';
+import { lazy, Suspense } from 'react';
 import PropTypes from 'prop-types';
 import {
   Paper,
@@ -30,19 +30,13 @@ import { teamService } from '../../services/teamService';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import StatusBadge from './statusBadge';
 import logger from '../../utils/logger';
-import LazyModal from '../common/LazyModal';
 import AppLoadingOverlay from '../common/AppLoadingOverlay';
 
-// Lazy load all modal components and AnalysisLogs
+// Lazy load AnalysisLogs
 const AnalysisLogs = lazy(() => import('./analysisLogs'));
-const AnalysisEditModal = lazy(() => import('../modals/AnalysisEditModal.jsx'));
-const LogDownloadDialog = lazy(() => import('../modals/logDownload'));
-const TeamSelectModal = lazy(() => import('../modals/changeTeamModal'));
-const VersionManagementModal = lazy(
-  () => import('../modals/versionManagement'),
-);
 import { useAnalyses, useTeams } from '../../contexts/sseContext';
 import { usePermissions } from '../../hooks/usePermissions';
+import { modalService } from '../../modals/modalService';
 
 export default function AnalysisItem({
   analysis,
@@ -50,11 +44,6 @@ export default function AnalysisItem({
   onToggleLogs,
   reorderMode = false,
 }) {
-  const [editModalType, setEditModalType] = useState(null); // null, 'analysis', or 'env'
-  const [showLogDownloadDialog, setShowLogDownloadDialog] = useState(false);
-  const [showTeamModal, setShowTeamModal] = useState(false);
-  const [showVersionModal, setShowVersionModal] = useState(false);
-
   const { loadingAnalyses, addLoadingAnalysis, removeLoadingAnalysis } =
     useAnalyses();
   const { teams } = useTeams();
@@ -138,14 +127,20 @@ export default function AnalysisItem({
     if (!canViewAnalyses(analysis)) {
       return; // No permission to view analysis files
     }
-    setEditModalType('analysis');
+    modalService.openAnalysisEditor(analysis, {
+      readOnly: !canEditAnalyses(analysis),
+      type: 'analysis',
+    });
   };
 
   const handleEditENV = async () => {
     if (!canViewAnalyses(analysis)) {
       return; // No permission to view analysis files
     }
-    setEditModalType('env');
+    modalService.openAnalysisEditor(analysis, {
+      readOnly: !canEditAnalyses(analysis),
+      type: 'env',
+    });
   };
 
   const handleDownloadLogs = async (timeRange) => {
@@ -202,7 +197,7 @@ export default function AnalysisItem({
         analysis.name,
         teamName,
       );
-      setShowTeamModal(false);
+      // Modal will close automatically after successful move
     } catch (error) {
       logger.error('Error moving analysis:', error);
     }
@@ -325,7 +320,8 @@ export default function AnalysisItem({
               <Menu
                 shadow="md"
                 width={200}
-                withinPortal={true}
+                withinPortal
+                zIndex={1001}
                 position="bottom-end"
                 closeOnItemClick={true}
               >
@@ -345,7 +341,14 @@ export default function AnalysisItem({
                   {(isAdmin || isUncategorized) && (
                     <>
                       <Menu.Item
-                        onClick={() => setShowTeamModal(true)}
+                        onClick={() =>
+                          modalService.openChangeTeam(
+                            handleTeamChange,
+                            teamsArray,
+                            analysis.teamId || analysis.team,
+                            analysis.name,
+                          )
+                        }
                         leftSection={
                           isUncategorized ? (
                             <IconFolderPlus size={16} />
@@ -370,7 +373,12 @@ export default function AnalysisItem({
                         Download Analysis File
                       </Menu.Item>
                       <Menu.Item
-                        onClick={() => setShowLogDownloadDialog(true)}
+                        onClick={() =>
+                          modalService.openLogDownload(
+                            analysis,
+                            handleDownloadLogs,
+                          )
+                        }
                         leftSection={<IconDownload size={16} />}
                       >
                         Download Logs
@@ -383,7 +391,12 @@ export default function AnalysisItem({
                   {canViewAnalyses(analysis) && (
                     <>
                       <Menu.Item
-                        onClick={() => setShowVersionModal(true)}
+                        onClick={() =>
+                          modalService.openVersionHistory(
+                            analysis,
+                            handleVersionRollback,
+                          )
+                        }
                         leftSection={<IconHistory size={16} />}
                       >
                         Version History
@@ -459,52 +472,6 @@ export default function AnalysisItem({
           </Suspense>
         )}
       </Stack>
-
-      {/* Edit Modal - Render if user can view analyses */}
-      {canViewAnalyses(analysis) && (
-        <LazyModal
-          show={!!editModalType}
-          onClose={() => setEditModalType(null)}
-          Component={AnalysisEditModal}
-          componentName={
-            editModalType === 'analysis'
-              ? 'Analysis Editor'
-              : 'Environment Editor'
-          }
-          loadingMessage={`Loading ${editModalType === 'analysis' ? 'analysis editor' : 'environment editor'}...`}
-          analysis={analysis}
-          readOnly={!canEditAnalyses(analysis)}
-          type={editModalType}
-        />
-      )}
-      <LazyModal
-        show={showLogDownloadDialog}
-        onClose={() => setShowLogDownloadDialog(false)}
-        Component={LogDownloadDialog}
-        componentName="Log Download Dialog"
-        loadingMessage="Loading log download options..."
-        onDownload={handleDownloadLogs}
-      />
-      <LazyModal
-        show={showTeamModal}
-        onClose={() => setShowTeamModal(false)}
-        Component={TeamSelectModal}
-        componentName="Team Selection Modal"
-        loadingMessage="Loading team selection..."
-        onSelect={handleTeamChange}
-        teams={teamsArray}
-        currentTeam={analysis.teamId || analysis.team}
-        analysisName={analysis.name}
-      />
-      <LazyModal
-        show={showVersionModal}
-        onClose={() => setShowVersionModal(false)}
-        Component={VersionManagementModal}
-        componentName="Version History Modal"
-        loadingMessage="Loading version history..."
-        analysis={analysis}
-        onVersionRollback={handleVersionRollback}
-      />
     </Paper>
   );
 }

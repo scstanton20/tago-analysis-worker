@@ -10,18 +10,16 @@ import { useAuth } from './useAuth';
 import { addPasskey, passkey } from '../lib/auth';
 import { useNotifications } from './useNotifications.jsx';
 import { useFormSync } from './useFormSync';
-import { useModalDataLoader } from './useModalDataLoader';
 import logger from '../utils/logger';
 import { validatePassword } from '../utils/userValidation';
 
 /**
  * Hook for managing profile modal state
  * @param {Object} params - Hook parameters
- * @param {boolean} params.opened - Whether the modal is open
- * @param {Function} params.onClose - Callback to close the modal
+ * @param {Function} params.closeModal - Function to close the modal
  * @returns {Object} State and handlers for profile modal
  */
-export function useProfileModal({ opened, onClose }) {
+export function useProfileModal({ closeModal }) {
   const { user, changeProfilePassword, updateProfile } = useAuth();
   const notify = useNotifications();
 
@@ -140,8 +138,11 @@ export function useProfileModal({ opened, onClose }) {
     }
   }, []);
 
-  // Load WebAuthn support and passkeys when modal opens
-  useModalDataLoader(opened, [checkWebAuthnSupport, loadPasskeys]);
+  // Data loading function (called by component on mount)
+  const loadData = useCallback(() => {
+    checkWebAuthnSupport();
+    loadPasskeys();
+  }, [checkWebAuthnSupport, loadPasskeys]);
 
   /**
    * Handle password change submission
@@ -164,7 +165,7 @@ export function useProfileModal({ opened, onClose }) {
         setTimeout(() => {
           setPasswordSuccess(false);
           if (activeTab === 'password') {
-            onClose();
+            closeModal();
           }
         }, 2000);
       } catch (err) {
@@ -173,7 +174,7 @@ export function useProfileModal({ opened, onClose }) {
         setPasswordLoading(false);
       }
     },
-    [notify, changeProfilePassword, passwordForm, activeTab, onClose],
+    [notify, changeProfilePassword, passwordForm, activeTab, closeModal],
   );
 
   /**
@@ -305,8 +306,8 @@ export function useProfileModal({ opened, onClose }) {
     setPasswordSuccess(false);
     setPasskeysError('');
     setActiveTab('profile');
-    onClose();
-  }, [passwordForm, passkeyForm, onClose]);
+    closeModal();
+  }, [passwordForm, passkeyForm, closeModal]);
 
   return {
     // Tab state
@@ -345,5 +346,6 @@ export function useProfileModal({ opened, onClose }) {
 
     // Modal control
     handleClose,
+    loadData,
   };
 }

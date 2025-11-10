@@ -193,7 +193,7 @@ export const analysisService = {
     }
 
     const blob = await response.blob();
-    downloadBlob(sanitize(fileName), blob, '.log');
+    await downloadBlob(sanitize(fileName), blob, '.log');
     logger.info('Analysis logs downloaded successfully', {
       fileName,
       timeRange,
@@ -295,7 +295,7 @@ export const analysisService = {
     // Sanitize version to prevent XSS - only allow numbers
     const safeVersion = version ? String(version).replace(/[^0-9]/g, '') : '';
     const versionSuffix = safeVersion ? `_v${safeVersion}` : '';
-    downloadBlob(sanitize(`${fileName}${versionSuffix}`), blob, '.js');
+    await downloadBlob(sanitize(`${fileName}${versionSuffix}`), blob, '.js');
   },
 
   async getVersions(fileName) {

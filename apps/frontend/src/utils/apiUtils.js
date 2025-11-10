@@ -5,7 +5,6 @@
  */
 import logger from './logger';
 import { isDevelopment, API_URL } from '../config/env.js';
-import sanitize from 'sanitize-filename';
 
 /**
  * WeakSet to track retried requests without mutating options objects
@@ -275,7 +274,10 @@ export async function handleResponse(response, originalUrl, originalOptions) {
  * @param {Blob} blob - Blob data to download
  * @param {string} extension - File extension (e.g., '.js', '.log')
  */
-export function downloadBlob(fileName, blob, extension = '') {
+export async function downloadBlob(fileName, blob, extension = '') {
+  // Dynamically import sanitize-filename only when needed
+  const { default: sanitize } = await import('sanitize-filename');
+
   // Ensure extension is safe (alphanumeric + dot only)
   const safeExtension = extension.match(/^\.?[a-zA-Z0-9]+$/) ? extension : '';
 

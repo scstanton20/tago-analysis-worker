@@ -14,8 +14,7 @@ import {
 } from '../../utils/reorderUtils';
 import AnalysisItem from './analysisItem';
 import AnalysisTree from './analysisTree';
-import CreateFolderModal from '../modals/createFolderModal';
-import RenameFolderModal from '../modals/renameFolderModal';
+import { modalService } from '../../modals/modalService';
 import {
   Paper,
   Stack,
@@ -59,9 +58,6 @@ export default function AnalysisList({
   const { getViewableTeams, isAdmin } = usePermissions();
 
   const [openLogIds, setOpenLogIds] = useState(new Set());
-  const [folderModalOpen, setFolderModalOpen] = useState(false);
-  const [renameModalOpen, setRenameModalOpen] = useState(false);
-  const [currentFolder, setCurrentFolder] = useState(null);
   const [reorderMode, setReorderMode] = useState(false);
   const [pendingReorders, setPendingReorders] = useState([]);
   const [localStructure, setLocalStructure] = useState(null);
@@ -176,10 +172,16 @@ export default function AnalysisList({
   };
 
   // Folder handlers
-  const handleCreateFolder = useCallback((parentFolder = null) => {
-    setCurrentFolder(parentFolder);
-    setFolderModalOpen(true);
-  }, []);
+  const handleCreateFolder = useCallback(
+    (parentFolder = null) => {
+      modalService.openCreateFolder(selectedTeam, {
+        parentFolderId: parentFolder?.id,
+        parentFolderName: parentFolder?.name,
+        onCreatePending: reorderMode ? handleCreatePendingFolder : null,
+      });
+    },
+    [selectedTeam, reorderMode, handleCreatePendingFolder],
+  );
 
   const handleFolderAction = useCallback(
     async (action, folder) => {
@@ -189,8 +191,7 @@ export default function AnalysisList({
           break;
 
         case 'rename':
-          setCurrentFolder(folder);
-          setRenameModalOpen(true);
+          modalService.openRenameFolder(selectedTeam, folder.id, folder.name);
           break;
 
         case 'delete':
@@ -493,7 +494,7 @@ export default function AnalysisList({
                     ? 'Close All Logs'
                     : 'Open All Logs'}
                 </Button>
-                <Menu position="bottom-end" withinPortal>
+                <Menu position="bottom-end" withinPortal zIndex={1001}>
                   <Menu.Target>
                     <ActionIcon variant="light" size="lg" color="brand">
                       <IconDotsVertical size={16} />
@@ -644,33 +645,6 @@ export default function AnalysisList({
           )}
         </Stack>
       </Stack>
-
-      {/* Create Folder Modal */}
-      {selectedTeam && (
-        <>
-          <CreateFolderModal
-            opened={folderModalOpen}
-            onClose={() => {
-              setFolderModalOpen(false);
-              setCurrentFolder(null);
-            }}
-            teamId={selectedTeam}
-            parentFolderId={currentFolder?.id}
-            parentFolderName={currentFolder?.name}
-            onCreatePending={reorderMode ? handleCreatePendingFolder : null}
-          />
-          <RenameFolderModal
-            opened={renameModalOpen}
-            onClose={() => {
-              setRenameModalOpen(false);
-              setCurrentFolder(null);
-            }}
-            teamId={selectedTeam}
-            folderId={currentFolder?.id || ''}
-            currentName={currentFolder?.name || ''}
-          />
-        </>
-      )}
     </Paper>
   );
 }

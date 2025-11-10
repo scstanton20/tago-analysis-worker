@@ -70,7 +70,6 @@ function ComponentErrorFallback({ error, reset, componentName }) {
           <Button
             onClick={reset}
             size="sm"
-            variant="light"
             color="red"
             leftSection={<IconRefresh size={16} />}
           >
@@ -79,7 +78,6 @@ function ComponentErrorFallback({ error, reset, componentName }) {
           <Button
             onClick={() => window.location.reload()}
             size="sm"
-            variant="subtle"
             color="gray"
           >
             Reload Page

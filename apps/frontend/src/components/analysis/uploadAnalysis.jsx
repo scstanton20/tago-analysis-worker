@@ -30,7 +30,6 @@ import {
   IconFolderPlus,
   IconFileCode,
 } from '@tabler/icons-react';
-import sanitize from 'sanitize-filename';
 import AppLoadingOverlay from '../common/AppLoadingOverlay';
 
 // Lazy load CodeMirror editor to reduce initial bundle size
@@ -142,13 +141,15 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
   const isTabDisabled = hasFormContent && !isCurrentAnalysisLoading;
 
   // Validation
-  const validateFilename = (filename) => {
+  const validateFilename = async (filename) => {
     if (!filename) return 'Filename cannot be empty';
 
     if (filename.includes('.')) {
       return 'Filename cannot contain periods. Extension will be added automatically.';
     }
 
+    // Dynamically import sanitize-filename only when needed
+    const { default: sanitize } = await import('sanitize-filename');
     const sanitized = sanitize(filename, { replacement: '_' });
     if (filename !== sanitized) {
       return 'Filename contains invalid characters. Please remove: < > : " / \\ | ? * and control characters';
@@ -179,7 +180,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
   };
 
   // Event handlers
-  const handleFileChange = (file) => {
+  const handleFileChange = async (file) => {
     if (!file) {
       resetFileSelection();
       return;
@@ -194,7 +195,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
     }
 
     const nameWithoutExtension = file.name.replace(/\.(js|cjs)$/, '');
-    const validationError = validateFilename(nameWithoutExtension);
+    const validationError = await validateFilename(nameWithoutExtension);
 
     if (validationError) {
       setError(validationError);
@@ -208,18 +209,18 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
     setAnalysisName(nameWithoutExtension);
   };
 
-  const handleEditableFileNameChange = (e) => {
+  const handleEditableFileNameChange = async (e) => {
     const value = e.target.value;
     setFormTouched(true);
     setEditableFileName(value);
-    setError(validateFilename(value));
+    setError(await validateFilename(value));
   };
 
-  const handleAnalysisNameChange = (e) => {
+  const handleAnalysisNameChange = async (e) => {
     const value = e.target.value;
     setFormTouched(true);
     setAnalysisName(value);
-    setError(validateFilename(value));
+    setError(await validateFilename(value));
   };
 
   const handleModeChange = (newMode) => {
@@ -248,7 +249,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
     }
 
     const finalFileName = mode === 'upload' ? editableFileName : analysisName;
-    const validationError = validateFilename(finalFileName);
+    const validationError = await validateFilename(finalFileName);
 
     if (validationError) {
       setError(validationError);

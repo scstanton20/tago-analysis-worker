@@ -3,6 +3,7 @@ import { useForm } from '@mantine/form';
 import { modals } from '@mantine/modals';
 import { admin, authClient } from '../lib/auth';
 import { userService } from '../services/userService';
+import { modalService } from '../modals/modalService';
 import logger from '../utils/logger.js';
 import {
   generateSecurePassword,
@@ -31,8 +32,6 @@ export function useUserManagement({
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [error, setError] = useState('');
   const [createdUserInfo, setCreatedUserInfo] = useState(null);
-  const [showSessionsModal, setShowSessionsModal] = useState(false);
-  const [selectedUserForSessions, setSelectedUserForSessions] = useState(null);
   const [actions, setActions] = useState([]);
   const [currentUserMemberRole, setCurrentUserMemberRole] = useState(null);
 
@@ -619,7 +618,7 @@ export function useUserManagement({
         setShowCreateForm(true);
       } catch (error) {
         logger.error('Error loading user data for editing:', error);
-        setError('Failed to load user data for editing');
+        setError(' user data for editing');
       } finally {
         setLoading(false);
       }
@@ -708,8 +707,7 @@ export function useUserManagement({
   );
 
   const handleManageSessions = useCallback((user) => {
-    setSelectedUserForSessions(user);
-    setShowSessionsModal(true);
+    modalService.openUserSessions(user);
   }, []);
 
   const handleBanUser = useCallback(
@@ -813,11 +811,6 @@ export function useUserManagement({
     form.clearFieldError('email');
   }, [form]);
 
-  const handleSessionsModalClose = useCallback(() => {
-    setShowSessionsModal(false);
-    setSelectedUserForSessions(null);
-  }, []);
-
   // Listen for SSE events for user role updates
   useEffect(() => {
     const handleAdminUserRoleUpdated = (event) => {
@@ -869,8 +862,6 @@ export function useUserManagement({
     setError,
     createdUserInfo,
     setCreatedUserInfo,
-    showSessionsModal,
-    selectedUserForSessions,
     availableTeams,
     actions,
     form,
@@ -889,7 +880,6 @@ export function useUserManagement({
     handleUnbanUser,
     handleCancel,
     handleCreate,
-    handleSessionsModalClose,
     handleUsernameChange,
     handleEmailChange,
     toggleDepartment,

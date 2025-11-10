@@ -9,6 +9,7 @@ import '@mantine/notifications/styles.css';
 import '@mantine/dropzone/styles.css';
 import App from './App';
 import './index.css';
+import modalComponents from './modals/registry';
 
 const theme = createTheme({
   primaryColor: 'blue',
@@ -63,10 +64,8 @@ const theme = createTheme({
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <MantineProvider theme={theme} defaultColorScheme="auto">
-      <ModalsProvider>
-        <Notifications />
-        <App />
-      </ModalsProvider>
+      <Notifications />
+      <App modalComponents={modalComponents} />
     </MantineProvider>
   </StrictMode>,
 );

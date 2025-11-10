@@ -1,7 +1,11 @@
-import { useState, useCallback, useMemo, lazy } from 'react';
-import PropTypes from 'prop-types';
+/**
+ * Version Management modal content component
+ * Manages viewing and rolling back to previous versions of an analysis
+ * @module modals/components/VersionManagementModalContent
+ */
+
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import {
-  Modal,
   Stack,
   Text,
   Button,
@@ -26,18 +30,24 @@ import {
 } from '@tabler/icons-react';
 import { analysisService } from '../../services/analysisService';
 import { useNotifications } from '../../hooks/useNotifications';
-import { useModalDataLoader } from '../../hooks/useModalDataLoader';
+import { modalService } from '../modalService';
 import logger from '../../utils/logger';
-const AnalysisEditModal = lazy(() => import('./AnalysisEditModal.jsx'));
+import PropTypes from 'prop-types';
 
-export default function VersionManagementModal({
-  isOpen,
-  onClose,
-  analysis,
-  onVersionRollback,
-}) {
-  const [showContentModal, setShowContentModal] = useState(false);
-  const [selectedVersion, setSelectedVersion] = useState(null);
+/**
+ * VersionManagementModalContent
+ * Content component for version management modal
+ *
+ * @param {Object} props - Component props
+ * @param {Object} props.context - Mantine modal context
+ * @param {string} props.id - Modal ID
+ * @param {Object} props.innerProps - Modal inner props
+ * @param {Object} props.innerProps.analysis - Analysis object
+ * @param {Function} props.innerProps.onVersionRollback - Callback after version rollback
+ * @returns {JSX.Element} Modal content
+ */
+function VersionManagementModalContent({ context, id, innerProps }) {
+  const { analysis, onVersionRollback } = innerProps;
   const [versionData, setVersionData] = useState({
     versions: [],
     nextVersionNumber: 2,
@@ -61,8 +71,26 @@ export default function VersionManagementModal({
     }
   }, [analysis.name, notify]);
 
-  // Load versions when modal opens using existing hook pattern
-  useModalDataLoader(isOpen, loadVersions, !!analysis?.name);
+  // Load versions when component mounts (modal opens)
+  useEffect(() => {
+    if (analysis?.name) {
+      loadVersions();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount
+
+  // Update modal title dynamically
+  useEffect(() => {
+    context.updateModal({
+      title: (
+        <Group gap="sm">
+          <IconHistory size={20} aria-hidden="true" />
+          <Text fw={600}>Version History - {analysis?.name}</Text>
+        </Group>
+      ),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Set once on mount (analysis.name doesn't change for this modal)
 
   const handleRollback = async (version) => {
     modals.openConfirmModal({
@@ -110,6 +138,17 @@ export default function VersionManagementModal({
     }
   };
 
+  const handleViewVersion = (version) => {
+    // Open AnalysisEditModal on top of this modal using modalService
+    // Mantine handles z-index stacking automatically
+    modalService.openAnalysisEditor(analysis, {
+      readOnly: true,
+      type: 'analysis',
+      version,
+      showDiffToggle: version !== 0, // Only show diff toggle for non-current versions
+    });
+  };
+
   const formatDate = (timestamp) => {
     return new Date(timestamp).toLocaleString();
   };
@@ -138,22 +177,7 @@ export default function VersionManagementModal({
   );
 
   return (
-    <Modal
-      opened={isOpen}
-      onClose={onClose}
-      closeOnEscape={false}
-      aria-labelledby="version-management-modal-title"
-      title={
-        <Group gap="sm">
-          <IconHistory size={20} aria-hidden="true" />
-          <Text fw={600} id="version-management-modal-title">
-            Version History - {analysis?.name}
-          </Text>
-        </Group>
-      }
-      size="lg"
-      centered
-    >
+    <Box pos="relative">
       <Stack gap="md">
         <Alert
           icon={<IconInfoCircle size={16} />}
@@ -248,10 +272,7 @@ export default function VersionManagementModal({
                         variant="light"
                         color="blue"
                         size="sm"
-                        onClick={() => {
-                          setSelectedVersion(0);
-                          setShowContentModal(true);
-                        }}
+                        onClick={() => handleViewVersion(0)}
                         aria-label="View current version content"
                       >
                         <IconEyeCode size={14} aria-hidden="true" />
@@ -298,10 +319,7 @@ export default function VersionManagementModal({
                           variant="light"
                           color="blue"
                           size="sm"
-                          onClick={() => {
-                            setSelectedVersion(version.version);
-                            setShowContentModal(true);
-                          }}
+                          onClick={() => handleViewVersion(version.version)}
                           loading={loading}
                           aria-label={`View this version's content`}
                         >
@@ -317,34 +335,22 @@ export default function VersionManagementModal({
         )}
 
         <Group justify="flex-end" mt="md">
-          <Button onClick={onClose} variant="light">
+          <Button onClick={() => modals.close(id)} variant="light">
             Close
           </Button>
         </Group>
       </Stack>
-
-      {showContentModal && (
-        <AnalysisEditModal
-          analysis={analysis}
-          onClose={() => {
-            setShowContentModal(false);
-            setSelectedVersion(null);
-          }}
-          readOnly={true}
-          type="analysis"
-          version={selectedVersion}
-          showDiffToggle={selectedVersion !== 0} // Only show diff toggle for non-current versions
-        />
-      )}
-    </Modal>
+    </Box>
   );
 }
 
-VersionManagementModal.propTypes = {
-  isOpen: PropTypes.bool.isRequired,
-  onClose: PropTypes.func.isRequired,
-  analysis: PropTypes.shape({
-    name: PropTypes.string.isRequired,
-  }),
-  onVersionRollback: PropTypes.func,
+VersionManagementModalContent.propTypes = {
+  context: PropTypes.object.isRequired,
+  id: PropTypes.string.isRequired,
+  innerProps: PropTypes.shape({
+    analysis: PropTypes.object.isRequired,
+    onVersionRollback: PropTypes.func,
+  }).isRequired,
 };
+
+export default VersionManagementModalContent;

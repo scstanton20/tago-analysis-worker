@@ -32,8 +32,9 @@ import {
 import { dnsService } from '../../../services/dnsService';
 import { useBackend } from '../../../contexts/sseContext';
 import { useAuth } from '../../../hooks/useAuth';
+import PropTypes from 'prop-types';
 
-export default function DNSCacheSettings() {
+function DNSCacheSettings() {
   const { dnsCache } = useBackend();
   const { isAuthenticated } = useAuth();
   const notify = useNotifications();
@@ -534,3 +535,7 @@ export default function DNSCacheSettings() {
     </Stack>
   );
 }
+
+DNSCacheSettings.propTypes = {};
+
+export default DNSCacheSettings;

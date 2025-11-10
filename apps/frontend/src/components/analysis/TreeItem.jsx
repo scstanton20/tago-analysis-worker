@@ -242,7 +242,7 @@ export default function TreeItem({
             </Group>
           </Box>
 
-          <Menu position="bottom-end" withinPortal>
+          <Menu position="bottom-end" withinPortal zIndex={1001}>
             <Menu.Target>
               <ActionIcon size="sm" variant="subtle" color="brand">
                 <IconDotsVertical size={16} />

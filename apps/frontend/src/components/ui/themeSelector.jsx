@@ -45,6 +45,8 @@ const ThemeSelector = () => {
       withArrow
       arrowOffset={12}
       offset={8}
+      withinPortal
+      zIndex={1001}
     >
       <Menu.Target>
         <ActionIcon

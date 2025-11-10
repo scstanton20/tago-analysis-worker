@@ -21,7 +21,7 @@ import { vsCodeDark } from '@fsegurai/codemirror-theme-vscode-dark';
 import { vsCodeLight } from '@fsegurai/codemirror-theme-vscode-light';
 import {
   readOnlySetup,
-  formatKeymap,
+  editorKeymap,
   createJavaScriptLinter,
   formatCode,
 } from '../../utils/codeMirrorUtils';
@@ -128,9 +128,9 @@ export function CodeMirrorEditor({
       if (languageRef.current === 'javascript') {
         extensions.push(javascript());
 
-        // Add format keymap and linting for editable JavaScript editors
+        // Add editor keymap (Tab indentation + format) and linting for editable JavaScript editors
         if (!readOnlyRef.current) {
-          extensions.push(formatKeymap);
+          extensions.push(editorKeymap);
           extensions.push(lintGutter());
           extensions.push(
             createJavaScriptLinter(onDiagnosticsChangeRef.current),
@@ -255,9 +255,9 @@ export function CodeMirrorEditor({
         if (languageRef.current === 'javascript') {
           extensions.push(javascript());
 
-          // Add format keymap and linting for editable JavaScript editors
+          // Add editor keymap (Tab indentation + format) and linting for editable JavaScript editors
           if (!readOnlyRef.current) {
-            extensions.push(formatKeymap);
+            extensions.push(editorKeymap);
             extensions.push(lintGutter());
             extensions.push(
               createJavaScriptLinter(onDiagnosticsChangeRef.current),

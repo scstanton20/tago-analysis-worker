@@ -1,18 +1,30 @@
 /**
- * Profile modal component
+ * Profile modal content component
  * Manages user profile settings, password changes, and passkey management
- * @module components/modals/profileModal
+ * @module modals/components/ProfileModalContent
  */
 
-import PropTypes from 'prop-types';
-import { Modal, Group, Text, Tabs, Badge } from '@mantine/core';
+import { useEffect } from 'react';
+import { Group, Text, Tabs, Badge, Stack } from '@mantine/core';
 import { IconUser, IconKey, IconShield } from '@tabler/icons-react';
+import { modals } from '@mantine/modals';
 import { useProfileModal } from '../../hooks/useProfileModal';
-import { ProfileTab } from '../profile/ProfileTab';
-import { PasswordTab } from '../profile/PasswordTab';
-import { PasskeysTab } from '../profile/PasskeysTab';
+import { ProfileTab } from '../../components/profile/ProfileTab';
+import { PasswordTab } from '../../components/profile/PasswordTab';
+import { PasskeysTab } from '../../components/profile/PasskeysTab';
+import PropTypes from 'prop-types';
 
-export default function ProfileModal({ opened, onClose }) {
+/**
+ * ProfileModalContent
+ * Content component for profile settings modal
+ *
+ * @param {Object} props - Component props
+ * @param {Object} props.context - Mantine modal context
+ * @param {string} props.id - Modal ID
+ * @param {Object} props.innerProps - Modal inner props (unused, but required)
+ * @returns {JSX.Element} Modal content
+ */
+function ProfileModalContent({ context, id }) {
   const {
     activeTab,
     setActiveTab,
@@ -39,24 +51,32 @@ export default function ProfileModal({ opened, onClose }) {
     handleRegisterPasskey,
     handleDeletePasskey,
     handleClose,
-  } = useProfileModal({ opened, onClose });
+    loadData,
+  } = useProfileModal({
+    closeModal: () => modals.close(id),
+  });
 
-  return (
-    <Modal
-      opened={opened}
-      onClose={handleClose}
-      title={
+  // Load data when component mounts (modal opens)
+  useEffect(() => {
+    loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount
+
+  // Update modal title with user icon
+  useEffect(() => {
+    context.updateModal({
+      title: (
         <Group gap="xs">
           <IconUser size={20} aria-hidden="true" />
-          <Text fw={600} id="profile-modal-title">
-            Profile Settings
-          </Text>
+          <Text fw={600}>Profile Settings</Text>
         </Group>
-      }
-      size="lg"
-      centered
-      aria-labelledby="profile-modal-title"
-    >
+      ),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Set once on mount
+
+  return (
+    <Stack>
       <Tabs value={activeTab} onChange={setActiveTab}>
         <Tabs.List>
           <Tabs.Tab value="profile" leftSection={<IconUser size={16} />}>
@@ -113,11 +133,13 @@ export default function ProfileModal({ opened, onClose }) {
           />
         </Tabs.Panel>
       </Tabs>
-    </Modal>
+    </Stack>
   );
 }
 
-ProfileModal.propTypes = {
-  opened: PropTypes.bool.isRequired,
-  onClose: PropTypes.func.isRequired,
+ProfileModalContent.propTypes = {
+  context: PropTypes.object.isRequired,
+  id: PropTypes.string.isRequired,
 };
+
+export default ProfileModalContent;

@@ -42,12 +42,6 @@ export function useAnalysisEdit({
 
   const isEnvMode = type === 'env';
 
-  // Update analysis name when it changes via SSE (only for analysis mode)
-  if (!isEnvMode && currentAnalysis.name !== newFileName && !isEditingName) {
-    setNewFileName(currentAnalysis.name);
-    setDisplayName(currentAnalysis.name);
-  }
-
   /**
    * Handle editor content change
    */

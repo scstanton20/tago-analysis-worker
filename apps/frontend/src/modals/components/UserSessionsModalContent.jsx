@@ -1,8 +1,11 @@
-import { useState } from 'react';
-import PropTypes from 'prop-types';
-import { useModalDataLoader } from '../../hooks/useModalDataLoader';
+/**
+ * User sessions modal content component
+ * Manages viewing and revoking user sessions
+ * @module modals/components/UserSessionsModalContent
+ */
+
+import { useState, useEffect, useCallback } from 'react';
 import {
-  Modal,
   Stack,
   Group,
   Button,
@@ -27,14 +30,25 @@ import { admin } from '../../lib/auth';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import { userService } from '../../services/userService';
 import logger from '../../utils/logger';
+import PropTypes from 'prop-types';
 
-export default function UserSessionsModal({ opened, onClose, user }) {
+/**
+ * UserSessionsModalContent
+ * Content component for user sessions modal
+ *
+ * @param {Object} props - Component props
+ * @param {Object} props.innerProps - Modal inner props
+ * @param {Object} props.innerProps.user - User object to manage sessions for
+ * @returns {JSX.Element} Modal content
+ */
+function UserSessionsModalContent({ innerProps }) {
+  const { user } = innerProps;
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const notify = useNotifications();
 
-  const loadSessions = async () => {
+  const loadSessions = useCallback(async () => {
     if (!user) return;
 
     try {
@@ -75,10 +89,12 @@ export default function UserSessionsModal({ opened, onClose, user }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
-  // Load sessions when modal opens
-  useModalDataLoader(opened, loadSessions, user);
+  // Load sessions when component mounts (modal opens)
+  useEffect(() => {
+    loadSessions();
+  }, [loadSessions]);
 
   const handleRevokeSession = async (sessionToken) => {
     modals.openConfirmModal({
@@ -245,139 +261,131 @@ export default function UserSessionsModal({ opened, onClose, user }) {
   };
 
   return (
-    <Modal
-      opened={opened}
-      onClose={onClose}
-      closeOnEscape={false}
-      aria-labelledby="user-sessions-modal-title"
-      title={
-        <Group gap="xs">
+    <Box pos="relative">
+      <LoadingOverlay visible={loading} />
+
+      <Stack gap="md">
+        {/* Custom Modal Header */}
+        <Group gap="xs" mb="md">
           <IconDeviceLaptop size={20} aria-hidden="true" />
-          <Text fw={600} id="user-sessions-modal-title">
+          <Text fw={600} size="lg">
             Sessions for {user?.name || user?.email}
           </Text>
         </Group>
-      }
-      size="calc(100vw - 3rem)"
-      centered
-    >
-      <Box pos="relative">
-        <LoadingOverlay visible={loading} />
+        {error && (
+          <Alert
+            icon={<IconAlertCircle size="1rem" />}
+            color="red"
+            variant="light"
+          >
+            {error}
+          </Alert>
+        )}
 
-        <Stack gap="md">
-          {error && (
-            <Alert
-              icon={<IconAlertCircle size="1rem" />}
+        <Group justify="space-between">
+          <Stack gap="xs">
+            <Text size="sm" c="dimmed">
+              Manage active sessions for this user
+            </Text>
+            <Text size="xs" c="dimmed">
+              Note: Users will be logged out automatically next time a page
+              refresh occurs.
+            </Text>
+          </Stack>
+          <Group gap="sm">
+            <Button
+              leftSection={<IconRefresh size="1rem" />}
+              onClick={loadSessions}
+              variant="light"
+              size="sm"
+            >
+              Refresh
+            </Button>
+            <Button
+              leftSection={<IconTrash size="1rem" />}
+              onClick={handleRevokeAllSessions}
               color="red"
               variant="light"
+              size="sm"
+              disabled={!sessions.length}
             >
-              {error}
-            </Alert>
-          )}
-
-          <Group justify="space-between">
-            <Stack gap="xs">
-              <Text size="sm" c="dimmed">
-                Manage active sessions for this user
-              </Text>
-              <Text size="xs" c="dimmed">
-                Note: Users will be logged out automatically next time a page
-                refresh occurs.
-              </Text>
-            </Stack>
-            <Group gap="sm">
-              <Button
-                leftSection={<IconRefresh size="1rem" />}
-                onClick={loadSessions}
-                variant="light"
-                size="sm"
-              >
-                Refresh
-              </Button>
-              <Button
-                leftSection={<IconTrash size="1rem" />}
-                onClick={handleRevokeAllSessions}
-                color="red"
-                variant="light"
-                size="sm"
-                disabled={!sessions.length}
-              >
-                Revoke All
-              </Button>
-            </Group>
+              Revoke All
+            </Button>
           </Group>
+        </Group>
 
-          {!Array.isArray(sessions) || sessions.length === 0 ? (
-            <Text ta="center" c="dimmed" py="xl">
-              {!Array.isArray(sessions)
-                ? 'Error loading sessions data'
-                : 'No active sessions found'}
-            </Text>
-          ) : (
-            <Table striped highlightOnHover>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Device</Table.Th>
-                  <Table.Th>IP Address</Table.Th>
-                  <Table.Th>Created</Table.Th>
-                  <Table.Th>Expires</Table.Th>
-                  <Table.Th>Status</Table.Th>
-                  <Table.Th>Actions</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {sessions.map((session, index) => {
-                  logger.log('Session data:', session); // Debug each session
-                  return (
-                    <Table.Tr key={session.token || session.id || index}>
-                      <Table.Td>
-                        <Group gap="xs">
-                          {getDeviceIcon(session.userAgent)}
-                          <Text size="sm" title={session.userAgent}>
-                            {session.userAgent
-                              ? session.userAgent.length > 50
-                                ? session.userAgent.substring(0, 50) + '...'
-                                : session.userAgent
-                              : 'Unknown Device'}
-                          </Text>
-                        </Group>
-                      </Table.Td>
-                      <Table.Td>{session.ipAddress || 'Unknown'}</Table.Td>
-                      <Table.Td>{formatDate(session.createdAt)}</Table.Td>
-                      <Table.Td>{formatDate(session.expiresAt)}</Table.Td>
-                      <Table.Td>{getSessionStatus(session)}</Table.Td>
-                      <Table.Td>
-                        <ActionIcon
-                          variant="light"
-                          color="red"
-                          size="sm"
-                          onClick={() =>
-                            handleRevokeSession(session.token || session.id)
-                          }
-                          aria-label="Revoke this session"
-                          disabled={!session.token && !session.id}
-                        >
-                          <IconTrash size="1rem" aria-hidden="true" />
-                        </ActionIcon>
-                      </Table.Td>
-                    </Table.Tr>
-                  );
-                })}
-              </Table.Tbody>
-            </Table>
-          )}
-        </Stack>
-      </Box>
-    </Modal>
+        {!Array.isArray(sessions) || sessions.length === 0 ? (
+          <Text ta="center" c="dimmed" py="xl">
+            {!Array.isArray(sessions)
+              ? 'Error loading sessions data'
+              : 'No active sessions found'}
+          </Text>
+        ) : (
+          <Table striped highlightOnHover>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Device</Table.Th>
+                <Table.Th>IP Address</Table.Th>
+                <Table.Th>Created</Table.Th>
+                <Table.Th>Expires</Table.Th>
+                <Table.Th>Status</Table.Th>
+                <Table.Th>Actions</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {sessions.map((session, index) => {
+                logger.log('Session data:', session); // Debug each session
+                return (
+                  <Table.Tr key={session.token || session.id || index}>
+                    <Table.Td>
+                      <Group gap="xs">
+                        {getDeviceIcon(session.userAgent)}
+                        <Text size="sm" title={session.userAgent}>
+                          {session.userAgent
+                            ? session.userAgent.length > 50
+                              ? session.userAgent.substring(0, 50) + '...'
+                              : session.userAgent
+                            : 'Unknown Device'}
+                        </Text>
+                      </Group>
+                    </Table.Td>
+                    <Table.Td>{session.ipAddress || 'Unknown'}</Table.Td>
+                    <Table.Td>{formatDate(session.createdAt)}</Table.Td>
+                    <Table.Td>{formatDate(session.expiresAt)}</Table.Td>
+                    <Table.Td>{getSessionStatus(session)}</Table.Td>
+                    <Table.Td>
+                      <ActionIcon
+                        variant="light"
+                        color="red"
+                        size="sm"
+                        onClick={() =>
+                          handleRevokeSession(session.token || session.id)
+                        }
+                        aria-label="Revoke this session"
+                        disabled={!session.token && !session.id}
+                      >
+                        <IconTrash size="1rem" aria-hidden="true" />
+                      </ActionIcon>
+                    </Table.Td>
+                  </Table.Tr>
+                );
+              })}
+            </Table.Tbody>
+          </Table>
+        )}
+      </Stack>
+    </Box>
   );
 }
 
-UserSessionsModal.propTypes = {
-  opened: PropTypes.bool.isRequired,
-  onClose: PropTypes.func.isRequired,
-  user: PropTypes.shape({
-    id: PropTypes.string.isRequired,
-    name: PropTypes.string,
-    email: PropTypes.string,
-  }),
+UserSessionsModalContent.propTypes = {
+  innerProps: PropTypes.shape({
+    user: PropTypes.shape({
+      id: PropTypes.string.isRequired,
+      name: PropTypes.string,
+      email: PropTypes.string,
+    }).isRequired,
+  }).isRequired,
 };
+
+export default UserSessionsModalContent;

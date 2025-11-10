@@ -1,7 +1,9 @@
 // frontend/src/App.jsx
 import { useState, lazy, Suspense } from 'react';
+import PropTypes from 'prop-types';
 import { AppShell, Text, Burger, Group } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
+import { ModalsProvider } from '@mantine/modals';
 import { SSEProvider, useConnection } from './contexts/sseContext';
 import { CombinedAuthProvider } from './contexts/CombinedAuthProvider';
 import { PermissionsProvider } from './contexts/PermissionsContext/index.js';
@@ -158,28 +160,41 @@ function AppContent() {
 }
 
 // Authenticated App Content with SSE
-function AuthenticatedApp() {
+function AuthenticatedApp({ modalComponents }) {
   return (
     <SSEProvider>
       <PermissionsProvider>
-        <AppContent />
+        <ModalsProvider
+          modals={modalComponents}
+          labels={{ confirm: 'Confirm', cancel: 'Cancel' }}
+        >
+          <AppContent />
+        </ModalsProvider>
       </PermissionsProvider>
     </SSEProvider>
   );
 }
 
-export default function App() {
+AuthenticatedApp.propTypes = {
+  modalComponents: PropTypes.object.isRequired,
+};
+
+export default function App({ modalComponents }) {
   return (
     <ErrorBoundary>
       <CombinedAuthProvider>
-        <AppRouter />
+        <AppRouter modalComponents={modalComponents} />
       </CombinedAuthProvider>
     </ErrorBoundary>
   );
 }
 
+App.propTypes = {
+  modalComponents: PropTypes.object.isRequired,
+};
+
 // Router component to conditionally load authenticated vs login components
-function AppRouter() {
+function AppRouter({ modalComponents }) {
   const { isAuthenticated, isLoading } = useAuth();
 
   // Show loading overlay during initial auth check
@@ -198,5 +213,9 @@ function AppRouter() {
   }
 
   // Only load SSE and heavy components when authenticated
-  return <AuthenticatedApp />;
+  return <AuthenticatedApp modalComponents={modalComponents} />;
 }
+
+AppRouter.propTypes = {
+  modalComponents: PropTypes.object.isRequired,
+};

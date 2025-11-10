@@ -137,7 +137,13 @@ export default function UserTable({
               </Badge>
             </Table.Td>
             <Table.Td>
-              <Menu shadow="md" width={200} closeOnItemClick={true}>
+              <Menu
+                shadow="md"
+                width={200}
+                closeOnItemClick={true}
+                withinPortal
+                zIndex={1001}
+              >
                 <Menu.Target>
                   <ActionIcon
                     variant="subtle"
