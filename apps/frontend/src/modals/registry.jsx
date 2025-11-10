@@ -1,17 +1,28 @@
 // frontend/src/modals/registry.jsx
-import { lazy } from 'react';
+import LogDownloadModalContent from './components/LogDownloadModalContent.jsx';
+import CreateFolderModalContent from './components/CreateFolderModalContent.jsx';
+import RenameFolderModalContent from './components/RenameFolderModalContent.jsx';
+import ChangeTeamModalContent from './components/ChangeTeamModalContent.jsx';
+import SettingsModalContent from './components/SettingsModalContent.jsx';
+import TeamManagementModalContent from './components/TeamManagementModalContent.jsx';
+import ProfileModalContent from './components/ProfileModalContent.jsx';
+import UserSessionsModalContent from './components/UserSessionsModalContent.jsx';
+import VersionManagementModalContent from './components/VersionManagementModalContent.jsx';
+import UserManagementModalContent from './components/UserManagementModalContent.jsx';
+import AnalysisEditModalContent from './components/AnalysisEditModalContent.jsx';
 
 /**
  * Modal Registry
  *
  * This registry defines all context modals available in the application.
- * Each modal is lazy-loaded for optimal bundle size and performance.
+ * All modals are loaded together as a single chunk for optimal performance.
  *
  * To add a new modal:
  * 1. Create a content component in modals/components/
- * 2. Add it to this registry with a unique key
- * 3. Add a service function in modalService.js
- * 4. Use modalService.openYourModal() to open it
+ * 2. Import it at the top of this file
+ * 3. Add it to the modalComponents object with a unique key
+ * 4. Add a service function in modalService.js
+ * 5. Use modalService.openYourModal() to open it
  *
  * Modal content components receive these props from Mantine:
  * - context: Modal context with updateModal() and other utilities
@@ -20,25 +31,17 @@ import { lazy } from 'react';
  */
 
 const modalComponents = {
-  logDownload: lazy(() => import('./components/LogDownloadModalContent.jsx')),
-  createFolder: lazy(() => import('./components/CreateFolderModalContent.jsx')),
-  renameFolder: lazy(() => import('./components/RenameFolderModalContent.jsx')),
-  changeTeam: lazy(() => import('./components/ChangeTeamModalContent.jsx')),
-  settings: lazy(() => import('./components/SettingsModalContent.jsx')),
-  teamManagement: lazy(
-    () => import('./components/TeamManagementModalContent.jsx'),
-  ),
-  profile: lazy(() => import('./components/ProfileModalContent.jsx')),
-  userSessions: lazy(() => import('./components/UserSessionsModalContent.jsx')),
-  versionHistory: lazy(
-    () => import('./components/VersionManagementModalContent.jsx'),
-  ),
-  userManagement: lazy(
-    () => import('./components/UserManagementModalContent.jsx'),
-  ),
-  analysisEditor: lazy(
-    () => import('./components/AnalysisEditModalContent.jsx'),
-  ),
+  logDownload: LogDownloadModalContent,
+  createFolder: CreateFolderModalContent,
+  renameFolder: RenameFolderModalContent,
+  changeTeam: ChangeTeamModalContent,
+  settings: SettingsModalContent,
+  teamManagement: TeamManagementModalContent,
+  profile: ProfileModalContent,
+  userSessions: UserSessionsModalContent,
+  versionHistory: VersionManagementModalContent,
+  userManagement: UserManagementModalContent,
+  analysisEditor: AnalysisEditModalContent,
 };
 
 export default modalComponents;

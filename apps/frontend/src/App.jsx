@@ -17,7 +17,7 @@ const AnalysisList = lazy(() => import('./components/analysis/analysisList'));
 const AnalysisCreator = lazy(
   () => import('./components/analysis/uploadAnalysis'),
 );
-const LoginPage = lazy(() => import('./components/auth/LoginPage'));
+import LoginPage from './components/auth/LoginPage';
 import ConnectionStatus from './components/common/connectionStatus';
 import Logo from './components/ui/logo';
 import ImpersonationBanner from './components/layout/impersonationBanner';
