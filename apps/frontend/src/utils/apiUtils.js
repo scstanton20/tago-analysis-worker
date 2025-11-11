@@ -1,10 +1,15 @@
 /**
  * API utility functions for frontend service layer
  * Provides standardized HTTP client with authentication and error handling
+ *
+ * This is a core utility with minimal dependencies for optimal performance
  * @module utils/apiUtils
  */
 import logger from './logger';
-import { isDevelopment, API_URL } from '../config/env.js';
+
+// Get environment variables directly from Vite (no env.js dependency)
+const isDevelopment = import.meta.env.DEV;
+const API_URL = import.meta.env.VITE_API_URL;
 
 /**
  * WeakSet to track retried requests without mutating options objects

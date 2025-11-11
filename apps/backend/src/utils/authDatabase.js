@@ -21,6 +21,10 @@ export function getAuthDatabase() {
     // Enable WAL mode for better concurrent access
     authDb.pragma('journal_mode = WAL');
 
+    // Performance optimizations for SQLite
+    authDb.pragma('synchronous = NORMAL'); // Faster writes, still safe with WAL
+    authDb.pragma('journal_size_limit = 6144000'); // 6MB Journal Size Limit
+
     // Graceful shutdown handlers
     const closeDb = () => {
       if (authDb) {

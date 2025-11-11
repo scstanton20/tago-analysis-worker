@@ -6,7 +6,7 @@ const Logo = ({ size = 32, className = '', ...props }) => {
   return (
     <Box
       component="img"
-      src="/dark-ollie.png"
+      src="/dark-ollie.avif"
       alt="PWS Logo"
       className={`app-logo ${className}`}
       width={size}

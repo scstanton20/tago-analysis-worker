@@ -4,9 +4,16 @@
  * Frontend Logger Utility
  * Browser-compatible logging system inspired by the backend pino logger
  * Supports log levels, contextual logging, and development/production modes
+ *
+ * This is a standalone utility with no dependencies to keep it lightweight
  */
 
-import { LOG_LEVEL, isDevelopment } from '../config/env.js';
+// Check if we're in development mode (Vite provides this at build time)
+const isDevelopment = import.meta.env.DEV;
+
+// Get log level from environment or use defaults
+const LOG_LEVEL =
+  import.meta.env.VITE_LOG_LEVEL || (isDevelopment ? 'debug' : 'info');
 
 // Log levels with priority
 const LOG_LEVELS = {
@@ -30,7 +37,7 @@ const LOG_STYLES = {
  * Logger configuration
  */
 const config = {
-  // Get log level from centralized environment configuration
+  // Get log level from environment or defaults
   level: LOG_LEVEL,
   // Enable/disable colored output
   useColors: isDevelopment,

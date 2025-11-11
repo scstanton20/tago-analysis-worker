@@ -31,22 +31,6 @@ body {
   min-height: 100vh;
 }
 
-/* Enhanced resize handle with brand colors */
-.resize-handle {
-  cursor: row-resize;
-  user-select: none;
-  transition: all 0.2s ease;
-  position: relative;
-}
-
-.resize-handle:hover {
-  background: var(--brand-gradient-light);
-}
-
-.resize-handle:active {
-  background: var(--brand-gradient);
-}
-
 /* Button cursor states */
 button:not(:disabled) {
   cursor: pointer;
@@ -54,29 +38,6 @@ button:not(:disabled) {
 
 button:disabled {
   cursor: not-allowed;
-}
-
-/* Logo animation keyframes */
-@keyframes logoGlow {
-  0%,
-  100% {
-    filter: drop-shadow(0 0 5px rgba(168, 85, 247, 0.3));
-  }
-  50% {
-    filter: drop-shadow(0 0 15px rgba(168, 85, 247, 0.5));
-  }
-}
-
-@keyframes gradientShift {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
 }
 
 /* Connection status indicator with pulsing effect */
@@ -143,41 +104,6 @@ button:disabled {
   color: white !important;
 }
 
-/* Department color swatches with enhanced styling */
-.department-color-swatch {
-  position: relative;
-  transition: all 0.3s ease;
-}
-
-.department-color-swatch:hover {
-  transform: scale(1.1);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-/* Navigation enhancements */
-.nav-item {
-  transition: all 0.3s ease;
-  position: relative;
-  overflow: hidden;
-}
-
-.nav-item.active {
-  background: var(--brand-gradient-light);
-  border-left: 3px solid var(--mantine-color-brand-6);
-}
-
-.nav-item.active::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: var(--brand-gradient);
-  opacity: 0.1;
-  z-index: -1;
-}
-
 /* Analysis cards with subtle gradients */
 .analysis-card {
   transition: all 0.3s ease;
@@ -206,35 +132,6 @@ button:disabled {
   opacity: 1;
 }
 
-/* Enhanced log viewer */
-.log-viewer {
-  font-family: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Consolas', monospace;
-}
-
-.log-entry {
-  transition: background-color 0.2s ease;
-  border-left: 2px solid transparent;
-}
-
-.log-entry:hover {
-  background-color: var(--mantine-color-gray-0);
-  border-left-color: var(--mantine-color-brand-4);
-}
-
-[data-mantine-color-scheme='dark'] .log-entry:hover {
-  background-color: var(--mantine-color-dark-6);
-}
-
-.log-entry.error {
-  border-left-color: var(--mantine-color-red-5);
-  background-color: rgba(239, 68, 68, 0.05);
-}
-
-.log-entry.warning {
-  border-left-color: var(--mantine-color-yellow-5);
-  background-color: rgba(245, 158, 11, 0.05);
-}
-
 /* Enhanced scrollbars */
 ::-webkit-scrollbar {
   width: 8px;
@@ -258,22 +155,6 @@ button:disabled {
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--brand-gradient-hover);
-}
-
-/* Monaco Editor enhancements */
-.monaco-editor {
-  border-radius: var(--mantine-radius-md);
-  overflow: hidden;
-}
-
-/* Loading overlays with brand styling */
-.loading-overlay {
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(8px);
-}
-
-[data-mantine-color-scheme='dark'] .loading-overlay {
-  background: rgba(0, 0, 0, 0.9);
 }
 
 /* Pulse animation for loading states */
@@ -330,190 +211,6 @@ button:disabled {
 .mantine-Button-root[data-variant='light'][data-color='brand'] {
   color: var(--mantine-color-brand-8) !important;
   font-weight: 500 !important;
-}
-
-/* Accessibility improvements */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-
-/* Department color swatches with enhanced styling */
-.department-color-swatch {
-  position: relative;
-  transition: all 0.3s ease;
-}
-
-.department-color-swatch:hover {
-  transform: scale(1.1);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-/* Navigation enhancements */
-.nav-item {
-  transition: all 0.3s ease;
-  position: relative;
-  overflow: hidden;
-}
-
-.nav-item.active {
-  background: var(--brand-gradient-light);
-  border-left: 3px solid var(--mantine-color-brand-6);
-}
-
-.nav-item.active::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: var(--brand-gradient);
-  opacity: 0.1;
-  z-index: -1;
-}
-
-/* Analysis cards with subtle gradients */
-.analysis-card {
-  transition: all 0.3s ease;
-  position: relative;
-  overflow: hidden;
-}
-
-.analysis-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(168, 85, 247, 0.15);
-}
-
-.analysis-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--brand-gradient);
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.analysis-card:hover::before {
-  opacity: 1;
-}
-
-/* Enhanced log viewer */
-.log-viewer {
-  font-family: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Consolas', monospace;
-}
-
-.log-entry {
-  transition: background-color 0.2s ease;
-  border-left: 2px solid transparent;
-}
-
-.log-entry:hover {
-  background-color: var(--mantine-color-gray-0);
-  border-left-color: var(--mantine-color-brand-4);
-}
-
-[data-mantine-color-scheme='dark'] .log-entry:hover {
-  background-color: var(--mantine-color-dark-6);
-}
-
-.log-entry.error {
-  border-left-color: var(--mantine-color-red-5);
-  background-color: rgba(239, 68, 68, 0.05);
-}
-
-.log-entry.warning {
-  border-left-color: var(--mantine-color-yellow-5);
-  background-color: rgba(245, 158, 11, 0.05);
-}
-
-/* Enhanced scrollbars */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: var(--mantine-color-gray-1);
-  border-radius: 4px;
-}
-
-[data-mantine-color-scheme='dark'] ::-webkit-scrollbar-track {
-  background: var(--mantine-color-dark-6);
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--brand-gradient);
-  border-radius: 4px;
-  transition: all 0.3s ease;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--brand-gradient-hover);
-}
-
-/* Monaco Editor enhancements */
-.monaco-editor {
-  border-radius: var(--mantine-radius-md);
-  overflow: hidden;
-}
-
-/* Loading overlays with brand styling */
-.loading-overlay {
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(8px);
-}
-
-[data-mantine-color-scheme='dark'] .loading-overlay {
-  background: rgba(0, 0, 0, 0.9);
-}
-
-/* Pulse animation for loading states */
-@keyframes pulse {
-  0% {
-    transform: scale(1);
-    opacity: 0.7;
-  }
-  50% {
-    transform: scale(1.05);
-    opacity: 0.9;
-  }
-  100% {
-    transform: scale(1);
-    opacity: 0.7;
-  }
-}
-
-.pulse {
-  animation: pulse 2s infinite;
-}
-
-/* Enhanced focus states */
-*:focus-visible {
-  outline: 2px solid var(--mantine-color-brand-6);
-  outline-offset: 2px;
-  border-radius: var(--mantine-radius-sm);
-}
-
-/* Dark mode specific enhancements */
-[data-mantine-color-scheme='dark'] {
-  --brand-gradient-light: linear-gradient(
-    135deg,
-    var(--mantine-color-brand-9) 0%,
-    var(--mantine-color-accent-9) 100%
-  );
-}
-
-[data-mantine-color-scheme='dark'] .analysis-card:hover {
-  box-shadow: 0 8px 25px rgba(168, 85, 247, 0.25);
 }
 
 /* Accessibility improvements */

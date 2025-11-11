@@ -34,7 +34,6 @@ export const modalService = {
       modalId,
       title: `Download Logs: ${analysis.name}`,
       size: 'md',
-      zIndex: 1000,
       closeOnEscape: false,
       innerProps: {
         analysis,
@@ -62,7 +61,6 @@ export const modalService = {
       modalId,
       title: 'Create Folder', // Will be updated dynamically by component
       size: 'md',
-      zIndex: 1000,
       closeOnEscape: false,
       innerProps: {
         teamId,
@@ -90,7 +88,6 @@ export const modalService = {
       modalId,
       title: 'Rename Folder',
       size: 'md',
-      zIndex: 1000,
       closeOnEscape: false,
       innerProps: {
         teamId,
@@ -118,7 +115,6 @@ export const modalService = {
       modalId,
       title: 'Change Team',
       size: 'md',
-      zIndex: 1000,
       closeOnEscape: false,
       innerProps: {
         onSelect,
@@ -143,7 +139,6 @@ export const modalService = {
       modalId,
       title: 'Settings',
       size: '95%',
-      zIndex: 1000,
       centered: true,
       closeOnEscape: false,
       innerProps: {},
@@ -165,7 +160,6 @@ export const modalService = {
       modalId,
       title: 'Manage Teams',
       size: 'lg',
-      zIndex: 1000,
       closeOnEscape: false,
       innerProps: {
         teams,
@@ -187,7 +181,6 @@ export const modalService = {
       modalId,
       title: 'Profile Settings',
       size: 'lg',
-      zIndex: 1000,
       closeOnEscape: false,
       innerProps: {},
     });
@@ -208,7 +201,6 @@ export const modalService = {
       modalId,
       title: '', // Custom title will be rendered in modal content header
       size: 'lg',
-      zIndex: 1001, // Higher than User Management modal (1000) for proper nesting
       withCloseButton: true, // Keep default close button
       closeOnEscape: false,
       innerProps: {
@@ -231,7 +223,6 @@ export const modalService = {
       modalId,
       title: '', // Custom title and close button will be rendered in modal content header
       size: 'xl',
-      zIndex: 1000,
       closeOnEscape: false, // Prevent accidental close while editing
       withCloseButton: false, // Custom close button in content handles conditional closing
       innerProps: {},
@@ -254,7 +245,6 @@ export const modalService = {
       modalId,
       title: `Version History: ${analysis.name}`,
       size: 'xl',
-      zIndex: 1000,
       closeOnEscape: false,
       innerProps: {
         analysis,
@@ -283,7 +273,6 @@ export const modalService = {
       modalId,
       title: '', // Custom header will be in the content
       size: '90%',
-      zIndex: 1000,
       closeOnEscape: false, // Prevent accidental close while editing
       closeOnClickOutside: false,
       withCloseButton: false, // We'll add our own close button in the custom header

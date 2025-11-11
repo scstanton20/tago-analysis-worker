@@ -4,8 +4,11 @@ import PropTypes from 'prop-types';
 import { ConnectionContext } from './contexts/ConnectionContext.js';
 import { useAuth } from '../../hooks/useAuth';
 import logger from '../../utils/logger';
-import { isDevelopment, API_URL } from '../../config/env.js';
 import { showError } from '../../utils/notificationService.jsx';
+
+// Get environment variables directly from Vite (no env.js dependency)
+const isDevelopment = import.meta.env.DEV;
+const API_URL = import.meta.env.VITE_API_URL;
 
 export function SSEConnectionProvider({ children, onMessage }) {
   const { isAuthenticated } = useAuth();
