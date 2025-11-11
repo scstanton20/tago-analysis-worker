@@ -11,7 +11,7 @@ import * as prettier from 'prettier/standalone';
 import { Linter } from 'eslint-linter-browserify';
 import { eslintConfig } from '../config/eslintConfig';
 import logger from './logger';
-import { PRETTIER_CONFIG } from './prettierConfig';
+import { getPrettierConfig } from './prettierConfig';
 
 /**
  * Custom read-only setup with line numbers and syntax highlighting
@@ -31,7 +31,8 @@ export const readOnlySetup = [
 export async function formatCode(view) {
   try {
     const code = view.state.doc.toString();
-    const formatted = await prettier.format(code, PRETTIER_CONFIG);
+    const prettierConfig = await getPrettierConfig();
+    const formatted = await prettier.format(code, prettierConfig);
 
     // Replace entire document with formatted code
     view.dispatch({
@@ -118,7 +119,8 @@ export async function checkFormatChanges(content) {
   if (!content) return false;
 
   try {
-    const formatted = await prettier.format(content, PRETTIER_CONFIG);
+    const prettierConfig = await getPrettierConfig();
+    const formatted = await prettier.format(content, prettierConfig);
 
     return formatted !== content;
   } catch {

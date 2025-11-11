@@ -4,6 +4,7 @@
  * @module modals/components/TeamManagementModalContent
  */
 
+import { lazy, Suspense } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -19,8 +20,17 @@ import {
 import { Box, Stack, Text, Divider } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { useTeamManagement } from '../../hooks/useTeamManagement';
-import { TeamCreateForm } from '../../components/teams/TeamCreateForm';
-import { TeamListItem } from '../../components/teams/TeamListItem';
+const TeamCreateForm = lazy(() =>
+  import('../../components/teams/TeamCreateForm').then((m) => ({
+    default: m.TeamCreateForm,
+  })),
+);
+const TeamListItem = lazy(() =>
+  import('../../components/teams/TeamListItem').then((m) => ({
+    default: m.TeamListItem,
+  })),
+);
+import AppLoadingOverlay from '../../components/common/AppLoadingOverlay.jsx';
 import { teamService } from '../../services/teamService';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import logger from '../../utils/logger';
@@ -106,61 +116,65 @@ function TeamManagementModalContent({ innerProps }) {
   };
 
   return (
-    <Stack>
-      {/* Create New Team */}
-      <TeamCreateForm
-        newTeamName={newTeamName}
-        setNewTeamName={setNewTeamName}
-        newTeamColor={newTeamColor}
-        setNewTeamColor={setNewTeamColor}
-        usedNames={usedNames}
-        usedColors={usedColors}
-        isLoading={isLoading}
-        onSubmit={handleCreateTeam}
-      />
+    <Suspense
+      fallback={<AppLoadingOverlay message="Loading Team Management..." />}
+    >
+      <Stack>
+        {/* Create New Team */}
+        <TeamCreateForm
+          newTeamName={newTeamName}
+          setNewTeamName={setNewTeamName}
+          newTeamColor={newTeamColor}
+          setNewTeamColor={setNewTeamColor}
+          usedNames={usedNames}
+          usedColors={usedColors}
+          isLoading={isLoading}
+          onSubmit={handleCreateTeam}
+        />
 
-      <Divider />
+        <Divider />
 
-      {/* Existing Teams */}
-      <Box>
-        <Text size="sm" fw={600} mb="sm">
-          Existing Teams
-        </Text>
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext
-            items={teamsArray.map((d) => d.id)}
-            strategy={verticalListSortingStrategy}
+        {/* Existing Teams */}
+        <Box>
+          <Text size="sm" fw={600} mb="sm">
+            Existing Teams
+          </Text>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
           >
-            <Stack gap="xs">
-              {teamsArray.map((team) => (
-                <TeamListItem
-                  key={team.id}
-                  team={team}
-                  editingId={editingId}
-                  editingName={editingName}
-                  setEditingName={setEditingName}
-                  editingColor={editingColor}
-                  usedColors={usedColors}
-                  isLoading={isLoading}
-                  isNameInUse={isNameUsed(editingName, team.id)}
-                  onColorClick={handleColorClick}
-                  onSaveColorChange={handleSaveColorChange}
-                  onUpdateName={handleUpdateName}
-                  onStartEdit={startEditingColor}
-                  onCancelEdit={cancelEditing}
-                  onDelete={() => handleDeleteTeam(team)}
-                  editingRef={editingRef}
-                />
-              ))}
-            </Stack>
-          </SortableContext>
-        </DndContext>
-      </Box>
-    </Stack>
+            <SortableContext
+              items={teamsArray.map((d) => d.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <Stack gap="xs">
+                {teamsArray.map((team) => (
+                  <TeamListItem
+                    key={team.id}
+                    team={team}
+                    editingId={editingId}
+                    editingName={editingName}
+                    setEditingName={setEditingName}
+                    editingColor={editingColor}
+                    usedColors={usedColors}
+                    isLoading={isLoading}
+                    isNameInUse={isNameUsed(editingName, team.id)}
+                    onColorClick={handleColorClick}
+                    onSaveColorChange={handleSaveColorChange}
+                    onUpdateName={handleUpdateName}
+                    onStartEdit={startEditingColor}
+                    onCancelEdit={cancelEditing}
+                    onDelete={() => handleDeleteTeam(team)}
+                    editingRef={editingRef}
+                  />
+                ))}
+              </Stack>
+            </SortableContext>
+          </DndContext>
+        </Box>
+      </Stack>
+    </Suspense>
   );
 }
 

@@ -5,8 +5,6 @@
  */
 
 import { useState, useCallback, useRef } from 'react';
-import { EditorSelection } from '@codemirror/state';
-import { EditorView } from '@codemirror/view';
 
 /**
  * Hook for managing diagnostic navigation in CodeMirror editor
@@ -42,13 +40,19 @@ export function useDiagnostics() {
    * Scroll to a specific diagnostic in the editor
    */
   const scrollToDiagnostic = useCallback(
-    (index) => {
+    async (index) => {
       if (!editorViewRef.current || !diagnostics[index]) {
         return;
       }
 
       const diagnostic = diagnostics[index];
       const view = editorViewRef.current;
+
+      // Lazy load CodeMirror modules only when navigating diagnostics
+      const [{ EditorSelection }, { EditorView }] = await Promise.all([
+        import('@codemirror/state'),
+        import('@codemirror/view'),
+      ]);
 
       // Scroll to diagnostic with positioning 2 rows from bottom
       view.dispatch({

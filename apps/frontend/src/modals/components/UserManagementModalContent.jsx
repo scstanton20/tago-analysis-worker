@@ -130,11 +130,6 @@ function UserManagementModalContent({ id }) {
             </Text>
           </Group>
           <Group gap="xs">
-            {showCreateForm && (
-              <Text size="sm" c="dimmed">
-                Press ESC or click × to close form
-              </Text>
-            )}
             <CloseButton
               onClick={handleCloseClick}
               size="lg"

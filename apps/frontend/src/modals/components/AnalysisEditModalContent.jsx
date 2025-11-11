@@ -8,7 +8,7 @@
  * - Environment variable editing
  * @module modals/components/AnalysisEditModalContent
  */
-
+import { lazy, Suspense } from 'react';
 import {
   Stack,
   Group,
@@ -18,7 +18,6 @@ import {
   Alert,
   Box,
   ActionIcon,
-  LoadingOverlay,
   Switch,
   Badge,
   Tooltip,
@@ -40,9 +39,14 @@ import { modals } from '@mantine/modals';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import { useAnalysisEdit } from '../../hooks/useAnalysisEdit';
 import { useDiagnostics } from '../../hooks/useDiagnostics';
-import { CodeMirrorEditor } from '../../components/editor/CodeMirrorEditor.jsx';
+const CodeMirrorEditor = lazy(() =>
+  import('../../components/editor/CodeMirrorEditor.jsx').then((m) => ({
+    default: m.CodeMirrorEditor,
+  })),
+);
 import { useAnalyses } from '../../contexts/sseContext';
 import PropTypes from 'prop-types';
+import AppLoadingOverlay from '../../components/common/AppLoadingOverlay.jsx';
 
 /**
  * Analysis Edit Modal Content Component
@@ -127,15 +131,7 @@ function AnalysisEditModalContent({ id, innerProps }) {
   const versionText = version !== null && version !== 0 ? ` (v${version})` : '';
 
   return (
-    <Stack
-      h="calc(100vh - 200px)"
-      onKeyDown={(e) => {
-        // Prevent ESC from closing modal when there are unsaved changes
-        if (e.key === 'Escape' && hasChanges) {
-          e.stopPropagation();
-        }
-      }}
-    >
+    <Stack h="calc(100vh - 200px)">
       {/* Custom modal header - replacing default Mantine header */}
       <Box
         mb="sm"
@@ -256,8 +252,7 @@ function AnalysisEditModalContent({ id, innerProps }) {
       )}
 
       <Box style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-        <LoadingOverlay visible={isLoading} />
-        {!isLoading && (
+        <Suspense fallback={<AppLoadingOverlay message="Loading editor..." />}>
           <CodeMirrorEditor
             value={content}
             onChange={handleEditorChange}
@@ -270,7 +265,7 @@ function AnalysisEditModalContent({ id, innerProps }) {
             onDiagnosticsChange={handleDiagnosticsChange}
             onViewReady={handleViewReady}
           />
-        )}
+        </Suspense>
       </Box>
 
       <Group

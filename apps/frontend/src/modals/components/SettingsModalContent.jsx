@@ -1,9 +1,10 @@
 // frontend/src/modals/components/SettingsModalContent.jsx
-import { useState } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { Stack, Group, Text, Button, Paper, Tabs, Box } from '@mantine/core';
 import { IconBook, IconTransfer, IconChartBar } from '@tabler/icons-react';
-import DNSCacheSettings from './settings/DNSCacheSettings';
-import MetricsDashboard from './settings/MetricsDashboard';
+const DNSCacheSettings = lazy(() => import('./settings/DNSCacheSettings'));
+const MetricsDashboard = lazy(() => import('./settings/MetricsDashboard'));
+import AppLoadingOverlay from '../../components/common/AppLoadingOverlay.jsx';
 
 /**
  * SettingsModalContent
@@ -41,37 +42,41 @@ const SettingsModalContent = () => {
 
         {/* Content Area */}
         <Box style={{ flex: 1 }}>
-          <Tabs.Panel value="api">
-            <Stack gap="md">
-              <Text size="lg" fw={600} mb="sm">
-                API & Documentation
-              </Text>
-              <Paper p="md" withBorder>
-                <Stack gap="sm">
-                  <Text size="sm" c="dimmed">
-                    Access API documentation and developer resources.
-                  </Text>
-                  <Button
-                    variant="light"
-                    size="sm"
-                    onClick={handleOpenApiDocs}
-                    leftSection={<IconBook size={16} />}
-                    fullWidth
-                  >
-                    Open API Documentation
-                  </Button>
-                </Stack>
-              </Paper>
-            </Stack>
-          </Tabs.Panel>
+          <Suspense
+            fallback={<AppLoadingOverlay message="Loading settings..." />}
+          >
+            <Tabs.Panel value="api">
+              <Stack gap="md">
+                <Text size="lg" fw={600} mb="sm">
+                  API & Documentation
+                </Text>
+                <Paper p="md" withBorder>
+                  <Stack gap="sm">
+                    <Text size="sm" c="dimmed">
+                      Access API documentation and developer resources.
+                    </Text>
+                    <Button
+                      variant="light"
+                      size="sm"
+                      onClick={handleOpenApiDocs}
+                      leftSection={<IconBook size={16} />}
+                      fullWidth
+                    >
+                      Open API Documentation
+                    </Button>
+                  </Stack>
+                </Paper>
+              </Stack>
+            </Tabs.Panel>
 
-          <Tabs.Panel value="metrics">
-            <MetricsDashboard />
-          </Tabs.Panel>
+            <Tabs.Panel value="metrics">
+              <MetricsDashboard />
+            </Tabs.Panel>
 
-          <Tabs.Panel value="dns">
-            <DNSCacheSettings />
-          </Tabs.Panel>
+            <Tabs.Panel value="dns">
+              <DNSCacheSettings />
+            </Tabs.Panel>
+          </Suspense>
         </Box>
       </Group>
     </Tabs>

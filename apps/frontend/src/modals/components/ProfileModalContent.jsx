@@ -4,15 +4,28 @@
  * @module modals/components/ProfileModalContent
  */
 
-import { useEffect } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import { Group, Text, Tabs, Badge, Stack } from '@mantine/core';
 import { IconUser, IconKey, IconShield } from '@tabler/icons-react';
 import { modals } from '@mantine/modals';
 import { useProfileModal } from '../../hooks/useProfileModal';
-import { ProfileTab } from '../../components/profile/ProfileTab';
-import { PasswordTab } from '../../components/profile/PasswordTab';
-import { PasskeysTab } from '../../components/profile/PasskeysTab';
+const ProfileTab = lazy(() =>
+  import('../../components/profile/ProfileTab').then((m) => ({
+    default: m.ProfileTab,
+  })),
+);
+const PasswordTab = lazy(() =>
+  import('../../components/profile/PasswordTab').then((m) => ({
+    default: m.PasswordTab,
+  })),
+);
+const PasskeysTab = lazy(() =>
+  import('../../components/profile/PasskeysTab').then((m) => ({
+    default: m.PasskeysTab,
+  })),
+);
 import PropTypes from 'prop-types';
+import AppLoadingOverlay from '../../components/common/AppLoadingOverlay.jsx';
 
 /**
  * ProfileModalContent
@@ -76,64 +89,68 @@ function ProfileModalContent({ context, id }) {
   }, []); // Set once on mount
 
   return (
-    <Stack>
-      <Tabs value={activeTab} onChange={setActiveTab}>
-        <Tabs.List>
-          <Tabs.Tab value="profile" leftSection={<IconUser size={16} />}>
-            Profile
-          </Tabs.Tab>
-          <Tabs.Tab value="password" leftSection={<IconKey size={16} />}>
-            Password
-          </Tabs.Tab>
-          <Tabs.Tab value="passkeys" leftSection={<IconShield size={16} />}>
-            Passkeys
-            {isWebAuthnSupported && passkeys.length > 0 && (
-              <Badge size="xs" ml="xs" variant="filled">
-                {passkeys.length}
-              </Badge>
-            )}
-          </Tabs.Tab>
-        </Tabs.List>
+    <Suspense
+      fallback={<AppLoadingOverlay message="Loading proflie settings..." />}
+    >
+      <Stack>
+        <Tabs value={activeTab} onChange={setActiveTab}>
+          <Tabs.List>
+            <Tabs.Tab value="profile" leftSection={<IconUser size={16} />}>
+              Profile
+            </Tabs.Tab>
+            <Tabs.Tab value="password" leftSection={<IconKey size={16} />}>
+              Password
+            </Tabs.Tab>
+            <Tabs.Tab value="passkeys" leftSection={<IconShield size={16} />}>
+              Passkeys
+              {isWebAuthnSupported && passkeys.length > 0 && (
+                <Badge size="xs" ml="xs" variant="filled">
+                  {passkeys.length}
+                </Badge>
+              )}
+            </Tabs.Tab>
+          </Tabs.List>
 
-        <Tabs.Panel value="profile" pt="md">
-          <ProfileTab
-            user={user}
-            profileForm={profileForm}
-            profileError={profileError}
-            profileSuccess={profileSuccess}
-            profileLoading={profileLoading}
-            isEditingProfile={isEditingProfile}
-            setIsEditingProfile={setIsEditingProfile}
-            handleProfileSubmit={handleProfileSubmit}
-            handleCancelProfileEdit={handleCancelProfileEdit}
-          />
-        </Tabs.Panel>
+          <Tabs.Panel value="profile" pt="md">
+            <ProfileTab
+              user={user}
+              profileForm={profileForm}
+              profileError={profileError}
+              profileSuccess={profileSuccess}
+              profileLoading={profileLoading}
+              isEditingProfile={isEditingProfile}
+              setIsEditingProfile={setIsEditingProfile}
+              handleProfileSubmit={handleProfileSubmit}
+              handleCancelProfileEdit={handleCancelProfileEdit}
+            />
+          </Tabs.Panel>
 
-        <Tabs.Panel value="password" pt="md">
-          <PasswordTab
-            passwordForm={passwordForm}
-            passwordError={passwordError}
-            passwordLoading={passwordLoading}
-            passwordSuccess={passwordSuccess}
-            handlePasswordSubmit={handlePasswordSubmit}
-            handleClose={handleClose}
-          />
-        </Tabs.Panel>
+          <Tabs.Panel value="password" pt="md">
+            <PasswordTab
+              passwordForm={passwordForm}
+              passwordError={passwordError}
+              passwordLoading={passwordLoading}
+              passwordSuccess={passwordSuccess}
+              handlePasswordSubmit={handlePasswordSubmit}
+              handleClose={handleClose}
+            />
+          </Tabs.Panel>
 
-        <Tabs.Panel value="passkeys" pt="md">
-          <PasskeysTab
-            isWebAuthnSupported={isWebAuthnSupported}
-            passkeyForm={passkeyForm}
-            registeringPasskey={registeringPasskey}
-            passkeysError={passkeysError}
-            passkeysLoading={passkeysLoading}
-            passkeys={passkeys}
-            handleRegisterPasskey={handleRegisterPasskey}
-            handleDeletePasskey={handleDeletePasskey}
-          />
-        </Tabs.Panel>
-      </Tabs>
-    </Stack>
+          <Tabs.Panel value="passkeys" pt="md">
+            <PasskeysTab
+              isWebAuthnSupported={isWebAuthnSupported}
+              passkeyForm={passkeyForm}
+              registeringPasskey={registeringPasskey}
+              passkeysError={passkeysError}
+              passkeysLoading={passkeysLoading}
+              passkeys={passkeys}
+              handleRegisterPasskey={handleRegisterPasskey}
+              handleDeletePasskey={handleDeletePasskey}
+            />
+          </Tabs.Panel>
+        </Tabs>
+      </Stack>
+    </Suspense>
   );
 }
 

@@ -5,11 +5,8 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import * as prettier from 'prettier';
 import { analysisService } from '../services/analysisService';
-import { checkFormatChanges } from '../utils/codeMirrorUtils';
 import logger from '../utils/logger';
-import { PRETTIER_CONFIG } from '../utils/prettierConfig';
 
 /**
  * Hook for managing analysis edit modal operations
@@ -62,6 +59,8 @@ export function useAnalysisEdit({
     let isCancelled = false;
 
     async function checkFormat() {
+      // Lazy load checkFormatChanges only when needed
+      const { checkFormatChanges } = await import('../utils/codeMirrorUtils');
       const hasChanges = await checkFormatChanges(content);
       if (!isCancelled) {
         setHasFormatChanges(hasChanges);
@@ -206,7 +205,13 @@ export function useAnalysisEdit({
       } else {
         // Auto-format JavaScript before saving
         try {
-          contentToSave = await prettier.format(content, PRETTIER_CONFIG);
+          // Lazy load prettier and config only when saving
+          const [prettier, { getPrettierConfig }] = await Promise.all([
+            import('prettier'),
+            import('../utils/prettierConfig'),
+          ]);
+          const prettierConfig = await getPrettierConfig();
+          contentToSave = await prettier.format(content, prettierConfig);
         } catch (formatError) {
           logger.warn('Formatting failed, saving unformatted:', formatError);
           // Continue with unformatted content if formatting fails

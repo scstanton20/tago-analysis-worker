@@ -35,6 +35,7 @@ export const modalService = {
       title: `Download Logs: ${analysis.name}`,
       size: 'md',
       zIndex: 1000,
+      closeOnEscape: false,
       innerProps: {
         analysis,
         onDownload,
@@ -62,6 +63,7 @@ export const modalService = {
       title: 'Create Folder', // Will be updated dynamically by component
       size: 'md',
       zIndex: 1000,
+      closeOnEscape: false,
       innerProps: {
         teamId,
         parentFolderId: options.parentFolderId || null,
@@ -89,6 +91,7 @@ export const modalService = {
       title: 'Rename Folder',
       size: 'md',
       zIndex: 1000,
+      closeOnEscape: false,
       innerProps: {
         teamId,
         folderId,
@@ -116,6 +119,7 @@ export const modalService = {
       title: 'Change Team',
       size: 'md',
       zIndex: 1000,
+      closeOnEscape: false,
       innerProps: {
         onSelect,
         teams,
@@ -141,6 +145,7 @@ export const modalService = {
       size: '95%',
       zIndex: 1000,
       centered: true,
+      closeOnEscape: false,
       innerProps: {},
     });
 
@@ -183,6 +188,7 @@ export const modalService = {
       title: 'Profile Settings',
       size: 'lg',
       zIndex: 1000,
+      closeOnEscape: false,
       innerProps: {},
     });
 
@@ -204,6 +210,7 @@ export const modalService = {
       size: 'lg',
       zIndex: 1001, // Higher than User Management modal (1000) for proper nesting
       withCloseButton: true, // Keep default close button
+      closeOnEscape: false,
       innerProps: {
         user,
       },
@@ -226,8 +233,6 @@ export const modalService = {
       size: 'xl',
       zIndex: 1000,
       closeOnEscape: false, // Prevent accidental close while editing
-      // Note: closeOnClickOutside is intentionally NOT set to allow Mantine's
-      // automatic modal stacking to work correctly with nested confirmation modals
       withCloseButton: false, // Custom close button in content handles conditional closing
       innerProps: {},
     });
@@ -250,6 +255,7 @@ export const modalService = {
       title: `Version History: ${analysis.name}`,
       size: 'xl',
       zIndex: 1000,
+      closeOnEscape: false,
       innerProps: {
         analysis,
         onVersionRollback,
@@ -279,8 +285,7 @@ export const modalService = {
       size: '90%',
       zIndex: 1000,
       closeOnEscape: false, // Prevent accidental close while editing
-      // Note: closeOnClickOutside is intentionally NOT set to allow Mantine's
-      // automatic modal stacking to work correctly with nested confirmation modals
+      closeOnClickOutside: false,
       withCloseButton: false, // We'll add our own close button in the custom header
       innerProps: {
         analysis,
