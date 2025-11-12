@@ -466,6 +466,65 @@ describe('AnalysisProcess', () => {
 
       vi.useRealTimers();
     });
+
+    it('should normalize exit code to 0 for manual stops', async () => {
+      const analysis = new AnalysisProcess('test-analysis', mockService);
+      analysis.process = createMockChildProcess();
+      analysis.status = 'running';
+      analysis.isManualStop = true;
+
+      await analysis.handleExit(null); // Signal termination (null code)
+
+      expect(analysis.status).toBe('stopped');
+      expect(analysis.isManualStop).toBe(false); // Should be reset
+      expect(sseManager.broadcastAnalysisUpdate).toHaveBeenCalledWith(
+        'test-analysis',
+        expect.objectContaining({
+          update: expect.objectContaining({
+            exitCode: 0, // Normalized from null to 0
+          }),
+        }),
+      );
+    });
+
+    it('should not normalize exit code for non-manual stops', async () => {
+      const analysis = new AnalysisProcess('test-analysis', mockService);
+      analysis.process = createMockChildProcess();
+      analysis.status = 'running';
+      analysis.isManualStop = false;
+
+      await analysis.handleExit(null); // Signal termination without manual stop
+
+      expect(analysis.status).toBe('stopped');
+      expect(sseManager.broadcastAnalysisUpdate).toHaveBeenCalledWith(
+        'test-analysis',
+        expect.objectContaining({
+          update: expect.objectContaining({
+            exitCode: null, // Not normalized, remains null
+          }),
+        }),
+      );
+    });
+
+    it('should not restart when manual stop flag is set', async () => {
+      const analysis = new AnalysisProcess('test-analysis', mockService);
+      analysis.process = createMockChildProcess();
+      analysis.status = 'running';
+      analysis.intendedState = 'running';
+      analysis.isManualStop = true;
+
+      vi.useFakeTimers();
+      const startSpy = vi.spyOn(analysis, 'start');
+
+      await analysis.handleExit(null);
+
+      vi.advanceTimersByTime(10000);
+
+      expect(startSpy).not.toHaveBeenCalled(); // Should not restart
+      expect(analysis.isManualStop).toBe(false); // Flag should be reset
+
+      vi.useRealTimers();
+    });
   });
 
   describe('IPC message handling', () => {

@@ -114,6 +114,9 @@ class AnalysisProcess {
     this.reconnectionAttempts = 0;
     this.isConnected = false;
 
+    // Manual stop tracking for exit code normalization
+    this.isManualStop = false;
+
     // Create main logger for lifecycle events (not analysis output)
     this.logger = createChildLogger('analysis', {
       analysis: analysisName,
@@ -451,9 +454,7 @@ class AnalysisProcess {
             }
           } else if (
             fullLine.includes('¬ Connected to TagoIO ::') ||
-            fullLine.includes('¬ Waiting for analysis trigger') ||
-            fullLine.includes('connected successfully') ||
-            fullLine.includes('connection established')
+            fullLine.includes('¬ Waiting for analysis trigger')
           ) {
             // Connection succeeded! Clear grace timer immediately
             if (this.connectionGraceTimer) {
@@ -468,8 +469,6 @@ class AnalysisProcess {
             this.isConnected = true;
             this.reconnectionAttempts = 0;
             this.connectionErrorDetected = false;
-
-            this.addLog('Connection established - analysis ready');
           }
 
           this.addLog(isError ? `ERROR: ${fullLine}` : fullLine);
@@ -580,6 +579,10 @@ class AnalysisProcess {
 
     await this.addLog('Stopping analysis...');
 
+    // Mark as manual stop for exit code normalization
+    this.isManualStop = true;
+    this.intendedState = 'stopped'; // Explicitly set intended state
+
     return new Promise((resolve) => {
       this.process.kill('SIGTERM');
 
@@ -688,6 +691,7 @@ class AnalysisProcess {
     this.connectionErrorDetected = false;
     this.restartAttempts = 0;
     this.isStarting = false;
+    this.isManualStop = false;
 
     this.logger.info(`Analysis resources cleaned up successfully`);
   }
@@ -711,10 +715,26 @@ class AnalysisProcess {
       await this.addLog(`ERROR: ${this.stderrBuffer.trim()}`);
     }
 
-    this.logger.info({ exitCode: code }, 'Analysis process exited');
+    // Normalize exit code for manual stops
+    // When killed by signal (SIGTERM/SIGKILL), code is null
+    // For manual stops, treat as clean exit (code 0)
+    const wasManualStop = this.isManualStop;
+    const normalizedCode = wasManualStop ? 0 : code;
 
-    await this.addLog(`Process exited with code ${code}`);
+    this.logger.info(
+      {
+        exitCode: code,
+        normalizedCode,
+        isManualStop: wasManualStop,
+      },
+      'Analysis process exited',
+    );
+
+    await this.addLog(`Process exited with code ${normalizedCode}`);
     this.process = null;
+
+    // Reset manual stop flag
+    this.isManualStop = false;
 
     this.updateStatus('stopped', false);
 
@@ -727,7 +747,7 @@ class AnalysisProcess {
       update: {
         status: 'stopped',
         enabled: false,
-        exitCode: code,
+        exitCode: normalizedCode, // Use normalized code
         exitTime: new Date().toISOString(),
         exitSequence: Date.now(), // Unique sequence number for deduplication
       },
@@ -736,7 +756,9 @@ class AnalysisProcess {
     await this.saveConfig();
 
     // Auto-restart analyses that exit unexpectedly OR have connection errors
+    // Don't restart if it was a manual stop
     const shouldRestart =
+      !wasManualStop &&
       this.intendedState === 'running' &&
       (code !== 0 || this.connectionErrorDetected);
 
