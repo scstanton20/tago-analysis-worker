@@ -178,7 +178,10 @@ class AnalysisService {
         if (config.analyses[name] && analysis instanceof AnalysisProcess) {
           // Update properties of existing AnalysisProcess instance
           analysis.enabled = config.analyses[name].enabled;
-          analysis.status = config.analyses[name].status;
+          // Do NOT update status from config - status is runtime-only
+          // Keep existing status, update intendedState instead
+          analysis.intendedState =
+            config.analyses[name].intendedState || 'stopped';
           analysis.lastStartTime = config.analyses[name].lastStartTime;
           analysis.teamId = config.analyses[name].teamId;
         }
@@ -197,7 +200,9 @@ class AnalysisService {
           const analysis = new AnalysisProcess(name, this);
           Object.assign(analysis, {
             enabled: analysisConfig.enabled,
-            status: analysisConfig.status,
+            // Always initialize status as 'stopped' on load
+            // Actual processes will be started by verifyIntendedState() based on intendedState
+            status: 'stopped',
             intendedState: analysisConfig.intendedState || 'stopped',
             lastStartTime: analysisConfig.lastStartTime,
             teamId: analysisConfig.teamId,
@@ -225,7 +230,8 @@ class AnalysisService {
     this.analyses.forEach((analysis, analysisName) => {
       configuration.analyses[analysisName] = {
         enabled: analysis.enabled,
-        status: analysis.status,
+        // Do NOT persist runtime status - only persist intended state
+        // Status will always be 'stopped' on load and actual processes will be started by verifyIntendedState()
         intendedState: analysis.intendedState || 'stopped',
         lastStartTime: analysis.lastStartTime,
         teamId: analysis.teamId,
@@ -1893,7 +1899,8 @@ class AnalysisService {
 
     Object.assign(analysis, {
       enabled: fullConfig.enabled,
-      status: fullConfig.status,
+      // Always initialize status as 'stopped' - processes are started separately via start()
+      status: 'stopped',
       intendedState: fullConfig.intendedState || 'stopped',
       lastStartTime: fullConfig.lastStartTime,
       teamId: fullConfig.teamId,
@@ -1920,7 +1927,50 @@ class AnalysisService {
   }
 
   /**
+   * Wait for analysis to establish connection to TagoIO
+   * Monitors the isConnected flag to determine when connection is successful
+   * @param {AnalysisProcess} analysis - Analysis instance to monitor
+   * @param {number} timeoutMs - Maximum time to wait in milliseconds
+   * @returns {Promise<boolean>} True if connected, false if timeout
+   */
+  async waitForAnalysisConnection(analysis, timeoutMs = 10000) {
+    return new Promise((resolve) => {
+      const startTime = Date.now();
+      let resolved = false;
+
+      // Check if already connected
+      if (analysis.isConnected) {
+        resolve(true);
+        return;
+      }
+
+      // Set up periodic check for connection
+      const checkInterval = setInterval(() => {
+        // Check for connection success
+        if (analysis.isConnected) {
+          clearInterval(checkInterval);
+          if (!resolved) {
+            resolved = true;
+            resolve(true);
+          }
+          return;
+        }
+
+        // Check for timeout
+        if (Date.now() - startTime > timeoutMs) {
+          clearInterval(checkInterval);
+          if (!resolved) {
+            resolved = true;
+            resolve(false);
+          }
+        }
+      }, 100); // Check every 100ms
+    });
+  }
+
+  /**
    * Verify intended state and restart analyses that should be running
+   * Uses batched concurrent startup with connection verification
    * Used during startup to ensure all intended processes are running
    * @returns {Promise<Object>} Summary of restart operations
    */
@@ -1932,12 +1982,16 @@ class AnalysisService {
       succeeded: [],
       failed: [],
       alreadyRunning: [],
+      connected: [],
+      connectionTimeouts: [],
     };
 
     moduleLogger.info(
       `Intended state verification: Found ${shouldBeRunning.length} analyses that should be running`,
     );
 
+    // Collect analyses that need starting
+    const toStart = [];
     for (const analysisName of shouldBeRunning) {
       const analysis = this.analyses.get(analysisName);
       if (!analysis) continue;
@@ -1945,7 +1999,6 @@ class AnalysisService {
       results.attempted.push(analysisName);
 
       // Skip if already running and healthy (actual process exists and is alive)
-      // This handles the power outage case - if no actual process exists, we restart
       const hasLiveProcess =
         analysis.process && !analysis.process.killed && analysis.process.pid;
       if (analysis.status === 'running' && hasLiveProcess) {
@@ -1966,22 +2019,104 @@ class AnalysisService {
         analysis.process = null;
       }
 
-      try {
-        moduleLogger.info(`Starting ${analysisName} (intended state: running)`);
-        await analysis.start();
-        results.succeeded.push(analysisName);
-        await this.addLog(
-          analysisName,
-          'Restarted during intended state verification',
-        );
-      } catch (error) {
-        moduleLogger.error(
-          { err: error, analysisName },
-          'Failed to start analysis during intended state verification',
-        );
-        results.failed.push({ name: analysisName, error: error.message });
+      toStart.push({ name: analysisName, analysis });
+    }
+
+    if (toStart.length === 0) {
+      moduleLogger.info('No analyses need starting');
+      return results;
+    }
+
+    moduleLogger.info(
+      `Starting ${toStart.length} analyses in batches with connection verification`,
+    );
+
+    // Batch size: 5 analyses at a time (configurable via environment)
+    const BATCH_SIZE = parseInt(process.env.ANALYSIS_BATCH_SIZE || '5', 10);
+    const batches = [];
+
+    // Split into batches
+    for (let i = 0; i < toStart.length; i += BATCH_SIZE) {
+      batches.push(toStart.slice(i, i + BATCH_SIZE));
+    }
+
+    moduleLogger.info(
+      `Starting ${batches.length} batches of up to ${BATCH_SIZE} analyses each`,
+    );
+
+    let totalStarted = 0;
+    let totalConnected = 0;
+
+    // Process each batch
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      const batch = batches[batchIndex];
+      moduleLogger.info(
+        `Starting batch ${batchIndex + 1}/${batches.length} with ${batch.length} analyses`,
+      );
+
+      // Start all analyses in this batch concurrently
+      const startPromises = batch.map(async ({ name, analysis }) => {
+        try {
+          moduleLogger.info(`Starting ${name}`);
+          await analysis.start();
+          totalStarted++;
+          results.succeeded.push(name);
+          await this.addLog(
+            name,
+            'Restarted during intended state verification',
+          );
+          return { name, analysis, started: true };
+        } catch (error) {
+          moduleLogger.error(
+            { err: error, analysisName: name },
+            'Failed to start analysis',
+          );
+          results.failed.push({ name, error: error.message });
+          return { name, analysis, started: false, error };
+        }
+      });
+
+      // Wait for all in batch to start
+      const startResults = await Promise.all(startPromises);
+
+      // Now wait for all in batch to connect (with timeout)
+      const connectionPromises = startResults
+        .filter((r) => r.started)
+        .map(async ({ name, analysis }) => {
+          const connected = await this.waitForAnalysisConnection(
+            analysis,
+            10000,
+          );
+
+          if (connected) {
+            moduleLogger.info(`${name} connected successfully`);
+            totalConnected++;
+            results.connected.push(name);
+          } else {
+            moduleLogger.warn(`${name} connection timeout (proceeding anyway)`);
+            results.connectionTimeouts.push(name);
+          }
+
+          return { name, connected };
+        });
+
+      // Wait for all connections in this batch (or timeout)
+      await Promise.all(connectionPromises);
+
+      moduleLogger.info(
+        `Batch ${batchIndex + 1} complete: ${connectionPromises.length} analyses started`,
+      );
+
+      // Small delay between batches to avoid overwhelming system
+      if (batchIndex < batches.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1000)); // 1s between batches
       }
     }
+
+    moduleLogger.info(
+      `State verification complete: ${totalStarted}/${toStart.length} started, ` +
+        `${totalConnected}/${totalStarted} connected successfully`,
+    );
 
     return results;
   }

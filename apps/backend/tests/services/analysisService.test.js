@@ -962,7 +962,7 @@ describe('AnalysisService', () => {
         analyses: {
           'test-analysis': {
             enabled: true,
-            status: 'running',
+            // status is no longer persisted in config
             intendedState: 'running',
             lastStartTime: null,
             teamId: 'team-123',
@@ -975,7 +975,10 @@ describe('AnalysisService', () => {
 
       // updateConfig merges config by updating the existing object properties
       expect(analysis.enabled).toBe(true);
-      expect(analysis.status).toBe('running');
+      // Status should remain 'stopped' after config update
+      // Only intendedState is persisted, status is runtime-only
+      expect(analysis.status).toBe('stopped');
+      expect(analysis.intendedState).toBe('running');
       expect(analysis.teamId).toBe('team-123');
     });
   });
@@ -1013,6 +1016,134 @@ describe('AnalysisService', () => {
       expect(inProgress).toHaveLength(2);
       expect(inProgress).toContain('analysis-1');
       expect(inProgress).toContain('analysis-2');
+    });
+  });
+
+  describe('batched startup', () => {
+    describe('waitForAnalysisConnection', () => {
+      it('should return true immediately if analysis is already connected', async () => {
+        const analysis = createMockAnalysisProcess({
+          isConnected: true,
+        });
+
+        const result = await analysisService.waitForAnalysisConnection(
+          analysis,
+          10000,
+        );
+
+        expect(result).toBe(true);
+      });
+
+      it('should return true when analysis connects within timeout', async () => {
+        const analysis = createMockAnalysisProcess({
+          isConnected: false,
+        });
+
+        // Simulate connection after 200ms
+        setTimeout(() => {
+          analysis.isConnected = true;
+        }, 200);
+
+        const result = await analysisService.waitForAnalysisConnection(
+          analysis,
+          1000,
+        );
+
+        expect(result).toBe(true);
+      });
+
+      it('should return false when connection times out', async () => {
+        const analysis = createMockAnalysisProcess({
+          isConnected: false,
+        });
+
+        // Never set isConnected to true
+        const result = await analysisService.waitForAnalysisConnection(
+          analysis,
+          300,
+        );
+
+        expect(result).toBe(false);
+      });
+    });
+
+    describe('verifyIntendedState with batching', () => {
+      beforeEach(() => {
+        // Mock analysis processes
+        for (let i = 1; i <= 3; i++) {
+          const analysis = createMockAnalysisProcess({
+            analysisName: `analysis-${i}`,
+            intendedState: 'running',
+            status: 'stopped',
+            process: null,
+          });
+          analysisService.analyses.set(`analysis-${i}`, analysis);
+        }
+      });
+
+      it('should start analyses in batches with connection verification', async () => {
+        // Override batch size for testing
+        process.env.ANALYSIS_BATCH_SIZE = '2';
+
+        const results = await analysisService.verifyIntendedState();
+
+        expect(results.attempted).toHaveLength(3);
+        expect(results.succeeded).toHaveLength(3);
+        expect(results.connected).toBeDefined();
+        expect(results.connectionTimeouts).toBeDefined();
+      });
+
+      it('should track connection successes and timeouts', async () => {
+        // Set one analysis to be already connected
+        const analysis1 = analysisService.analyses.get('analysis-1');
+        analysis1.isConnected = true;
+
+        const results = await analysisService.verifyIntendedState();
+
+        expect(results.attempted).toHaveLength(3);
+        expect(
+          results.connected.length + results.connectionTimeouts.length,
+        ).toBe(results.succeeded.length);
+      });
+
+      it('should handle start failures gracefully', async () => {
+        // Make one analysis fail to start
+        const analysis2 = analysisService.analyses.get('analysis-2');
+        analysis2.start = vi.fn().mockRejectedValue(new Error('Start failed'));
+
+        const results = await analysisService.verifyIntendedState();
+
+        expect(results.attempted).toHaveLength(3);
+        expect(results.failed).toHaveLength(1);
+        expect(results.failed[0].name).toBe('analysis-2');
+        expect(results.succeeded).toHaveLength(2);
+      });
+
+      it('should skip analyses that are already running', async () => {
+        const analysis1 = analysisService.analyses.get('analysis-1');
+        analysis1.status = 'running';
+        analysis1.process = { killed: false, pid: 12345 };
+
+        const results = await analysisService.verifyIntendedState();
+
+        expect(results.attempted).toHaveLength(3);
+        expect(results.alreadyRunning).toHaveLength(1);
+        expect(results.alreadyRunning[0]).toBe('analysis-1');
+        expect(results.succeeded).toHaveLength(2);
+      });
+
+      it('should return early if no analyses need starting', async () => {
+        // Set all analyses to already running
+        analysisService.analyses.forEach((analysis) => {
+          analysis.status = 'running';
+          analysis.process = { killed: false, pid: 12345 };
+        });
+
+        const results = await analysisService.verifyIntendedState();
+
+        expect(results.alreadyRunning).toHaveLength(3);
+        expect(results.succeeded).toHaveLength(0);
+      });
     });
   });
 

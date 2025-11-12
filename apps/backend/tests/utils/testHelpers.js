@@ -144,6 +144,7 @@ export function createMockAnalysisProcess(overrides = {}) {
     logs: [],
     logSequence: 0,
     totalLogCount: 0,
+    isConnected: true, // For batched startup connection verification
     start: vi.fn().mockResolvedValue(undefined),
     stop: vi.fn().mockResolvedValue(undefined),
     cleanup: vi.fn().mockResolvedValue(undefined),

@@ -387,83 +387,141 @@ async function startServer() {
   }
 }
 
-// Graceful shutdown
-process.on('SIGINT', () => {
-  serverLogger.info('Received SIGINT, shutting down gracefully');
+/**
+ * Graceful shutdown handle for containers
+ * Stops all analyses, saves state, flushes logs, and closes servers cleanly
+ * @param {string} signal - Signal name (SIGTERM or SIGINT)
+ */
+async function gracefulShutdown(signal) {
+  serverLogger.info(`Received ${signal}, initiating graceful shutdown`);
+
+  // 1. Update container state
   sseManager.updateContainerState({
     status: 'shutting_down',
-    message: 'Server is shutting down',
+    message: `Server shutting down (${signal})`,
   });
 
-  // Stop health check
+  // 2. Stop health check and metrics
   analysisService.stopHealthCheck();
 
-  // Broadcast shutdown notification to all users
+  // 3. Stop all running analyses
+  serverLogger.info('Stopping all running analyses');
+  const shutdownPromises = [];
+  for (const [name, analysis] of analysisService.analyses) {
+    if (analysis.status === 'running') {
+      serverLogger.info(
+        { analysisName: name },
+        'Stopping analysis for shutdown',
+      );
+      shutdownPromises.push(
+        analysis.stop().catch((error) => {
+          serverLogger.error(
+            { err: error, analysisName: name },
+            'Failed to stop analysis during shutdown',
+          );
+        }),
+      );
+    }
+  }
+
+  // Wait for all analyses to stop (with 5s timeout)
+  await Promise.race([
+    Promise.all(shutdownPromises),
+    new Promise((resolve) => setTimeout(resolve, 5000)),
+  ]);
+  serverLogger.info(
+    `Stopped ${shutdownPromises.length} analyses (or timed out after 5s)`,
+  );
+
+  // 4. Save final configuration
+  try {
+    await analysisService.saveConfig();
+    serverLogger.info('Final configuration saved');
+  } catch (error) {
+    serverLogger.error({ err: error }, 'Failed to save final configuration');
+  }
+
+  // 5. Flush file loggers
+  let flushedCount = 0;
+  for (const [name, analysis] of analysisService.analyses) {
+    if (analysis.fileLogger && analysis.fileLogger.flush) {
+      try {
+        analysis.fileLogger.flush();
+        flushedCount++;
+      } catch (error) {
+        serverLogger.error(
+          { err: error, analysisName: name },
+          'Failed to flush file logger',
+        );
+      }
+    }
+  }
+  serverLogger.info(`Flushed ${flushedCount} file loggers`);
+
+  // 6. Save DNS cache
+  try {
+    await dnsCache.save();
+    serverLogger.info('DNS cache saved');
+  } catch (error) {
+    serverLogger.error({ err: error }, 'Failed to save DNS cache');
+  }
+
+  // 7. Notify SSE clients
   sseManager.broadcast({
     type: 'serverShutdown',
-    reason: 'Server is shutting down',
+    reason: `Server shutting down (${signal})`,
   });
 
-  setTimeout(() => {
-    // Close servers based on what's running
+  // Give clients time to receive shutdown notification
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+
+  // 8. Close servers with timeout
+  serverLogger.info('Closing HTTP/HTTPS servers');
+  const serverClosePromise = new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      serverLogger.warn('Server close timeout, forcing exit');
+      resolve();
+    }, 3000);
+
+    let closedCount = 0;
+    const totalServers = (httpsServer ? 1 : 0) + (server ? 1 : 0);
+
+    const checkAllClosed = () => {
+      closedCount++;
+      if (closedCount >= totalServers) {
+        clearTimeout(timeout);
+        resolve();
+      }
+    };
+
     if (httpsServer) {
       httpsServer.close(() => {
-        serverLogger.info('HTTPS Server closed');
-        if (!server) {
-          process.exit(0);
-        }
+        serverLogger.info('HTTPS server closed');
+        checkAllClosed();
       });
     }
 
     if (server) {
       server.close(() => {
-        serverLogger.info('HTTP Server closed');
-        process.exit(0);
+        serverLogger.info('HTTP server closed');
+        checkAllClosed();
       });
-    } else if (httpsServer) {
-      // If only HTTPS server is running, exit after closing it
-      setTimeout(() => process.exit(0), 100);
     }
-  }, 1000); // Give time for broadcast to reach clients
-});
 
-process.on('SIGTERM', () => {
-  serverLogger.info('Received SIGTERM, shutting down gracefully');
-  sseManager.updateContainerState({
-    status: 'shutting_down',
-    message: 'Server is shutting down',
+    if (totalServers === 0) {
+      clearTimeout(timeout);
+      resolve();
+    }
   });
 
-  // Stop health check
-  analysisService.stopHealthCheck();
+  await serverClosePromise;
 
-  // Broadcast shutdown notification to all users
-  sseManager.broadcast({
-    type: 'serverShutdown',
-    reason: 'Server is shutting down',
-  });
+  serverLogger.info('Graceful shutdown complete');
+  process.exit(0);
+}
 
-  setTimeout(() => {
-    // Close servers based on what's running
-    if (httpsServer) {
-      httpsServer.close(() => {
-        serverLogger.info('HTTPS Server closed');
-        if (!server) {
-          process.exit(0);
-        }
-      });
-    }
-
-    if (server) {
-      server.close(() => {
-        serverLogger.info('HTTP Server closed');
-        process.exit(0);
-      });
-    } else if (httpsServer) {
-      // If only HTTPS server is running, exit after closing it
-      setTimeout(() => process.exit(0), 100);
-    }
-  }, 1000); // Give time for broadcast to reach clients
-});
+// Graceful shutdown handlers
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 startServer();

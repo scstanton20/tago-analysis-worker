@@ -108,6 +108,12 @@ class AnalysisProcess {
     this.connectionErrorDetected = false;
     this.isStarting = false; // Flag to prevent race conditions on start
 
+    // Connection grace period management
+    this.connectionGracePeriod = 30000; // 30 seconds
+    this.connectionGraceTimer = null;
+    this.reconnectionAttempts = 0;
+    this.isConnected = false;
+
     // Create main logger for lifecycle events (not analysis output)
     this.logger = createChildLogger('analysis', {
       analysis: analysisName,
@@ -347,7 +353,7 @@ class AnalysisProcess {
           message.hostname,
           message.options,
         );
-        this.process.send({
+        this.safeIPCSend({
           type: 'DNS_LOOKUP_RESPONSE',
           requestId: message.requestId,
           result,
@@ -357,7 +363,7 @@ class AnalysisProcess {
         const result = await dnsCache.handleDNSResolve4Request(
           message.hostname,
         );
-        this.process.send({
+        this.safeIPCSend({
           type: 'DNS_RESOLVE4_RESPONSE',
           requestId: message.requestId,
           result,
@@ -367,7 +373,7 @@ class AnalysisProcess {
         const result = await dnsCache.handleDNSResolve6Request(
           message.hostname,
         );
-        this.process.send({
+        this.safeIPCSend({
           type: 'DNS_RESOLVE6_RESPONSE',
           requestId: message.requestId,
           result,
@@ -392,27 +398,80 @@ class AnalysisProcess {
       } else {
         const fullLine = (buffer + line).trim();
         if (fullLine) {
-          // Check for SDK connection errors
+          // Check for SDK reconnection attempts
           if (
-            fullLine.includes(
-              '¬ Connection was closed, trying to reconnect...',
-            ) ||
+            fullLine.includes('¬ Connection was closed, trying to reconnect...')
+          ) {
+            this.reconnectionAttempts++;
+            this.isConnected = false;
+
+            this.logger.info(
+              `SDK reconnection attempt ${this.reconnectionAttempts}`,
+            );
+
+            // Start grace period timer on first attempt
+            if (!this.connectionGraceTimer) {
+              this.logger.info(
+                `Starting ${this.connectionGracePeriod}ms grace period for SDK reconnection`,
+              );
+
+              this.connectionGraceTimer = setTimeout(() => {
+                // Grace period expired without successful connection
+                if (!this.isConnected) {
+                  this.logger.warn(
+                    `Connection grace period expired without success after ${this.reconnectionAttempts} attempts`,
+                  );
+                  this.connectionErrorDetected = true;
+
+                  if (this.process && !this.process.killed) {
+                    this.process.kill('SIGTERM');
+                  }
+                }
+              }, this.connectionGracePeriod);
+            }
+
+            this.addLog(
+              `SDK reconnecting (attempt ${this.reconnectionAttempts})...`,
+            );
+          } else if (
             fullLine.includes('¬ Error :: Analysis not found or not active.')
           ) {
-            this.logger.warn(
-              'Tago SDK connection/analysis error detected - marking for restart',
-            );
-
+            // Fatal error - kill immediately
+            this.logger.error('Analysis not found or not active - fatal error');
             this.connectionErrorDetected = true;
-            this.addLog(
-              'Tago connection/analysis error - will restart process',
-            );
 
-            // Kill the process to trigger restart logic
+            // Clear grace timer if active
+            if (this.connectionGraceTimer) {
+              clearTimeout(this.connectionGraceTimer);
+              this.connectionGraceTimer = null;
+            }
+
             if (this.process && !this.process.killed) {
               this.process.kill('SIGTERM');
             }
+          } else if (
+            fullLine.includes('¬ Connected to TagoIO ::') ||
+            fullLine.includes('¬ Waiting for analysis trigger') ||
+            fullLine.includes('connected successfully') ||
+            fullLine.includes('connection established')
+          ) {
+            // Connection succeeded! Clear grace timer immediately
+            if (this.connectionGraceTimer) {
+              clearTimeout(this.connectionGraceTimer);
+              this.connectionGraceTimer = null;
+
+              this.logger.info(
+                `SDK connection successful after ${this.reconnectionAttempts} reconnection attempts`,
+              );
+            }
+
+            this.isConnected = true;
+            this.reconnectionAttempts = 0;
+            this.connectionErrorDetected = false;
+
+            this.addLog('Connection established - analysis ready');
           }
+
           this.addLog(isError ? `ERROR: ${fullLine}` : fullLine);
         }
         if (isError) {
@@ -545,6 +604,29 @@ class AnalysisProcess {
   }
 
   /**
+   * Safely send IPC message to child process with null guards
+   * Prevents crash when process is killed during async operations
+   * @param {Object} message - Message to send to child process
+   * @returns {void}
+   */
+  safeIPCSend(message) {
+    try {
+      if (this.process && !this.process.killed) {
+        this.process.send(message);
+      } else {
+        this.logger.debug('Skipped IPC send - process no longer available', {
+          messageType: message.type,
+        });
+      }
+    } catch (error) {
+      this.logger.warn(
+        { err: error, messageType: message.type },
+        'Failed to send IPC message to child process',
+      );
+    }
+  }
+
+  /**
    * Clean up all resources associated with this analysis
    * Call this method before deleting an analysis to prevent memory leaks
    * @returns {Promise<void>}
@@ -564,6 +646,16 @@ class AnalysisProcess {
       }
       this.process = null;
     }
+
+    // Clear connection grace timer
+    if (this.connectionGraceTimer) {
+      clearTimeout(this.connectionGraceTimer);
+      this.connectionGraceTimer = null;
+    }
+
+    // Reset connection state
+    this.reconnectionAttempts = 0;
+    this.isConnected = false;
 
     // Close file logger stream to prevent memory leaks
     if (this.fileLogger) {

@@ -468,6 +468,138 @@ describe('AnalysisProcess', () => {
     });
   });
 
+  describe('IPC message handling', () => {
+    it('should handle DNS lookup requests', async () => {
+      const mockProcess = createMockChildProcess();
+      fork.mockReturnValue(mockProcess);
+
+      const analysis = new AnalysisProcess('test-analysis', mockService);
+      await analysis.start();
+
+      // Simulate IPC message from child process
+      const ipcHandler = mockProcess.on.mock.calls.find(
+        (call) => call[0] === 'message',
+      )[1];
+
+      await ipcHandler({
+        type: 'DNS_LOOKUP_REQUEST',
+        requestId: 'req-123',
+        hostname: 'example.com',
+        options: {},
+      });
+
+      expect(mockProcess.send).toHaveBeenCalledWith({
+        type: 'DNS_LOOKUP_RESPONSE',
+        requestId: 'req-123',
+        result: { addresses: ['127.0.0.1'] },
+      });
+    });
+
+    it('should not crash when process is killed during async DNS lookup', async () => {
+      const mockProcess = createMockChildProcess();
+      fork.mockReturnValue(mockProcess);
+
+      const analysis = new AnalysisProcess('test-analysis', mockService);
+      await analysis.start();
+
+      // Get the IPC message handler
+      const ipcHandler = mockProcess.on.mock.calls.find(
+        (call) => call[0] === 'message',
+      )[1];
+
+      // Create a promise that will kill the process during DNS lookup
+      const dnsPromise = ipcHandler({
+        type: 'DNS_LOOKUP_REQUEST',
+        requestId: 'req-123',
+        hostname: 'example.com',
+        options: {},
+      });
+
+      // Kill the process before DNS lookup completes
+      analysis.process = null;
+
+      // Should not throw error
+      await expect(dnsPromise).resolves.not.toThrow();
+
+      // Send should not have been called since process is null
+      expect(mockProcess.send).not.toHaveBeenCalled();
+    });
+
+    it('should not crash when process is killed during DNS resolve4', async () => {
+      const mockProcess = createMockChildProcess();
+      fork.mockReturnValue(mockProcess);
+
+      const analysis = new AnalysisProcess('test-analysis', mockService);
+      await analysis.start();
+
+      const ipcHandler = mockProcess.on.mock.calls.find(
+        (call) => call[0] === 'message',
+      )[1];
+
+      const dnsPromise = ipcHandler({
+        type: 'DNS_RESOLVE4_REQUEST',
+        requestId: 'req-456',
+        hostname: 'example.com',
+      });
+
+      // Kill the process
+      analysis.process = null;
+
+      await expect(dnsPromise).resolves.not.toThrow();
+      expect(mockProcess.send).not.toHaveBeenCalled();
+    });
+
+    it('should not crash when process is killed during DNS resolve6', async () => {
+      const mockProcess = createMockChildProcess();
+      fork.mockReturnValue(mockProcess);
+
+      const analysis = new AnalysisProcess('test-analysis', mockService);
+      await analysis.start();
+
+      const ipcHandler = mockProcess.on.mock.calls.find(
+        (call) => call[0] === 'message',
+      )[1];
+
+      const dnsPromise = ipcHandler({
+        type: 'DNS_RESOLVE6_REQUEST',
+        requestId: 'req-789',
+        hostname: 'example.com',
+      });
+
+      // Kill the process
+      analysis.process = null;
+
+      await expect(dnsPromise).resolves.not.toThrow();
+      expect(mockProcess.send).not.toHaveBeenCalled();
+    });
+
+    it('should handle IPC send errors gracefully', async () => {
+      const mockProcess = createMockChildProcess();
+      mockProcess.send.mockImplementation(() => {
+        throw new Error('IPC send failed');
+      });
+
+      fork.mockReturnValue(mockProcess);
+
+      const analysis = new AnalysisProcess('test-analysis', mockService);
+      await analysis.start();
+
+      const ipcHandler = mockProcess.on.mock.calls.find(
+        (call) => call[0] === 'message',
+      )[1];
+
+      // Should not crash on send error
+      await expect(
+        ipcHandler({
+          type: 'DNS_LOOKUP_REQUEST',
+          requestId: 'req-123',
+          hostname: 'example.com',
+          options: {},
+        }),
+      ).resolves.not.toThrow();
+    });
+  });
+
   describe('handleOutput', () => {
     it('should process stdout data', async () => {
       const analysis = new AnalysisProcess('test-analysis', mockService);
@@ -485,19 +617,109 @@ describe('AnalysisProcess', () => {
       expect(analysis.logs[0].message).toContain('ERROR: Error message');
     });
 
-    it('should detect SDK connection errors', async () => {
+    it('should detect SDK connection errors and start grace period', async () => {
       const mockProcess = createMockChildProcess();
       const analysis = new AnalysisProcess('test-analysis', mockService);
       analysis.process = mockProcess;
       analysis.status = 'running';
+
+      vi.useFakeTimers();
 
       analysis.handleOutput(
         false,
         Buffer.from('¬ Connection was closed, trying to reconnect...\n'),
       );
 
-      expect(analysis.connectionErrorDetected).toBe(true);
+      // Should NOT kill immediately
+      expect(mockProcess.kill).not.toHaveBeenCalled();
+      expect(analysis.isConnected).toBe(false);
+      expect(analysis.reconnectionAttempts).toBe(1);
+      expect(analysis.connectionGraceTimer).not.toBeNull();
+
+      vi.useRealTimers();
+    });
+
+    it('should kill process after grace period expires without connection', async () => {
+      const mockProcess = createMockChildProcess();
+      const analysis = new AnalysisProcess('test-analysis', mockService);
+      analysis.process = mockProcess;
+      analysis.status = 'running';
+      analysis.connectionGracePeriod = 1000; // 1 second for test
+
+      vi.useFakeTimers();
+
+      analysis.handleOutput(
+        false,
+        Buffer.from('¬ Connection was closed, trying to reconnect...\n'),
+      );
+
+      // Should not kill yet
+      expect(mockProcess.kill).not.toHaveBeenCalled();
+
+      // Advance timer past grace period
+      vi.advanceTimersByTime(1100);
+
+      // Now should kill
       expect(mockProcess.kill).toHaveBeenCalledWith('SIGTERM');
+      expect(analysis.connectionErrorDetected).toBe(true);
+
+      vi.useRealTimers();
+    });
+
+    it('should clear grace timer on successful connection', async () => {
+      const mockProcess = createMockChildProcess();
+      const analysis = new AnalysisProcess('test-analysis', mockService);
+      analysis.process = mockProcess;
+      analysis.status = 'running';
+      analysis.connectionGracePeriod = 30000;
+
+      vi.useFakeTimers();
+
+      // Start reconnection
+      analysis.handleOutput(
+        false,
+        Buffer.from('¬ Connection was closed, trying to reconnect...\n'),
+      );
+
+      expect(analysis.connectionGraceTimer).not.toBeNull();
+      expect(analysis.isConnected).toBe(false);
+
+      // Connection succeeds
+      analysis.handleOutput(
+        false,
+        Buffer.from('¬ Connected to TagoIO :: Analysis Ready\n'),
+      );
+
+      expect(analysis.isConnected).toBe(true);
+      expect(analysis.connectionGraceTimer).toBeNull();
+      expect(analysis.reconnectionAttempts).toBe(0);
+      expect(analysis.connectionErrorDetected).toBe(false);
+
+      // Advance timer past grace period - should NOT kill
+      vi.advanceTimersByTime(31000);
+      expect(mockProcess.kill).not.toHaveBeenCalled();
+
+      vi.useRealTimers();
+    });
+
+    it('should immediately kill on fatal analysis error', async () => {
+      const mockProcess = createMockChildProcess();
+      const analysis = new AnalysisProcess('test-analysis', mockService);
+      analysis.process = mockProcess;
+      analysis.status = 'running';
+
+      vi.useFakeTimers();
+
+      analysis.handleOutput(
+        false,
+        Buffer.from('¬ Error :: Analysis not found or not active.\n'),
+      );
+
+      // Should kill immediately for fatal errors
+      expect(mockProcess.kill).toHaveBeenCalledWith('SIGTERM');
+      expect(analysis.connectionErrorDetected).toBe(true);
+
+      vi.useRealTimers();
     });
 
     it('should handle multi-line output', async () => {
