@@ -1,38 +1,5 @@
 /**
- * DNS Cache Service - Performance optimization and SSRF protection
- * Provides DNS result caching with integrated Server-Side Request Forgery protection.
- *
- * This service handles:
- * - DNS result caching (lookup, resolve4, resolve6)
- * - SSRF protection on hostnames and resolved addresses
- * - IPC-based DNS resolution for child processes
- * - TTL-based cache expiration and statistics
- * - Real-time statistics broadcasting via SSE
- * - Configuration persistence
- *
- * Security Features:
- * - Pre-resolution hostname validation (blocks private/local hosts)
- * - Post-resolution address validation (blocks private IP ranges)
- * - Protection against DNS rebinding attacks
- * - Validation for both parent and child processes
- *
- * Caching Strategy:
- * - In-memory Map-based cache with TTL expiration
- * - LRU-style eviction when maxEntries limit reached
- * - Separate cache keys for IPv4/IPv6 lookups
- * - TTL-based statistics periods for accurate hit rate calculation
- *
- * Child Process Integration:
- * - IPC-based DNS resolution requests from analysis processes
- * - Environment variables propagated to child processes
- * - Shared cache between parent and child processes
- *
- * Architecture:
- * - Singleton service pattern (exported as dnsCache)
- * - Monkey-patching of Node.js dns module methods
- * - Periodic SSE stats broadcasting (configurable interval)
- * - Configuration persisted to dns-cache-config.json
- *
+ * DNS caching service with SSRF protection
  * @module dnsCache
  */
 import dns from 'dns';
@@ -52,41 +19,6 @@ import { DNS_CACHE } from '../constants.js';
 const logger = createChildLogger('dns-cache');
 const DNS_CONFIG_FILE = path.join(config.paths.config, 'dns-cache-config.json');
 
-// DNS stats included in metrics SSE broadcasts via metricsService.getAllMetrics()
-// No circular dependency: metricsService dynamically imports dnsCache
-
-/**
- * DNS Cache Service class for caching DNS resolutions with SSRF protection
- * Singleton instance manages DNS interception, caching, and statistics.
- *
- * Key Features:
- * - DNS method interception (lookup, resolve4, resolve6)
- * - TTL-based cache expiration with automatic cleanup
- * - SSRF protection validation on all resolutions
- * - IPC handler for child process DNS requests
- * - Real-time statistics with periodic SSE broadcasting
- * - Configuration persistence and environment variable propagation
- *
- * Cache Implementation:
- * - Map-based storage with timestamp tracking
- * - TTL expiration checked on retrieval
- * - LRU eviction when maxEntries exceeded
- * - Separate keys for different resolution types
- *
- * Statistics Tracking:
- * - Hits/misses/errors/evictions counters
- * - TTL period-based statistics for accurate hit rates
- * - Automatic period reset when TTL expires
- * - Periodic SSE broadcasts for real-time monitoring
- *
- * SSRF Protection:
- * - Pre-resolution hostname validation
- * - Post-resolution address validation
- * - Blocks private/local/reserved IP ranges
- * - Protects both parent and child processes
- *
- * @class DNSCacheService
- */
 class DNSCacheService {
   /**
    * Initialize DNS cache service instance
@@ -124,27 +56,7 @@ class DNSCacheService {
     this.statsBroadcastTimer = null;
   }
 
-  /**
-   * Initialize DNS cache service
-   * Loads configuration, installs interceptors if enabled, and starts statistics broadcasting
-   *
-   * @returns {Promise<void>}
-   *
-   * Process:
-   * 1. Loads configuration from dns-cache-config.json
-   * 2. Propagates config to environment variables for child processes
-   * 3. Installs DNS method interceptors if enabled
-   * 4. Starts periodic SSE stats broadcasting if enabled
-   *
-   * Side Effects:
-   * - Modifies process.env variables (DNS_CACHE_*)
-   * - Monkey-patches dns.lookup, dnsPromises.resolve4/6 if enabled
-   * - Starts interval timer for stats broadcasting
-   *
-   * Error Handling:
-   * - Logs errors but does not throw
-   * - Service continues with default configuration on error
-   */
+  /** Initialize DNS cache (load config, install interceptors if enabled) */
   async initialize() {
     try {
       await this.loadConfig();
@@ -165,13 +77,7 @@ class DNSCacheService {
     }
   }
 
-  /**
-   * Load DNS cache configuration from file
-   * Creates default configuration file if it doesn't exist
-   *
-   * @returns {Promise<void>}
-   * @throws {Error} Non-ENOENT errors are logged but not thrown
-   */
+  /** Load configuration from file */
   async loadConfig() {
     try {
       const data = await safeReadFile(
@@ -190,15 +96,7 @@ class DNSCacheService {
     }
   }
 
-  /**
-   * Save current DNS cache configuration to file
-   *
-   * @returns {Promise<void>}
-   *
-   * Configuration File:
-   * - Location: config/dns-cache-config.json
-   * - Format: JSON with enabled, ttl, maxEntries
-   */
+  /** Save configuration to file */
   async saveConfig() {
     try {
       await safeWriteFile(
@@ -212,35 +110,7 @@ class DNSCacheService {
     }
   }
 
-  /**
-   * Install DNS method interceptors for caching and SSRF protection
-   * Monkey-patches dns.lookup, dnsPromises.resolve4, and dnsPromises.resolve6
-   *
-   * @returns {void}
-   *
-   * Intercepted Methods:
-   * - dns.lookup: Used by most Node.js networking (http, https, net)
-   * - dnsPromises.resolve4: IPv4 resolution
-   * - dnsPromises.resolve6: IPv6 resolution
-   *
-   * Protection Features:
-   * - Pre-resolution hostname validation (SSRF)
-   * - Post-resolution address validation (SSRF)
-   * - Cache lookup before actual DNS query
-   * - Statistics tracking (hits, misses, errors)
-   * - Prometheus metrics updates
-   *
-   * Cache Strategy:
-   * - Check cache first, return immediately if hit
-   * - Perform actual DNS resolution on miss
-   * - Validate resolved addresses with SSRF protection
-   * - Add to cache if validation passes
-   *
-   * Side Effects:
-   * - Replaces global dns.lookup function
-   * - Replaces global dnsPromises.resolve4/6 functions
-   * - Updates statistics and Prometheus metrics
-   */
+  /** Install DNS interceptors with caching and SSRF protection */
   installInterceptors() {
     // Store original functions
     this.originalLookup = dns.lookup;

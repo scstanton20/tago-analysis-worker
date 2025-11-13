@@ -1,4 +1,3 @@
-// frontend/src/AuthenticatedApp.jsx
 import { useState, lazy, Suspense } from 'react';
 import { AppShell, Text, Burger, Group } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';

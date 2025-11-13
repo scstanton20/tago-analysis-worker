@@ -1,4 +1,3 @@
-// frontend/src/modals/components/CreateFolderModalContent.jsx
 import { TextInput, Button, Stack } from '@mantine/core';
 import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';

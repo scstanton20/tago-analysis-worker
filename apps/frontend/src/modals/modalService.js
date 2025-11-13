@@ -1,4 +1,3 @@
-// frontend/src/modals/modalService.js
 import { modals } from '@mantine/modals';
 
 /**

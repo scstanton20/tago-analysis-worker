@@ -1,4 +1,3 @@
-// frontend/src/modals/components/ChangeTeamModalContent.jsx
 import { useState } from 'react';
 import PropTypes from 'prop-types';
 import {

@@ -1,4 +1,3 @@
-// frontend/src/services/userService.js
 import { withErrorHandling } from '../utils/apiUtils';
 import {
   createServiceLogger,

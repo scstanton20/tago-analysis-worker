@@ -1,4 +1,3 @@
-// frontend/src/components/analysis/statusBadge.jsx
 import PropTypes from 'prop-types';
 import { Badge } from '@mantine/core';
 

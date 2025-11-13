@@ -1,4 +1,3 @@
-// frontend/src/components/teamSidebar.jsx
 import { useState } from 'react';
 import PropTypes from 'prop-types';
 import {

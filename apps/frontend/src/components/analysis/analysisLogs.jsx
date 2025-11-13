@@ -1,4 +1,3 @@
-// frontend/src/components/analysis/analysisLogs.jsx
 import PropTypes from 'prop-types';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useMountedRef } from '../../hooks/useMountedRef';

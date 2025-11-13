@@ -1,4 +1,3 @@
-// frontend/src/services/teamService.js
 import {
   fetchWithHeaders,
   handleResponse,

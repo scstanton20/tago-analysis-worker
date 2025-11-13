@@ -1,4 +1,3 @@
-// frontend/src/contexts/sseContext/hooks/useConnection.js
 import { useContext } from 'react';
 import { ConnectionContext } from '../contexts/ConnectionContext.js';
 

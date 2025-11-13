@@ -1,4 +1,3 @@
-// frontend/src/contexts/sseContext/hooks/useBackend.js
 import { useContext } from 'react';
 import { BackendContext } from '../contexts/BackendContext.js';
 

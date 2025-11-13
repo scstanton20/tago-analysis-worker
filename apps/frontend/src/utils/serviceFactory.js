@@ -1,4 +1,3 @@
-// frontend/src/utils/serviceFactory.js
 import {
   fetchWithHeaders,
   handleResponse,

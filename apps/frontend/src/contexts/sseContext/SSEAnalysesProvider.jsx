@@ -1,4 +1,3 @@
-// frontend/src/contexts/sseContext/SSEAnalysesProvider.jsx
 import { useState, useCallback, useRef, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import { AnalysesContext } from './contexts/AnalysesContext.js';

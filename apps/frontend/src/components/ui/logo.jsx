@@ -1,4 +1,3 @@
-// frontend/src/components/Logo.jsx
 import PropTypes from 'prop-types';
 import { Box } from '@mantine/core';
 

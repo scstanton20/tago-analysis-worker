@@ -1,4 +1,3 @@
-// frontend/src/contexts/sseContext/index.js
 
 // SSE Context - Modular exports
 

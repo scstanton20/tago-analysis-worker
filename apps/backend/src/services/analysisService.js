@@ -12,23 +12,6 @@
  * - Configuration persistence and migration
  * - Process metrics collection for monitoring
  *
- * Architecture:
- * - Singleton service pattern (exported as analysisService)
- * - AnalysisProcess model instances stored in Map
- * - Configuration caching for performance
- * - Periodic health checks and metrics collection
- * - Request-scoped logging via logger parameter
- *
- * Storage Structure:
- * - analyses-storage/
- *   - [analysisName]/
- *     - index.js (current version)
- *     - env/.env (encrypted environment variables)
- *     - logs/analysis.log (NDJSON format)
- *     - versions/ (version history)
- *       - metadata.json
- *       - v1.js, v2.js, etc.
- *
  * @module analysisService
  */
 import { v4 as uuidv4 } from 'uuid';

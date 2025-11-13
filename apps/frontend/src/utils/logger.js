@@ -1,4 +1,3 @@
-// frontend/src/utils/logger.js
 
 /**
  * Frontend Logger Utility

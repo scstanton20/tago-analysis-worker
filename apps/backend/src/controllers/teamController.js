@@ -1,4 +1,3 @@
-// backend/src/controllers/teamController.js
 import teamService from '../services/teamService.js';
 import { sseManager } from '../utils/sse.js';
 import {

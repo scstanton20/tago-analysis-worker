@@ -1,4 +1,3 @@
-// frontend/src/App.jsx
 import { lazy, Suspense } from 'react';
 import { CombinedAuthProvider } from './contexts/CombinedAuthProvider';
 import { useAuth } from './hooks/useAuth';

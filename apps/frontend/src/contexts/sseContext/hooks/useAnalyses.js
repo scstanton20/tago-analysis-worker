@@ -1,4 +1,3 @@
-// frontend/src/contexts/sseContext/hooks/useAnalyses.js
 import { useContext } from 'react';
 import { AnalysesContext } from '../contexts/AnalysesContext.js';
 

@@ -1,4 +1,3 @@
-// frontend/src/modals/components/LogDownloadModalContent.jsx
 import { useState } from 'react';
 import PropTypes from 'prop-types';
 import { Stack, Group, Text, Button, Select } from '@mantine/core';

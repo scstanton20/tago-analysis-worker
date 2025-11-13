@@ -1,4 +1,3 @@
-// frontend/src/components/connectionStatus.jsx
 import { useState } from 'react';
 import { useConnection, useBackend } from '../../contexts/sseContext';
 import {

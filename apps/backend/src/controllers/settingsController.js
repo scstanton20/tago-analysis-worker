@@ -1,4 +1,3 @@
-// backend/src/controllers/settingsController.js
 import dnsCache from '../services/dnsCache.js';
 import { sseManager } from '../utils/sse.js';
 import { handleError } from '../utils/responseHelpers.js';

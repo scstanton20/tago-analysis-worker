@@ -1,4 +1,3 @@
-// backend/src/migrations/startup.js
 import { v4 as uuidv4 } from 'uuid';
 import { execSync } from 'child_process';
 import Database from 'better-sqlite3';

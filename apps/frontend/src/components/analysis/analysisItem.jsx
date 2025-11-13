@@ -1,4 +1,3 @@
-// frontend/src/components/analysis/analysisItem.jsx
 import { lazy, Suspense } from 'react';
 import PropTypes from 'prop-types';
 import {

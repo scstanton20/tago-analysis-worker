@@ -1,4 +1,3 @@
-// frontend/src/components/metrics/metricsDashboard.jsx
 import { useState, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import {

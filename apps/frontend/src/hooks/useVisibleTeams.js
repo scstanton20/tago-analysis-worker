@@ -1,4 +1,3 @@
-// frontend/src/hooks/useVisibleTeams.js
 import { useMemo } from 'react';
 import { useAnalyses } from '../contexts/sseContext';
 import { usePermissions } from './usePermissions';

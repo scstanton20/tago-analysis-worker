@@ -1,4 +1,3 @@
-// backend/src/middleware/errorHandler.js
 const errorHandler = (err, req, res, next) => {
   const logger = req.log?.child({ middleware: 'errorHandler' }) || console;
 

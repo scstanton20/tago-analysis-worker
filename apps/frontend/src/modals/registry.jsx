@@ -1,4 +1,3 @@
-// frontend/src/modals/registry.jsx
 import LogDownloadModalContent from './components/LogDownloadModalContent.jsx';
 import CreateFolderModalContent from './components/CreateFolderModalContent.jsx';
 import RenameFolderModalContent from './components/RenameFolderModalContent.jsx';

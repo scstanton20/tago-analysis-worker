@@ -1,4 +1,3 @@
-// frontend/src/contexts/sseContext/utils/createSSEContext.js
 import { createContext, useContext } from 'react';
 
 /**

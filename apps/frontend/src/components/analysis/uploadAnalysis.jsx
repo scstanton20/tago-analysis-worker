@@ -1,4 +1,3 @@
-// frontend/src/components/analysis/uploadAnalysis.jsx
 import { useState, useMemo, useCallback, lazy, Suspense } from 'react';
 import PropTypes from 'prop-types';
 import { analysisService } from '../../services/analysisService';

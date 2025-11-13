@@ -1,4 +1,3 @@
-// backend/src/routes/sseRoutes.js
 import { Router } from 'express';
 import { handleSSEConnection, sseManager } from '../utils/sse.js';
 import { sseCompression } from '../middleware/compression.js';

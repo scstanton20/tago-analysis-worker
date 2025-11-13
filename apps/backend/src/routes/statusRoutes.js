@@ -1,4 +1,3 @@
-// backend/src/routes/statusRoutes.js
 import { Router } from 'express';
 import StatusController from '../controllers/statusController.js';
 import { asyncHandler } from '../utils/asyncHandler.js';

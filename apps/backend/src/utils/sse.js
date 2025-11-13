@@ -1,44 +1,7 @@
 /**
  * Server-Sent Events (SSE) manager for real-time communication
  * Manages WebSocket-like connections using HTTP streaming to push updates to clients.
- *
- * Features:
- * - User-specific messaging with team-based access control
- * - Global broadcasts and admin-only broadcasts
- * - Automatic metrics broadcasting to connected clients
- * - Permission-aware data filtering based on user roles and team access
- * - Heartbeat mechanism with timeout detection for connection health
- * - Automatic stale connection cleanup to prevent memory leaks
- *
- * Connection Management:
- * - Tracks sessions using better-sse (sessionId -> Session)
- * - Per-analysis channels for targeted log broadcasting
- * - Global channel for system-wide broadcasts
- * - Automatic cleanup on disconnect
- * - Stale connection detection (60-second timeout)
- * - Heartbeat tracking with lastPushAt timestamp
- *
- * Heartbeat & Timeout:
- * - Centralized heartbeat every 30 seconds
- * - Tracks successful message delivery via lastHeartbeat
- * - Removes connections with no successful heartbeat in 60 seconds
- * - Prevents accumulation of dead connections
- *
- * Security:
- * - Better Auth integration for session validation
- * - Role-based message filtering (admin vs regular users)
- * - Team-based access control for analysis and metrics data
- *
- * Use Cases:
- * - Real-time analysis status updates
- * - Live log streaming
- * - System metrics broadcasting
- * - Team and analysis CRUD notifications
- * - Container health status updates
- *
- * @module sse
  */
-// backend/src/utils/sse.js
 import { createChildLogger } from './logging/logger.js';
 import { metricsService } from '../services/metricsService.js';
 import { createSession, createChannel } from 'better-sse';
@@ -73,16 +36,6 @@ class SSEManager {
    * @param {Function} [filterFn=null] - Optional filter function (client) => boolean
    * @returns {number} Count of clients that successfully received the message
    *
-   * Behavior:
-   * - Iterates through clients
-   * - Applies optional filter function
-   * - Skips destroyed connections
-   * - Automatically removes failed clients
-   * - Updates lastHeartbeat on successful writes
-   *
-   * Error Handling:
-   * - Logs errors per client
-   * - Collects and removes failed clients after iteration
    */
   /**
    * Broadcast message to a collection of better-sse sessions
@@ -137,14 +90,6 @@ class SSEManager {
    * @param {Object} req.user - Authenticated user object
    * @returns {Promise<Object>} better-sse Session object
    *
-   * Side effects:
-   * - Creates better-sse session
-   * - Registers session to global channel
-   * - Adds session to sessions map
-   * - Adds to legacy tracking (backward compatibility)
-   * - Starts heartbeat mechanism if first client
-   * - Starts metrics broadcasting if first client
-   * - Sets up disconnect handler
    */
   async addClient(userId, res, req) {
     // Create better-sse session
@@ -201,13 +146,6 @@ class SSEManager {
    * @param {string} sessionId - Session identifier
    * @returns {Promise<void>}
    *
-   * Side effects:
-   * - Unsubscribes from all analysis channels
-   * - Deregisters from global channel
-   * - Removes session from sessions map
-   * - Removes from legacy tracking
-   * - Stops heartbeat mechanism if no clients remaining
-   * - Stops metrics broadcasting if no clients remaining
    */
   async removeClient(userId, sessionId) {
     const session = this.sessions.get(sessionId);
@@ -243,14 +181,6 @@ class SSEManager {
    * @param {Object} data - Message data object (will be wrapped with timestamp)
    * @returns {number} Count of clients that successfully received the message
    *
-   * Behavior:
-   * - Returns 0 if user has no active connections
-   * - Automatically removes failed clients
-   * - Skips destroyed response objects
-   *
-   * Error Handling:
-   * - Logs send errors
-   * - Removes client on failure
    */
   sendToUser(userId, data) {
     const userSessions = this.getSessionsByUserId(userId);
@@ -286,14 +216,6 @@ class SSEManager {
    * @param {string} userId - User ID whose connections to close
    * @returns {number} Count of connections that were closed
    *
-   * Use Cases:
-   * - User banned from system
-   * - User removed from organization
-   *
-   * Behavior:
-   * - Ends each response stream
-   * - Automatically triggers cleanup via 'close' event
-   * - Safe to call even if user has no connections
    */
   disconnectUser(userId) {
     const userSessions = this.getSessionsByUserId(userId);
@@ -342,17 +264,6 @@ class SSEManager {
    * @param {string} userId - User ID to force logout
    * @param {string} [reason='Your session has been terminated'] - Reason for logout
    * @returns {Promise<number>} Count of connections that were closed
-   *
-   * Use Cases:
-   * - User banned from system
-   * - User sessions revoked by admin
-   * - User removed from organization
-   *
-   * Behavior:
-   * - Sends forceLogout message to all user's connections
-   * - Waits briefly for message delivery
-   * - Closes all SSE connections for the user
-   * - Returns count of closed connections
    */
   async forceUserLogout(userId, reason = 'Your session has been terminated') {
     logger.info({ userId, reason }, 'Forcing user logout via SSE');
@@ -384,19 +295,6 @@ class SSEManager {
    * @param {Object} data - Message data object
    * @returns {void}
    *
-   * Behavior:
-   * - Broadcasts to all sessions via global channel
-   * - Uses better-sse channel broadcast mechanism
-   *
-   * Use Cases:
-   * - System-wide notifications
-   * - Global refresh commands
-   * - Heartbeat messages
-   * - Status updates
-   *
-   * Error Handling:
-   * - Logs broadcast errors
-   * - better-sse handles failed session cleanup
    */
   broadcast(data) {
     try {

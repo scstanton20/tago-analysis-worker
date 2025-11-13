@@ -1,4 +1,3 @@
-// backend/src/routes/teamRoutes.js
 import { Router } from 'express';
 import TeamController from '../controllers/teamController.js';
 import {

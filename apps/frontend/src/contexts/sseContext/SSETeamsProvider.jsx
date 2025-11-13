@@ -1,4 +1,3 @@
-// frontend/src/contexts/sseContext/SSETeamsProvider.jsx
 import { useState, useCallback, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import { TeamsContext } from './contexts/TeamsContext.js';

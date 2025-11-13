@@ -1,4 +1,3 @@
-// frontend/src/contexts/sseContext/SSEBackendProvider.jsx
 import { useState, useCallback, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import { BackendContext } from './contexts/BackendContext.js';

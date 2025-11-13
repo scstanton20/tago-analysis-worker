@@ -1,4 +1,3 @@
-// frontend/src/hooks/useFilteredAnalyses.js
 import { useMemo } from 'react';
 import { useAnalyses } from '../contexts/sseContext';
 import { useAuth } from './useAuth';

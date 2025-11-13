@@ -1,4 +1,3 @@
-// backend/src/controllers/analysisController.js
 import { analysisService } from '../services/analysisService.js';
 import { sseManager } from '../utils/sse.js';
 import path from 'path';

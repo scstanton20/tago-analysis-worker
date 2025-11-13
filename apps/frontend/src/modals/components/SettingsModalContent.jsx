@@ -1,4 +1,3 @@
-// frontend/src/modals/components/SettingsModalContent.jsx
 import { useState, lazy, Suspense } from 'react';
 import { Stack, Group, Text, Button, Paper, Tabs, Box } from '@mantine/core';
 import { IconBook, IconTransfer, IconChartBar } from '@tabler/icons-react';

@@ -1,4 +1,3 @@
-// frontend/src/contexts/sseContext/hooks/useTeams.js
 import { useContext } from 'react';
 import { TeamsContext } from '../contexts/TeamsContext.js';
 

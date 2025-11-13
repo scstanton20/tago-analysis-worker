@@ -1,5 +1,4 @@
-// backend/src/routes/index.js
-
+// Export routes
 export { default as analysisRoutes } from './analysisRoutes.js';
 export { default as statusRoutes } from './statusRoutes.js';
 export { default as teamRoutes } from './teamRoutes.js';

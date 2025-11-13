@@ -1,4 +1,3 @@
-// frontend/src/contexts/sseContext/SSEConnectionProvider.jsx
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import { ConnectionContext } from './contexts/ConnectionContext.js';
