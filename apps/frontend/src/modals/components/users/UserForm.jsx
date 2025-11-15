@@ -7,8 +7,8 @@ import {
   TextInput,
   PasswordInput,
   Select,
-  Button,
 } from '@mantine/core';
+import { FormActionButtons } from '../../../components/global';
 import DepartmentPermissions from './DepartmentPermissions';
 
 /**
@@ -172,22 +172,15 @@ export default function UserForm({
             </Alert>
           )}
 
-        <Group justify="flex-end" gap="sm">
-          <Button
-            variant="default"
-            onClick={onCancel}
-            disabled={!form.isDirty()}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            variant="gradient"
-            gradient={{ from: 'brand.6', to: 'accent.6' }}
-          >
-            {editingUser ? 'Update User' : 'Create User'}
-          </Button>
-        </Group>
+        <FormActionButtons
+          onSubmit={onSubmit}
+          onCancel={onCancel}
+          submitLabel={editingUser ? 'Update User' : 'Create User'}
+          cancelDisabled={!form.isDirty()}
+          submitType="submit"
+          justify="flex-end"
+          gap="sm"
+        />
       </Stack>
     </form>
   );

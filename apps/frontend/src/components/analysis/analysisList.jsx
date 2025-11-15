@@ -23,7 +23,6 @@ import {
   Center,
   Loader,
   Box,
-  ActionIcon,
 } from '@mantine/core';
 import { ActionMenu } from '../global/menus/ActionMenu';
 import { modals } from '@mantine/modals';
@@ -35,7 +34,7 @@ import {
   IconCheck,
   IconX,
 } from '@tabler/icons-react';
-import { FormAlert, EmptyState } from '../global';
+import { FormAlert, EmptyState, PaperCard } from '../global';
 import teamService from '../../services/teamService';
 import {
   showSuccess,
@@ -370,36 +369,26 @@ export default function AnalysisList({
   // Handle loading state
   if (connectionStatus === 'connecting') {
     return (
-      <Paper p="lg" withBorder radius="md">
-        <Stack>
-          <Text size="lg" fw={600}>
-            Available Analyses
-          </Text>
-          <Center py="xl">
-            <Group>
-              <Loader size="sm" />
-              <Text c="dimmed">Connecting to server...</Text>
-            </Group>
-          </Center>
-        </Stack>
-      </Paper>
+      <PaperCard title="Available Analyses" p="lg" radius="md">
+        <Center py="xl">
+          <Group>
+            <Loader size="sm" />
+            <Text c="dimmed">Connecting to server...</Text>
+          </Group>
+        </Center>
+      </PaperCard>
     );
   }
 
   // Handle disconnected state
   if (connectionStatus === 'disconnected') {
     return (
-      <Paper p="lg" withBorder radius="md">
-        <Stack>
-          <Text size="lg" fw={600}>
-            Available Analyses
-          </Text>
-          <FormAlert
-            type="error"
-            message="Disconnected from server. Attempting to reconnect..."
-          />
-        </Stack>
-      </Paper>
+      <PaperCard title="Available Analyses" p="lg" radius="md">
+        <FormAlert
+          type="error"
+          message="Disconnected from server. Attempting to reconnect..."
+        />
+      </PaperCard>
     );
   }
 

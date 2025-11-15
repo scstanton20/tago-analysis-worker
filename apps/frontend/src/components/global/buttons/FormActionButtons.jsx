@@ -19,39 +19,59 @@ export function FormActionButtons({
   cancelVariant = 'default',
   cancelColor,
   disabled = false,
+  cancelDisabled = false,
   justify = 'flex-end',
   gap = 'sm',
   mt = 'md',
   submitType = 'submit',
   fullWidth = false,
+  submitIcon,
+  cancelIcon,
+  reverseOrder = false,
+  size = 'sm',
   className,
   ...props
 }) {
+  const submitButton = (
+    <Button
+      key="submit"
+      type={submitType}
+      onClick={onSubmit}
+      loading={loading}
+      disabled={disabled}
+      variant={submitVariant}
+      gradient={submitVariant === 'gradient' ? submitGradient : undefined}
+      color={submitColor}
+      fullWidth={fullWidth}
+      leftSection={submitIcon}
+      size={size}
+    >
+      {submitLabel}
+    </Button>
+  );
+
+  const cancelButton = onCancel && (
+    <Button
+      key="cancel"
+      variant={cancelVariant}
+      color={cancelColor}
+      onClick={onCancel}
+      disabled={loading || disabled || cancelDisabled}
+      fullWidth={fullWidth}
+      leftSection={cancelIcon}
+      size={size}
+    >
+      {cancelLabel}
+    </Button>
+  );
+
+  const buttons = reverseOrder
+    ? [submitButton, cancelButton]
+    : [cancelButton, submitButton];
+
   return (
     <Group justify={justify} gap={gap} mt={mt} className={className} {...props}>
-      {onCancel && (
-        <Button
-          variant={cancelVariant}
-          color={cancelColor}
-          onClick={onCancel}
-          disabled={loading || disabled}
-          fullWidth={fullWidth}
-        >
-          {cancelLabel}
-        </Button>
-      )}
-      <Button
-        type={submitType}
-        onClick={onSubmit}
-        loading={loading}
-        disabled={disabled}
-        variant={submitVariant}
-        gradient={submitVariant === 'gradient' ? submitGradient : undefined}
-        color={submitColor}
-        fullWidth={fullWidth}
-      >
-        {submitLabel}
-      </Button>
+      {buttons.filter(Boolean)}
     </Group>
   );
 }
@@ -82,6 +102,8 @@ FormActionButtons.propTypes = {
   cancelColor: PropTypes.string,
   /** Disabled state (both buttons) */
   disabled: PropTypes.bool,
+  /** Disabled state (cancel button only) */
+  cancelDisabled: PropTypes.bool,
   /** Group justify */
   justify: PropTypes.string,
   /** Gap between buttons */
@@ -92,6 +114,14 @@ FormActionButtons.propTypes = {
   submitType: PropTypes.oneOf(['submit', 'button']),
   /** Make buttons full width */
   fullWidth: PropTypes.bool,
+  /** Icon for submit button (uses leftSection) */
+  submitIcon: PropTypes.node,
+  /** Icon for cancel button (uses leftSection) */
+  cancelIcon: PropTypes.node,
+  /** Reverse button order (submit first, cancel second) */
+  reverseOrder: PropTypes.bool,
+  /** Button size */
+  size: PropTypes.string,
   /** Additional CSS class */
   className: PropTypes.string,
 };

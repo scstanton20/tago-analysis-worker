@@ -13,10 +13,8 @@ import {
   Table,
   Badge,
   ActionIcon,
-  Alert,
-  LoadingOverlay,
-  Box,
 } from '@mantine/core';
+import { FormAlert, LoadingState } from '../../components/global';
 import { modals } from '@mantine/modals';
 import {
   IconDeviceLaptop,
@@ -24,7 +22,6 @@ import {
   IconDeviceDesktop,
   IconTrash,
   IconRefresh,
-  IconAlertCircle,
 } from '@tabler/icons-react';
 import { admin } from '../../lib/auth';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
@@ -249,9 +246,7 @@ function UserSessionsModalContent({ innerProps }) {
     revokeAllOperation.error;
 
   return (
-    <Box pos="relative">
-      <LoadingOverlay visible={isLoading} />
-
+    <LoadingState loading={isLoading}>
       <Stack gap="md">
         {/* Custom Modal Header */}
         <Group gap="xs" mb="md">
@@ -260,15 +255,7 @@ function UserSessionsModalContent({ innerProps }) {
             Sessions for {user?.name || user?.email}
           </Text>
         </Group>
-        {operationError && (
-          <Alert
-            icon={<IconAlertCircle size="1rem" />}
-            color="red"
-            variant="light"
-          >
-            {operationError}
-          </Alert>
-        )}
+        <FormAlert type="error" message={operationError} />
 
         <Group justify="space-between">
           <Stack gap="xs">
@@ -362,7 +349,7 @@ function UserSessionsModalContent({ innerProps }) {
           </Table>
         )}
       </Stack>
-    </Box>
+    </LoadingState>
   );
 }
 

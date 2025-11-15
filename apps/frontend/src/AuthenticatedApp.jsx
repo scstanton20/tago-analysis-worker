@@ -18,7 +18,8 @@ import Logo from './components/ui/logo';
 import ImpersonationBanner from './components/layout/impersonationBanner';
 import ThemeSelector from './components/ui/themeSelector';
 import ErrorBoundary from './components/ErrorBoundary';
-import AppLoadingOverlay from './components/common/AppLoadingOverlay';
+import AppLoadingOverlay from './components/global/indicators/AppLoadingOverlay';
+import { LoadingState } from './components/global';
 // Import modal components registry
 import modalComponents from './modals/registry.jsx';
 
@@ -108,17 +109,11 @@ function AppContent() {
             <ErrorBoundary variant="component" componentName="Analysis Creator">
               <Suspense
                 fallback={
-                  <AppLoadingOverlay
-                    message="Connecting to Tago Analysis Worker..."
-                    submessage={
-                      (connectionStatus === 'connecting' &&
-                        'Establishing server connection...') ||
-                      (connectionStatus === 'disconnected' &&
-                        'Connection lost, retrying...') ||
-                      (connectionStatus === 'server_shutdown' &&
-                        'Server is restarting, please wait...') ||
-                      ''
-                    }
+                  <LoadingState
+                    loading={true}
+                    skeleton
+                    pattern="form"
+                    skeletonCount={3}
                   />
                 }
               >
@@ -129,17 +124,11 @@ function AppContent() {
           <ErrorBoundary variant="component" componentName="Analysis List">
             <Suspense
               fallback={
-                <AppLoadingOverlay
-                  message="Connecting to Tago Analysis Worker..."
-                  submessage={
-                    (connectionStatus === 'connecting' &&
-                      'Establishing server connection...') ||
-                    (connectionStatus === 'disconnected' &&
-                      'Connection lost, retrying...') ||
-                    (connectionStatus === 'server_shutdown' &&
-                      'Server is restarting, please wait...') ||
-                    ''
-                  }
+                <LoadingState
+                  loading={true}
+                  skeleton
+                  pattern="card"
+                  skeletonCount={5}
                 />
               }
             >

@@ -1,4 +1,5 @@
-import { TextInput, Button, Stack } from '@mantine/core';
+import { TextInput, Stack } from '@mantine/core';
+import { FormActionButtons } from '../../components/global';
 import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { modals } from '@mantine/modals';
@@ -86,13 +87,12 @@ const CreateFolderModalContent = ({ id, context, innerProps }) => {
         data-autofocus
       />
 
-      <Button
-        onClick={handleCreate}
+      <FormActionButtons
+        onSubmit={handleCreate}
         loading={createOperation.loading}
+        submitLabel="Create Folder"
         fullWidth
-      >
-        Create Folder
-      </Button>
+      />
     </Stack>
   );
 };

@@ -24,7 +24,7 @@ import {
   IconPlus,
   IconTrash,
 } from '@tabler/icons-react';
-import { FormAlert } from '../global';
+import { FormAlert, PaperCard } from '../global';
 
 export function PasskeysTab({
   isWebAuthnSupported,
@@ -61,14 +61,12 @@ export function PasskeysTab({
       {isWebAuthnSupported && (
         <>
           {/* Register New Passkey */}
-          <Paper p="md" withBorder>
+          <PaperCard
+            title="Register New Passkey"
+            icon={<IconFingerprint size={20} />}
+          >
             <form onSubmit={passkeyForm.onSubmit(handleRegisterPasskey)}>
-              <Stack gap="md">
-                <Group gap="xs">
-                  <IconFingerprint size={20} />
-                  <Text fw={500}>Register New Passkey</Text>
-                </Group>
-
+              <Stack gap="sm">
                 <Text size="sm" c="dimmed">
                   Add a new passkey to your account. You can use Face ID, Touch
                   ID, Windows Hello, or a security key.
@@ -94,74 +92,70 @@ export function PasskeysTab({
                 </Group>
               </Stack>
             </form>
-          </Paper>
+          </PaperCard>
 
           {/* Passkey Errors */}
           <FormAlert type="error" message={passkeysError} />
 
           {/* Registered Passkeys List */}
-          <Paper p="md" withBorder>
-            <Stack gap="md">
-              <Group gap="xs">
-                <IconShield size={20} />
-                <Text fw={500}>Your Passkeys</Text>
-                {passkeysLoading && <Loader size="sm" />}
-              </Group>
-
-              {passkeysLoading ? (
-                <Center p="xl">
-                  <Loader size="md" />
-                </Center>
-              ) : passkeys.length === 0 ? (
-                <Text size="sm" c="dimmed" ta="center" p="xl">
-                  No passkeys registered. Register your first passkey above to
-                  enable secure, passwordless authentication.
-                </Text>
-              ) : (
-                <Stack gap="xs">
-                  {passkeys.map((passkey, index) => (
-                    <Paper
-                      key={passkey.id || passkey.credentialID || index}
-                      p="sm"
-                      withBorder
-                    >
-                      <Group justify="space-between" align="center">
-                        <Stack gap={4}>
-                          <Group gap="xs">
-                            <IconFingerprint size={16} />
-                            <Text fw={500} size="sm">
-                              {passkey.name || 'Unnamed Passkey'}
-                            </Text>
-                          </Group>
-                          <Group gap="xs">
-                            <Badge size="xs" variant="light">
-                              {Array.isArray(passkey.transports)
-                                ? passkey.transports.join(', ')
-                                : 'Passkey'}
-                            </Badge>
-                            <Text size="xs" c="dimmed">
-                              Added{' '}
-                              {new Date(passkey.createdAt).toLocaleDateString()}
-                            </Text>
-                          </Group>
-                        </Stack>
-                        <ActionIcon
-                          color="red"
-                          variant="light"
-                          size="sm"
-                          onClick={() => confirmDeletePasskey(passkey.id)}
-                          aria-label={`Delete ${passkey.name || 'passkey'}`}
-                          title="Delete passkey"
-                        >
-                          <IconTrash size={14} aria-hidden="true" />
-                        </ActionIcon>
-                      </Group>
-                    </Paper>
-                  ))}
-                </Stack>
-              )}
-            </Stack>
-          </Paper>
+          <PaperCard
+            title="Your Passkeys"
+            icon={<IconShield size={20} />}
+            actions={passkeysLoading && <Loader size="sm" />}
+          >
+            {passkeysLoading ? (
+              <Center p="xl">
+                <Loader size="md" />
+              </Center>
+            ) : passkeys.length === 0 ? (
+              <Text size="sm" c="dimmed" ta="center" p="xl">
+                No passkeys registered. Register your first passkey above to
+                enable secure, passwordless authentication.
+              </Text>
+            ) : (
+              <Stack gap="xs">
+                {passkeys.map((passkey, index) => (
+                  <Paper
+                    key={passkey.id || passkey.credentialID || index}
+                    p="sm"
+                    withBorder
+                  >
+                    <Group justify="space-between" align="center">
+                      <Stack gap={4}>
+                        <Group gap="xs">
+                          <IconFingerprint size={16} />
+                          <Text fw={500} size="sm">
+                            {passkey.name || 'Unnamed Passkey'}
+                          </Text>
+                        </Group>
+                        <Group gap="xs">
+                          <Badge size="xs" variant="light">
+                            {Array.isArray(passkey.transports)
+                              ? passkey.transports.join(', ')
+                              : 'Passkey'}
+                          </Badge>
+                          <Text size="xs" c="dimmed">
+                            Added{' '}
+                            {new Date(passkey.createdAt).toLocaleDateString()}
+                          </Text>
+                        </Group>
+                      </Stack>
+                      <ActionIcon
+                        color="red"
+                        variant="light"
+                        size="sm"
+                        onClick={() => confirmDeletePasskey(passkey.id)}
+                        aria-label={`Delete ${passkey.name || 'passkey'}`}
+                        title="Delete passkey"
+                      >
+                        <IconTrash size={14} aria-hidden="true" />
+                      </ActionIcon>
+                    </Group>
+                  </Paper>
+                ))}
+              </Stack>
+            )}
+          </PaperCard>
         </>
       )}
     </Stack>

@@ -12,7 +12,7 @@ import { showError, showInfo } from '../utils/notificationService';
 import { useEventListener } from '../hooks/useEventListener';
 import { fetchWithHeaders, handleResponse } from '../utils/apiUtils.js';
 import logger from '../utils/logger.js';
-import AppLoadingOverlay from '../components/common/AppLoadingOverlay';
+import AppLoadingOverlay from '../components/global/indicators/AppLoadingOverlay';
 
 // Lazy load PasswordOnboarding component
 const PasswordOnboarding = lazy(

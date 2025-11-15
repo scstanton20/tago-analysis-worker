@@ -16,12 +16,14 @@ import PropTypes from 'prop-types';
 export function FormAlert({
   type = 'error',
   message,
+  title,
+  children,
   icon,
   onClose,
   className,
   ...props
 }) {
-  if (!message) return null;
+  if (!message && !children) return null;
 
   const config = {
     error: {
@@ -49,11 +51,12 @@ export function FormAlert({
       icon={icon || defaultIcon}
       color={color}
       variant="light"
+      title={title}
       onClose={onClose}
       className={className}
       {...props}
     >
-      {message}
+      {children || message}
     </Alert>
   );
 }
@@ -63,6 +66,10 @@ FormAlert.propTypes = {
   type: PropTypes.oneOf(['error', 'success', 'warning', 'info']),
   /** Message to display */
   message: PropTypes.string,
+  /** Optional alert title */
+  title: PropTypes.string,
+  /** Complex content (alternative to message) */
+  children: PropTypes.node,
   /** Custom icon (overrides default) */
   icon: PropTypes.node,
   /** Callback when close button is clicked */

@@ -24,10 +24,14 @@ import {
   CloseButton,
 } from '@mantine/core';
 import {
+  FormAlert,
+  FormActionButtons,
+  LoadingState,
+} from '../../components/global';
+import {
   IconEdit,
   IconCheck,
   IconX,
-  IconAlertCircle,
   IconGitCompare,
   IconWand,
   IconChevronUp,
@@ -46,7 +50,6 @@ const CodeMirrorEditor = lazy(() =>
 );
 import { useAnalyses } from '../../contexts/sseContext';
 import PropTypes from 'prop-types';
-import AppLoadingOverlay from '../../components/common/AppLoadingOverlay.jsx';
 
 /**
  * Analysis Edit Modal Content Component
@@ -217,11 +220,7 @@ function AnalysisEditModalContent({ id, innerProps }) {
           </Group>
         )}
       </Box>
-      {error && (
-        <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light">
-          {error}
-        </Alert>
-      )}
+      <FormAlert type="error" message={error} />
 
       {isEnvMode && (
         <Alert
@@ -245,7 +244,7 @@ function AnalysisEditModalContent({ id, innerProps }) {
       )}
 
       <Box style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-        <Suspense fallback={<AppLoadingOverlay message="Loading editor..." />}>
+        <Suspense fallback={<LoadingState loading={true} minHeight={400} />}>
           <CodeMirrorEditor
             value={content}
             onChange={handleEditorChange}
@@ -332,21 +331,21 @@ function AnalysisEditModalContent({ id, innerProps }) {
             </Group>
           )}
         </Group>
-        <Group>
+        {!readOnly ? (
+          <FormActionButtons
+            onSubmit={handleSaveAndClose}
+            onCancel={() => modals.close(id)}
+            loading={isLoading}
+            disabled={!hasChanges}
+            submitLabel="Save Changes"
+            submitColor="brand"
+            submitVariant="filled"
+          />
+        ) : (
           <Button variant="default" onClick={() => modals.close(id)}>
-            {readOnly ? 'Close' : 'Cancel'}
+            Close
           </Button>
-          {!readOnly && (
-            <Button
-              onClick={handleSaveAndClose}
-              disabled={!hasChanges}
-              loading={isLoading}
-              color="brand"
-            >
-              Save Changes
-            </Button>
-          )}
-        </Group>
+        )}
       </Group>
     </Stack>
   );

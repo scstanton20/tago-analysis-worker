@@ -6,7 +6,7 @@
 
 import PropTypes from 'prop-types';
 import { Stack, Group, Text, Button, Box, TextInput } from '@mantine/core';
-import { FormAlert, FormActionButtons } from '../global';
+import { FormAlert, FormActionButtons, ContentBox } from '../global';
 
 export function ProfileTab({
   user,
@@ -28,13 +28,7 @@ export function ProfileTab({
       />
 
       {!isEditingProfile ? (
-        <Box
-          p="md"
-          style={{
-            borderRadius: 'var(--mantine-radius-md)',
-            border: '1px solid var(--mantine-color-gray-3)',
-          }}
-        >
+        <ContentBox>
           <Stack gap="xs">
             <Group justify="space-between">
               <Text size="sm" fw={500}>
@@ -72,7 +66,7 @@ export function ProfileTab({
               Edit Profile
             </Button>
           </Group>
-        </Box>
+        </ContentBox>
       ) : (
         <form onSubmit={profileForm.onSubmit(handleProfileSubmit)}>
           <Stack gap="md">

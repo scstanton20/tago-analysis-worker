@@ -19,7 +19,7 @@ import { signIn, signInPasskey } from '../../lib/auth.js';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import { useAsyncOperation } from '../../hooks/async/useAsyncOperation';
 import Logo from '../ui/logo';
-import AppLoadingOverlay from '../common/AppLoadingOverlay';
+import AppLoadingOverlay from '../global/indicators/AppLoadingOverlay.jsx';
 
 // Lazy load PasswordOnboarding component
 const PasswordOnboarding = lazy(() => import('./passwordOnboarding'));

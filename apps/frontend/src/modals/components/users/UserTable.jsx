@@ -7,7 +7,6 @@ import {
   IconUserCheck,
   IconBan,
   IconCircleCheck,
-  IconDotsVertical,
   IconDeviceLaptop,
 } from '@tabler/icons-react';
 

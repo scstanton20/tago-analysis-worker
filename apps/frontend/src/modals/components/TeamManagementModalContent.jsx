@@ -19,6 +19,7 @@ import {
 } from '@dnd-kit/sortable';
 import { Box, Stack, Text, Divider } from '@mantine/core';
 import { modals } from '@mantine/modals';
+import { LoadingState } from '../../components/global';
 import { useTeamManagement } from '../../hooks/useTeamManagement';
 const TeamCreateForm = lazy(() =>
   import('../../components/teams/TeamCreateForm').then((m) => ({
@@ -30,7 +31,6 @@ const TeamListItem = lazy(() =>
     default: m.TeamListItem,
   })),
 );
-import AppLoadingOverlay from '../../components/common/AppLoadingOverlay.jsx';
 import { teamService } from '../../services/teamService';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import logger from '../../utils/logger';
@@ -117,7 +117,14 @@ function TeamManagementModalContent({ innerProps }) {
 
   return (
     <Suspense
-      fallback={<AppLoadingOverlay message="Loading Team Management..." />}
+      fallback={
+        <LoadingState
+          loading={true}
+          skeleton
+          pattern="form"
+          skeletonCount={3}
+        />
+      }
     >
       <Stack>
         {/* Create New Team */}

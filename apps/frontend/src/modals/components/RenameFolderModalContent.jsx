@@ -1,4 +1,5 @@
-import { TextInput, Button, Stack } from '@mantine/core';
+import { TextInput, Stack } from '@mantine/core';
+import { FormActionButtons } from '../../components/global';
 import { useState } from 'react';
 import PropTypes from 'prop-types';
 import { modals } from '@mantine/modals';
@@ -61,13 +62,12 @@ const RenameFolderModalContent = ({ id, innerProps }) => {
         data-autofocus
       />
 
-      <Button
-        onClick={handleRename}
+      <FormActionButtons
+        onSubmit={handleRename}
         loading={renameOperation.loading}
+        submitLabel="Rename Folder"
         fullWidth
-      >
-        Rename Folder
-      </Button>
+      />
     </Stack>
   );
 };

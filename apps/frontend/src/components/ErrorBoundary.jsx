@@ -15,6 +15,7 @@ import {
   IconAlertCircle,
   IconRefresh,
 } from '@tabler/icons-react';
+import { IconLabel } from './global';
 import logger from '../utils/logger';
 
 /**
@@ -47,12 +48,15 @@ function ComponentErrorFallback({ error, reset, componentName }) {
       }}
     >
       <Stack gap="md">
-        <Group gap="xs">
-          <IconAlertCircle size={24} color="var(--mantine-color-red-6)" />
-          <Text size="md" fw={600} c="red.7">
-            Failed to load {componentName || 'component'}
-          </Text>
-        </Group>
+        <IconLabel
+          icon={
+            <IconAlertCircle size={24} color="var(--mantine-color-red-6)" />
+          }
+          label={`Failed to load ${componentName || 'component'}`}
+          size="md"
+          fw={600}
+          c="red.7"
+        />
 
         <Text size="sm" c="dimmed">
           {isChunkError

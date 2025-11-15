@@ -6,7 +6,6 @@ import { useNotifications } from '../../hooks/useNotifications.jsx';
 import { usePermissions } from '../../hooks/usePermissions.js';
 import { useAsyncOperation } from '../../hooks/async/useAsyncOperation';
 import {
-  Paper,
   Stack,
   Group,
   Text,
@@ -17,8 +16,9 @@ import {
   ActionIcon,
   Box,
   Select,
+  Paper,
 } from '@mantine/core';
-import { FormAlert } from '../global/alerts/FormAlert';
+import { FormAlert, ContentBox, LoadingState } from '../global';
 import { Dropzone } from '@mantine/dropzone';
 import {
   IconChevronDown,
@@ -28,7 +28,6 @@ import {
   IconFolderPlus,
   IconFileCode,
 } from '@tabler/icons-react';
-import AppLoadingOverlay from '../common/AppLoadingOverlay';
 
 // Lazy load CodeMirror editor to reduce initial bundle size
 const CodeMirrorEditor = lazy(() =>
@@ -112,7 +111,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
   // If user has no upload permissions anywhere, don't show the component
   if (!isAdmin && uploadableTeams.length === 0) {
     return (
-      <Paper withBorder radius="md" mb="lg" p="md">
+      <ContentBox radius="md" mb="lg">
         <FormAlert
           type="warning"
           message={
@@ -125,7 +124,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
             </>
           }
         />
-      </Paper>
+      </ContentBox>
     );
   }
   const hasFormContent =
@@ -538,7 +537,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
                     {mode === 'create' && isExpanded && (
                       <Suspense
                         fallback={
-                          <AppLoadingOverlay message="Loading editor..." />
+                          <LoadingState loading={true} minHeight={400} />
                         }
                       >
                         <CodeMirrorEditor

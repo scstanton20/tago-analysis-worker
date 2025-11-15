@@ -8,9 +8,8 @@ import {
   Box,
   Checkbox,
   Divider,
-  Alert,
 } from '@mantine/core';
-import { IconAlertCircle } from '@tabler/icons-react';
+import { FormAlert } from '../../../components/global';
 
 /**
  * Department Permissions Component
@@ -37,15 +36,7 @@ export default function DepartmentPermissions({
         analyses is automatically assigned when a department is enabled.
       </Text>
 
-      {error && (
-        <Alert
-          icon={<IconAlertCircle size="1rem" />}
-          color="red"
-          variant="light"
-        >
-          {error}
-        </Alert>
-      )}
+      <FormAlert type="error" message={error} />
 
       <Stack gap="xs" mah="40vh" style={{ overflow: 'auto' }}>
         {availableTeams.map((team) => {

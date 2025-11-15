@@ -14,9 +14,8 @@ import {
   Badge,
   Alert,
   ActionIcon,
-  Box,
   Divider,
-  LoadingOverlay,
+  Box,
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import {
@@ -32,6 +31,7 @@ import { analysisService } from '../../services/analysisService';
 import { useNotifications } from '../../hooks/useNotifications';
 import { useAsyncOperation } from '../../hooks/async/useAsyncOperation';
 import { modalService } from '../modalService';
+import { IconLabel, LoadingState } from '../../components/global';
 import logger from '../../utils/logger';
 import PropTypes from 'prop-types';
 
@@ -78,10 +78,11 @@ function VersionManagementModalContent({ context, id, innerProps }) {
   useEffect(() => {
     context.updateModal({
       title: (
-        <Group gap="sm">
-          <IconHistory size={20} aria-hidden="true" />
-          <Text fw={600}>Version History - {analysis?.name}</Text>
-        </Group>
+        <IconLabel
+          icon={<IconHistory size={20} aria-hidden="true" />}
+          label={`Version History - ${analysis?.name}`}
+          fw={600}
+        />
       ),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -187,9 +188,7 @@ function VersionManagementModalContent({ context, id, innerProps }) {
         </Alert>
 
         {loadVersionsOperation.loading ? (
-          <Box pos="relative" h={200}>
-            <LoadingOverlay visible />
-          </Box>
+          <LoadingState loading={true} minHeight={200} />
         ) : versionData.versions.length === 0 ? (
           <Alert
             icon={<IconInfoCircle size={16} />}

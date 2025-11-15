@@ -8,7 +8,6 @@ import {
   NumberInput,
   Button,
   Group,
-  Alert,
   SimpleGrid,
   Badge,
   Loader,
@@ -19,6 +18,7 @@ import {
   Divider,
   Progress,
 } from '@mantine/core';
+import { FormAlert, PaperCard } from '../../../components/global';
 import { useNotifications } from '../../../hooks/useNotifications';
 import { useAsyncOperation } from '../../../hooks/async/useAsyncOperation';
 import {
@@ -27,13 +27,11 @@ import {
   IconRefresh,
   IconChartBar,
   IconClearAll,
-  IconAlertCircle,
   IconDeviceFloppy,
 } from '@tabler/icons-react';
 import { dnsService } from '../../../services/dnsService';
 import { useBackend } from '../../../contexts/sseContext';
 import { useAuth } from '../../../hooks/useAuth';
-import PropTypes from 'prop-types';
 
 function DNSCacheSettings() {
   const { dnsCache } = useBackend();
@@ -241,9 +239,10 @@ function DNSCacheSettings() {
 
   if (!config) {
     return (
-      <Alert icon={<IconAlertCircle size={16} />} color="red">
-        Failed to load DNS cache configuration. Please try refreshing the page.
-      </Alert>
+      <FormAlert
+        type="error"
+        message="Failed to load DNS cache configuration. Please try refreshing the page."
+      />
     );
   }
 
@@ -254,22 +253,20 @@ function DNSCacheSettings() {
       </Text>
 
       {/* Configuration */}
-      <Paper p="md" withBorder>
+      <PaperCard
+        title="DNS Cache Settings"
+        icon={<IconTransfer size={20} />}
+        actions={
+          <Switch
+            checked={config.enabled}
+            onChange={(event) =>
+              handleEnabledToggle(event.currentTarget.checked)
+            }
+            label={config.enabled ? 'Enabled' : 'Disabled'}
+          />
+        }
+      >
         <Stack gap="md">
-          <Group justify="space-between">
-            <Group gap="xs">
-              <IconTransfer size={20} />
-              <Text fw={500}>DNS Cache Settings</Text>
-            </Group>
-            <Switch
-              checked={config.enabled}
-              onChange={(event) =>
-                handleEnabledToggle(event.currentTarget.checked)
-              }
-              label={config.enabled ? 'Enabled' : 'Disabled'}
-            />
-          </Group>
-
           <SimpleGrid cols={2} spacing="md">
             <NumberInput
               label="TTL (milliseconds)"
@@ -314,26 +311,24 @@ function DNSCacheSettings() {
             </Group>
           )}
         </Stack>
-      </Paper>
+      </PaperCard>
 
       {/* Statistics */}
-      <Paper p="md" withBorder>
+      <PaperCard
+        title="Cache Statistics"
+        icon={<IconChartBar size={20} />}
+        actions={
+          <Button
+            size="xs"
+            variant="subtle"
+            leftSection={<IconRefresh size={14} />}
+            onClick={handleResetStats}
+          >
+            Reset Stats
+          </Button>
+        }
+      >
         <Stack gap="md">
-          <Group justify="space-between">
-            <Group gap="xs">
-              <IconChartBar size={20} />
-              <Text fw={500}>Cache Statistics</Text>
-            </Group>
-            <Button
-              size="xs"
-              variant="subtle"
-              leftSection={<IconRefresh size={14} />}
-              onClick={handleResetStats}
-            >
-              Reset Stats
-            </Button>
-          </Group>
-
           <SimpleGrid cols={3} spacing="sm">
             <Card p="xs" withBorder>
               <Text size="xs" c="dimmed">
@@ -395,24 +390,24 @@ function DNSCacheSettings() {
             </Card>
           </SimpleGrid>
         </Stack>
-      </Paper>
+      </PaperCard>
 
       {/* Cache Management */}
-      <Paper p="md" withBorder>
+      <PaperCard
+        title="Cache Management"
+        actions={
+          <Button
+            size="xs"
+            variant="light"
+            color="red"
+            leftSection={<IconClearAll size={14} />}
+            onClick={handleClearCache}
+          >
+            Clear Cache
+          </Button>
+        }
+      >
         <Stack gap="md">
-          <Group justify="space-between">
-            <Text fw={500}>Cache Management</Text>
-            <Button
-              size="xs"
-              variant="light"
-              color="red"
-              leftSection={<IconClearAll size={14} />}
-              onClick={handleClearCache}
-            >
-              Clear Cache
-            </Button>
-          </Group>
-
           <Button
             variant="subtle"
             onClick={() => {
@@ -517,7 +512,7 @@ function DNSCacheSettings() {
             </>
           )}
         </Stack>
-      </Paper>
+      </PaperCard>
     </Stack>
   );
 }

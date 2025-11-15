@@ -1,6 +1,7 @@
-import { Alert, Button, Group, Text } from '@mantine/core';
+import { Alert, Button, Group } from '@mantine/core';
 import { IconUserCheck, IconX } from '@tabler/icons-react';
 import { useAuth } from '../../hooks/useAuth';
+import { IconLabel } from '../global';
 import logger from '../../utils/logger';
 
 export default function ImpersonationBanner() {
@@ -31,12 +32,12 @@ export default function ImpersonationBanner() {
       }}
     >
       <Group justify="space-between" align="center">
-        <Group gap="xs">
-          <IconUserCheck size={20} />
-          <Text size="sm" fw={600}>
-            You are impersonating {user?.name || user?.email}
-          </Text>
-        </Group>
+        <IconLabel
+          icon={<IconUserCheck size={20} />}
+          label={`You are impersonating ${user?.name || user?.email}`}
+          size="sm"
+          fw={600}
+        />
         <Button
           size="xs"
           variant="white"

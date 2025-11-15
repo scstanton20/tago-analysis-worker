@@ -12,20 +12,12 @@ import {
   Button,
   Text,
   Alert,
-  Box,
-  Paper,
-  LoadingOverlay,
   ActionIcon,
   Tooltip,
   CloseButton,
 } from '@mantine/core';
-import {
-  IconPlus,
-  IconUser,
-  IconAlertCircle,
-  IconCopy,
-  IconCheck,
-} from '@tabler/icons-react';
+import { FormAlert, ContentBox, LoadingState } from '../../components/global';
+import { IconPlus, IconUser, IconCopy, IconCheck } from '@tabler/icons-react';
 import { modals } from '@mantine/modals';
 import { useAuth } from '../../hooks/useAuth';
 import { usePermissions } from '../../hooks/usePermissions';
@@ -115,9 +107,7 @@ function UserManagementModalContent({ id }) {
   };
 
   return (
-    <Box pos="relative">
-      <LoadingOverlay visible={loading} />
-
+    <LoadingState loading={loading}>
       <Stack gap="md">
         {/* Custom Modal Header */}
         <Group gap="xs" justify="space-between" mb="md">
@@ -139,18 +129,10 @@ function UserManagementModalContent({ id }) {
             />
           </Group>
         </Group>
-        {error && (
-          <Alert
-            icon={<IconAlertCircle size="1rem" />}
-            color="red"
-            variant="light"
-          >
-            {error}
-          </Alert>
-        )}
+        <FormAlert type="error" message={error} />
 
         {createdUserInfo ? (
-          <Paper withBorder p="md">
+          <ContentBox>
             <Stack gap="md">
               <Text fw={600} size="lg" ta="center" c="green">
                 User Created Successfully!
@@ -205,7 +187,7 @@ function UserManagementModalContent({ id }) {
                 Continue
               </Button>
             </Stack>
-          </Paper>
+          </ContentBox>
         ) : !showCreateForm ? (
           <>
             <Group justify="space-between">
@@ -223,7 +205,7 @@ function UserManagementModalContent({ id }) {
               </Button>
             </Group>
 
-            <Paper withBorder p="xs">
+            <ContentBox p="xs">
               <UserTable
                 users={users}
                 currentUser={currentUser}
@@ -234,10 +216,10 @@ function UserManagementModalContent({ id }) {
                 onBanUser={handleBanUser}
                 onUnbanUser={handleUnbanUser}
               />
-            </Paper>
+            </ContentBox>
           </>
         ) : (
-          <Paper withBorder p="md">
+          <ContentBox>
             <UserForm
               form={form}
               editingUser={editingUser}
@@ -253,10 +235,10 @@ function UserManagementModalContent({ id }) {
               onToggleDepartment={toggleDepartment}
               onTogglePermission={toggleDepartmentPermission}
             />
-          </Paper>
+          </ContentBox>
         )}
       </Stack>
-    </Box>
+    </LoadingState>
   );
 }
 

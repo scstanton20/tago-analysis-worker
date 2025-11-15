@@ -5,11 +5,12 @@ import PropTypes from 'prop-types';
  * PaperCard - Standardized Paper wrapper component
  *
  * Provides consistent Paper styling for card-like containers.
- * Supports optional title, actions, and content areas.
+ * Supports optional title, icon, actions, and content areas.
  */
 export function PaperCard({
   children,
   title,
+  icon,
   actions,
   padding = 'md',
   radius = 'md',
@@ -31,12 +32,17 @@ export function PaperCard({
       {...props}
     >
       <Stack gap={gap}>
-        {(title || actions) && (
+        {(title || icon || actions) && (
           <Group justify="space-between" align="center">
-            {title && (
-              <Text size={titleSize} fw={titleWeight}>
-                {title}
-              </Text>
+            {(title || icon) && (
+              <Group gap="xs">
+                {icon}
+                {title && (
+                  <Text size={titleSize} fw={titleWeight}>
+                    {title}
+                  </Text>
+                )}
+              </Group>
             )}
             {actions && <Box>{actions}</Box>}
           </Group>
@@ -52,6 +58,8 @@ PaperCard.propTypes = {
   children: PropTypes.node.isRequired,
   /** Optional card title */
   title: PropTypes.string,
+  /** Optional icon element */
+  icon: PropTypes.node,
   /** Optional action buttons/elements */
   actions: PropTypes.node,
   /** Padding size */

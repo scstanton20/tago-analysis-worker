@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import PropTypes from 'prop-types';
-import { Stack, Group, Text, Button, Select } from '@mantine/core';
+import { Stack, Text, Select } from '@mantine/core';
 import { IconDownload } from '@tabler/icons-react';
+import { FormActionButtons } from '../../components/global';
 import { modals } from '@mantine/modals';
 import { useAsyncOperation } from '../../hooks/async/useAsyncOperation';
 
@@ -53,19 +54,16 @@ const LogDownloadModalContent = ({ id, innerProps }) => {
         allowDeselect={false}
       />
 
-      <Group justify="flex-end" mt="md">
-        <Button variant="default" onClick={() => modals.close(id)}>
-          Cancel
-        </Button>
-        <Button
-          onClick={handleDownload}
-          loading={downloadOperation.loading}
-          leftSection={<IconDownload size={16} />}
-          color="brand"
-        >
-          Download
-        </Button>
-      </Group>
+      <FormActionButtons
+        onSubmit={handleDownload}
+        onCancel={() => modals.close(id)}
+        loading={downloadOperation.loading}
+        submitLabel="Download"
+        submitIcon={<IconDownload size={16} />}
+        submitColor="brand"
+        submitVariant="filled"
+        mt="md"
+      />
     </Stack>
   );
 };

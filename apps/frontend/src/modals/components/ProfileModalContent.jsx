@@ -5,10 +5,11 @@
  */
 
 import { useEffect, lazy, Suspense } from 'react';
-import { Group, Text, Tabs, Badge, Stack } from '@mantine/core';
+import { Tabs, Badge, Stack } from '@mantine/core';
 import { IconUser, IconKey, IconShield } from '@tabler/icons-react';
 import { modals } from '@mantine/modals';
 import { useProfileModal } from '../../hooks/useProfileModal';
+import { IconLabel, LoadingState } from '../../components/global';
 const ProfileTab = lazy(() =>
   import('../../components/profile/ProfileTab').then((m) => ({
     default: m.ProfileTab,
@@ -25,7 +26,6 @@ const PasskeysTab = lazy(() =>
   })),
 );
 import PropTypes from 'prop-types';
-import AppLoadingOverlay from '../../components/common/AppLoadingOverlay.jsx';
 
 /**
  * ProfileModalContent
@@ -79,10 +79,11 @@ function ProfileModalContent({ context, id }) {
   useEffect(() => {
     context.updateModal({
       title: (
-        <Group gap="xs">
-          <IconUser size={20} aria-hidden="true" />
-          <Text fw={600}>Profile Settings</Text>
-        </Group>
+        <IconLabel
+          icon={<IconUser size={20} aria-hidden="true" />}
+          label="Profile Settings"
+          fw={600}
+        />
       ),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -90,7 +91,14 @@ function ProfileModalContent({ context, id }) {
 
   return (
     <Suspense
-      fallback={<AppLoadingOverlay message="Loading proflie settings..." />}
+      fallback={
+        <LoadingState
+          loading={true}
+          skeleton
+          pattern="form"
+          skeletonCount={4}
+        />
+      }
     >
       <Stack>
         <Tabs value={activeTab} onChange={setActiveTab}>

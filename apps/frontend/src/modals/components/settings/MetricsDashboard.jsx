@@ -10,13 +10,12 @@ import {
   Title,
   Box,
   Button,
-  Alert,
-  LoadingOverlay,
   Table,
   Progress,
   Center,
   Tabs,
 } from '@mantine/core';
+import { FormAlert, LoadingState } from '../../../components/global';
 import {
   IconRefresh,
   IconAlertCircle,
@@ -122,11 +121,7 @@ StatusBadge.propTypes = {
 // Process Table Component
 function ProcessTable({ processes, loading = false }) {
   if (loading) {
-    return (
-      <Box pos="relative" h={200}>
-        <LoadingOverlay visible />
-      </Box>
-    );
+    return <LoadingState loading={true} minHeight={200} />;
   }
 
   if (!processes || processes.length === 0) {
@@ -481,15 +476,15 @@ function MetricsDashboard() {
 
       {/* Connection Status Alert */}
       {connectionStatus !== 'connected' && (
-        <Alert
-          icon={<IconAlertCircle size={16} />}
+        <FormAlert
+          type={connectionStatus === 'connecting' ? 'info' : 'error'}
           title="Connection Status"
-          color={connectionStatus === 'connecting' ? 'blue' : 'red'}
-        >
-          {connectionStatus === 'connecting'
-            ? 'Connecting to real-time data stream...'
-            : 'Lost connection to real-time data stream. Attempting to reconnect...'}
-        </Alert>
+          message={
+            connectionStatus === 'connecting'
+              ? 'Connecting to real-time data stream...'
+              : 'Lost connection to real-time data stream. Attempting to reconnect...'
+          }
+        />
       )}
 
       {/* Tabbed Metrics View */}

@@ -3,7 +3,7 @@ import { CombinedAuthProvider } from './contexts/CombinedAuthProvider';
 import { useAuth } from './hooks/useAuth';
 import LoginPage from './components/auth/LoginPage';
 import ErrorBoundary from './components/ErrorBoundary';
-import AppLoadingOverlay from './components/common/AppLoadingOverlay';
+import AppLoadingOverlay from './components/global/indicators/AppLoadingOverlay';
 
 // Lazy load the entire authenticated app to avoid loading unnecessary code on login page
 const AuthenticatedApp = lazy(() => import('./AuthenticatedApp'));

@@ -5,16 +5,9 @@
  */
 
 import PropTypes from 'prop-types';
-import {
-  Box,
-  Stack,
-  Group,
-  Text,
-  Button,
-  TextInput,
-  ColorSwatch,
-} from '@mantine/core';
+import { Box, Stack, Group, Text, TextInput, ColorSwatch } from '@mantine/core';
 import { TeamColorPicker, PREDEFINED_COLORS } from './TeamColorPicker';
+import { FormActionButtons } from '../global';
 
 export function TeamCreateForm({
   newTeamName,
@@ -75,17 +68,17 @@ export function TeamCreateForm({
                 No color selected
               </Text>
             )}
-            <Button
-              type="submit"
+            <FormActionButtons
+              onSubmit={onSubmit}
               disabled={
                 !newTeamName.trim() || !newTeamColor || isNameInUse || isLoading
               }
               loading={isLoading}
               size="sm"
-              color="green"
-            >
-              Create
-            </Button>
+              submitColor="green"
+              submitLabel="Create"
+              singleButton
+            />
           </Group>
         </Stack>
       </form>

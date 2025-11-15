@@ -12,13 +12,12 @@ import {
   IconFolderCog,
   IconHistory,
 } from '@tabler/icons-react';
-import { ActionMenu, ConfirmDialog } from '../global';
+import { ActionMenu, ConfirmDialog, LoadingState } from '../global';
 import { analysisService } from '../../services/analysisService';
 import { teamService } from '../../services/teamService';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import StatusBadge from './statusBadge';
 import logger from '../../utils/logger';
-import AppLoadingOverlay from '../common/AppLoadingOverlay';
 
 // Lazy load AnalysisLogs
 const AnalysisLogs = lazy(() => import('./analysisLogs'));
@@ -415,7 +414,16 @@ export default function AnalysisItem({
 
         {/* Logs Section */}
         {showLogs && (
-          <Suspense fallback={<AppLoadingOverlay message="Loading logs..." />}>
+          <Suspense
+            fallback={
+              <LoadingState
+                loading={true}
+                skeleton
+                pattern="logs"
+                skeletonCount={10}
+              />
+            }
+          >
             <AnalysisLogs analysis={analysis} />
           </Suspense>
         )}

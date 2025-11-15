@@ -2,15 +2,15 @@ import { useState } from 'react';
 import PropTypes from 'prop-types';
 import {
   Stack,
-  Group,
   Text,
-  Button,
   UnstyledButton,
   Badge,
   ColorSwatch,
   Alert,
   ScrollArea,
+  Group,
 } from '@mantine/core';
+import { FormActionButtons } from '../../components/global';
 import { IconFolder, IconCheck, IconInfoCircle } from '@tabler/icons-react';
 import { modals } from '@mantine/modals';
 import { useAsyncOperation } from '../../hooks/async/useAsyncOperation';
@@ -120,22 +120,14 @@ const ChangeTeamModalContent = ({ id, innerProps }) => {
         </Stack>
       </ScrollArea>
 
-      <Group justify="flex-end" mt="md">
-        <Button
-          variant="default"
-          onClick={() => modals.close(id)}
-          disabled={submitOperation.loading}
-        >
-          Cancel
-        </Button>
-        <Button
-          onClick={handleSubmit}
-          loading={submitOperation.loading}
-          disabled={selectedTeam === currentTeam}
-        >
-          Move Analysis
-        </Button>
-      </Group>
+      <FormActionButtons
+        onSubmit={handleSubmit}
+        onCancel={() => modals.close(id)}
+        loading={submitOperation.loading}
+        disabled={selectedTeam === currentTeam}
+        submitLabel="Move Analysis"
+        mt="md"
+      />
 
       {selectedTeam !== currentTeam && (
         <Alert icon={<IconInfoCircle size={16} />} color="blue" variant="light">
