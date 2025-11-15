@@ -81,7 +81,6 @@ function AnalysisEditModalContent({ id, innerProps }) {
     formatCodeFn,
     hasFormatChanges,
     isEnvMode,
-    setError,
     setIsEditingName,
     setNewFileName,
     handleEditorChange,
@@ -219,13 +218,7 @@ function AnalysisEditModalContent({ id, innerProps }) {
         )}
       </Box>
       {error && (
-        <Alert
-          icon={<IconAlertCircle size={16} />}
-          color="red"
-          variant="light"
-          onClose={() => setError(null)}
-          withCloseButton
-        >
+        <Alert icon={<IconAlertCircle size={16} />} color="red" variant="light">
           {error}
         </Alert>
       )}

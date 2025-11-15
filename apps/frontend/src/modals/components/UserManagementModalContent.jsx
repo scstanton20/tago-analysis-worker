@@ -58,7 +58,6 @@ function UserManagementModalContent({ id }) {
     editingUser,
     showCreateForm,
     error,
-    setError,
     createdUserInfo,
     setCreatedUserInfo,
     availableTeams,
@@ -97,7 +96,6 @@ function UserManagementModalContent({ id }) {
     if (isAdmin) {
       loadUsers();
       loadActions();
-      setError('');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Run once on mount, isAdmin is stable

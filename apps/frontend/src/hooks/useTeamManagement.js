@@ -7,6 +7,7 @@
 import { useState, useMemo, useRef, useCallback } from 'react';
 import { teamService } from '../services/teamService';
 import { useNotifications } from './useNotifications.jsx';
+import { useAsyncOperation } from './async';
 import logger from '../utils/logger';
 
 /**
@@ -21,8 +22,31 @@ export function useTeamManagement({ teams }) {
   const [editingId, setEditingId] = useState(null);
   const [editingName, setEditingName] = useState('');
   const [editingColor, setEditingColor] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const notify = useNotifications();
+
+  // Async operations
+  const createTeamOperation = useAsyncOperation({
+    onError: (error) => logger.error('Error creating team:', error),
+  });
+
+  const updateNameOperation = useAsyncOperation({
+    onError: (error) => logger.error('Error updating team name:', error),
+  });
+
+  const updateColorOperation = useAsyncOperation({
+    onError: (error) => logger.error('Error updating team color:', error),
+  });
+
+  const deleteTeamOperation = useAsyncOperation({
+    onError: (error) => logger.error('Error deleting team:', error),
+  });
+
+  // Combined loading state from all operations
+  const isLoading =
+    createTeamOperation.loading ||
+    updateNameOperation.loading ||
+    updateColorOperation.loading ||
+    deleteTeamOperation.loading;
 
   // Ref for click outside functionality in edit mode
   const editingRef = useRef();
@@ -60,20 +84,16 @@ export function useTeamManagement({ teams }) {
         return;
       }
 
-      setIsLoading(true);
-      try {
+      await createTeamOperation.execute(async () => {
         await notify.createTeam(
           teamService.createTeam(newTeamName.trim(), newTeamColor),
           newTeamName.trim(),
         );
         setNewTeamName('');
         setNewTeamColor('');
-      } catch (error) {
-        logger.error('Error creating team:', error);
-      } finally {
-        setIsLoading(false);
-      }
+      });
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [newTeamName, newTeamColor, isLoading, usedNames, notify],
   );
 
@@ -106,8 +126,7 @@ export function useTeamManagement({ teams }) {
         return;
       }
 
-      setIsLoading(true);
-      try {
+      await updateNameOperation.execute(async () => {
         await notify.updateTeam(
           teamService.updateTeam(id, {
             name: editingName.trim(),
@@ -115,12 +134,9 @@ export function useTeamManagement({ teams }) {
           editingName.trim(),
         );
         setEditingId(null);
-      } catch (error) {
-        logger.error('Error updating team name:', error);
-      } finally {
-        setIsLoading(false);
-      }
+      });
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [editingName, teamsArray, isLoading, notify],
   );
 
@@ -142,8 +158,7 @@ export function useTeamManagement({ teams }) {
         return;
       }
 
-      setIsLoading(true);
-      try {
+      await updateColorOperation.execute(async () => {
         const currentTeam = teamsArray.find((d) => d.id === id);
         await notify.executeWithNotification(
           teamService.updateTeam(id, { color: editingColor }),
@@ -154,12 +169,9 @@ export function useTeamManagement({ teams }) {
         );
         setEditingId(null);
         setEditingColor('');
-      } catch (error) {
-        logger.error('Error updating team color:', error);
-      } finally {
-        setIsLoading(false);
-      }
+      });
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [editingColor, isLoading, teamsArray, notify],
   );
 
@@ -171,19 +183,15 @@ export function useTeamManagement({ teams }) {
     async (id) => {
       if (isLoading) return;
 
-      setIsLoading(true);
-      try {
+      await deleteTeamOperation.execute(async () => {
         const currentTeam = teamsArray.find((d) => d.id === id);
         await notify.deleteTeam(
           teamService.deleteTeam(id, 'uncategorized'),
           currentTeam?.name || 'team',
         );
-      } catch (error) {
-        logger.error('Error deleting team:', error);
-      } finally {
-        setIsLoading(false);
-      }
+      });
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [isLoading, teamsArray, notify],
   );
 

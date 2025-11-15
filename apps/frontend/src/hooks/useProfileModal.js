@@ -10,6 +10,7 @@ import { useAuth } from './useAuth';
 import { addPasskey, passkey } from '../lib/auth';
 import { useNotifications } from './useNotifications.jsx';
 import { useFormSync } from './useFormSync';
+import { useAsyncOperation } from './async';
 import logger from '../utils/logger';
 import { validatePassword } from '../utils/userValidation';
 
@@ -26,23 +27,47 @@ export function useProfileModal({ closeModal }) {
   // Tab state
   const [activeTab, setActiveTab] = useState('profile');
 
-  // Password change state
-  const [passwordLoading, setPasswordLoading] = useState(false);
-  const [passwordError, setPasswordError] = useState('');
+  // Success state (still need these for UI feedback)
   const [passwordSuccess, setPasswordSuccess] = useState(false);
-
-  // Profile editing state
-  const [profileLoading, setProfileLoading] = useState(false);
-  const [profileError, setProfileError] = useState('');
   const [profileSuccess, setProfileSuccess] = useState(false);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
 
   // Passkey state
   const [passkeys, setPasskeys] = useState([]);
-  const [passkeysLoading, setPasskeysLoading] = useState(false);
-  const [passkeysError, setPasskeysError] = useState('');
-  const [registeringPasskey, setRegisteringPasskey] = useState(false);
   const [isWebAuthnSupported, setIsWebAuthnSupported] = useState(true);
+
+  // Async operations
+  const passwordOperation = useAsyncOperation({
+    onError: (error) => logger.error('Password change error:', error),
+  });
+
+  const profileOperation = useAsyncOperation({
+    onError: (error) => logger.error('Profile update error:', error),
+  });
+
+  const loadPasskeysOperation = useAsyncOperation({
+    onError: (error) => logger.error('Error loading passkeys:', error),
+  });
+
+  const registerPasskeyOperation = useAsyncOperation({
+    onError: (error) => logger.error('Passkey registration error:', error),
+  });
+
+  const deletePasskeyOperation = useAsyncOperation({
+    onError: (error) => logger.error('Error deleting passkey:', error),
+  });
+
+  // Derived states for backward compatibility
+  const passwordLoading = passwordOperation.loading;
+  const passwordError = passwordOperation.error;
+  const profileLoading = profileOperation.loading;
+  const profileError = profileOperation.error;
+  const passkeysLoading = loadPasskeysOperation.loading;
+  const passkeysError =
+    loadPasskeysOperation.error ||
+    registerPasskeyOperation.error ||
+    deletePasskeyOperation.error;
+  const registeringPasskey = registerPasskeyOperation.loading;
 
   // Forms
   const passwordForm = useForm({
@@ -113,10 +138,7 @@ export function useProfileModal({ closeModal }) {
 
   // Load passkeys from Better Auth
   const loadPasskeys = useCallback(async () => {
-    try {
-      setPasskeysLoading(true);
-      setPasskeysError('');
-
+    await loadPasskeysOperation.execute(async () => {
       // Use Better Auth passkey client to list user's passkeys
       if (passkey && passkey.listUserPasskeys) {
         const result = await passkey.listUserPasskeys();
@@ -129,13 +151,8 @@ export function useProfileModal({ closeModal }) {
         logger.warn('Passkey listing not available');
         setPasskeys([]);
       }
-    } catch (error) {
-      logger.error('Error loading passkeys:', error);
-      setPasskeysError(error.message || 'Failed to load passkeys');
-      setPasskeys([]);
-    } finally {
-      setPasskeysLoading(false);
-    }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Data loading function (called by component on mount)
@@ -149,11 +166,9 @@ export function useProfileModal({ closeModal }) {
    */
   const handlePasswordSubmit = useCallback(
     async (values) => {
-      try {
-        setPasswordLoading(true);
-        setPasswordError('');
-        setPasswordSuccess(false);
+      setPasswordSuccess(false);
 
+      await passwordOperation.execute(async () => {
         await notify.passwordChange(
           changeProfilePassword(values.currentPassword, values.newPassword),
         );
@@ -168,13 +183,16 @@ export function useProfileModal({ closeModal }) {
             closeModal();
           }
         }, 2000);
-      } catch (err) {
-        setPasswordError(err.message || 'Failed to change password');
-      } finally {
-        setPasswordLoading(false);
-      }
+      });
     },
-    [notify, changeProfilePassword, passwordForm, activeTab, closeModal],
+    [
+      notify,
+      changeProfilePassword,
+      passwordForm,
+      activeTab,
+      closeModal,
+      passwordOperation,
+    ],
   );
 
   /**
@@ -182,11 +200,9 @@ export function useProfileModal({ closeModal }) {
    */
   const handleProfileSubmit = useCallback(
     async (values) => {
-      try {
-        setProfileLoading(true);
-        setProfileError('');
-        setProfileSuccess(false);
+      setProfileSuccess(false);
 
+      await profileOperation.execute(async () => {
         await notify.profileUpdate(
           updateProfile({
             name: values.name,
@@ -202,13 +218,9 @@ export function useProfileModal({ closeModal }) {
         setTimeout(() => {
           setProfileSuccess(false);
         }, 3000);
-      } catch (err) {
-        setProfileError(err.message || 'Failed to update profile');
-      } finally {
-        setProfileLoading(false);
-      }
+      });
     },
-    [notify, updateProfile],
+    [notify, updateProfile, profileOperation],
   );
 
   /**
@@ -216,7 +228,6 @@ export function useProfileModal({ closeModal }) {
    */
   const handleCancelProfileEdit = useCallback(() => {
     setIsEditingProfile(false);
-    setProfileError('');
     setProfileSuccess(false);
     profileForm.setValues({
       name: user.name || '',
@@ -230,10 +241,7 @@ export function useProfileModal({ closeModal }) {
    */
   const handleRegisterPasskey = useCallback(
     async (values) => {
-      try {
-        setRegisteringPasskey(true);
-        setPasskeysError('');
-
+      await registerPasskeyOperation.execute(async () => {
         // Use Better Auth addPasskey function
         const result = await addPasskey({
           name: values.name,
@@ -249,17 +257,17 @@ export function useProfileModal({ closeModal }) {
         // Reload passkeys list
         await loadPasskeys();
         passkeyForm.reset();
-      } catch (error) {
-        logger.error('Passkey registration error:', error);
-        setPasskeysError(error.message || 'Failed to register passkey');
+      });
+
+      // Show error notification if operation failed
+      if (registerPasskeyOperation.error) {
         notify.error(
-          'Failed to register passkey: ' + (error.message || 'Unknown error'),
+          'Failed to register passkey: ' +
+            (registerPasskeyOperation.error || 'Unknown error'),
         );
-      } finally {
-        setRegisteringPasskey(false);
       }
     },
-    [loadPasskeys, passkeyForm, notify],
+    [loadPasskeys, passkeyForm, notify, registerPasskeyOperation],
   );
 
   /**
@@ -267,9 +275,7 @@ export function useProfileModal({ closeModal }) {
    */
   const handleDeletePasskey = useCallback(
     async (credentialId) => {
-      try {
-        setPasskeysError('');
-
+      await deletePasskeyOperation.execute(async () => {
         // Use Better Auth passkey deletion
         if (passkey && passkey.deletePasskey) {
           const result = await passkey.deletePasskey({
@@ -287,13 +293,16 @@ export function useProfileModal({ closeModal }) {
         } else {
           throw new Error('Passkey deletion not available');
         }
-      } catch (error) {
-        logger.error('Error deleting passkey:', error);
-        setPasskeysError(error.message || 'Failed to delete passkey');
-        notify.error('Failed to delete passkey: ' + error.message);
+      });
+
+      // Show error notification if operation failed
+      if (deletePasskeyOperation.error) {
+        notify.error(
+          'Failed to delete passkey: ' + deletePasskeyOperation.error,
+        );
       }
     },
-    [loadPasskeys, notify],
+    [loadPasskeys, notify, deletePasskeyOperation],
   );
 
   /**
@@ -302,9 +311,7 @@ export function useProfileModal({ closeModal }) {
   const handleClose = useCallback(() => {
     passwordForm.reset();
     passkeyForm.reset();
-    setPasswordError('');
     setPasswordSuccess(false);
-    setPasskeysError('');
     setActiveTab('profile');
     closeModal();
   }, [passwordForm, passkeyForm, closeModal]);

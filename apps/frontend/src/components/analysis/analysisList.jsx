@@ -23,21 +23,19 @@ import {
   Center,
   Loader,
   Box,
-  Alert,
-  Menu,
   ActionIcon,
 } from '@mantine/core';
+import { ActionMenu } from '../global/menus/ActionMenu';
 import { modals } from '@mantine/modals';
 import {
   IconFileText,
-  IconInfoCircle,
   IconUserX,
   IconFolderPlus,
-  IconDotsVertical,
   IconArrowsSort,
   IconCheck,
   IconX,
 } from '@tabler/icons-react';
+import { FormAlert, EmptyState } from '../global';
 import teamService from '../../services/teamService';
 import {
   showSuccess,
@@ -396,13 +394,10 @@ export default function AnalysisList({
           <Text size="lg" fw={600}>
             Available Analyses
           </Text>
-          <Alert
-            icon={<IconInfoCircle size={16} />}
-            color="red"
-            variant="light"
-          >
-            Disconnected from server. Attempting to reconnect...
-          </Alert>
+          <FormAlert
+            type="error"
+            message="Disconnected from server. Attempting to reconnect..."
+          />
         </Stack>
       </Paper>
     );
@@ -493,25 +488,21 @@ export default function AnalysisList({
                     ? 'Close All Logs'
                     : 'Open All Logs'}
                 </Button>
-                <Menu position="bottom-end" withinPortal zIndex={1001}>
-                  <Menu.Target>
-                    <ActionIcon variant="light" size="lg" color="brand">
-                      <IconDotsVertical size={16} />
-                    </ActionIcon>
-                  </Menu.Target>
-                  <Menu.Dropdown>
-                    <Menu.Item
-                      leftSection={<IconArrowsSort size={16} />}
-                      onClick={() => {
+                <ActionMenu
+                  items={[
+                    {
+                      label: 'Reorganize List',
+                      icon: <IconArrowsSort size={16} />,
+                      onClick: () => {
                         // Capture current structure for local editing
                         setLocalStructure(structuredClone(teamStructure));
                         setReorderMode(true);
-                      }}
-                    >
-                      Reorganize List
-                    </Menu.Item>
-                  </Menu.Dropdown>
-                </Menu>
+                      },
+                    },
+                  ]}
+                  triggerVariant="light"
+                  triggerSize="lg"
+                />
               </Group>
             ))}
           {/* Log toggle button for non-team views */}
@@ -606,41 +597,36 @@ export default function AnalysisList({
             })
           ) : (
             /* Empty State */
-            <Center py="xl">
-              <Stack align="center" gap="md">
-                <Box ta="center">
-                  <Text c="dimmed" size="md" mb="xs">
-                    {selectedTeam
-                      ? 'No analyses found in this team'
-                      : totalAccessibleAnalyses === 0
-                        ? 'No analyses available'
-                        : 'Loading analyses...'}
-                  </Text>
-
-                  <Text c="dimmed" size="sm">
-                    {selectedTeam
-                      ? 'Try selecting a different team or create a new analysis here.'
-                      : totalAccessibleAnalyses === 0
-                        ? 'Upload an analysis file to get started.'
-                        : 'Please wait while analyses load from the server.'}
-                  </Text>
-                </Box>
-
-                {/* Additional context for team view */}
-                {selectedTeam && currentTeamInfo && (
-                  <Alert
-                    icon={<IconInfoCircle size={16} />}
-                    color="blue"
-                    variant="light"
-                    style={{ maxWidth: 400 }}
-                  >
-                    You can create a new analysis for the{' '}
-                    <strong>{currentTeamInfo.name}</strong> team using the
-                    analysis creator above.
-                  </Alert>
-                )}
-              </Stack>
-            </Center>
+            <EmptyState
+              icon={<IconFileText size={48} />}
+              title={
+                selectedTeam
+                  ? 'No analyses found in this team'
+                  : totalAccessibleAnalyses === 0
+                    ? 'No analyses available'
+                    : 'Loading analyses...'
+              }
+              description={
+                selectedTeam
+                  ? 'Try selecting a different team or create a new analysis here.'
+                  : totalAccessibleAnalyses === 0
+                    ? 'Upload an analysis file to get started.'
+                    : 'Please wait while analyses load from the server.'
+              }
+            >
+              {selectedTeam && currentTeamInfo && (
+                <FormAlert
+                  type="info"
+                  message={
+                    <>
+                      You can create a new analysis for the{' '}
+                      <strong>{currentTeamInfo.name}</strong> team using the
+                      analysis creator above.
+                    </>
+                  }
+                />
+              )}
+            </EmptyState>
           )}
         </Stack>
       </Stack>

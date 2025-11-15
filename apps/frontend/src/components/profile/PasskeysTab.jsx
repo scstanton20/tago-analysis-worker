@@ -10,7 +10,6 @@ import {
   Group,
   Text,
   Button,
-  Alert,
   Paper,
   Center,
   Loader,
@@ -20,12 +19,12 @@ import {
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import {
-  IconAlertCircle,
   IconFingerprint,
   IconShield,
   IconPlus,
   IconTrash,
 } from '@tabler/icons-react';
+import { FormAlert } from '../global';
 
 export function PasskeysTab({
   isWebAuthnSupported,
@@ -50,16 +49,14 @@ export function PasskeysTab({
 
   return (
     <Stack gap="md">
-      {!isWebAuthnSupported && (
-        <Alert
-          icon={<IconAlertCircle size="1rem" />}
-          color="orange"
-          variant="light"
-        >
-          WebAuthn is not supported in this browser. Passkeys require a modern
-          browser with WebAuthn support.
-        </Alert>
-      )}
+      <FormAlert
+        type="warning"
+        message={
+          !isWebAuthnSupported
+            ? 'WebAuthn is not supported in this browser. Passkeys require a modern browser with WebAuthn support.'
+            : null
+        }
+      />
 
       {isWebAuthnSupported && (
         <>
@@ -100,15 +97,7 @@ export function PasskeysTab({
           </Paper>
 
           {/* Passkey Errors */}
-          {passkeysError && (
-            <Alert
-              icon={<IconAlertCircle size="1rem" />}
-              color="red"
-              variant="light"
-            >
-              {passkeysError}
-            </Alert>
-          )}
+          <FormAlert type="error" message={passkeysError} />
 
           {/* Registered Passkeys List */}
           <Paper p="md" withBorder>

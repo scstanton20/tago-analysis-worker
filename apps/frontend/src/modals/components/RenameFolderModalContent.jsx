@@ -1,10 +1,11 @@
 import { TextInput, Button, Stack } from '@mantine/core';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import PropTypes from 'prop-types';
 import { modals } from '@mantine/modals';
 import teamService from '../../services/teamService';
-import logger from '../../utils/logger';
 import { useNotifications } from '../../hooks/useNotifications';
+import { useAsyncOperation } from '../../hooks/async/useAsyncOperation';
+import { useEnterKeySubmit } from '../../hooks/forms/useEnterKeySubmit';
 
 /**
  * RenameFolderModalContent
@@ -24,12 +25,7 @@ const RenameFolderModalContent = ({ id, innerProps }) => {
 
   const notify = useNotifications();
   const [name, setName] = useState(currentName || '');
-  const [loading, setLoading] = useState(false);
-
-  // Update name when currentName prop changes
-  useEffect(() => {
-    setName(currentName || '');
-  }, [currentName]);
+  const renameOperation = useAsyncOperation();
 
   const handleRename = async () => {
     if (!name.trim()) {
@@ -42,28 +38,16 @@ const RenameFolderModalContent = ({ id, innerProps }) => {
       return;
     }
 
-    setLoading(true);
-    try {
+    await renameOperation.execute(async () => {
       await teamService.updateFolder(teamId, folderId, {
         name: name.trim(),
       });
-
       notify.success(`Folder renamed to "${name}"`);
-
       modals.close(id);
-    } catch (error) {
-      logger.error('Error renaming folder:', error);
-      notify.error(error.message || 'Failed to rename folder');
-    } finally {
-      setLoading(false);
-    }
+    });
   };
 
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter') {
-      handleRename();
-    }
-  };
+  const handleKeyDown = useEnterKeySubmit(handleRename);
 
   return (
     <Stack>
@@ -72,12 +56,16 @@ const RenameFolderModalContent = ({ id, innerProps }) => {
         placeholder="Enter new folder name..."
         value={name}
         onChange={(e) => setName(e.target.value)}
-        onKeyPress={handleKeyPress}
+        onKeyDown={handleKeyDown}
         required
         data-autofocus
       />
 
-      <Button onClick={handleRename} loading={loading} fullWidth>
+      <Button
+        onClick={handleRename}
+        loading={renameOperation.loading}
+        fullWidth
+      >
         Rename Folder
       </Button>
     </Stack>

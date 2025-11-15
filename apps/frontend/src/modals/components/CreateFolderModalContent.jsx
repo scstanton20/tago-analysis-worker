@@ -3,8 +3,9 @@ import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { modals } from '@mantine/modals';
 import teamService from '../../services/teamService';
-import logger from '../../utils/logger';
 import { useNotifications } from '../../hooks/useNotifications';
+import { useAsyncOperation } from '../../hooks/async/useAsyncOperation';
+import { useEnterKeySubmit } from '../../hooks/forms/useEnterKeySubmit';
 
 /**
  * CreateFolderModalContent
@@ -31,7 +32,7 @@ const CreateFolderModalContent = ({ id, context, innerProps }) => {
 
   const notify = useNotifications();
   const [name, setName] = useState('');
-  const [loading, setLoading] = useState(false);
+  const createOperation = useAsyncOperation();
 
   // Update modal title dynamically based on whether it's a subfolder
   useEffect(() => {
@@ -60,30 +61,18 @@ const CreateFolderModalContent = ({ id, context, innerProps }) => {
       return;
     }
 
-    setLoading(true);
-    try {
+    await createOperation.execute(async () => {
       await teamService.createFolder(teamId, {
         name: name.trim(),
         parentFolderId: parentFolderId || undefined,
       });
-
       notify.success(`Folder "${name}" created successfully`);
-
       setName('');
       modals.close(id);
-    } catch (error) {
-      logger.error('Error creating folder:', error);
-      notify.error(error.message || 'Failed to create folder');
-    } finally {
-      setLoading(false);
-    }
+    });
   };
 
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter') {
-      handleCreate();
-    }
-  };
+  const handleKeyDown = useEnterKeySubmit(handleCreate);
 
   return (
     <Stack>
@@ -92,12 +81,16 @@ const CreateFolderModalContent = ({ id, context, innerProps }) => {
         placeholder="Enter folder name..."
         value={name}
         onChange={(e) => setName(e.target.value)}
-        onKeyPress={handleKeyPress}
+        onKeyDown={handleKeyDown}
         required
         data-autofocus
       />
 
-      <Button onClick={handleCreate} loading={loading} fullWidth>
+      <Button
+        onClick={handleCreate}
+        loading={createOperation.loading}
+        fullWidth
+      >
         Create Folder
       </Button>
     </Stack>

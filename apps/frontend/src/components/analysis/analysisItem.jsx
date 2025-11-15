@@ -1,17 +1,6 @@
 import { lazy, Suspense } from 'react';
 import PropTypes from 'prop-types';
-import {
-  Paper,
-  Group,
-  Text,
-  Button,
-  Menu,
-  ActionIcon,
-  Badge,
-  Stack,
-  Box,
-} from '@mantine/core';
-import { modals } from '@mantine/modals';
+import { Paper, Group, Text, Button, Badge, Stack, Box } from '@mantine/core';
 import {
   IconPlayerPlay,
   IconPlayerStop,
@@ -19,11 +8,11 @@ import {
   IconDownload,
   IconEdit,
   IconTrash,
-  IconDotsVertical,
   IconFolderPlus,
   IconFolderCog,
   IconHistory,
 } from '@tabler/icons-react';
+import { ActionMenu, ConfirmDialog } from '../global';
 import { analysisService } from '../../services/analysisService';
 import { teamService } from '../../services/teamService';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
@@ -104,11 +93,9 @@ export default function AnalysisItem({
   };
 
   const handleDeleteAnalysis = async () => {
-    modals.openConfirmModal({
+    ConfirmDialog.delete({
       title: 'Delete Analysis',
-      children: `Are you sure you want to delete "${analysis.name}"? This action cannot be undone.`,
-      labels: { confirm: 'Delete', cancel: 'Cancel' },
-      confirmProps: { color: 'red' },
+      itemName: analysis.name,
       onConfirm: async () => {
         try {
           await notify.deleteAnalysis(
@@ -155,11 +142,9 @@ export default function AnalysisItem({
   };
 
   const handleDeleteLogs = async () => {
-    modals.openConfirmModal({
+    ConfirmDialog.delete({
       title: 'Delete All Logs',
-      children: `Are you sure you want to delete all logs for "${analysis.name}"? This action cannot be undone.`,
-      labels: { confirm: 'Delete', cancel: 'Cancel' },
-      confirmProps: { color: 'red' },
+      itemName: `all logs for "${analysis.name}"`,
       onConfirm: async () => {
         try {
           await notify.deleteLogs(
@@ -316,150 +301,114 @@ export default function AnalysisItem({
               canDownloadAnalyses(analysis) ||
               canEditAnalyses(analysis) ||
               canDeleteAnalyses(analysis)) && (
-              <Menu
-                shadow="md"
-                width={200}
-                withinPortal
-                zIndex={1001}
-                position="bottom-end"
-                closeOnItemClick={true}
-              >
-                <Menu.Target>
-                  <ActionIcon
-                    variant="subtle"
-                    size="lg"
-                    color="brand"
-                    aria-label={`Actions for ${analysis.name}`}
-                  >
-                    <IconDotsVertical size={20} aria-hidden="true" />
-                  </ActionIcon>
-                </Menu.Target>
-
-                <Menu.Dropdown>
-                  {/* Team Management - Admins can move any analysis, users can move uncategorized */}
-                  {(isAdmin || isUncategorized) && (
-                    <>
-                      <Menu.Item
-                        onClick={() =>
-                          modalService.openChangeTeam(
-                            handleTeamChange,
-                            teamsArray,
-                            analysis.teamId || analysis.team,
-                            analysis.name,
-                          )
-                        }
-                        leftSection={
-                          isUncategorized ? (
+              <ActionMenu
+                items={[
+                  // Team Management - Admins can move any analysis, users can move uncategorized
+                  ...(isAdmin || isUncategorized
+                    ? [
+                        {
+                          label: isUncategorized
+                            ? 'Add to Team'
+                            : 'Change Team',
+                          icon: isUncategorized ? (
                             <IconFolderPlus size={16} />
                           ) : (
                             <IconFolderCog size={16} />
-                          )
-                        }
-                      >
-                        {isUncategorized ? 'Add to Team' : 'Change Team'}
-                      </Menu.Item>
-                      <Menu.Divider />
-                    </>
-                  )}
-
-                  {/* File Operations */}
-                  {canDownloadAnalyses(analysis) && (
-                    <>
-                      <Menu.Item
-                        onClick={handleDownloadAnalysis}
-                        leftSection={<IconDownload size={16} />}
-                      >
-                        Download Analysis File
-                      </Menu.Item>
-                      <Menu.Item
-                        onClick={() =>
-                          modalService.openLogDownload(
-                            analysis,
-                            handleDownloadLogs,
-                          )
-                        }
-                        leftSection={<IconDownload size={16} />}
-                      >
-                        Download Logs
-                      </Menu.Item>
-                      <Menu.Divider />
-                    </>
-                  )}
-
-                  {/* Version Management */}
-                  {canViewAnalyses(analysis) && (
-                    <>
-                      <Menu.Item
-                        onClick={() =>
-                          modalService.openVersionHistory(
-                            analysis,
-                            handleVersionRollback,
-                          )
-                        }
-                        leftSection={<IconHistory size={16} />}
-                      >
-                        Version History
-                      </Menu.Item>
-                      <Menu.Divider />
-                    </>
-                  )}
-
-                  {/* Analysis File Operations - Show view or edit based on permissions */}
-                  {canViewAnalyses(analysis) && (
-                    <>
-                      <Menu.Item
-                        onClick={handleEditAnalysis}
-                        leftSection={
-                          canEditAnalyses(analysis) ? (
+                          ),
+                          onClick: () =>
+                            modalService.openChangeTeam(
+                              handleTeamChange,
+                              teamsArray,
+                              analysis.teamId || analysis.team,
+                              analysis.name,
+                            ),
+                        },
+                        { type: 'divider' },
+                      ]
+                    : []),
+                  // File Operations
+                  ...(canDownloadAnalyses(analysis)
+                    ? [
+                        {
+                          label: 'Download Analysis File',
+                          icon: <IconDownload size={16} />,
+                          onClick: handleDownloadAnalysis,
+                        },
+                        {
+                          label: 'Download Logs',
+                          icon: <IconDownload size={16} />,
+                          onClick: () =>
+                            modalService.openLogDownload(
+                              analysis,
+                              handleDownloadLogs,
+                            ),
+                        },
+                        { type: 'divider' },
+                      ]
+                    : []),
+                  // Version Management
+                  ...(canViewAnalyses(analysis)
+                    ? [
+                        {
+                          label: 'Version History',
+                          icon: <IconHistory size={16} />,
+                          onClick: () =>
+                            modalService.openVersionHistory(
+                              analysis,
+                              handleVersionRollback,
+                            ),
+                        },
+                        { type: 'divider' },
+                      ]
+                    : []),
+                  // Analysis File Operations
+                  ...(canViewAnalyses(analysis)
+                    ? [
+                        {
+                          label: canEditAnalyses(analysis)
+                            ? 'Edit Analysis'
+                            : 'View Analysis File',
+                          icon: canEditAnalyses(analysis) ? (
                             <IconEdit size={16} />
                           ) : (
                             <IconFileText size={16} />
-                          )
-                        }
-                      >
-                        {canEditAnalyses(analysis)
-                          ? 'Edit Analysis'
-                          : 'View Analysis File'}
-                      </Menu.Item>
-                      <Menu.Item
-                        onClick={handleEditENV}
-                        leftSection={
-                          canEditAnalyses(analysis) ? (
+                          ),
+                          onClick: handleEditAnalysis,
+                        },
+                        {
+                          label: canEditAnalyses(analysis)
+                            ? 'Edit Environment'
+                            : 'View Environment',
+                          icon: canEditAnalyses(analysis) ? (
                             <IconEdit size={16} />
                           ) : (
                             <IconFileText size={16} />
-                          )
-                        }
-                      >
-                        {canEditAnalyses(analysis)
-                          ? 'Edit Environment'
-                          : 'View Environment'}
-                      </Menu.Item>
-                      <Menu.Divider />
-                    </>
-                  )}
-
-                  {/* Destructive Operations */}
-                  {canDeleteAnalyses(analysis) && (
-                    <>
-                      <Menu.Item
-                        onClick={handleDeleteLogs}
-                        color="red"
-                        leftSection={<IconTrash size={16} />}
-                      >
-                        Clear/Delete All Logs
-                      </Menu.Item>
-                      <Menu.Item
-                        onClick={handleDeleteAnalysis}
-                        color="red"
-                        leftSection={<IconTrash size={16} />}
-                      >
-                        Delete Analysis
-                      </Menu.Item>
-                    </>
-                  )}
-                </Menu.Dropdown>
-              </Menu>
+                          ),
+                          onClick: handleEditENV,
+                        },
+                        { type: 'divider' },
+                      ]
+                    : []),
+                  // Destructive Operations
+                  ...(canDeleteAnalyses(analysis)
+                    ? [
+                        {
+                          label: 'Clear/Delete All Logs',
+                          icon: <IconTrash size={16} />,
+                          onClick: handleDeleteLogs,
+                          color: 'red',
+                        },
+                        {
+                          label: 'Delete Analysis',
+                          icon: <IconTrash size={16} />,
+                          onClick: handleDeleteAnalysis,
+                          color: 'red',
+                        },
+                      ]
+                    : []),
+                ]}
+                aria-label={`Actions for ${analysis.name}`}
+              />
             )}
           </Group>
         </Group>

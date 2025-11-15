@@ -2,7 +2,7 @@
  * Tree Item Component
  * Renders a single item (folder or analysis) in the analysis tree
  * Supports drag-and-drop reordering, nesting, and expansion
- * @module components/analysis/TreeItem
+ *
  */
 
 import { useEffect } from 'react';
@@ -14,7 +14,6 @@ import {
   Text,
   Collapse,
   Box,
-  Menu,
   Badge,
 } from '@mantine/core';
 import {
@@ -22,12 +21,12 @@ import {
   IconChevronDown,
   IconFolder,
   IconFolderOpen,
-  IconDotsVertical,
   IconEdit,
   IconTrash,
   IconFolderPlus,
-  IconGripVertical,
 } from '@tabler/icons-react';
+import { ActionMenu } from '../global/menus/ActionMenu';
+import { DragHandle } from '../global/indicators/DragHandle';
 import {
   SortableContext,
   useSortable,
@@ -152,18 +151,7 @@ export default function TreeItem({
         >
           {/* Drag handle - only visible in reorder mode */}
           {reorderMode && (
-            <Box
-              {...attributes}
-              {...listeners}
-              style={{
-                cursor: 'grab',
-                display: 'flex',
-                alignItems: 'center',
-                padding: '4px',
-              }}
-            >
-              <IconGripVertical size={18} opacity={0.6} />
-            </Box>
+            <DragHandle {...attributes} {...listeners} opacity={0.6} />
           )}
 
           <Box
@@ -242,35 +230,28 @@ export default function TreeItem({
             </Group>
           </Box>
 
-          <Menu position="bottom-end" withinPortal zIndex={1001}>
-            <Menu.Target>
-              <ActionIcon size="sm" variant="subtle" color="brand">
-                <IconDotsVertical size={16} />
-              </ActionIcon>
-            </Menu.Target>
-            <Menu.Dropdown>
-              <Menu.Item
-                leftSection={<IconFolderPlus size={16} />}
-                onClick={() => onFolderAction('createSubfolder', item)}
-              >
-                Add Subfolder
-              </Menu.Item>
-              <Menu.Item
-                leftSection={<IconEdit size={16} />}
-                onClick={() => onFolderAction('rename', item)}
-              >
-                Rename
-              </Menu.Item>
-              <Menu.Divider />
-              <Menu.Item
-                leftSection={<IconTrash size={16} />}
-                onClick={() => onFolderAction('delete', item)}
-                color="red"
-              >
-                Delete Folder
-              </Menu.Item>
-            </Menu.Dropdown>
-          </Menu>
+          <ActionMenu
+            items={[
+              {
+                label: 'Add Subfolder',
+                icon: <IconFolderPlus size={16} />,
+                onClick: () => onFolderAction('createSubfolder', item),
+              },
+              {
+                label: 'Rename',
+                icon: <IconEdit size={16} />,
+                onClick: () => onFolderAction('rename', item),
+              },
+              { type: 'divider' },
+              {
+                label: 'Delete Folder',
+                icon: <IconTrash size={16} />,
+                onClick: () => onFolderAction('delete', item),
+                color: 'red',
+              },
+            ]}
+            triggerSize="sm"
+          />
         </Group>
 
         <Collapse in={isExpanded}>
@@ -346,20 +327,15 @@ export default function TreeItem({
       >
         {/* Drag handle - only visible in reorder mode */}
         {reorderMode && (
-          <Box
+          <DragHandle
             {...attributes}
             {...listeners}
+            opacity={0.6}
             style={{
-              cursor: 'grab',
-              display: 'flex',
-              alignItems: 'center',
-              padding: '4px',
               alignSelf: 'flex-start',
               marginTop: '12px',
             }}
-          >
-            <IconGripVertical size={18} opacity={0.6} />
-          </Box>
+          />
         )}
 
         <Box style={{ flex: 1, minWidth: 0 }}>

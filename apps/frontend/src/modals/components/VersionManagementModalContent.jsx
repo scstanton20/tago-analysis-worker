@@ -30,6 +30,7 @@ import {
 } from '@tabler/icons-react';
 import { analysisService } from '../../services/analysisService';
 import { useNotifications } from '../../hooks/useNotifications';
+import { useAsyncOperation } from '../../hooks/async/useAsyncOperation';
 import { modalService } from '../modalService';
 import logger from '../../utils/logger';
 import PropTypes from 'prop-types';
@@ -53,23 +54,17 @@ function VersionManagementModalContent({ context, id, innerProps }) {
     nextVersionNumber: 2,
     currentVersion: 1,
   });
-  const [loading, setLoading] = useState(false);
   const [rollbackLoading, setRollbackLoading] = useState(null);
   const notify = useNotifications();
+  const loadVersionsOperation = useAsyncOperation();
+  const downloadOperation = useAsyncOperation();
 
   const loadVersions = useCallback(async () => {
-    setLoading(true);
-    try {
+    await loadVersionsOperation.execute(async () => {
       const data = await analysisService.getVersions(analysis.name);
       setVersionData(data);
-    } catch (error) {
-      logger.error('Failed to load versions:', error);
-      const errorMessage = error.message || 'Failed to load version history';
-      notify.error(errorMessage);
-    } finally {
-      setLoading(false);
-    }
-  }, [analysis.name, notify]);
+    });
+  }, [analysis.name, loadVersionsOperation]);
 
   // Load versions when component mounts (modal opens)
   useEffect(() => {
@@ -125,7 +120,7 @@ function VersionManagementModalContent({ context, id, innerProps }) {
   };
 
   const handleDownloadVersion = async (version) => {
-    try {
+    await downloadOperation.execute(async () => {
       await notify.executeWithNotification(
         analysisService.downloadAnalysis(analysis.name, version),
         {
@@ -133,9 +128,7 @@ function VersionManagementModalContent({ context, id, innerProps }) {
           success: 'Version downloaded successfully',
         },
       );
-    } catch (error) {
-      logger.error('Failed to download version:', error);
-    }
+    });
   };
 
   const handleViewVersion = (version) => {
@@ -193,7 +186,7 @@ function VersionManagementModalContent({ context, id, innerProps }) {
           </Text>
         </Alert>
 
-        {loading ? (
+        {loadVersionsOperation.loading ? (
           <Box pos="relative" h={200}>
             <LoadingOverlay visible />
           </Box>
@@ -320,7 +313,7 @@ function VersionManagementModalContent({ context, id, innerProps }) {
                           color="blue"
                           size="sm"
                           onClick={() => handleViewVersion(version.version)}
-                          loading={loading}
+                          loading={loadVersionsOperation.loading}
                           aria-label={`View this version's content`}
                         >
                           <IconEyeCode aria-hidden="true" />

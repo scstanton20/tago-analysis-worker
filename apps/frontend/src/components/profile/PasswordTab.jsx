@@ -5,8 +5,8 @@
  */
 
 import PropTypes from 'prop-types';
-import { Stack, Group, Button, PasswordInput, Alert } from '@mantine/core';
-import { IconAlertCircle } from '@tabler/icons-react';
+import { Stack, PasswordInput } from '@mantine/core';
+import { FormAlert, FormActionButtons } from '../global';
 
 export function PasswordTab({
   passwordForm,
@@ -19,15 +19,7 @@ export function PasswordTab({
   return (
     <form onSubmit={passwordForm.onSubmit(handlePasswordSubmit)}>
       <Stack gap="md">
-        {passwordError && (
-          <Alert
-            icon={<IconAlertCircle size="1rem" />}
-            color="red"
-            variant="light"
-          >
-            {passwordError}
-          </Alert>
-        )}
+        <FormAlert type="error" message={passwordError} />
 
         <PasswordInput
           label="Current Password"
@@ -59,24 +51,13 @@ export function PasswordTab({
           {...passwordForm.getInputProps('confirmPassword')}
         />
 
-        <Group justify="flex-end" gap="sm" mt="md">
-          <Button
-            variant="default"
-            onClick={handleClose}
-            disabled={passwordLoading}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            loading={passwordLoading}
-            disabled={passwordSuccess}
-            variant="gradient"
-            gradient={{ from: 'brand.6', to: 'accent.6' }}
-          >
-            Change Password
-          </Button>
-        </Group>
+        <FormActionButtons
+          onSubmit={handlePasswordSubmit}
+          onCancel={handleClose}
+          loading={passwordLoading}
+          disabled={passwordSuccess}
+          submitLabel="Change Password"
+        />
       </Stack>
     </form>
   );

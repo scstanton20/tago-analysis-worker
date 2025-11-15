@@ -17,6 +17,7 @@ import {
   Loader,
   Box,
 } from '@mantine/core';
+import { EmptyState } from '../global/layout/EmptyState';
 
 const LOGS_PER_PAGE = 100;
 
@@ -345,12 +346,15 @@ const AnalysisLogs = ({ analysis }) => {
             </Group>
           </Center>
         ) : logs.length === 0 ? (
-          <Center h="100%">
-            <Text c="dimmed" size="sm">
-              No logs available.{' '}
-              {analysis.status === 'running' && 'Waiting for new logs...'}
-            </Text>
-          </Center>
+          <EmptyState
+            title="No logs available"
+            description={
+              analysis.status === 'running'
+                ? 'Waiting for new logs...'
+                : undefined
+            }
+            py="xl"
+          />
         ) : (
           <Stack gap={2}>
             {logs.map((log, index) => {

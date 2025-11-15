@@ -20,6 +20,7 @@ import {
   Progress,
 } from '@mantine/core';
 import { useNotifications } from '../../../hooks/useNotifications';
+import { useAsyncOperation } from '../../../hooks/async/useAsyncOperation';
 import {
   IconTransfer,
   IconTrash,
@@ -38,10 +39,10 @@ function DNSCacheSettings() {
   const { dnsCache } = useBackend();
   const { isAuthenticated } = useAuth();
   const notify = useNotifications();
-  const [loading, setLoading] = useState(false);
+  const loadConfigOperation = useAsyncOperation();
+  const loadEntriesOperation = useAsyncOperation();
   const [entries, setEntries] = useState([]);
   const [showEntries, setShowEntries] = useState(false);
-  const [entriesLoading, setEntriesLoading] = useState(false);
 
   // Manual save state for TTL and maxEntries
   const [pendingTtl, setPendingTtl] = useState(null);
@@ -108,8 +109,7 @@ function DNSCacheSettings() {
   };
 
   const loadConfig = async () => {
-    setLoading(true);
-    try {
+    await loadConfigOperation.execute(async () => {
       const data = await dnsService.getConfig();
 
       // Set initial data for immediate display (SSE will update later)
@@ -121,28 +121,14 @@ function DNSCacheSettings() {
       setPendingMaxEntries(data.config.maxEntries);
       setHasUnsavedChanges(false);
       setValidationErrors({});
-    } catch (error) {
-      const isAuthError = error?.response?.status === 401;
-      notify.error(
-        isAuthError
-          ? 'Authentication required. Please refresh the page and try again.'
-          : 'Failed to load DNS cache configuration',
-      );
-    } finally {
-      setLoading(false);
-    }
+    });
   };
 
   const loadEntries = async () => {
-    setEntriesLoading(true);
-    try {
+    await loadEntriesOperation.execute(async () => {
       const data = await dnsService.getCacheEntries();
       setEntries(data.entries);
-    } catch {
-      notify.error('Failed to load DNS cache entries');
-    } finally {
-      setEntriesLoading(false);
-    }
+    });
   };
 
   // Handle enabled/disabled switch
@@ -242,7 +228,7 @@ function DNSCacheSettings() {
     );
   }
 
-  if (loading) {
+  if (loadConfigOperation.loading) {
     return (
       <Stack align="center" justify="center" h={200}>
         <Loader size="lg" />
@@ -443,7 +429,7 @@ function DNSCacheSettings() {
           {showEntries && (
             <>
               <Divider />
-              {entriesLoading ? (
+              {loadEntriesOperation.loading ? (
                 <Stack align="center" py="md">
                   <Loader size="sm" />
                 </Stack>

@@ -1,13 +1,6 @@
 import PropTypes from 'prop-types';
-import {
-  Table,
-  Text,
-  Badge,
-  Stack,
-  Group,
-  ActionIcon,
-  Menu,
-} from '@mantine/core';
+import { Table, Text, Badge, Stack } from '@mantine/core';
+import { ActionMenu } from '../../../components/global/menus/ActionMenu';
 import {
   IconEdit,
   IconTrash,
@@ -137,88 +130,57 @@ export default function UserTable({
               </Badge>
             </Table.Td>
             <Table.Td>
-              <Menu
+              <ActionMenu
+                items={[
+                  {
+                    label: 'Edit User',
+                    icon: <IconEdit size={16} />,
+                    onClick: () => onEdit(user),
+                  },
+                  ...(user.id !== currentUser?.id
+                    ? [
+                        { type: 'divider' },
+                        {
+                          label: 'Impersonate User',
+                          icon: <IconUserCheck size={16} />,
+                          onClick: () => onImpersonate(user),
+                          color: 'violet',
+                        },
+                        {
+                          label: 'Manage Sessions',
+                          icon: <IconDeviceLaptop size={16} />,
+                          onClick: () => onManageSessions(user),
+                          color: 'blue',
+                        },
+                        { type: 'divider' },
+                        user.banned
+                          ? {
+                              label: 'Unban User',
+                              icon: <IconCircleCheck size={16} />,
+                              onClick: () => onUnbanUser(user),
+                              color: 'green',
+                            }
+                          : {
+                              label: 'Ban User',
+                              icon: <IconBan size={16} />,
+                              onClick: () => onBanUser(user),
+                              color: 'red',
+                            },
+                        {
+                          label: 'Delete User',
+                          icon: <IconTrash size={16} />,
+                          onClick: () => onDelete(user),
+                          color: 'red',
+                        },
+                      ]
+                    : []),
+                ]}
                 shadow="md"
                 width={200}
-                closeOnItemClick={true}
-                withinPortal
-                zIndex={1001}
-              >
-                <Menu.Target>
-                  <ActionIcon
-                    variant="subtle"
-                    size="lg"
-                    color="brand"
-                    aria-label={`Actions for ${user.name || user.email}`}
-                  >
-                    <IconDotsVertical size={20} aria-hidden="true" />
-                  </ActionIcon>
-                </Menu.Target>
-
-                <Menu.Dropdown>
-                  {/* Edit User */}
-                  <Menu.Item
-                    onClick={() => onEdit(user)}
-                    leftSection={<IconEdit size={16} />}
-                  >
-                    Edit User
-                  </Menu.Item>
-
-                  {user.id !== currentUser?.id && (
-                    <>
-                      <Menu.Divider />
-
-                      {/* Impersonate User */}
-                      <Menu.Item
-                        onClick={() => onImpersonate(user)}
-                        leftSection={<IconUserCheck size={16} />}
-                        color="violet"
-                      >
-                        Impersonate User
-                      </Menu.Item>
-
-                      {/* Manage Sessions */}
-                      <Menu.Item
-                        onClick={() => onManageSessions(user)}
-                        leftSection={<IconDeviceLaptop size={16} />}
-                        color="blue"
-                      >
-                        Manage Sessions
-                      </Menu.Item>
-
-                      <Menu.Divider />
-
-                      {/* Ban/Unban User */}
-                      {user.banned ? (
-                        <Menu.Item
-                          onClick={() => onUnbanUser(user)}
-                          leftSection={<IconCircleCheck size={16} />}
-                          color="green"
-                        >
-                          Unban User
-                        </Menu.Item>
-                      ) : (
-                        <Menu.Item
-                          onClick={() => onBanUser(user)}
-                          leftSection={<IconBan size={16} />}
-                          color="red"
-                        >
-                          Ban User
-                        </Menu.Item>
-                      )}
-
-                      {/* Delete User */}
-                      <Menu.Item
-                        onClick={() => onDelete(user)}
-                        leftSection={<IconTrash size={16} />}
-                        color="red"
-                      >
-                        Delete User
-                      </Menu.Item>
-                    </>
-                  )}
-                </Menu.Dropdown>
-              </Menu>
+                triggerSize="lg"
+                triggerVariant="subtle"
+                triggerColor="brand"
+              />
             </Table.Td>
           </Table.Tr>
         ))}

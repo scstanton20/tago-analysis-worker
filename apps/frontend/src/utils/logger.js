@@ -1,4 +1,3 @@
-
 /**
  * Frontend Logger Utility
  * Browser-compatible logging system inspired by the backend pino logger

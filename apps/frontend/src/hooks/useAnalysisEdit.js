@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { analysisService } from '../services/analysisService';
+import { useAsyncOperation } from './async';
 import logger from '../utils/logger';
 
 /**
@@ -27,8 +28,6 @@ export function useAnalysisEdit({
 }) {
   const [content, setContent] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [isEditingName, setIsEditingName] = useState(false);
   const [newFileName, setNewFileName] = useState(currentAnalysis.name);
   const [displayName, setDisplayName] = useState(currentAnalysis.name);
@@ -38,6 +37,38 @@ export function useAnalysisEdit({
   const [hasFormatChanges, setHasFormatChanges] = useState(false);
 
   const isEnvMode = type === 'env';
+
+  // Async operations
+  const loadContentOperation = useAsyncOperation({
+    onError: (error) =>
+      logger.error(`Failed to load analysis ${type} content:`, error),
+  });
+
+  const loadDiffOperation = useAsyncOperation({
+    onError: (error) =>
+      logger.error('Failed to fetch current content for diff:', error),
+  });
+
+  const saveOperation = useAsyncOperation({
+    onError: (error) => logger.error('Save failed:', error),
+  });
+
+  const renameOperation = useAsyncOperation({
+    onError: (error) => logger.error('Rename failed:', error),
+  });
+
+  // Combined loading and error states
+  const isLoading =
+    loadContentOperation.loading ||
+    loadDiffOperation.loading ||
+    saveOperation.loading ||
+    renameOperation.loading;
+
+  const error =
+    loadContentOperation.error ||
+    loadDiffOperation.error ||
+    saveOperation.error ||
+    renameOperation.error;
 
   /**
    * Handle editor content change
@@ -96,8 +127,7 @@ export function useAnalysisEdit({
   const handleDiffToggle = useCallback(
     async (enabled) => {
       if (enabled && !currentContent) {
-        try {
-          setIsLoading(true);
+        await loadDiffOperation.execute(async () => {
           // Fetch current version content for comparison
           const current = await analysisService.getAnalysisContent(
             currentAnalysis.name,
@@ -105,13 +135,7 @@ export function useAnalysisEdit({
           );
           setCurrentContent(current);
           setDiffMode(true);
-        } catch (error) {
-          logger.error('Failed to fetch current content for diff:', error);
-          setError('Failed to load current version for comparison');
-          return;
-        } finally {
-          setIsLoading(false);
-        }
+        });
       } else {
         setDiffMode(enabled);
         if (!enabled) {
@@ -119,6 +143,7 @@ export function useAnalysisEdit({
         }
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [currentAnalysis.name, currentContent],
   );
 
@@ -132,10 +157,7 @@ export function useAnalysisEdit({
       const nameToUse = isEnvMode ? currentAnalysis.name : displayName;
       if (!nameToUse) return;
 
-      try {
-        setIsLoading(true);
-        setError(null);
-
+      await loadContentOperation.execute(async () => {
         const fileContent = isEnvMode
           ? await analysisService.getAnalysisENVContent(nameToUse)
           : await analysisService.getAnalysisContent(nameToUse, version);
@@ -144,16 +166,7 @@ export function useAnalysisEdit({
           setContent(fileContent);
           setHasChanges(false);
         }
-      } catch (error) {
-        logger.error(`Failed to load analysis ${type} content:`, error);
-        if (!isCancelled) {
-          setError(error.message);
-        }
-      } finally {
-        if (!isCancelled) {
-          setIsLoading(false);
-        }
-      }
+      });
     }
 
     loadContent();
@@ -161,16 +174,14 @@ export function useAnalysisEdit({
     return () => {
       isCancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentAnalysis.name, displayName, isEnvMode, type, version]);
 
   /**
    * Save analysis content with auto-formatting
    */
   const handleSave = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
+    const result = await saveOperation.execute(async () => {
       let contentToSave = content;
 
       if (isEnvMode) {
@@ -226,33 +237,26 @@ export function useAnalysisEdit({
 
       setHasChanges(false);
       return true; // Indicate successful save
-    } catch (error) {
-      logger.error('Save failed:', error);
-      setError(error.message || `Failed to update analysis ${type} content.`);
-      return false; // Indicate failed save
-    } finally {
-      setIsLoading(false);
-    }
+    });
+
+    // Return false if operation failed, otherwise return true
+    return result !== undefined ? result : false;
   };
 
   /**
    * Rename analysis
    */
   const handleRename = async () => {
-    try {
-      if (!newFileName.trim()) {
-        setError('Filename cannot be empty');
-        return false;
-      }
+    if (!newFileName.trim()) {
+      return false;
+    }
 
-      if (newFileName === displayName) {
-        setIsEditingName(false);
-        return true;
-      }
+    if (newFileName === displayName) {
+      setIsEditingName(false);
+      return true;
+    }
 
-      setIsLoading(true);
-      setError(null);
-
+    const result = await renameOperation.execute(async () => {
       await notify.executeWithNotification(
         analysisService.renameAnalysis(displayName, newFileName),
         {
@@ -265,15 +269,15 @@ export function useAnalysisEdit({
       setDisplayName(newFileName);
       setIsEditingName(false);
       return true;
-    } catch (error) {
-      logger.error('Rename failed:', error);
-      setError(error.message || 'Failed to rename analysis.');
-      // Reset the filename input to the current name if rename fails
+    });
+
+    // If rename failed, reset the filename input to the current name
+    if (result === undefined) {
       setNewFileName(displayName);
       return false;
-    } finally {
-      setIsLoading(false);
     }
+
+    return result;
   };
 
   return {
@@ -291,7 +295,6 @@ export function useAnalysisEdit({
     hasFormatChanges,
     isEnvMode,
     // Setters
-    setError,
     setIsEditingName,
     setNewFileName,
     // Handlers

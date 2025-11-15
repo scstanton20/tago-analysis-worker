@@ -5,16 +5,8 @@
  */
 
 import PropTypes from 'prop-types';
-import {
-  Stack,
-  Group,
-  Text,
-  Button,
-  Alert,
-  Box,
-  TextInput,
-} from '@mantine/core';
-import { IconAlertCircle, IconCheck } from '@tabler/icons-react';
+import { Stack, Group, Text, Button, Box, TextInput } from '@mantine/core';
+import { FormAlert, FormActionButtons } from '../global';
 
 export function ProfileTab({
   user,
@@ -29,21 +21,11 @@ export function ProfileTab({
 }) {
   return (
     <Stack gap="md">
-      {profileError && (
-        <Alert
-          icon={<IconAlertCircle size="1rem" />}
-          color="red"
-          variant="light"
-        >
-          {profileError}
-        </Alert>
-      )}
-
-      {profileSuccess && (
-        <Alert icon={<IconCheck size="1rem" />} color="green" variant="light">
-          Profile updated successfully!
-        </Alert>
-      )}
+      <FormAlert type="error" message={profileError} />
+      <FormAlert
+        type="success"
+        message={profileSuccess ? 'Profile updated successfully!' : null}
+      />
 
       {!isEditingProfile ? (
         <Box
@@ -135,18 +117,12 @@ export function ProfileTab({
               </Group>
             </Box>
 
-            <Group justify="flex-end" gap="sm" mt="md">
-              <Button
-                variant="default"
-                onClick={handleCancelProfileEdit}
-                disabled={profileLoading}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" loading={profileLoading} variant="gradient">
-                Save Changes
-              </Button>
-            </Group>
+            <FormActionButtons
+              onSubmit={handleProfileSubmit}
+              onCancel={handleCancelProfileEdit}
+              loading={profileLoading}
+              submitLabel="Save Changes"
+            />
           </Stack>
         </form>
       )}

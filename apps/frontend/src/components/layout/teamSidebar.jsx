@@ -30,6 +30,7 @@ import {
   NavLink,
   Tooltip,
 } from '@mantine/core';
+import { EmptyState } from '../global/layout/EmptyState';
 import {
   IconBrandAsana,
   IconGripVertical,
@@ -317,9 +318,7 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
               Loading teams...
             </Text>
           ) : teamsArray.length === 0 ? (
-            <Text c="dimmed" size="sm" ta="center" py="md">
-              No teams assigned
-            </Text>
+            <EmptyState title="No teams assigned" py="md" />
           ) : (
             <DndContext
               sensors={sensors}

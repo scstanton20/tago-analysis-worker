@@ -4,6 +4,7 @@ import { modals } from '@mantine/modals';
 import { admin, authClient } from '../lib/auth';
 import { userService } from '../services/userService';
 import { modalService } from '../modals/modalService';
+import { useAsyncOperation } from './async';
 import logger from '../utils/logger.js';
 import {
   generateSecurePassword,
@@ -27,13 +28,59 @@ export function useUserManagement({
 }) {
   // State management
   const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [error, setError] = useState('');
   const [createdUserInfo, setCreatedUserInfo] = useState(null);
   const [actions, setActions] = useState([]);
   const [currentUserMemberRole, setCurrentUserMemberRole] = useState(null);
+
+  // Async operations
+  const loadUsersOperation = useAsyncOperation({
+    onError: (error) => logger.error('Error loading users:', error),
+  });
+
+  const loadActionsOperation = useAsyncOperation({
+    onError: (error) => logger.error('Error loading actions:', error),
+  });
+
+  const submitOperation = useAsyncOperation({
+    onError: (error) => logger.error('Submit error:', error),
+  });
+
+  const deleteOperation = useAsyncOperation({
+    onError: (error) => logger.error('Delete error:', error),
+  });
+
+  const banOperation = useAsyncOperation({
+    onError: (error) => logger.error('Ban error:', error),
+  });
+
+  const unbanOperation = useAsyncOperation({
+    onError: (error) => logger.error('Unban error:', error),
+  });
+
+  const impersonateOperation = useAsyncOperation({
+    onError: (error) => logger.error('Impersonate error:', error),
+  });
+
+  // Derived states
+  const loading =
+    loadUsersOperation.loading ||
+    loadActionsOperation.loading ||
+    submitOperation.loading ||
+    deleteOperation.loading ||
+    banOperation.loading ||
+    unbanOperation.loading ||
+    impersonateOperation.loading;
+
+  const error =
+    loadUsersOperation.error ||
+    loadActionsOperation.error ||
+    submitOperation.error ||
+    deleteOperation.error ||
+    banOperation.error ||
+    unbanOperation.error ||
+    impersonateOperation.error;
 
   // Convert teams from SSE object to array format for dropdown
   const availableTeams = useMemo(() => {
@@ -93,10 +140,7 @@ export function useUserManagement({
 
   // Load functions
   const loadUsers = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError('');
-
+    await loadUsersOperation.execute(async () => {
       const result = await admin.listUsers({
         query: {
           limit: 100,
@@ -108,16 +152,11 @@ export function useUserManagement({
       }
 
       setUsers(result.data.users || result.data || []);
-    } catch (err) {
-      logger.error('Error loading users:', err);
-      setError(err.message || 'Failed to load users');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    });
+  }, [loadUsersOperation]);
 
   const loadActions = useCallback(async () => {
-    try {
+    await loadActionsOperation.execute(async () => {
       const result = await userService.getAvailablePermissions();
 
       if (result.success && result.data) {
@@ -126,10 +165,8 @@ export function useUserManagement({
         logger.error('Failed to load permissions:', result.error);
         setActions([]);
       }
-    } catch (error) {
-      logger.error('Error loading actions:', error);
-      setActions([]);
-    }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Fetch current user's member role on mount
@@ -273,27 +310,22 @@ export function useUserManagement({
   // Event handlers
   const handleSubmit = useCallback(
     async (values) => {
-      try {
-        setLoading(true);
-        setError('');
+      // Validate email and username before submission
+      const emailError = validateEmail(values.email);
+      if (emailError) {
+        form.setFieldError('email', emailError);
+        return;
+      }
 
-        // Validate email and username before submission
-        const emailError = validateEmail(values.email);
-        if (emailError) {
-          form.setFieldError('email', emailError);
-          setLoading(false);
+      if (values.username) {
+        const usernameError = await validateUsername(values.username);
+        if (usernameError) {
+          form.setFieldError('username', usernameError);
           return;
         }
+      }
 
-        if (values.username) {
-          const usernameError = await validateUsername(values.username);
-          if (usernameError) {
-            form.setFieldError('username', usernameError);
-            setLoading(false);
-            return;
-          }
-        }
-
+      await submitOperation.execute(async () => {
         if (editingUser) {
           // Handle user editing
           const updates = {};
@@ -349,7 +381,6 @@ export function useUserManagement({
             const passwordError = validatePassword(values.password);
             if (passwordError) {
               form.setFieldError('password', passwordError);
-              setLoading(false);
               return;
             }
 
@@ -553,11 +584,7 @@ export function useUserManagement({
           await loadUsers();
           setShowCreateForm(false);
         }
-      } catch (err) {
-        setError(err.message || 'Operation failed');
-      } finally {
-        setLoading(false);
-      }
+      });
     },
     [
       validateEmail,
@@ -569,59 +596,50 @@ export function useUserManagement({
       notify,
       loadUsers,
       form,
+      submitOperation,
     ],
   );
 
   const handleEdit = useCallback(
     async (user) => {
       setEditingUser(user);
-      setLoading(true);
 
-      try {
-        const departmentPermissions = {};
+      const departmentPermissions = {};
 
-        if (user.role !== 'admin') {
-          try {
-            const teamMembershipsData =
-              await userService.getUserTeamMemberships(user.id);
+      if (user.role !== 'admin') {
+        try {
+          const teamMembershipsData = await userService.getUserTeamMemberships(
+            user.id,
+          );
 
-            if (
-              teamMembershipsData.success &&
-              teamMembershipsData.data?.teams
-            ) {
-              teamMembershipsData.data.teams.forEach((team) => {
-                departmentPermissions[team.id] = {
-                  enabled: true,
-                  permissions: team.permissions || ['view_analyses'],
-                };
-              });
-              logger.log(
-                `✓ Loaded ${teamMembershipsData.data.teams.length} team assignments for user ${user.id}`,
-              );
-            } else {
-              logger.warn('Failed to fetch user team memberships for editing');
-            }
-          } catch (error) {
-            logger.warn('Error fetching user team memberships:', error);
+          if (teamMembershipsData.success && teamMembershipsData.data?.teams) {
+            teamMembershipsData.data.teams.forEach((team) => {
+              departmentPermissions[team.id] = {
+                enabled: true,
+                permissions: team.permissions || ['view_analyses'],
+              };
+            });
+            logger.log(
+              `✓ Loaded ${teamMembershipsData.data.teams.length} team assignments for user ${user.id}`,
+            );
+          } else {
+            logger.warn('Failed to fetch user team memberships for editing');
           }
+        } catch (error) {
+          logger.warn('Error fetching user team memberships:', error);
         }
-
-        form.setValues({
-          name: user.name || '',
-          email: user.email || '',
-          username: user.username || '',
-          password: '',
-          role: user.role || 'user',
-          departmentPermissions,
-        });
-        form.resetDirty();
-        setShowCreateForm(true);
-      } catch (error) {
-        logger.error('Error loading user data for editing:', error);
-        setError(' user data for editing');
-      } finally {
-        setLoading(false);
       }
+
+      form.setValues({
+        name: user.name || '',
+        email: user.email || '',
+        username: user.username || '',
+        password: '',
+        role: user.role || 'user',
+        departmentPermissions,
+      });
+      form.resetDirty();
+      setShowCreateForm(true);
     },
     [form],
   );
@@ -634,10 +652,7 @@ export function useUserManagement({
         labels: { confirm: 'Delete', cancel: 'Cancel' },
         confirmProps: { color: 'red' },
         onConfirm: async () => {
-          try {
-            setLoading(true);
-            setError('');
-
+          await deleteOperation.execute(async () => {
             const result = await userService.removeUserFromOrganization(
               user.id,
               organizationId,
@@ -655,15 +670,11 @@ export function useUserManagement({
             );
 
             await loadUsers();
-          } catch (err) {
-            setError(err.message || 'Failed to delete user');
-          } finally {
-            setLoading(false);
-          }
+          });
         },
       });
     },
-    [notify, loadUsers, organizationId, setLoading, setError],
+    [notify, loadUsers, organizationId, deleteOperation],
   );
 
   const handleImpersonate = useCallback(
@@ -674,10 +685,7 @@ export function useUserManagement({
         labels: { confirm: 'Impersonate', cancel: 'Cancel' },
         confirmProps: { color: 'blue' },
         onConfirm: async () => {
-          try {
-            setLoading(true);
-            setError('');
-
+          await impersonateOperation.execute(async () => {
             const result = await admin.impersonateUser({
               userId: user.id,
             });
@@ -695,15 +703,11 @@ export function useUserManagement({
             // This will trigger PermissionsContext to auto-reload permissions via useEffect
             await refetchSession();
             logger.log('✓ Session refetched after impersonation start');
-          } catch (err) {
-            setError(err.message || 'Failed to impersonate user');
-          } finally {
-            setLoading(false);
-          }
+          });
         },
       });
     },
-    [refetchSession, notify, setLoading, setError],
+    [refetchSession, notify, impersonateOperation],
   );
 
   const handleManageSessions = useCallback((user) => {
@@ -718,10 +722,7 @@ export function useUserManagement({
         labels: { confirm: 'Ban User', cancel: 'Cancel' },
         confirmProps: { color: 'red' },
         onConfirm: async () => {
-          try {
-            setLoading(true);
-            setError('');
-
+          await banOperation.execute(async () => {
             const result = await admin.banUser({
               userId: user.id,
               banReason: 'Banned by administrator',
@@ -749,23 +750,16 @@ export function useUserManagement({
             );
 
             await loadUsers();
-          } catch (err) {
-            setError(err.message || 'Failed to ban user');
-          } finally {
-            setLoading(false);
-          }
+          });
         },
       });
     },
-    [loadUsers, notify],
+    [loadUsers, notify, banOperation],
   );
 
   const handleUnbanUser = useCallback(
     async (user) => {
-      try {
-        setLoading(true);
-        setError('');
-
+      await unbanOperation.execute(async () => {
         const result = await admin.unbanUser({
           userId: user.id,
         });
@@ -776,13 +770,9 @@ export function useUserManagement({
         notify.success(`User ${user.name || user.email} has been unbanned`);
 
         await loadUsers();
-      } catch (err) {
-        setError(err.message || 'Failed to unban user');
-      } finally {
-        setLoading(false);
-      }
+      });
     },
-    [notify, loadUsers],
+    [notify, loadUsers, unbanOperation],
   );
 
   const handleCancel = useCallback(() => {
@@ -790,7 +780,6 @@ export function useUserManagement({
     setShowCreateForm(false);
     setCreatedUserInfo(null);
     form.reset();
-    setError('');
     form.clearFieldError('username');
     form.clearFieldError('email');
   }, [form]);
@@ -859,7 +848,6 @@ export function useUserManagement({
     editingUser,
     showCreateForm,
     error,
-    setError,
     createdUserInfo,
     setCreatedUserInfo,
     availableTeams,

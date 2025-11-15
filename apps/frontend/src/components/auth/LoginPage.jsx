@@ -9,19 +9,15 @@ import {
   Text,
   Box,
   Stack,
-  Alert,
   Container,
   Card,
   Divider,
 } from '@mantine/core';
-import {
-  IconAlertCircle,
-  IconLogin,
-  IconFingerprint,
-} from '@tabler/icons-react';
+import { IconLogin, IconFingerprint } from '@tabler/icons-react';
+import { FormAlert } from '../global';
 import { signIn, signInPasskey } from '../../lib/auth.js';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
-import logger from '../../utils/logger';
+import { useAsyncOperation } from '../../hooks/async/useAsyncOperation';
 import Logo from '../ui/logo';
 import AppLoadingOverlay from '../common/AppLoadingOverlay';
 
@@ -34,10 +30,8 @@ export default function LoginPage() {
     username: '',
     password: '',
   });
-  const [loading, setLoading] = useState(false);
-  const [passkeyLoading, setPasskeyLoading] = useState(false);
-  const [error, setError] = useState('');
-  // Removed useState - now using derived state with useMemo
+  const loginOperation = useAsyncOperation();
+  const passkeyOperation = useAsyncOperation();
   const [showPasswordOnboarding, setShowPasswordOnboarding] = useState(false);
   const [passwordOnboardingUser, setPasswordOnboardingUser] = useState('');
 
@@ -77,14 +71,11 @@ export default function LoginPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.username || !formData.password) {
-      setError('Please fill in all fields');
+      loginOperation.setError('Please fill in all fields');
       return;
     }
 
-    setLoading(true);
-    setError('');
-
-    try {
+    await loginOperation.execute(async () => {
       // Determine if input is email or username
       const isEmail = formData.username.includes('@');
 
@@ -113,22 +104,12 @@ export default function LoginPage() {
 
       // Show success notification - Better Auth will handle the redirect automatically
       notify.success('Welcome back! You have been signed in successfully.');
-    } catch (err) {
-      if (err.message === 'REQUIRES_PASSWORD_CHANGE') {
-        // Handle 428 - show password onboarding
-        setShowPasswordOnboarding(true);
-        setPasswordOnboardingUser(formData.username);
-        return;
-      }
-      setError(err.message || 'Login failed');
-    } finally {
-      setLoading(false);
-    }
+    });
   };
 
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
-    if (error) setError('');
+    if (loginOperation.error) loginOperation.setError('');
   };
 
   const handlePasswordOnboardingSuccess = () => {
@@ -152,10 +133,7 @@ export default function LoginPage() {
   }, []); // Expensive browser feature detection, properly memoized
 
   const handlePasskeyLogin = async () => {
-    setPasskeyLoading(true);
-    setError('');
-
-    try {
+    await passkeyOperation.execute(async () => {
       const result = await signInPasskey();
 
       // Better Auth may return result directly or in a different format
@@ -170,12 +148,7 @@ export default function LoginPage() {
 
       // Force refresh session to update UI
       window.dispatchEvent(new Event('auth-change'));
-    } catch (err) {
-      logger.error('Passkey login error:', err);
-      setError(err.message || 'Passkey authentication failed');
-    } finally {
-      setPasskeyLoading(false);
-    }
+    });
   };
 
   // Show password onboarding if required
@@ -239,16 +212,10 @@ export default function LoginPage() {
                 </Text>
               </Box>
 
-              {error && (
-                <Alert
-                  icon={<IconAlertCircle size="1rem" />}
-                  color="red"
-                  variant="light"
-                  radius="md"
-                >
-                  {error}
-                </Alert>
-              )}
+              <FormAlert
+                type="error"
+                message={loginOperation.error || passkeyOperation.error}
+              />
 
               <Stack gap="md" key="login-form-fields">
                 <TextInput
@@ -283,7 +250,7 @@ export default function LoginPage() {
 
               <Button
                 type="submit"
-                loading={loading}
+                loading={loginOperation.loading}
                 fullWidth
                 size="md"
                 leftSection={<IconLogin size="1rem" />}
@@ -293,9 +260,9 @@ export default function LoginPage() {
                 style={{
                   fontWeight: 600,
                 }}
-                disabled={passkeyLoading}
+                disabled={passkeyOperation.loading}
               >
-                {loading ? 'Signing in...' : 'Sign In'}
+                {loginOperation.loading ? 'Signing in...' : 'Sign In'}
               </Button>
 
               {isWebAuthnSupported && (
@@ -304,7 +271,7 @@ export default function LoginPage() {
 
                   <Button
                     onClick={handlePasskeyLogin}
-                    loading={passkeyLoading}
+                    loading={passkeyOperation.loading}
                     fullWidth
                     size="md"
                     leftSection={<IconFingerprint size="1rem" />}
@@ -314,9 +281,9 @@ export default function LoginPage() {
                     style={{
                       fontWeight: 600,
                     }}
-                    disabled={loading}
+                    disabled={loginOperation.loading}
                   >
-                    {passkeyLoading
+                    {passkeyOperation.loading
                       ? 'Authenticating...'
                       : 'Sign in with Passkey'}
                   </Button>

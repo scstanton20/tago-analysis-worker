@@ -13,7 +13,7 @@ import {
 } from '@mantine/core';
 import { IconFolder, IconCheck, IconInfoCircle } from '@tabler/icons-react';
 import { modals } from '@mantine/modals';
-import logger from '../../utils/logger';
+import { useAsyncOperation } from '../../hooks/async/useAsyncOperation';
 
 /**
  * ChangeTeamModalContent
@@ -33,7 +33,7 @@ const ChangeTeamModalContent = ({ id, innerProps }) => {
   const { onSelect, teams, currentTeam, analysisName } = innerProps;
 
   const [selectedTeam, setSelectedTeam] = useState(currentTeam);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submitOperation = useAsyncOperation();
 
   const handleSubmit = async () => {
     if (selectedTeam === currentTeam) {
@@ -41,15 +41,10 @@ const ChangeTeamModalContent = ({ id, innerProps }) => {
       return;
     }
 
-    setIsSubmitting(true);
-    try {
+    await submitOperation.execute(async () => {
       await onSelect(selectedTeam);
       modals.close(id);
-    } catch (error) {
-      logger.error('Error changing team:', error);
-    } finally {
-      setIsSubmitting(false);
-    }
+    });
   };
 
   return (
@@ -129,13 +124,13 @@ const ChangeTeamModalContent = ({ id, innerProps }) => {
         <Button
           variant="default"
           onClick={() => modals.close(id)}
-          disabled={isSubmitting}
+          disabled={submitOperation.loading}
         >
           Cancel
         </Button>
         <Button
           onClick={handleSubmit}
-          loading={isSubmitting}
+          loading={submitOperation.loading}
           disabled={selectedTeam === currentTeam}
         >
           Move Analysis

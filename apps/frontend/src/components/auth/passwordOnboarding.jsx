@@ -11,8 +11,10 @@ import {
   Container,
   Card,
 } from '@mantine/core';
-import { IconAlertCircle, IconKey } from '@tabler/icons-react';
+import { IconKey } from '@tabler/icons-react';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
+import { useAsyncOperation } from '../../hooks/async/useAsyncOperation';
+import { FormAlert } from '../global/alerts/FormAlert';
 import Logo from '../ui/logo.jsx';
 import { validatePassword } from '../../utils/userValidation';
 
@@ -26,46 +28,41 @@ export default function PasswordOnboarding({
     newPassword: '',
     confirmPassword: '',
   });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+
+  const passwordChangeOperation = useAsyncOperation();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!formData.newPassword || !formData.confirmPassword) {
-      setError('Please fill in all fields');
+      passwordChangeOperation.setError('Please fill in all fields');
       return;
     }
 
     if (formData.newPassword !== formData.confirmPassword) {
-      setError('New passwords do not match');
+      passwordChangeOperation.setError('New passwords do not match');
       return;
     }
 
     // Validate password with new requirements
     const passwordError = validatePassword(formData.newPassword);
     if (passwordError) {
-      setError(passwordError);
+      passwordChangeOperation.setError(passwordError);
       return;
     }
 
-    setLoading(true);
-    setError('');
-
-    try {
+    await passwordChangeOperation.execute(async () => {
       await passwordOnboarding(formData.newPassword);
       notify.success('Password changed successfully!');
       onSuccess();
-    } catch (err) {
-      setError(err.message || 'Password change failed');
-    } finally {
-      setLoading(false);
-    }
+    });
   };
 
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
-    if (error) setError('');
+    if (passwordChangeOperation.error) {
+      passwordChangeOperation.setError(null);
+    }
   };
 
   return (
@@ -135,16 +132,7 @@ export default function PasswordOnboarding({
                 and contain at least one uppercase letter.
               </Alert>
 
-              {error && (
-                <Alert
-                  icon={<IconAlertCircle size="1rem" />}
-                  color="red"
-                  variant="light"
-                  radius="md"
-                >
-                  {error}
-                </Alert>
-              )}
+              <FormAlert type="error" message={passwordChangeOperation.error} />
 
               <Stack gap="md">
                 <PasswordInput
@@ -178,7 +166,7 @@ export default function PasswordOnboarding({
 
               <Button
                 type="submit"
-                loading={loading}
+                loading={passwordChangeOperation.loading}
                 fullWidth
                 size="md"
                 leftSection={<IconKey size="1rem" />}
@@ -189,7 +177,9 @@ export default function PasswordOnboarding({
                   fontWeight: 600,
                 }}
               >
-                {loading ? 'Changing Password...' : 'Change Password'}
+                {passwordChangeOperation.loading
+                  ? 'Changing Password...'
+                  : 'Change Password'}
               </Button>
             </Stack>
           </form>

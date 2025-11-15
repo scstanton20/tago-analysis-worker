@@ -1,10 +1,10 @@
 import { useState, useMemo, useCallback, lazy, Suspense } from 'react';
 import PropTypes from 'prop-types';
 import { analysisService } from '../../services/analysisService';
-import logger from '../../utils/logger';
 import { useAnalyses } from '../../contexts/sseContext/index';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import { usePermissions } from '../../hooks/usePermissions.js';
+import { useAsyncOperation } from '../../hooks/async/useAsyncOperation';
 import {
   Paper,
   Stack,
@@ -13,18 +13,17 @@ import {
   Button,
   TextInput,
   Tabs,
-  Alert,
   Collapse,
   ActionIcon,
   Box,
   Select,
 } from '@mantine/core';
+import { FormAlert } from '../global/alerts/FormAlert';
 import { Dropzone } from '@mantine/dropzone';
 import {
   IconChevronDown,
   IconChevronUp,
   IconUpload,
-  IconAlertCircle,
   IconX,
   IconFolderPlus,
   IconFileCode,
@@ -52,8 +51,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
 
   // UI state
   const [isExpanded, setIsExpanded] = useState(false);
-  const [error, setError] = useState(null);
-  const [isUploading, setIsUploading] = useState(false);
+  const uploadOperation = useAsyncOperation();
 
   // SSE context
   const { loadingAnalyses, analyses } = useAnalyses();
@@ -70,7 +68,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
     mode === 'upload' ? editableFileName : analysisName;
   const isCurrentAnalysisLoading =
     currentAnalysisName &&
-    (loadingAnalyses.has(currentAnalysisName) || isUploading);
+    (loadingAnalyses.has(currentAnalysisName) || uploadOperation.loading);
 
   // Get teams where user can upload
   const uploadableTeams = getUploadableTeams();
@@ -115,13 +113,18 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
   if (!isAdmin && uploadableTeams.length === 0) {
     return (
       <Paper withBorder radius="md" mb="lg" p="md">
-        <Alert color="yellow" icon={<IconAlertCircle size={16} />}>
-          <Text fw={500}>No Upload Permissions</Text>
-          <Text size="sm" mt="xs">
-            You don't have upload permissions for any teams. Contact an
-            administrator to grant you upload access.
-          </Text>
-        </Alert>
+        <FormAlert
+          type="warning"
+          message={
+            <>
+              <Text fw={500}>No Upload Permissions</Text>
+              <Text size="sm" mt="xs">
+                You don't have upload permissions for any teams. Contact an
+                administrator to grant you upload access.
+              </Text>
+            </>
+          }
+        />
       </Paper>
     );
   }
@@ -130,13 +133,14 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
     editorContent !== DEFAULT_EDITOR_CONTENT ||
     analysisName ||
     editableFileName;
-  const showCancelButton = formTouched || hasFormContent || error;
+  const showCancelButton =
+    formTouched || hasFormContent || uploadOperation.error;
   const isSaveDisabled =
     isCurrentAnalysisLoading ||
     (mode === 'create' && !analysisName) ||
     (mode === 'upload' && (!selectedFile || !editableFileName)) ||
     !selectedTeamId ||
-    error;
+    uploadOperation.error;
   const isTabDisabled = hasFormContent && !isCurrentAnalysisLoading;
 
   // Validation
@@ -188,7 +192,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
     setFormTouched(true);
 
     if (!file.name.endsWith('.js') && !file.name.endsWith('.js')) {
-      setError('Please select a JavaScript file (.js)');
+      uploadOperation.setError('Please select a JavaScript file (.js)');
       resetFileSelection();
       return;
     }
@@ -197,12 +201,12 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
     const validationError = await validateFilename(nameWithoutExtension);
 
     if (validationError) {
-      setError(validationError);
+      uploadOperation.setError(validationError);
       resetFileSelection();
       return;
     }
 
-    setError(null);
+    uploadOperation.setError(null);
     setSelectedFile(file);
     setEditableFileName(nameWithoutExtension);
     setAnalysisName(nameWithoutExtension);
@@ -212,14 +216,14 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
     const value = e.target.value;
     setFormTouched(true);
     setEditableFileName(value);
-    setError(await validateFilename(value));
+    uploadOperation.setError(await validateFilename(value));
   };
 
   const handleAnalysisNameChange = async (e) => {
     const value = e.target.value;
     setFormTouched(true);
     setAnalysisName(value);
-    setError(await validateFilename(value));
+    uploadOperation.setError(await validateFilename(value));
   };
 
   const handleModeChange = (newMode) => {
@@ -243,7 +247,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
 
   const handleUpload = async () => {
     if (mode === 'create' && !analysisName) {
-      setError('Please provide a name for the analysis');
+      uploadOperation.setError('Please provide a name for the analysis');
       return;
     }
 
@@ -251,14 +255,11 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
     const validationError = await validateFilename(finalFileName);
 
     if (validationError) {
-      setError(validationError);
+      uploadOperation.setError(validationError);
       return;
     }
 
-    setError(null);
-    setIsUploading(true);
-
-    try {
+    await uploadOperation.execute(async () => {
       let file;
       if (mode === 'upload') {
         file = new File([selectedFile], finalFileName, {
@@ -280,12 +281,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
       if (onClose) {
         onClose();
       }
-    } catch (error) {
-      setError(error.message || 'Failed to save analysis');
-      logger.error('Save failed:', error);
-    } finally {
-      setIsUploading(false);
-    }
+    });
   };
 
   const handleCancel = () => {
@@ -298,7 +294,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
     setEditableFileName('');
     setAnalysisName('');
     setEditorContent(DEFAULT_EDITOR_CONTENT);
-    setError(null);
+    uploadOperation.setError(null);
     setFormTouched(false);
     setIsExpanded(false);
     setSelectedTeamId(getInitialTeam());
@@ -406,7 +402,9 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
                       }}
                       onDrop={(files) => handleFileChange(files[0])}
                       onReject={() => {
-                        setError('Please select a JavaScript file (.js)');
+                        uploadOperation.setError(
+                          'Please select a JavaScript file (.js)',
+                        );
                         setFormTouched(true);
                       }}
                       maxFiles={1}
@@ -491,7 +489,10 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
                       onChange={handleEditableFileNameChange}
                       placeholder="Enter filename (no extension)"
                       disabled={isInputDisabled}
-                      error={error && error.includes('already exists')}
+                      error={
+                        uploadOperation.error &&
+                        uploadOperation.error.includes('already exists')
+                      }
                     />
                   )}
 
@@ -510,7 +511,10 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
                     onChange={handleAnalysisNameChange}
                     placeholder="Enter analysis name (no extension)"
                     disabled={isInputDisabled}
-                    error={error && error.includes('already exists')}
+                    error={
+                      uploadOperation.error &&
+                      uploadOperation.error.includes('already exists')
+                    }
                   />
 
                   <Text size="sm" c="dimmed">
@@ -552,15 +556,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
             </Tabs>
 
             {/* Error Message */}
-            {error && (
-              <Alert
-                icon={<IconAlertCircle size={16} />}
-                color="red"
-                variant="light"
-              >
-                {error}
-              </Alert>
-            )}
+            <FormAlert type="error" message={uploadOperation.error} />
 
             {/* Action Buttons */}
             <Group>

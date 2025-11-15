@@ -29,6 +29,7 @@ import {
 import { admin } from '../../lib/auth';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import { userService } from '../../services/userService';
+import { useAsyncOperation } from '../../hooks/async/useAsyncOperation';
 import logger from '../../utils/logger';
 import PropTypes from 'prop-types';
 
@@ -44,17 +45,15 @@ import PropTypes from 'prop-types';
 function UserSessionsModalContent({ innerProps }) {
   const { user } = innerProps;
   const [sessions, setSessions] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const notify = useNotifications();
+  const loadSessionsOperation = useAsyncOperation();
+  const revokeSessionOperation = useAsyncOperation();
+  const revokeAllOperation = useAsyncOperation();
 
   const loadSessions = useCallback(async () => {
     if (!user) return;
 
-    try {
-      setLoading(true);
-      setError('');
-
+    await loadSessionsOperation.execute(async () => {
       const result = await admin.listUserSessions({
         userId: user.id,
       });
@@ -83,13 +82,8 @@ function UserSessionsModalContent({ innerProps }) {
       }
 
       setSessions(sessionsData);
-    } catch (err) {
-      logger.error('Error loading sessions:', err);
-      setError(err.message || 'Failed to load sessions');
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
+    });
+  }, [user, loadSessionsOperation]);
 
   // Load sessions when component mounts (modal opens)
   useEffect(() => {
@@ -109,10 +103,7 @@ function UserSessionsModalContent({ innerProps }) {
   };
 
   const executeRevokeSession = async (sessionToken) => {
-    try {
-      setLoading(true);
-      setError('');
-
+    await revokeSessionOperation.execute(async () => {
       logger.log('Attempting to revoke session token:', sessionToken);
 
       const result = await admin.revokeUserSession({
@@ -154,12 +145,7 @@ function UserSessionsModalContent({ innerProps }) {
       } catch (error) {
         logger.log('Session validation error (expected):', error);
       }
-    } catch (err) {
-      logger.error('Error revoking session:', err);
-      setError(err.message || 'Failed to revoke session');
-    } finally {
-      setLoading(false);
-    }
+    });
   };
 
   const handleRevokeAllSessions = async () => {
@@ -175,10 +161,7 @@ function UserSessionsModalContent({ innerProps }) {
   };
 
   const executeRevokeAllSessions = async () => {
-    try {
-      setLoading(true);
-      setError('');
-
+    await revokeAllOperation.execute(async () => {
       logger.log('Attempting to revoke all sessions for user:', user.id);
 
       const result = await admin.revokeUserSessions({
@@ -211,12 +194,7 @@ function UserSessionsModalContent({ innerProps }) {
       // Reload sessions to verify they're gone
       logger.log('Reloading sessions after revoking all...');
       await loadSessions();
-    } catch (err) {
-      logger.error('Error revoking all sessions:', err);
-      setError(err.message || 'Failed to revoke all sessions');
-    } finally {
-      setLoading(false);
-    }
+    });
   };
 
   const getDeviceIcon = (userAgent) => {
@@ -260,9 +238,19 @@ function UserSessionsModalContent({ innerProps }) {
     );
   };
 
+  const isLoading =
+    loadSessionsOperation.loading ||
+    revokeSessionOperation.loading ||
+    revokeAllOperation.loading;
+
+  const operationError =
+    loadSessionsOperation.error ||
+    revokeSessionOperation.error ||
+    revokeAllOperation.error;
+
   return (
     <Box pos="relative">
-      <LoadingOverlay visible={loading} />
+      <LoadingOverlay visible={isLoading} />
 
       <Stack gap="md">
         {/* Custom Modal Header */}
@@ -272,13 +260,13 @@ function UserSessionsModalContent({ innerProps }) {
             Sessions for {user?.name || user?.email}
           </Text>
         </Group>
-        {error && (
+        {operationError && (
           <Alert
             icon={<IconAlertCircle size="1rem" />}
             color="red"
             variant="light"
           >
-            {error}
+            {operationError}
           </Alert>
         )}
 

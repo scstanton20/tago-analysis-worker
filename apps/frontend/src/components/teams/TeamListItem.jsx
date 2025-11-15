@@ -17,6 +17,7 @@ import {
   Box,
 } from '@mantine/core';
 import { IconEdit, IconTrash } from '@tabler/icons-react';
+import { useEnterKeySubmit } from '../../hooks/forms/useEnterKeySubmit';
 import { TeamColorPicker } from './TeamColorPicker';
 
 /**
@@ -88,18 +89,16 @@ function TeamEditMode({
   const hasColorChanged = editingColor && editingColor !== team.color;
   const hasNameChanged = editingName !== team.name;
 
+  const handleKeyDown = useEnterKeySubmit(() => onUpdateName(team.id), {
+    onEscape: onCancel,
+  });
+
   return (
     <Stack gap="sm" ref={editingRef}>
       <TextInput
         value={editingName}
         onChange={(e) => setEditingName(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            onUpdateName(team.id);
-          } else if (e.key === 'Escape') {
-            onCancel();
-          }
-        }}
+        onKeyDown={handleKeyDown}
         size="sm"
         disabled={isLoading}
         error={isNameInUse ? 'This name is already in use' : null}

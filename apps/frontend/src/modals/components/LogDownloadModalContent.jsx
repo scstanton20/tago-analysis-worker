@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import { Stack, Group, Text, Button, Select } from '@mantine/core';
 import { IconDownload } from '@tabler/icons-react';
 import { modals } from '@mantine/modals';
+import { useAsyncOperation } from '../../hooks/async/useAsyncOperation';
 
 /**
  * LogDownloadModalContent
@@ -20,17 +21,14 @@ const LogDownloadModalContent = ({ id, innerProps }) => {
   const { onDownload } = innerProps;
 
   const [timeRange, setTimeRange] = useState('1h');
-  const [isLoading, setIsLoading] = useState(false);
+  const downloadOperation = useAsyncOperation();
 
   const handleDownload = async () => {
-    setIsLoading(true);
-    try {
+    await downloadOperation.execute(async () => {
       await onDownload(timeRange);
       // Close modal on successful download
       modals.close(id);
-    } finally {
-      setIsLoading(false);
-    }
+    });
   };
 
   const timeRangeOptions = [
@@ -61,7 +59,7 @@ const LogDownloadModalContent = ({ id, innerProps }) => {
         </Button>
         <Button
           onClick={handleDownload}
-          loading={isLoading}
+          loading={downloadOperation.loading}
           leftSection={<IconDownload size={16} />}
           color="brand"
         >
