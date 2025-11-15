@@ -287,11 +287,13 @@ const AnalysisLogs = ({ analysis }) => {
       mt="md"
       withBorder
       radius="md"
+      onClick={(e) => e.stopPropagation()}
       style={{
         minHeight: '96px',
         maxHeight: '800px',
         overflow: 'hidden',
         userSelect: isResizing ? 'none' : 'auto',
+        cursor: 'default',
       }}
     >
       {/* Header */}
