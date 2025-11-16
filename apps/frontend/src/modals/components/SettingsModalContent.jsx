@@ -54,6 +54,31 @@ const SettingsModalContent = () => {
 
         {/* Content Area */}
         <Box style={{ flex: 1 }}>
+          {/* API tab - no lazy loading needed */}
+          <Tabs.Panel value="api">
+            <Stack gap="md">
+              <Text size="lg" fw={600} mb="sm">
+                API Documentation
+              </Text>
+              <PaperCard>
+                <Stack gap="sm">
+                  <Text size="sm" c="dimmed">
+                    Access API documentation and developer resources.
+                  </Text>
+                  <SecondaryButton
+                    size="sm"
+                    onClick={handleOpenApiDocs}
+                    leftSection={<IconBook size={16} />}
+                    fullWidth
+                  >
+                    Open API Documentation
+                  </SecondaryButton>
+                </Stack>
+              </PaperCard>
+            </Stack>
+          </Tabs.Panel>
+
+          {/* Lazy-loaded tabs with Suspense */}
           <Suspense
             fallback={
               <LoadingState
@@ -64,29 +89,6 @@ const SettingsModalContent = () => {
               />
             }
           >
-            <Tabs.Panel value="api">
-              <Stack gap="md">
-                <Text size="lg" fw={600} mb="sm">
-                  API Documentation
-                </Text>
-                <PaperCard>
-                  <Stack gap="sm">
-                    <Text size="sm" c="dimmed">
-                      Access API documentation and developer resources.
-                    </Text>
-                    <SecondaryButton
-                      size="sm"
-                      onClick={handleOpenApiDocs}
-                      leftSection={<IconBook size={16} />}
-                      fullWidth
-                    >
-                      Open API Documentation
-                    </SecondaryButton>
-                  </Stack>
-                </PaperCard>
-              </Stack>
-            </Tabs.Panel>
-
             <Tabs.Panel value="utils">
               <UtilsDocs />
             </Tabs.Panel>
