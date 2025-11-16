@@ -176,7 +176,7 @@ describe('TeamController', () => {
         req.log,
       );
       expect(res.json).toHaveBeenCalledWith(mockTeam);
-      expect(sseManager.broadcastToAdminUsers).toHaveBeenCalledWith({
+      expect(sseManager.broadcastToTeamUsers).toHaveBeenCalledWith('team-1', {
         type: 'teamUpdated',
         team: mockTeam,
       });

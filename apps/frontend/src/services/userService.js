@@ -86,17 +86,17 @@ export const userService = {
   ),
 
   /**
-   * Get user team memberships
+   * Get user teams for editing (admin only)
    * @param {string} userId - User ID
-   * @returns {Promise<Object>} User's team memberships with permissions
+   * @returns {Promise<Object>} User's team memberships
    */
-  getUserTeamMemberships: createGetMethod(
+  getUserTeamsForEdit: createGetMethod(
     logger,
-    'fetch user team memberships',
-    (userId) => `/users/${userId}/team-memberships`,
+    'fetch user teams for editing',
+    (userId) => `/users/${userId}/teams/edit`,
     {
-      debugMessage: 'Fetching user team memberships',
-      successMessage: 'User team memberships fetched successfully',
+      debugMessage: 'Fetching user teams for editing',
+      successMessage: 'User teams fetched for editing',
       getDebugParams: (userId) => ({ userId }),
       getSuccessParams: (_result, userId) => ({ userId }),
     },

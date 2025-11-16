@@ -19,7 +19,7 @@ describe('mqAPI', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    const module = await import('../../src/utils/mqAPI.js');
+    const module = await import('../../src/utils/in-process-utils/mqAPI.js');
     mqAPI = module.default;
   });
 

@@ -8,6 +8,72 @@ import {
 import { sseManager } from '../utils/sse/index.js';
 
 /**
+ * Helper function to get user team memberships
+ * Can be used by both HTTP endpoints and session callbacks
+ *
+ * @param {string} userId - User ID to get teams for
+ * @param {string} userRole - User's role ('admin' or 'user')
+ * @returns {Array<{id: string, name: string, permissions: string[]}>} Array of team memberships
+ */
+export function getUserTeams(userId, userRole) {
+  // Admin users get all permissions on all teams
+  const adminPermissions = [
+    'view_analyses',
+    'run_analyses',
+    'upload_analyses',
+    'download_analyses',
+    'edit_analyses',
+    'delete_analyses',
+  ];
+
+  // If user is an admin, return all teams with full permissions
+  if (userRole === 'admin') {
+    const allTeams = executeQueryAll(
+      'SELECT id, name FROM team ORDER BY name',
+      [],
+      `getting all teams for admin user ${userId}`,
+    );
+
+    return allTeams.map((team) => ({
+      id: team.id,
+      name: team.name,
+      permissions: adminPermissions,
+    }));
+  }
+
+  // For regular users, get their specific team memberships
+  const memberships = executeQueryAll(
+    `
+      SELECT t.id, t.name, m.permissions
+      FROM teamMember m
+      JOIN team t ON m.teamId = t.id
+      WHERE m.userId = ?
+    `,
+    [userId],
+    `getting team memberships for user ${userId}`,
+  );
+
+  return memberships.map((membership) => ({
+    id: membership.id,
+    name: membership.name,
+    permissions: (() => {
+      if (!membership.permissions) return [];
+
+      try {
+        return JSON.parse(membership.permissions);
+      } catch (error) {
+        // Log error but don't crash - return empty permissions
+        console.error(
+          `Failed to parse permissions for user ${userId}, team ${membership.id}:`,
+          error.message,
+        );
+        return [];
+      }
+    })(),
+  }));
+}
+
+/**
  * Controller class for managing user operations
  * Handles HTTP requests for user-organization relationships, team assignments,
  * permission management, session control, and account status (ban/unban).
@@ -375,53 +441,21 @@ export class UserController {
   }
 
   /**
-   * Get user team memberships
-   * Retrieves teams and permissions for a user
+   * Get user teams for admin editing
+   * Admin-only endpoint to fetch team memberships when editing a user
    *
    * @param {Object} req - Express request object
    * @param {Object} req.params - URL parameters
    * @param {string} req.params.userId - User ID to query
-   * @param {Object} req.user - Authenticated user object
-   * @param {Object} req.log - Request-scoped logger
    * @param {Object} res - Express response object
    * @returns {Promise<void>}
-   *
-   * Response:
-   * - JSON object with teams array containing id, name, and permissions for each team
-   * - Admin users: Returns ALL teams with full permissions
-   * - Regular users: Returns only teams they are explicitly members of
-   *
-   * Security:
-   * - Users can only access their own memberships unless they are admins
-   * - Authorization check performed before query
-   * - Target user's role determines response (admin gets all teams)
    */
-  static async getUserTeamMemberships(req, res) {
+  static async getUserTeamsForEdit(req, res) {
     const { userId } = req.params;
 
-    // Validation handled by middleware
-    // Check authorization: users can only get their own memberships, admins can get any
-    const currentUser = req.user;
-    const isAdmin = currentUser?.role === 'admin';
-    const isOwnRequest = currentUser?.id === userId;
-
-    if (!isAdmin && !isOwnRequest) {
-      req.log.warn(
-        {
-          action: 'getUserTeamMemberships',
-          userId,
-          requesterId: currentUser?.id,
-        },
-        'Forbidden: user attempting to access another user memberships',
-      );
-      return res.status(403).json({
-        error: 'Forbidden: You can only access your own team memberships',
-      });
-    }
-
     req.log.info(
-      { action: 'getUserTeamMemberships', userId },
-      'Getting team memberships',
+      { action: 'getUserTeamsForEdit', userId },
+      'Getting team memberships for editing',
     );
 
     // Check if the target user (userId) is an admin
@@ -431,78 +465,27 @@ export class UserController {
       `getting role for user ${userId}`,
     );
 
-    // If target user is an admin, return all teams with full permissions
-    if (targetUser?.role === 'admin') {
-      const allTeams = executeQueryAll(
-        `
-        SELECT id, name
-        FROM team
-        ORDER BY name
-      `,
-        [],
-        'getting all teams for admin user',
-      );
-
-      req.log.info(
-        {
-          action: 'getUserTeamMemberships',
-          userId,
-          count: allTeams.length,
-          isAdmin: true,
-        },
-        'All teams retrieved for admin user',
-      );
-
-      // Admin users get all permissions on all teams
-      const adminPermissions = [
-        'view_analyses',
-        'run_analyses',
-        'upload_analyses',
-        'download_analyses',
-        'edit_analyses',
-        'delete_analyses',
-      ];
-
-      return res.json({
-        success: true,
-        data: {
-          teams: allTeams.map((team) => ({
-            id: team.id,
-            name: team.name,
-            permissions: adminPermissions,
-          })),
-        },
+    if (!targetUser) {
+      return res.status(404).json({
+        error: 'User not found',
       });
     }
 
-    // For regular users, get their specific team memberships
-    const memberships = executeQueryAll(
-      `
-      SELECT t.id, t.name, m.permissions
-      FROM teamMember m
-      JOIN team t ON m.teamId = t.id
-      WHERE m.userId = ?
-    `,
-      [userId],
-      `getting team memberships for user ${userId}`,
-    );
+    // Use shared helper function to get teams
+    const teams = getUserTeams(userId, targetUser.role || 'user');
 
     req.log.info(
-      { action: 'getUserTeamMemberships', userId, count: memberships.length },
-      'Team memberships retrieved',
+      {
+        action: 'getUserTeamsForEdit',
+        userId,
+        count: teams.length,
+      },
+      'Team memberships retrieved for editing',
     );
 
     res.json({
       success: true,
-      data: {
-        teams: memberships.map((membership) => ({
-          id: membership.id,
-          name: membership.name,
-          permissions: membership.permissions
-            ? JSON.parse(membership.permissions)
-            : [],
-        })),
-      },
+      data: { teams },
     });
   }
 

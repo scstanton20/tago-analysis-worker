@@ -35,8 +35,8 @@ export const AuthProvider = ({ children }) => {
 
   // Memoize user and session data extraction
   const authData = useMemo(() => {
-    const user = session?.data?.user || session?.user || null;
-    const sessionData = session?.data?.session || session?.session || null;
+    const user = session?.user || null;
+    const sessionData = session?.session || null;
     const isAuthenticated = !!(session && user && sessionData);
     const isAdmin = user?.role === 'admin';
     const isImpersonating = !!sessionData?.impersonatedBy;

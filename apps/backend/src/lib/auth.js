@@ -3,6 +3,7 @@ import { admin } from 'better-auth/plugins/admin';
 import { passkey } from 'better-auth/plugins/passkey';
 import { username } from 'better-auth/plugins/username';
 import { organization } from 'better-auth/plugins/organization';
+import { customSession } from 'better-auth/plugins';
 import path from 'path';
 import { config } from '../config/default.js';
 import {
@@ -18,6 +19,7 @@ import {
 } from '../utils/authDatabase.js';
 import { createChildLogger } from '../utils/logging/logger.js';
 import { AUTH } from '../constants.js';
+import { getUserTeams } from '../controllers/userController.js';
 
 const authLogger = createChildLogger('auth');
 
@@ -111,6 +113,25 @@ export const auth = betterAuth({
     },
   },
   plugins: [
+    customSession(async ({ user, session }) => {
+      try {
+        // Use shared helper to get user teams
+        const teams = getUserTeams(user.id, user.role || 'user');
+
+        return {
+          user,
+          session,
+          teams, // Add teams at the root level of the response
+        };
+      } catch (error) {
+        authLogger.error(
+          { error: error.message, userId: user.id },
+          'Failed to inject team memberships into session',
+        );
+        // Return session without teams if error
+        return { user, session };
+      }
+    }),
     username({
       usernameValidator: (username) => {
         // Allow alphanumeric, underscores, hyphens, and dots

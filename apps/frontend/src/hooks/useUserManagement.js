@@ -622,24 +622,21 @@ export function useUserManagement({
 
       const departmentPermissions = {};
 
+      // For non-admin users, load their team assignments
       if (user.role !== 'admin') {
         try {
-          const teamMembershipsData = await userService.getUserTeamMemberships(
-            user.id,
-          );
+          const teamData = await userService.getUserTeamsForEdit(user.id);
 
-          if (teamMembershipsData.success && teamMembershipsData.data?.teams) {
-            teamMembershipsData.data.teams.forEach((team) => {
+          if (teamData.success && teamData.data?.teams) {
+            teamData.data.teams.forEach((team) => {
               departmentPermissions[team.id] = {
                 enabled: true,
                 permissions: team.permissions || ['view_analyses'],
               };
             });
             logger.log(
-              `✓ Loaded ${teamMembershipsData.data.teams.length} team assignments for user ${user.id}`,
+              `✓ Loaded ${teamData.data.teams.length} team assignments for user ${user.id}`,
             );
-          } else {
-            logger.warn('Failed to fetch user team memberships for editing');
           }
         } catch (error) {
           logger.warn('Error fetching user team memberships:', error);

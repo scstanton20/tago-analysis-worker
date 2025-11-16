@@ -1,5 +1,4 @@
 import { useState, useCallback, useMemo, useContext, useEffect } from 'react';
-import { fetchWithHeaders, handleResponse } from '../../utils/apiUtils.js';
 import { AuthContext } from '../AuthContext.jsx';
 import { useTeams } from '../sseContext/index.js';
 import { PermissionsContext } from './context.js';
@@ -17,7 +16,6 @@ export const PermissionsProvider = ({ children }) => {
   const { user, isAuthenticated, isAdmin, session } = authContext;
 
   const [organizationMembership, setOrganizationMembership] = useState(null);
-  const [userTeams, setUserTeams] = useState([]);
   const [membershipLoading, setMembershipLoading] = useState(false);
 
   // Track user ID to detect user changes (including impersonation)
@@ -26,11 +24,16 @@ export const PermissionsProvider = ({ children }) => {
   // Derive organizationId directly from session instead of storing in state
   const organizationId = session?.session?.activeOrganizationId || null;
 
+  // Get teams directly from session (injected by Better Auth customSession plugin)
+  // Teams are at the root level of the session response
+  const userTeams = useMemo(() => {
+    return session?.teams || [];
+  }, [session]);
+
   // Memoize organization data loading function
   const loadOrganizationData = useCallback(async () => {
     if (!isAuthenticated || !user) {
       setOrganizationMembership(null);
-      setUserTeams([]);
       return;
     }
 
@@ -41,41 +44,19 @@ export const PermissionsProvider = ({ children }) => {
       const orgRole = user.role === 'admin' ? 'owner' : 'member';
       setOrganizationMembership(orgRole);
 
-      // Load user team memberships
-      // IMPORTANT: Always use our custom endpoint for both admin and regular users
-      // This endpoint returns all teams for admins and only assigned teams for regular users
-      try {
-        const teamMembershipsResponse = await fetchWithHeaders(
-          `/users/${user.id}/team-memberships`,
-        );
-
-        const teamMembershipsData = await handleResponse(
-          teamMembershipsResponse,
-          `/users/${user.id}/team-memberships`,
-          { credentials: 'include' },
-        );
-
-        if (teamMembershipsData.success && teamMembershipsData.data?.teams) {
-          setUserTeams(teamMembershipsData.data.teams);
-          const isAdminUser = user.role === 'admin';
-          logger.log(
-            `✓ Loaded ${teamMembershipsData.data.teams.length} team memberships${isAdminUser ? ' (all teams for admin)' : ''}`,
-          );
-        } else {
-          setUserTeams([]);
-        }
-      } catch (teamsError) {
-        logger.warn('Error loading team memberships:', teamsError);
-        setUserTeams([]);
-      }
+      // Teams are now loaded directly from session (see userTeams useMemo above)
+      // No need for separate API call - Better Auth session callback injects teams
+      const isAdminUser = user.role === 'admin';
+      logger.log(
+        `✓ Loaded ${userTeams.length} team memberships from session${isAdminUser ? ' (all teams for admin)' : ''}`,
+      );
     } catch (error) {
       logger.error('Error loading organization data:', error);
       setOrganizationMembership(null);
-      setUserTeams([]);
     } finally {
       setMembershipLoading(false);
     }
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, user, userTeams.length]);
 
   // Watch for user ID changes (including impersonation) and reload permissions
   useEffect(() => {
@@ -88,9 +69,8 @@ export const PermissionsProvider = ({ children }) => {
       );
       setCurrentUserId(newUserId);
 
-      // Clear existing data and reload
+      // Clear existing data and reload (teams come from session automatically)
       setOrganizationMembership(null);
-      setUserTeams([]);
 
       loadOrganizationData();
     } else if (!isAuthenticated && currentUserId) {
@@ -109,9 +89,8 @@ export const PermissionsProvider = ({ children }) => {
       'PermissionsContext: Auth change event detected, reloading permissions...',
     );
 
-    // Clear existing data
+    // Clear existing data (teams come from session automatically)
     setOrganizationMembership(null);
-    setUserTeams([]);
 
     // Reload organization data
     await loadOrganizationData();
@@ -297,9 +276,8 @@ export const PermissionsProvider = ({ children }) => {
         try {
           logger.log('Refreshing permissions and team data');
 
-          // Clear and reload organization data
+          // Clear and reload organization data (teams come from session automatically)
           setOrganizationMembership(null);
-          setUserTeams([]);
 
           // Reload organization data
           await loadOrganizationData();

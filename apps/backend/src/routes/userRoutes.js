@@ -2,7 +2,6 @@ import { Router } from 'express';
 import {
   authMiddleware,
   requireAdmin,
-  requireSelfOrAdmin,
 } from '../middleware/betterAuthMiddleware.js';
 import { UserController } from '../controllers/userController.js';
 import { validateRequest } from '../middleware/validateRequest.js';
@@ -17,19 +16,10 @@ router.use(authMiddleware);
 
 /**
  * @swagger
- * /users/{userId}/team-memberships:
+ * /users/{userId}/teams/edit:
  *   get:
- *     summary: Get user team memberships
- *     description: |
- *       Get team memberships and permissions for a user.
- *
- *       **Behavior based on target user's role:**
- *       - If target user is an admin: Returns ALL teams with full permissions
- *       - If target user is a regular user: Returns only teams they are explicitly members of
- *
- *       **Access control:**
- *       - Users can only access their own memberships
- *       - Admins can access any user's memberships
+ *     summary: Get user teams for editing (Admin only)
+ *     description: Get team memberships for a user when editing. Admin-only endpoint.
  *     tags: [User Management]
  *     parameters:
  *       - in: path
@@ -37,74 +27,21 @@ router.use(authMiddleware);
  *         required: true
  *         schema:
  *           type: string
- *         description: User ID to get team memberships for
+ *         description: User ID
  *     responses:
  *       200:
- *         description: Team memberships retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 data:
- *                   type: object
- *                   properties:
- *                     teams:
- *                       type: array
- *                       items:
- *                         $ref: '#/components/schemas/UserTeamMembership'
- *             examples:
- *               adminUser:
- *                 summary: Response for admin user
- *                 value:
- *                   success: true
- *                   data:
- *                     teams:
- *                       - id: "team-1"
- *                         name: "Team Alpha"
- *                         permissions: ["view_analyses", "run_analyses", "upload_analyses", "download_analyses", "edit_analyses", "delete_analyses"]
- *                       - id: "team-2"
- *                         name: "Team Beta"
- *                         permissions: ["view_analyses", "run_analyses", "upload_analyses", "download_analyses", "edit_analyses", "delete_analyses"]
- *               regularUser:
- *                 summary: Response for regular user
- *                 value:
- *                   success: true
- *                   data:
- *                     teams:
- *                       - id: "team-1"
- *                         name: "Team Alpha"
- *                         permissions: ["view_analyses", "run_analyses"]
- *       400:
- *         description: Invalid userId provided
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
+ *         description: Team memberships retrieved
  *       401:
- *         description: Authentication required
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
+ *         description: Unauthorized
  *       403:
- *         description: Forbidden - can only access own memberships unless admin
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
+ *         description: Forbidden - admin only
+ *       404:
+ *         description: User not found
  */
 router.get(
-  '/:userId/team-memberships',
-  requireSelfOrAdmin,
-  validateRequest(userValidationSchemas.getUserTeamMemberships),
-  asyncHandler(
-    UserController.getUserTeamMemberships,
-    'get user team memberships',
-  ),
+  '/:userId/teams/edit',
+  requireAdmin,
+  asyncHandler(UserController.getUserTeamsForEdit, 'get user teams for edit'),
 );
 
 /**

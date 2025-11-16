@@ -269,51 +269,6 @@ describe('userSchemas', () => {
     });
   });
 
-  describe('getUserTeamMemberships', () => {
-    it('should validate with valid userId', () => {
-      const validData = {
-        userId: 'user-123',
-      };
-
-      const result = schemas.getUserTeamMemberships.params.safeParse(validData);
-
-      expect(result.success).toBe(true);
-    });
-
-    it('should require userId field', () => {
-      const invalidData = {};
-
-      const result =
-        schemas.getUserTeamMemberships.params.safeParse(invalidData);
-
-      expect(result.success).toBe(false);
-      expect(result.error?.issues[0].path).toContain('userId');
-    });
-
-    it('should reject empty userId', () => {
-      const invalidData = {
-        userId: '',
-      };
-
-      const result =
-        schemas.getUserTeamMemberships.params.safeParse(invalidData);
-
-      expect(result.success).toBe(false);
-      expect(result.error?.issues[0].path).toContain('userId');
-    });
-
-    it('should reject non-string userId', () => {
-      const invalidData = {
-        userId: 123,
-      };
-
-      const result =
-        schemas.getUserTeamMemberships.params.safeParse(invalidData);
-
-      expect(result.success).toBe(false);
-    });
-  });
-
   describe('updateUserTeamAssignments', () => {
     it('should validate with valid data', () => {
       const validData = {

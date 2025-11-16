@@ -37,7 +37,6 @@ vi.mock('../../src/middleware/validateRequest.js', () => ({
 
 vi.mock('../../src/validation/userSchemas.js', () => ({
   userValidationSchemas: {
-    getUserTeamMemberships: {},
     setInitialPassword: {},
     addToOrganization: {},
     assignUserToTeams: {},
@@ -50,20 +49,25 @@ vi.mock('../../src/validation/userSchemas.js', () => ({
 
 vi.mock('../../src/controllers/userController.js', () => ({
   UserController: {
-    getUserTeamMemberships: vi.fn((req, res) =>
-      res.json({
+    getUserTeamsForEdit: vi.fn((req, res) => {
+      // Handle non-existent user case
+      if (req.params.userId === 'non-existent-user-id') {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      return res.json({
         success: true,
         data: {
           teams: [
             {
-              teamId: 'team-1',
-              teamName: 'Engineering',
-              permissions: ['view_analyses', 'run_analyses'],
+              id: 'team-1',
+              name: 'Team 1',
+              permissions: ['view_analyses'],
             },
           ],
         },
-      }),
-    ),
+      });
+    }),
     setInitialPassword: vi.fn((req, res) =>
       res.json({
         success: true,
@@ -161,6 +165,7 @@ describe('User Routes - WITH REAL AUTH', () => {
   // eslint-disable-next-line no-unused-vars
   let adminUser;
   let teamOwnerUser;
+  // eslint-disable-next-line no-unused-vars
   let teamViewerUser;
 
   beforeAll(async () => {
@@ -198,20 +203,6 @@ describe('User Routes - WITH REAL AUTH', () => {
   });
 
   describe('Authentication Requirements', () => {
-    it('should reject unauthenticated requests to team memberships', async () => {
-      const response = await request(app).get(
-        '/api/users/some-user-id/team-memberships',
-      );
-
-      // Debug: Log the error if we get 500
-      if (response.status === 500) {
-        console.log('500 Error Response:', response.body);
-      }
-
-      expect(response.status).toBe(401);
-      expect(UserController.getUserTeamMemberships).not.toHaveBeenCalled();
-    });
-
     it('should reject unauthenticated requests to set initial password', async () => {
       await request(app)
         .post('/api/users/set-initial-password')
@@ -256,84 +247,44 @@ describe('User Routes - WITH REAL AUTH', () => {
       expect(UserController.removeUserFromOrganization).not.toHaveBeenCalled();
       expect(UserController.forceLogout).not.toHaveBeenCalled();
     });
-
-    it('should allow authenticated requests with valid session', async () => {
-      const cookie = await getSessionCookie('teamOwner');
-      console.log('Test cookie:', cookie);
-      console.log('TeamOwner user:', teamOwnerUser);
-
-      const response = await request(app)
-        .get(`/api/users/${teamOwnerUser.id}/team-memberships`)
-        .set('Cookie', cookie);
-
-      console.log('Response status:', response.status);
-      console.log('Response body:', response.body);
-
-      expect(response.status).toBe(200);
-      expect(UserController.getUserTeamMemberships).toHaveBeenCalled();
-    });
   });
 
-  describe('GET /api/users/:userId/team-memberships - Self-Service', () => {
-    it('should allow users to view their own team memberships', async () => {
-      const cookie = await getSessionCookie('teamOwner');
-
-      const response = await request(app)
-        .get(`/api/users/${teamOwnerUser.id}/team-memberships`)
-        .set('Cookie', cookie)
-        .expect(200);
-
-      expect(response.body).toEqual({
-        success: true,
-        data: {
-          teams: [
-            {
-              teamId: 'team-1',
-              teamName: 'Engineering',
-              permissions: ['view_analyses', 'run_analyses'],
-            },
-          ],
-        },
-      });
-      expect(UserController.getUserTeamMemberships).toHaveBeenCalled();
-    });
-
-    it('should deny users from viewing other users team memberships', async () => {
-      const viewerCookie = await getSessionCookie('teamViewer');
-
-      // teamViewer trying to view teamOwner's memberships
-      await request(app)
-        .get(`/api/users/${teamOwnerUser.id}/team-memberships`)
-        .set('Cookie', viewerCookie)
-        .expect(403);
-
-      expect(UserController.getUserTeamMemberships).not.toHaveBeenCalled();
-    });
-
-    it('should allow admin to view any user team memberships', async () => {
+  describe('GET /api/users/:userId/teams/edit - Admin Only', () => {
+    it('should allow admin to get user teams for editing', async () => {
       const adminCookie = await getSessionCookie('admin');
 
-      await request(app)
-        .get(`/api/users/${teamOwnerUser.id}/team-memberships`)
+      const response = await request(app)
+        .get(`/api/users/${teamOwnerUser.id}/teams/edit`)
         .set('Cookie', adminCookie)
         .expect(200);
 
-      expect(UserController.getUserTeamMemberships).toHaveBeenCalled();
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.teams).toBeDefined();
+      expect(Array.isArray(response.body.data.teams)).toBe(true);
     });
 
-    it('should allow users to view their own memberships even if they are a viewer', async () => {
-      const viewerCookie = await getSessionCookie('teamViewer');
+    it('should deny non-admin from getting user teams for editing', async () => {
+      const userCookie = await getSessionCookie('teamOwner');
 
       await request(app)
-        .get(`/api/users/${teamViewerUser.id}/team-memberships`)
-        .set('Cookie', viewerCookie)
-        .expect(200);
+        .get(`/api/users/${teamOwnerUser.id}/teams/edit`)
+        .set('Cookie', userCookie)
+        .expect(403);
+    });
 
-      expect(UserController.getUserTeamMemberships).toHaveBeenCalled();
+    it('should return 404 for non-existent user', async () => {
+      const adminCookie = await getSessionCookie('admin');
+
+      const response = await request(app)
+        .get('/api/users/non-existent-user-id/teams/edit')
+        .set('Cookie', adminCookie)
+        .expect(404);
+
+      expect(response.body.error).toContain('User not found');
     });
   });
 
-  describe('POST /api/users/set-initial-password - Self-Service', () => {
+  describe('POST /api/users/set-initial-password', () => {
     it('should allow any authenticated user to set initial password', async () => {
       const cookie = await getSessionCookie('teamViewer');
 
@@ -895,11 +846,6 @@ describe('User Routes - WITH REAL AUTH', () => {
       const adminCookie = await getSessionCookie('admin');
 
       await request(app)
-        .delete('/api/users/u1/team-memberships')
-        .set('Cookie', adminCookie)
-        .expect(404);
-
-      await request(app)
         .get('/api/users/set-initial-password')
         .set('Cookie', adminCookie)
         .expect(404);
@@ -939,9 +885,9 @@ describe('User Routes - WITH REAL AUTH', () => {
     it('should support admin user permission management', async () => {
       const adminCookie = await getSessionCookie('admin');
 
-      // Get current memberships
+      // Get teams for editing (new admin-only endpoint)
       await request(app)
-        .get('/api/users/user-1/team-memberships')
+        .get('/api/users/user-1/teams/edit')
         .set('Cookie', adminCookie)
         .expect(200);
 
@@ -959,7 +905,6 @@ describe('User Routes - WITH REAL AUTH', () => {
         .send({ organizationId: 'org-1', role: 'admin' })
         .expect(200);
 
-      expect(UserController.getUserTeamMemberships).toHaveBeenCalled();
       expect(UserController.updateUserTeamAssignments).toHaveBeenCalled();
       expect(UserController.updateUserOrganizationRole).toHaveBeenCalled();
     });

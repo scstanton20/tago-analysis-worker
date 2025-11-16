@@ -120,8 +120,8 @@ export class TeamController {
 
     req.log.info({ action: 'updateTeam', teamId: id }, 'Team updated');
 
-    // Broadcast update to admin users only
-    sseManager.broadcastToAdminUsers({
+    // Broadcast update to team members and admins
+    sseManager.broadcastToTeamUsers(id, {
       type: 'teamUpdated',
       team: team,
     });

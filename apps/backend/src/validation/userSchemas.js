@@ -33,15 +33,6 @@ export const userValidationSchemas = {
   },
 
   /**
-   * GET /api/users/:userId/teams - Get user team memberships
-   */
-  getUserTeamMemberships: {
-    params: z.object({
-      userId: z.string().min(1, 'userId is required'),
-    }),
-  },
-
-  /**
    * PATCH /api/users/:userId/team-assignments - Update user team assignments
    */
   updateUserTeamAssignments: {
