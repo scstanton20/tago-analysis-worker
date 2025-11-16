@@ -1,5 +1,4 @@
 import { useState, useCallback, useMemo, useContext, useEffect } from 'react';
-import { authClient } from '../../lib/auth.js';
 import { fetchWithHeaders, handleResponse } from '../../utils/apiUtils.js';
 import { AuthContext } from '../AuthContext.jsx';
 import { useTeams } from '../sseContext/index.js';
@@ -15,43 +14,28 @@ export const PermissionsProvider = ({ children }) => {
     throw new Error('PermissionsProvider must be used within an AuthProvider');
   }
 
-  const { user, isAuthenticated, isAdmin } = authContext;
+  const { user, isAuthenticated, isAdmin, session } = authContext;
 
   const [organizationMembership, setOrganizationMembership] = useState(null);
-  const [organizationId, setOrganizationId] = useState(null);
   const [userTeams, setUserTeams] = useState([]);
   const [membershipLoading, setMembershipLoading] = useState(false);
 
   // Track user ID to detect user changes (including impersonation)
   const [currentUserId, setCurrentUserId] = useState(user?.id || null);
 
+  // Derive organizationId directly from session instead of storing in state
+  const organizationId = session?.session?.activeOrganizationId || null;
+
   // Memoize organization data loading function
   const loadOrganizationData = useCallback(async () => {
     if (!isAuthenticated || !user) {
       setOrganizationMembership(null);
-      setOrganizationId(null);
       setUserTeams([]);
       return;
     }
 
     try {
       setMembershipLoading(true);
-
-      // Set the main organization as active and get its data
-      const activeOrgResult = await authClient.organization.setActive({
-        organizationSlug: 'main',
-      });
-
-      if (activeOrgResult.data) {
-        setOrganizationId(activeOrgResult.data.id);
-        logger.log(
-          '✓ Set active organization and ID:',
-          activeOrgResult.data.id,
-        );
-      } else {
-        logger.warn('Could not set active organization or get its data');
-        setOrganizationId(null);
-      }
 
       // Assume admin users have 'owner' role in organization
       const orgRole = user.role === 'admin' ? 'owner' : 'member';
@@ -85,9 +69,8 @@ export const PermissionsProvider = ({ children }) => {
         setUserTeams([]);
       }
     } catch (error) {
-      logger.error('Error setting active organization:', error);
+      logger.error('Error loading organization data:', error);
       setOrganizationMembership(null);
-      setOrganizationId(null);
       setUserTeams([]);
     } finally {
       setMembershipLoading(false);
@@ -107,7 +90,6 @@ export const PermissionsProvider = ({ children }) => {
 
       // Clear existing data and reload
       setOrganizationMembership(null);
-      setOrganizationId(null);
       setUserTeams([]);
 
       loadOrganizationData();
@@ -129,7 +111,6 @@ export const PermissionsProvider = ({ children }) => {
 
     // Clear existing data
     setOrganizationMembership(null);
-    setOrganizationId(null);
     setUserTeams([]);
 
     // Reload organization data
@@ -318,7 +299,6 @@ export const PermissionsProvider = ({ children }) => {
 
           // Clear and reload organization data
           setOrganizationMembership(null);
-          setOrganizationId(null);
           setUserTeams([]);
 
           // Reload organization data
@@ -351,7 +331,7 @@ export const PermissionsProvider = ({ children }) => {
     }),
     [
       organizationMembership,
-      organizationId,
+      organizationId, // Derived from session, will update when session changes
       userTeams,
       membershipLoading,
       teamHelpers,

@@ -104,6 +104,16 @@ function MessageRouter({ children }) {
         );
         break;
 
+      case 'userDeleted':
+        // Dispatch custom event for user deletion
+        logger.log('SSE: User deleted:', data.data);
+        window.dispatchEvent(
+          new CustomEvent('userDeleted', {
+            detail: data.data,
+          }),
+        );
+        break;
+
       case 'refresh':
         // Refresh data via SSE instead of page reload
         logger.log(

@@ -786,6 +786,16 @@ describe('UserController', () => {
         success: true,
         message: 'User removed from organization',
       });
+
+      // Verify SSE broadcast to admin users
+      expect(sseManager.broadcastToAdminUsers).toHaveBeenCalledWith({
+        type: 'userDeleted',
+        data: {
+          userId: 'user-123',
+          message: 'user-123 has been remvoed from the Organization.',
+          action: 'refresh_user_list',
+        },
+      });
     });
 
     it('should delete user account when no organizationId', async () => {

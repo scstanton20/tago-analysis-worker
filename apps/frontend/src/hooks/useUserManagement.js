@@ -678,19 +678,17 @@ export function useUserManagement({
               throw new Error(result.error.message);
             }
 
-            // Note: SSE connections are automatically closed by the backend
-            // afterRemoveMember hook, so no need to call forceLogout separately
-
             notify.success(
               `User ${user.name || user.email} deleted successfully.`,
             );
 
-            await loadUsers();
+            // Note: SSE will automatically update the user list via handleUserDeleted
+            // SSE connections are automatically closed by the backend afterRemoveMember hook
           });
         },
       });
     },
-    [notify, loadUsers, organizationId, deleteOperation],
+    [notify, organizationId, deleteOperation],
   );
 
   const handleImpersonate = useCallback(
@@ -816,29 +814,22 @@ export function useUserManagement({
     form.clearFieldError('email');
   }, [form]);
 
-  // Listen for SSE events for user role updates
-  const handleAdminUserRoleUpdated = useCallback((event) => {
+  // Listen for SSE events for user deletion
+  const handleUserDeleted = useCallback((event) => {
     const data = event.detail;
-    logger.log('User management: Received admin user role update event:', data);
+    logger.log('User management: Received user deleted event:', data);
 
-    // Update the specific user in the users list without a full reload
+    // Remove the deleted user from the users list
     setUsers((prevUsers) => {
-      return prevUsers.map((user) => {
-        if (user.id === data.userId) {
-          logger.log(
-            `Updating user ${user.id} role from ${user.role} to ${data.role}`,
-          );
-          return {
-            ...user,
-            role: data.role,
-          };
-        }
-        return user;
-      });
+      const filteredUsers = prevUsers.filter((user) => user.id !== data.userId);
+      logger.log(
+        `Removed user ${data.userId} from list. Remaining users: ${filteredUsers.length}`,
+      );
+      return filteredUsers;
     });
   }, []);
 
-  useEventListener('admin-user-role-updated', handleAdminUserRoleUpdated);
+  useEventListener('userDeleted', handleUserDeleted);
 
   return {
     // State

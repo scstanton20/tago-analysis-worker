@@ -916,6 +916,16 @@ export class UserController {
     );
 
     res.json({ success: true, message: 'User removed from organization' });
+
+    // Broadcast user deleted via SSE (admin only)
+    await sseManager.broadcastToAdminUsers({
+      type: 'userDeleted',
+      data: {
+        userId,
+        message: `${userId} has been remvoed from the Organization.`,
+        action: 'refresh_user_list',
+      },
+    });
   }
 
   /**
