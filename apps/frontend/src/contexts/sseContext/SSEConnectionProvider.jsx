@@ -19,8 +19,8 @@ export function SSEConnectionProvider({ children, onMessage }) {
   const eventSourceRef = useRef(null);
   const reconnectAttemptsRef = useRef(0);
   const reconnectRef = useRef(null);
-  const maxReconnectAttempts = 10;
-  const maxReconnectDelay = 30000;
+  const reconnectTimeoutRef = useRef(null);
+  const maxReconnectDelay = 30000; // 30 seconds max delay between retries
   const mountedRef = useRef(true);
   const connectionStatusRef = useRef('connecting');
   const subscribedAnalyses = useRef(new Set());
@@ -48,15 +48,30 @@ export function SSEConnectionProvider({ children, onMessage }) {
       const response = await fetch('/api/status', {
         credentials: 'include',
       });
-      if (response.ok) {
-        const data = await response.json();
-        // Pass status update to message handler
-        if (onMessage) {
-          onMessage({ type: 'statusUpdate', data });
-        }
+
+      if (!response.ok) {
+        // Handle HTTP error responses (4xx, 5xx)
+        throw new Error(`Status update failed with status ${response.status}`);
       }
+
+      const data = await response.json();
+      // Pass status update to message handler
+      if (onMessage) {
+        onMessage({ type: 'statusUpdate', data });
+      }
+      // Show success notification when status update completes
+      const { showSuccess } = await import(
+        '../../utils/notificationService.jsx'
+      );
+      await showSuccess(
+        'Status refreshed successfully',
+        'Status Updated',
+        3000,
+      );
     } catch (error) {
       logger.error('Error requesting status update:', error);
+      const { showError } = await import('../../utils/notificationService.jsx');
+      await showError('Failed to refresh status', 'Error', 4000);
     }
   }, [isAuthenticated, onMessage]);
 
@@ -165,6 +180,13 @@ export function SSEConnectionProvider({ children, onMessage }) {
           if (eventSource.readyState === EventSource.CLOSED) {
             setConnectionStatus('disconnected');
             connectionStatusRef.current = 'disconnected';
+
+            // Notify message handler that EventSource detected connection lost
+            // This handles native disconnection (network failure, server restart, etc.)
+            if (onMessage) {
+              onMessage({ type: 'connectionLost' });
+            }
+
             // Use ref to avoid circular dependency
             if (reconnectRef.current) {
               reconnectRef.current();
@@ -179,20 +201,18 @@ export function SSEConnectionProvider({ children, onMessage }) {
 
       eventSource.onmessage = handleMessage;
     });
-  }, [handleMessage, getSSEUrl]);
+  }, [handleMessage, getSSEUrl, onMessage]);
 
   const reconnect = useCallback(async () => {
     if (!mountedRef.current) return;
 
-    if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
-      logger.log(
-        `SSE max reconnection attempts reached (${maxReconnectAttempts})`,
-      );
-      setConnectionStatus('failed');
-      connectionStatusRef.current = 'failed';
-      return;
+    // Clear any existing reconnect timeout to prevent duplicates
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
     }
 
+    // Calculate delay with exponential backoff, capped at maxReconnectDelay
     const delay = Math.min(
       1000 * Math.pow(2, reconnectAttemptsRef.current),
       maxReconnectDelay,
@@ -200,16 +220,18 @@ export function SSEConnectionProvider({ children, onMessage }) {
     reconnectAttemptsRef.current++;
 
     logger.log(
-      `SSE reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})`,
+      `SSE will reconnect in ${delay / 1000}s (attempt ${reconnectAttemptsRef.current}, max delay: ${maxReconnectDelay / 1000}s)`,
     );
 
-    setTimeout(async () => {
+    reconnectTimeoutRef.current = setTimeout(async () => {
       if (!mountedRef.current) return;
 
       setConnectionStatus('connecting');
       connectionStatusRef.current = 'connecting';
       try {
         await createConnection();
+        // Reset counter on successful connection
+        reconnectAttemptsRef.current = 0;
       } catch (error) {
         logger.error('SSE reconnection failed:', error);
         if (mountedRef.current) {
@@ -223,6 +245,48 @@ export function SSEConnectionProvider({ children, onMessage }) {
       }
     }, delay);
   }, [createConnection]);
+
+  // Manual reconnection function that resets retry counter
+  const forceReconnect = useCallback(async () => {
+    if (!isAuthenticated) return;
+
+    logger.log('Manual reconnection triggered - resetting retry counter');
+
+    // Clear any pending reconnection timeout
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
+    // Reset retry counter for fresh attempt
+    reconnectAttemptsRef.current = 0;
+
+    // Close existing connection if any
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+
+    // Trigger reconnection immediately
+    setConnectionStatus('connecting');
+    connectionStatusRef.current = 'connecting';
+
+    try {
+      await createConnection();
+      // Connection successful, keep counter at 0
+      reconnectAttemptsRef.current = 0;
+    } catch (error) {
+      logger.error('Manual reconnection failed:', error);
+      if (mountedRef.current) {
+        setConnectionStatus('disconnected');
+        connectionStatusRef.current = 'disconnected';
+        // Trigger automatic reconnection with backoff
+        if (reconnectRef.current) {
+          reconnectRef.current();
+        }
+      }
+    }
+  }, [isAuthenticated, createConnection]);
 
   // Store reconnect in ref to break circular dependency
   useEffect(() => {
@@ -288,10 +352,34 @@ export function SSEConnectionProvider({ children, onMessage }) {
       }
     };
 
+    // Handle backend offline detection from metrics staleness
+    const handleBackendOffline = () => {
+      if (mountedRef.current) {
+        logger.warn(
+          'Backend detected as offline via metrics staleness - forcing SSE reconnection',
+        );
+
+        // Close the lying EventSource connection if it exists
+        if (eventSourceRef.current) {
+          eventSourceRef.current.close();
+          eventSourceRef.current = null;
+        }
+
+        // Mark as disconnected (safe even if already disconnected)
+        setConnectionStatus('disconnected');
+        connectionStatusRef.current = 'disconnected';
+
+        if (reconnectRef.current) {
+          reconnectRef.current();
+        }
+      }
+    };
+
     const timeoutId = setTimeout(connect, 50);
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('focus', handleFocus);
+    window.addEventListener('backend-offline', handleBackendOffline);
 
     return () => {
       logger.log('SSE client cleanup starting');
@@ -299,8 +387,15 @@ export function SSEConnectionProvider({ children, onMessage }) {
 
       clearTimeout(timeoutId);
 
+      // Clear any pending reconnection timeout
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('backend-offline', handleBackendOffline);
 
       if (eventSourceRef.current) {
         logger.log('SSE closing connection');
@@ -401,6 +496,7 @@ export function SSEConnectionProvider({ children, onMessage }) {
       hasInitialData,
       serverShutdown,
       requestStatusUpdate,
+      forceReconnect,
       sessionId,
       subscribeToAnalysis,
       unsubscribeFromAnalysis,
@@ -410,6 +506,7 @@ export function SSEConnectionProvider({ children, onMessage }) {
       hasInitialData,
       serverShutdown,
       requestStatusUpdate,
+      forceReconnect,
       sessionId,
       subscribeToAnalysis,
       unsubscribeFromAnalysis,

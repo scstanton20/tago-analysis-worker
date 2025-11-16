@@ -1,4 +1,6 @@
 import { modals } from '@mantine/modals';
+import { IconHistory, IconUser } from '@tabler/icons-react';
+import { IconLabel } from '../components/global';
 
 /**
  * Modal Service Layer
@@ -175,7 +177,13 @@ export const modalService = {
     modals.openContextModal({
       modal: 'profile',
       modalId,
-      title: 'Profile Settings',
+      title: (
+        <IconLabel
+          icon={<IconUser size={20} aria-hidden="true" />}
+          label="Profile Settings"
+          fw={600}
+        />
+      ),
       size: 'lg',
       closeOnEscape: false,
       innerProps: {},
@@ -239,7 +247,13 @@ export const modalService = {
     modals.openContextModal({
       modal: 'versionHistory',
       modalId,
-      title: `Version History: ${analysis.name}`,
+      title: (
+        <IconLabel
+          icon={<IconHistory size={20} aria-hidden="true" />}
+          label={`Version History - ${analysis.name}`}
+          fw={600}
+        />
+      ),
       size: 'xl',
       closeOnEscape: false,
       innerProps: {

@@ -156,9 +156,9 @@ export function useProfileModal({ closeModal }) {
   }, []);
 
   // Data loading function (called by component on mount)
-  const loadData = useCallback(() => {
-    checkWebAuthnSupport();
-    loadPasskeys();
+  const loadData = useCallback(async () => {
+    await checkWebAuthnSupport();
+    await loadPasskeys();
   }, [checkWebAuthnSupport, loadPasskeys]);
 
   /**

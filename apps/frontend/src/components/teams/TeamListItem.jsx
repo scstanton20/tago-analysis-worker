@@ -127,11 +127,7 @@ function TeamEditMode({
           </Text>
         </Group>
         <Group gap="xs">
-          <CancelButton
-            size="xs"
-            onClick={onCancel}
-            disabled={isLoading}
-          >
+          <CancelButton size="xs" onClick={onCancel} disabled={isLoading}>
             Cancel
           </CancelButton>
           {hasColorChanged && (

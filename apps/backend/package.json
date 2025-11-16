@@ -7,7 +7,7 @@
     "node": ">=22.0.0"
   },
   "imports": {
-    "#utils/mqAPI": "./src/utils/mqAPI.js"
+    "#tago-utils": "./src/utils/in-process-utils/index.js"
   },
   "scripts": {
     "start": "node src/server.js",

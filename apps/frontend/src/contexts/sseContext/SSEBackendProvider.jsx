@@ -1,11 +1,17 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { BackendContext } from './contexts/BackendContext.js';
+
+// Metrics come every 1 second - if we miss 3+ updates, backend is offline
+const METRICS_STALE_THRESHOLD_MS = 3500;
 
 export function SSEBackendProvider({ children }) {
   const [backendStatus, setBackendStatus] = useState(null);
   const [dnsCache, setDnsCache] = useState(null);
   const [metricsData, setMetricsData] = useState(null);
+  const lastMetricsUpdateRef = useRef(null);
+  const stalenessCheckIntervalRef = useRef(null);
+  const offlineDetectedRef = useRef(false); // Track if we've already detected offline
 
   // Event Handlers
   const handleStatusUpdate = useCallback((data) => {
@@ -39,6 +45,12 @@ export function SSEBackendProvider({ children }) {
 
   const handleMetricsUpdate = useCallback((data) => {
     if (data.total || data.container || data.children || data.processes) {
+      // Track when we last received a metrics update
+      lastMetricsUpdateRef.current = Date.now();
+
+      // Reset offline detection flag when we receive metrics
+      offlineDetectedRef.current = false;
+
       setMetricsData({
         total: data.total,
         container: data.container,
@@ -66,6 +78,53 @@ export function SSEBackendProvider({ children }) {
     }
   }, []);
 
+  // Handle connection loss - clear stale backend status
+  // This fires when EventSource natively detects connection closed
+  const handleConnectionLost = useCallback(() => {
+    setBackendStatus(null);
+    setMetricsData(null);
+    lastMetricsUpdateRef.current = null;
+    // Don't reset offlineDetectedRef here - let metricsUpdate reset it when data flows again
+  }, []);
+
+  // Set up staleness detection - check every second if metrics are stale
+  // Run once on mount, no dependencies to prevent re-creating interval
+  useEffect(() => {
+    console.log('[SSEBackend] Setting up staleness detection interval');
+    stalenessCheckIntervalRef.current = setInterval(() => {
+      const now = Date.now();
+      const lastUpdate = lastMetricsUpdateRef.current;
+
+      // Only check if we have a last update time and haven't already detected offline
+      if (lastUpdate && !offlineDetectedRef.current) {
+        const timeSinceLastUpdate = now - lastUpdate;
+
+        if (timeSinceLastUpdate > METRICS_STALE_THRESHOLD_MS) {
+          console.warn(
+            `Backend metrics stale - last update ${Math.round(timeSinceLastUpdate / 1000)}s ago. Backend is offline.`,
+          );
+
+          // Mark as offline to prevent repeated triggers
+          offlineDetectedRef.current = true;
+
+          // Clear stale data
+          setBackendStatus(null);
+          setMetricsData(null);
+
+          // Emit event ONCE to trigger SSE reconnection
+          window.dispatchEvent(new CustomEvent('backend-offline'));
+        }
+      }
+    }, 1000);
+
+    return () => {
+      if (stalenessCheckIntervalRef.current) {
+        clearInterval(stalenessCheckIntervalRef.current);
+        stalenessCheckIntervalRef.current = null;
+      }
+    };
+  }, []); // Empty deps - run once on mount
+
   // Message handler to be called by parent
   const handleMessage = useCallback(
     (data) => {
@@ -83,6 +142,9 @@ export function SSEBackendProvider({ children }) {
         case 'metricsUpdate':
           handleMetricsUpdate(data);
           break;
+        case 'connectionLost':
+          handleConnectionLost();
+          break;
         default:
           break;
       }
@@ -92,6 +154,7 @@ export function SSEBackendProvider({ children }) {
       handleDnsConfigUpdated,
       handleDnsStatsUpdate,
       handleMetricsUpdate,
+      handleConnectionLost,
     ],
   );
 

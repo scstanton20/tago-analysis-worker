@@ -4,7 +4,7 @@
  * @module modals/components/UserSessionsModalContent
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { Stack, Group, Text, Table, Badge, ActionIcon } from '@mantine/core';
 import {
   FormAlert,
@@ -23,7 +23,7 @@ import {
 import { admin } from '../../lib/auth';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import { userService } from '../../services/userService';
-import { useAsyncOperation } from '../../hooks/async/useAsyncOperation';
+import { useAsyncOperation, useAsyncMount } from '../../hooks/async';
 import logger from '../../utils/logger';
 import PropTypes from 'prop-types';
 
@@ -40,12 +40,49 @@ function UserSessionsModalContent({ innerProps }) {
   const { user } = innerProps;
   const [sessions, setSessions] = useState([]);
   const notify = useNotifications();
-  const loadSessionsOperation = useAsyncOperation();
   const revokeSessionOperation = useAsyncOperation();
   const revokeAllOperation = useAsyncOperation();
 
+  // Load sessions when component mounts (modal opens)
+  const loadSessionsOperation = useAsyncMount(
+    async () => {
+      if (!user?.id) return;
+
+      const result = await admin.listUserSessions({
+        userId: user.id,
+      });
+
+      logger.log('List sessions result:', result);
+
+      if (result.error) {
+        throw new Error(result.error.message);
+      }
+
+      // Handle different possible response structures
+      let sessionsData = [];
+      if (result.data && Array.isArray(result.data)) {
+        sessionsData = result.data;
+      } else if (
+        result.data &&
+        result.data.sessions &&
+        Array.isArray(result.data.sessions)
+      ) {
+        sessionsData = result.data.sessions;
+      } else if (Array.isArray(result)) {
+        sessionsData = result;
+      } else {
+        logger.warn('Unexpected sessions response structure:', result);
+        sessionsData = [];
+      }
+
+      setSessions(sessionsData);
+    },
+    { deps: [user?.id] },
+  );
+
+  // Helper function to manually reload sessions
   const loadSessions = useCallback(async () => {
-    if (!user) return;
+    if (!user?.id) return;
 
     await loadSessionsOperation.execute(async () => {
       const result = await admin.listUserSessions({
@@ -77,12 +114,8 @@ function UserSessionsModalContent({ innerProps }) {
 
       setSessions(sessionsData);
     });
-  }, [user, loadSessionsOperation]);
-
-  // Load sessions when component mounts (modal opens)
-  useEffect(() => {
-    loadSessions();
-  }, [loadSessions]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const handleRevokeSession = async (sessionToken) => {
     modals.openConfirmModal({

@@ -5,3 +5,4 @@
  */
 
 export { useAsyncOperation } from './useAsyncOperation';
+export { useAsyncMount } from './useAsyncMount';

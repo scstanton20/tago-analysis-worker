@@ -4,12 +4,17 @@
  * @module modals/components/ProfileModalContent
  */
 
-import { useEffect, lazy, Suspense } from 'react';
+import { lazy, Suspense } from 'react';
 import { Tabs, Badge, Stack } from '@mantine/core';
-import { IconUser, IconKey, IconShield } from '@tabler/icons-react';
+import {
+  IconKey,
+  IconShield,
+  IconUser as TabIconUser,
+} from '@tabler/icons-react';
 import { modals } from '@mantine/modals';
 import { useProfileModal } from '../../hooks/useProfileModal';
-import { IconLabel, LoadingState } from '../../components/global';
+import { LoadingState } from '../../components/global';
+import { useAsyncMount } from '../../hooks/async';
 const ProfileTab = lazy(() =>
   import('../../components/profile/ProfileTab').then((m) => ({
     default: m.ProfileTab,
@@ -32,12 +37,11 @@ import PropTypes from 'prop-types';
  * Content component for profile settings modal
  *
  * @param {Object} props - Component props
- * @param {Object} props.context - Mantine modal context
  * @param {string} props.id - Modal ID
  * @param {Object} props.innerProps - Modal inner props (unused, but required)
  * @returns {JSX.Element} Modal content
  */
-function ProfileModalContent({ context, id }) {
+function ProfileModalContent({ id }) {
   const {
     activeTab,
     setActiveTab,
@@ -70,24 +74,9 @@ function ProfileModalContent({ context, id }) {
   });
 
   // Load data when component mounts (modal opens)
-  useEffect(() => {
-    loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run once on mount
-
-  // Update modal title with user icon
-  useEffect(() => {
-    context.updateModal({
-      title: (
-        <IconLabel
-          icon={<IconUser size={20} aria-hidden="true" />}
-          label="Profile Settings"
-          fw={600}
-        />
-      ),
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Set once on mount
+  useAsyncMount(async () => {
+    await loadData();
+  });
 
   return (
     <Suspense
@@ -103,7 +92,7 @@ function ProfileModalContent({ context, id }) {
       <Stack>
         <Tabs value={activeTab} onChange={setActiveTab}>
           <Tabs.List>
-            <Tabs.Tab value="profile" leftSection={<IconUser size={16} />}>
+            <Tabs.Tab value="profile" leftSection={<TabIconUser size={16} />}>
               Profile
             </Tabs.Tab>
             <Tabs.Tab value="password" leftSection={<IconKey size={16} />}>
@@ -163,7 +152,6 @@ function ProfileModalContent({ context, id }) {
 }
 
 ProfileModalContent.propTypes = {
-  context: PropTypes.object.isRequired,
   id: PropTypes.string.isRequired,
 };
 

@@ -4,7 +4,6 @@ import { fetchWithHeaders, handleResponse } from '../../utils/apiUtils.js';
 import { AuthContext } from '../AuthContext.jsx';
 import { useTeams } from '../sseContext/index.js';
 import { PermissionsContext } from './context.js';
-import { useInitialState } from '../../hooks/useInitialState.js';
 import { useEventListener } from '../../hooks/useEventListener.js';
 import logger from '../../utils/logger.js';
 
@@ -94,13 +93,6 @@ export const PermissionsProvider = ({ children }) => {
       setMembershipLoading(false);
     }
   }, [isAuthenticated, user]);
-
-  // Load organization data when authentication state changes
-  // Uses custom useInitialState hook to handle initialization pattern
-  useInitialState(loadOrganizationData, null, {
-    condition: isAuthenticated && user,
-    resetCondition: !isAuthenticated || !user,
-  });
 
   // Watch for user ID changes (including impersonation) and reload permissions
   useEffect(() => {

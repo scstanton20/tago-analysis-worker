@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { analysisService } from '../services/analysisService';
-import { useAsyncOperation } from './async';
+import { useAsyncOperation, useAsyncMount } from './async';
 import logger from '../utils/logger';
 
 /**
@@ -155,33 +155,21 @@ export function useAnalysisEdit({
   /**
    * Load content when component mounts or analysis changes
    */
-  useEffect(() => {
-    let isCancelled = false;
-
-    async function loadContent() {
+  useAsyncMount(
+    async () => {
       const nameToUse = isEnvMode ? currentAnalysis.name : displayName;
       if (!nameToUse) return;
 
-      await loadContentOperation.execute(async () => {
-        const fileContent = isEnvMode
-          ? await analysisService.getAnalysisENVContent(nameToUse)
-          : await analysisService.getAnalysisContent(nameToUse, version);
+      const fileContent = isEnvMode
+        ? await analysisService.getAnalysisENVContent(nameToUse)
+        : await analysisService.getAnalysisContent(nameToUse, version);
 
-        if (!isCancelled) {
-          setContent(fileContent);
-          setOriginalContent(fileContent);
-          setHasChanges(false);
-        }
-      });
-    }
-
-    loadContent();
-
-    return () => {
-      isCancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentAnalysis.name, displayName, isEnvMode, type, version]);
+      setContent(fileContent);
+      setOriginalContent(fileContent);
+      setHasChanges(false);
+    },
+    { deps: [currentAnalysis.name, displayName, isEnvMode, type, version] },
+  );
 
   /**
    * Save analysis content with auto-formatting

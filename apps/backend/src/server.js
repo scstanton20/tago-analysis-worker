@@ -262,6 +262,9 @@ async function startServer() {
     app.use(`${API_PREFIX}/settings`, routes.settingsRoutes);
     serverLogger.info('✓ Settings routes mounted');
 
+    app.use(`${API_PREFIX}/utils-docs`, routes.utilsDocsRoutes);
+    serverLogger.info('✓ Utils documentation routes mounted');
+
     // SSE routes
     app.use(`${API_PREFIX}/sse`, routes.sseRoutes);
     serverLogger.info('✓ SSE routes mounted');

@@ -20,7 +20,7 @@ import AnalysisEditModalContent from './components/AnalysisEditModalContent.jsx'
  * 1. Create a content component in modals/components/
  * 2. Import it at the top of this file
  * 3. Add it to the modalComponents object with a unique key
- * 4. Add a service function in modalService.js
+ * 4. Add a service function in modalService.jsx
  * 5. Use modalService.openYourModal() to open it
  *
  * Modal content components receive these props from Mantine:

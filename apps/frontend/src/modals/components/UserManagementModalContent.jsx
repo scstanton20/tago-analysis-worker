@@ -87,14 +87,17 @@ function UserManagementModalContent({ id }) {
     teams,
   });
 
-  // Load data when modal opens
+  // Load data when user becomes admin
   useEffect(() => {
     if (isAdmin) {
       loadUsers();
       loadActions();
     }
+    // loadUsers and loadActions are stable callbacks from useUserManagement hook
+    // Including them in deps would cause infinite loops due to internal operation state
+    // We only want to reload when isAdmin status changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run once on mount, isAdmin is stable
+  }, [isAdmin]);
 
   // Only show if user is admin
   if (!isAdmin) {

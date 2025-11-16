@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useInitialValues } from '../../../hooks/useInitialState';
 import {
   Stack,
@@ -25,7 +25,7 @@ import {
   DangerButton,
 } from '../../../components/global';
 import { useNotifications } from '../../../hooks/useNotifications';
-import { useAsyncOperation } from '../../../hooks/async/useAsyncOperation';
+import { useAsyncOperation, useAsyncMount } from '../../../hooks/async';
 import {
   IconTransfer,
   IconTrash,
@@ -42,7 +42,6 @@ function DNSCacheSettings() {
   const { dnsCache } = useBackend();
   const { isAuthenticated } = useAuth();
   const notify = useNotifications();
-  const loadConfigOperation = useAsyncOperation();
   const loadEntriesOperation = useAsyncOperation();
   const [entries, setEntries] = useState([]);
   const [showEntries, setShowEntries] = useState(false);
@@ -61,12 +60,23 @@ function DNSCacheSettings() {
   const config = dnsCache?.config || initialConfig;
   const stats = dnsCache?.stats || initialStats;
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      loadConfig();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated]);
+  // Load config on mount when authenticated
+  const loadConfigOperation = useAsyncMount(
+    async () => {
+      const data = await dnsService.getConfig();
+
+      // Set initial data for immediate display (SSE will update later)
+      setInitialConfig(data.config);
+      setInitialStats(data.stats);
+
+      // Initialize pending values from loaded config
+      setPendingTtl(data.config.ttl);
+      setPendingMaxEntries(data.config.maxEntries);
+      setHasUnsavedChanges(false);
+      setValidationErrors({});
+    },
+    { deps: [isAuthenticated] },
+  );
 
   // Initialize pending values when config is first loaded
   useInitialValues(
@@ -109,22 +119,6 @@ function DNSCacheSettings() {
 
     const error = validateMaxEntries(value);
     setValidationErrors((prev) => ({ ...prev, maxEntries: error }));
-  };
-
-  const loadConfig = async () => {
-    await loadConfigOperation.execute(async () => {
-      const data = await dnsService.getConfig();
-
-      // Set initial data for immediate display (SSE will update later)
-      setInitialConfig(data.config);
-      setInitialStats(data.stats);
-
-      // Initialize pending values from loaded config
-      setPendingTtl(data.config.ttl);
-      setPendingMaxEntries(data.config.maxEntries);
-      setHasUnsavedChanges(false);
-      setValidationErrors({});
-    });
   };
 
   const loadEntries = async () => {

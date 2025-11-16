@@ -4,7 +4,8 @@
  * @module modals/components/VersionManagementModalContent
  */
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
+import { useAsyncMount, useAsyncOperation } from '../../hooks/async';
 import {
   Stack,
   Text,
@@ -20,7 +21,6 @@ import {
 import { modals } from '@mantine/modals';
 import { SecondaryButton } from '../../components/global/buttons';
 import {
-  IconHistory,
   IconDownload,
   IconPlayerPlay,
   IconInfoCircle,
@@ -30,9 +30,8 @@ import {
 } from '@tabler/icons-react';
 import { analysisService } from '../../services/analysisService';
 import { useNotifications } from '../../hooks/useNotifications';
-import { useAsyncOperation } from '../../hooks/async/useAsyncOperation';
 import { modalService } from '../modalService';
-import { IconLabel, LoadingState } from '../../components/global';
+import { LoadingState } from '../../components/global';
 import logger from '../../utils/logger';
 import PropTypes from 'prop-types';
 
@@ -41,14 +40,13 @@ import PropTypes from 'prop-types';
  * Content component for version management modal
  *
  * @param {Object} props - Component props
- * @param {Object} props.context - Mantine modal context
  * @param {string} props.id - Modal ID
  * @param {Object} props.innerProps - Modal inner props
  * @param {Object} props.innerProps.analysis - Analysis object
  * @param {Function} props.innerProps.onVersionRollback - Callback after version rollback
  * @returns {JSX.Element} Modal content
  */
-function VersionManagementModalContent({ context, id, innerProps }) {
+function VersionManagementModalContent({ id, innerProps }) {
   const { analysis, onVersionRollback } = innerProps;
   const [versionData, setVersionData] = useState({
     versions: [],
@@ -57,37 +55,17 @@ function VersionManagementModalContent({ context, id, innerProps }) {
   });
   const [rollbackLoading, setRollbackLoading] = useState(null);
   const notify = useNotifications();
-  const loadVersionsOperation = useAsyncOperation();
   const downloadOperation = useAsyncOperation();
 
-  const loadVersions = useCallback(async () => {
-    await loadVersionsOperation.execute(async () => {
+  // Load versions when component mounts or analysis changes
+  const loadVersionsOperation = useAsyncMount(
+    async () => {
+      if (!analysis?.name) return;
       const data = await analysisService.getVersions(analysis.name);
       setVersionData(data);
-    });
-  }, [analysis.name, loadVersionsOperation]);
-
-  // Load versions when component mounts (modal opens)
-  useEffect(() => {
-    if (analysis?.name) {
-      loadVersions();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run once on mount
-
-  // Update modal title dynamically
-  useEffect(() => {
-    context.updateModal({
-      title: (
-        <IconLabel
-          icon={<IconHistory size={20} aria-hidden="true" />}
-          label={`Version History - ${analysis?.name}`}
-          fw={600}
-        />
-      ),
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Set once on mount (analysis.name doesn't change for this modal)
+    },
+    { deps: [analysis?.name] },
+  );
 
   const handleRollback = async (version) => {
     modals.openConfirmModal({
@@ -111,7 +89,10 @@ function VersionManagementModalContent({ context, id, innerProps }) {
           }
 
           // Reload versions to update current version indicator
-          await loadVersions();
+          await loadVersionsOperation.execute(async () => {
+            const data = await analysisService.getVersions(analysis.name);
+            setVersionData(data);
+          });
         } catch (error) {
           logger.error('Failed to rollback:', error);
         } finally {
@@ -338,7 +319,6 @@ function VersionManagementModalContent({ context, id, innerProps }) {
 }
 
 VersionManagementModalContent.propTypes = {
-  context: PropTypes.object.isRequired,
   id: PropTypes.string.isRequired,
   innerProps: PropTypes.shape({
     analysis: PropTypes.object.isRequired,

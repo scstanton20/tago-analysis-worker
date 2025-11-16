@@ -12,7 +12,7 @@ import { useEffect, useLayoutEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { basicSetup } from 'codemirror';
 import { EditorView } from '@codemirror/view';
-import { EditorState } from '@codemirror/state';
+import { EditorState, Compartment } from '@codemirror/state';
 import { javascript } from '@codemirror/lang-javascript';
 import { lintGutter } from '@codemirror/lint';
 import { unifiedMergeView } from '@codemirror/merge';
@@ -44,6 +44,7 @@ export function CodeMirrorEditor({
 }) {
   const editorRef = useRef(null);
   const viewRef = useRef(null);
+  const themeCompartmentRef = useRef(new Compartment());
   const onChangeRef = useRef(onChange);
   const readOnlyRef = useRef(readOnly);
   const languageRef = useRef(language);
@@ -76,7 +77,7 @@ export function CodeMirrorEditor({
       // Create unified diff view (inline diff)
       const extensions = [
         readOnlySetup, // Use consistent read-only setup for diff views
-        theme,
+        themeCompartmentRef.current.of(theme),
         unifiedMergeView({
           original: value || '', // Current version as original
           mergeControls: false, // Disable accept/reject controls for read-only viewing
@@ -109,7 +110,7 @@ export function CodeMirrorEditor({
       // Create regular editor
       const extensions = [
         readOnlyRef.current ? readOnlySetup : basicSetup,
-        theme,
+        themeCompartmentRef.current.of(theme),
       ];
 
       // Add update listener for editable editors
@@ -172,118 +173,26 @@ export function CodeMirrorEditor({
         viewRef.current = null;
       }
     };
-    // This effect intentionally runs once on mount to create the editor.
-    // It captures initial prop values (value, colorScheme, diffMode, originalContent).
-    // Subsequent updates are handled by separate effects (lines 177-277, 279-339)
-    // and refs (onChangeRef, readOnlyRef, etc.) to avoid expensive editor recreation.
-    // This is a valid performance optimization pattern for expensive initialization.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Create only once on mount
 
   // Update theme when colorScheme changes
   useEffect(() => {
-    if (viewRef.current) {
-      // Get appropriate theme for CodeMirror (external library needs explicit theme objects)
-      const theme =
-        colorScheme === 'dark' ||
-        (colorScheme === 'auto' &&
-          window.matchMedia('(prefers-color-scheme: dark)').matches)
-          ? vsCodeDark
-          : vsCodeLight;
+    if (!viewRef.current || !themeCompartmentRef.current) return;
 
-      // For theme changes, we need to recreate the editor with the new theme
-      // This is the correct way to handle theme switching in CodeMirror 6
-      const currentContent = viewRef.current.state.doc.toString();
-      const parent = viewRef.current.dom.parentNode;
+    const theme =
+      colorScheme === 'dark' ||
+      (colorScheme === 'auto' &&
+        window.matchMedia('(prefers-color-scheme: dark)').matches)
+        ? vsCodeDark
+        : vsCodeLight;
 
-      // Track if this is currently a diff view based on props
-      const isDiffView = diffMode && originalContent;
-
-      viewRef.current.destroy();
-
-      if (isDiffView) {
-        // Recreate unified diff view
-        const extensions = [
-          readOnlySetup, // Use consistent read-only setup for diff views
-          theme,
-          unifiedMergeView({
-            original: currentContent || '', // Current version as original
-            mergeControls: false, // Disable accept/reject controls
-            collapseUnchanged: { margin: 3, minSize: 4 }, // Collapse unchanged lines
-          }),
-        ];
-
-        if (languageRef.current === 'javascript') {
-          extensions.push(javascript());
-        }
-
-        const state = EditorState.create({
-          doc: originalContent || '', // Previous version as document
-          extensions,
-        });
-
-        const view = new EditorView({
-          state,
-          parent,
-        });
-
-        viewRef.current = view;
-
-        // Expose view to parent component
-        if (onViewReadyRef.current) {
-          onViewReadyRef.current(view);
-        }
-      } else {
-        // Recreate regular editor
-        const extensions = [
-          readOnlyRef.current ? readOnlySetup : basicSetup,
-          theme,
-        ];
-
-        // Add update listener for editable editors
-        if (!readOnlyRef.current) {
-          extensions.push(
-            EditorView.updateListener.of((update) => {
-              if (update.docChanged && onChangeRef.current) {
-                const newContent = update.state.doc.toString();
-                onChangeRef.current(newContent);
-              }
-            }),
-          );
-        }
-
-        if (languageRef.current === 'javascript') {
-          extensions.push(javascript());
-
-          // Add editor keymap (Tab indentation + format) and linting for editable JavaScript editors
-          if (!readOnlyRef.current) {
-            extensions.push(editorKeymap);
-            extensions.push(lintGutter());
-            extensions.push(
-              createJavaScriptLinter(onDiagnosticsChangeRef.current),
-            );
-          }
-        }
-
-        const state = EditorState.create({
-          doc: currentContent,
-          extensions,
-        });
-
-        const view = new EditorView({
-          state,
-          parent,
-        });
-
-        viewRef.current = view;
-
-        // Expose view to parent component
-        if (onViewReadyRef.current) {
-          onViewReadyRef.current(view);
-        }
-      }
-    }
-  }, [colorScheme, diffMode, originalContent]);
+    // Use dispatch with compartment reconfigure instead of destroying the editor
+    // This is efficient and preserves all editor state
+    viewRef.current.dispatch({
+      effects: themeCompartmentRef.current.reconfigure(theme),
+    });
+  }, [colorScheme]);
 
   // Update content when value changes externally (but not from user typing)
   useEffect(() => {
@@ -306,7 +215,7 @@ export function CodeMirrorEditor({
 
           const extensions = [
             readOnlySetup, // Use consistent read-only setup for diff views
-            theme,
+            themeCompartmentRef.current.of(theme),
             unifiedMergeView({
               original: value || '', // Current version as original
               mergeControls: false, // Disable accept/reject controls
@@ -348,7 +257,12 @@ export function CodeMirrorEditor({
         }
       }
     }
-  }, [value, diffMode, originalContent, colorScheme]);
+    // colorScheme is intentionally excluded from dependencies.
+    // Theme changes are handled by the separate effect (lines 187-202)
+    // using dispatch with compartment.reconfigure. This prevents unnecessary
+    // editor destruction when only the theme changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, diffMode, originalContent]);
 
   return (
     <div

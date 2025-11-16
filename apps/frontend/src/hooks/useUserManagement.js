@@ -5,6 +5,7 @@ import { admin, authClient } from '../lib/auth';
 import { userService } from '../services/userService';
 import { modalService } from '../modals/modalService';
 import { useAsyncOperation } from './async';
+import { useEventListener } from './useEventListener';
 import logger from '../utils/logger.js';
 import {
   generateSecurePassword,
@@ -33,35 +34,16 @@ export function useUserManagement({
   const [createdUserInfo, setCreatedUserInfo] = useState(null);
   const [actions, setActions] = useState([]);
   const [currentUserMemberRole, setCurrentUserMemberRole] = useState(null);
+  const [memberRoleError, setMemberRoleError] = useState(null);
 
-  // Async operations
-  const loadUsersOperation = useAsyncOperation({
-    onError: (error) => logger.error('Error loading users:', error),
-  });
-
-  const loadActionsOperation = useAsyncOperation({
-    onError: (error) => logger.error('Error loading actions:', error),
-  });
-
-  const submitOperation = useAsyncOperation({
-    onError: (error) => logger.error('Submit error:', error),
-  });
-
-  const deleteOperation = useAsyncOperation({
-    onError: (error) => logger.error('Delete error:', error),
-  });
-
-  const banOperation = useAsyncOperation({
-    onError: (error) => logger.error('Ban error:', error),
-  });
-
-  const unbanOperation = useAsyncOperation({
-    onError: (error) => logger.error('Unban error:', error),
-  });
-
-  const impersonateOperation = useAsyncOperation({
-    onError: (error) => logger.error('Impersonate error:', error),
-  });
+  // Async operations (errors are exposed via .error property and displayed to user)
+  const loadUsersOperation = useAsyncOperation();
+  const loadActionsOperation = useAsyncOperation();
+  const submitOperation = useAsyncOperation();
+  const deleteOperation = useAsyncOperation();
+  const banOperation = useAsyncOperation();
+  const unbanOperation = useAsyncOperation();
+  const impersonateOperation = useAsyncOperation();
 
   // Derived states
   const loading =
@@ -80,7 +62,8 @@ export function useUserManagement({
     deleteOperation.error ||
     banOperation.error ||
     unbanOperation.error ||
-    impersonateOperation.error;
+    impersonateOperation.error ||
+    memberRoleError;
 
   // Convert teams from SSE object to array format for dropdown
   const availableTeams = useMemo(() => {
@@ -202,11 +185,18 @@ export function useUserManagement({
       try {
         const { data, error } =
           await authClient.organization.getActiveMemberRole();
-        if (!error && data?.role) {
+        if (error) {
+          setMemberRoleError(error.message);
+          logger.error('Error fetching member role:', error);
+          return;
+        }
+        if (data?.role) {
           setCurrentUserMemberRole(data.role);
+          setMemberRoleError(null);
         }
       } catch (err) {
         logger.error('Error fetching member role:', err);
+        setMemberRoleError(err.message);
       }
     };
 
@@ -827,45 +817,28 @@ export function useUserManagement({
   }, [form]);
 
   // Listen for SSE events for user role updates
-  useEffect(() => {
-    const handleAdminUserRoleUpdated = (event) => {
-      const data = event.detail;
-      logger.log(
-        'User management: Received admin user role update event:',
-        data,
-      );
+  const handleAdminUserRoleUpdated = useCallback((event) => {
+    const data = event.detail;
+    logger.log('User management: Received admin user role update event:', data);
 
-      // Update the specific user in the users list without a full reload
-      setUsers((prevUsers) => {
-        return prevUsers.map((user) => {
-          if (user.id === data.userId) {
-            logger.log(
-              `Updating user ${user.id} role from ${user.role} to ${data.role}`,
-            );
-            return {
-              ...user,
-              role: data.role,
-            };
-          }
-          return user;
-        });
+    // Update the specific user in the users list without a full reload
+    setUsers((prevUsers) => {
+      return prevUsers.map((user) => {
+        if (user.id === data.userId) {
+          logger.log(
+            `Updating user ${user.id} role from ${user.role} to ${data.role}`,
+          );
+          return {
+            ...user,
+            role: data.role,
+          };
+        }
+        return user;
       });
-    };
-
-    // Add event listener
-    window.addEventListener(
-      'admin-user-role-updated',
-      handleAdminUserRoleUpdated,
-    );
-
-    // Cleanup
-    return () => {
-      window.removeEventListener(
-        'admin-user-role-updated',
-        handleAdminUserRoleUpdated,
-      );
-    };
+    });
   }, []);
+
+  useEventListener('admin-user-role-updated', handleAdminUserRoleUpdated);
 
   return {
     // State

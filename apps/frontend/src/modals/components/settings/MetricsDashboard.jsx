@@ -451,7 +451,9 @@ function MetricsDashboard() {
       {/* Header */}
       <Group justify="space-between" align="center">
         <div>
-          <Title order={2}>📊 System Metrics</Title>
+          <Text size="lg" fw={600} mb="sm">
+            System Metrics
+          </Text>
           <Text c="dimmed">
             Real-time monitoring dashboard • Updates every second
           </Text>

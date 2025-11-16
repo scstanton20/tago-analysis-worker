@@ -6,3 +6,4 @@ export { userRouter as userRoutes } from './userRoutes.js';
 export { sseRouter as sseRoutes } from './sseRoutes.js';
 export { settingsRouter as settingsRoutes } from './settingsRoutes.js';
 export { metricsRouter as metricsRoutes } from './metricsRoutes.js';
+export { default as utilsDocsRoutes } from './utilsDocsRoutes.js';

@@ -34,6 +34,14 @@ const AnalysisLogs = ({ analysis }) => {
   const isLoadingMore = useRef(false);
   const hasLoadedInitial = useRef(false);
   const isMountedRef = useMountedRef();
+  // Refs to track latest log state for deduplication without deps
+  const currentLogsRef = useRef({
+    sseLogs: [],
+    initialLogs: [],
+    additionalLogs: [],
+  });
+  // Ref to track previous log count for clearing detection
+  const previousLogCountRef = useRef(0);
 
   // Memoize sseLogs to prevent unnecessary re-renders
   const sseLogs = useMemo(() => analysis.logs || [], [analysis.logs]);
@@ -90,6 +98,12 @@ const AnalysisLogs = ({ analysis }) => {
     };
   }, [analysis.name, sessionId, subscribeToAnalysis, unsubscribeFromAnalysis]);
 
+  // Keep currentLogsRef in sync with latest log state
+  // This allows loadMoreLogs to access current values without including them in deps
+  useEffect(() => {
+    currentLogsRef.current = { sseLogs, initialLogs, additionalLogs };
+  }, [sseLogs, initialLogs, additionalLogs]);
+
   // Load initial logs on mount or analysis change
   useEffect(() => {
     hasLoadedInitial.current = false;
@@ -97,9 +111,14 @@ const AnalysisLogs = ({ analysis }) => {
     setAdditionalLogs([]);
     setPage(1);
     setHasMore(false);
+    previousLogCountRef.current = 0; // Reset log count tracker
     disableAutoScroll(); // Start with auto-scroll disabled
     loadInitialLogs();
-  }, [analysis.name, loadInitialLogs, disableAutoScroll]);
+    // loadInitialLogs & disableAutoScroll are stable callbacks that depend on
+    // analysis.name, so they'll naturally update when analysis.name changes.
+    // Including them in deps would cause unnecessary reruns.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analysis.name]);
 
   const loadMoreLogs = useCallback(async () => {
     if (isLoadingMore.current || !hasMore || !isMountedRef.current) return;
@@ -115,12 +134,20 @@ const AnalysisLogs = ({ analysis }) => {
 
       if (!isMountedRef.current) return;
 
+      // Use refs to get current log values without including them in deps
+      // This prevents unnecessary callback recreations when logs update
+      const {
+        sseLogs: currentSseLogs,
+        initialLogs: currentInitialLogs,
+        additionalLogs: currentAdditionalLogs,
+      } = currentLogsRef.current;
+
       // Filter out logs we already have
       const existingSequences = new Set(
         [
-          ...sseLogs.map((log) => log.sequence),
-          ...initialLogs.map((log) => log.sequence),
-          ...additionalLogs.map((log) => log.sequence),
+          ...currentSseLogs.map((log) => log.sequence),
+          ...currentInitialLogs.map((log) => log.sequence),
+          ...currentAdditionalLogs.map((log) => log.sequence),
         ].filter(Boolean),
       );
 
@@ -141,15 +168,7 @@ const AnalysisLogs = ({ analysis }) => {
     } finally {
       isLoadingMore.current = false;
     }
-  }, [
-    analysis.name,
-    page,
-    hasMore,
-    sseLogs,
-    initialLogs,
-    additionalLogs,
-    isMountedRef,
-  ]);
+  }, [analysis.name, page, hasMore, isMountedRef]);
 
   const handleBottomReached = useCallback(() => {
     // Only load more if we're not already loading and there are more logs
@@ -159,32 +178,14 @@ const AnalysisLogs = ({ analysis }) => {
     }
   }, [hasMore, loadMoreLogs, isMountedRef]);
 
-  // Reset and load logs when analysis changes
-  const [currentAnalysisName, setCurrentAnalysisName] = useState(analysis.name);
-
-  useEffect(() => {
-    if (analysis.name !== currentAnalysisName) {
-      setCurrentAnalysisName(analysis.name);
-      hasLoadedInitial.current = false;
-      setInitialLogs([]);
-      setAdditionalLogs([]);
-      setPage(1);
-      setHasMore(false);
-      disableAutoScroll();
-      loadInitialLogs();
-    }
-  }, [analysis.name, currentAnalysisName, disableAutoScroll, loadInitialLogs]);
-
-  // Reset state when logs are cleared
-  const [previousLogCount, setPreviousLogCount] = useState(sseLogs.length);
-
-  // Use useEffect to handle log clearing detection properly
+  // Detect and handle log clearing with ref-based tracking
+  // Using ref instead of state eliminates circular dependency in effect deps
   useEffect(() => {
     // Detect when logs are cleared (sse logs go to 0 or contain only a clear message)
     const logsWereCleared =
       isMountedRef.current &&
       hasLoadedInitial.current &&
-      previousLogCount > 0 &&
+      previousLogCountRef.current > 0 &&
       (sseLogs.length === 0 ||
         (sseLogs.length === 1 && sseLogs[0]?.message?.includes('cleared')));
 
@@ -194,24 +195,23 @@ const AnalysisLogs = ({ analysis }) => {
       setAdditionalLogs([]);
       setPage(1);
       setHasMore(false);
+      previousLogCountRef.current = 0;
       disableAutoScroll();
       hasLoadedInitial.current = false; // Force reload of initial logs
       loadInitialLogs();
     }
 
-    // Update previous count
-    setPreviousLogCount(sseLogs.length);
-  }, [
-    sseLogs.length,
-    previousLogCount,
-    isMountedRef,
-    loadInitialLogs,
-    sseLogs,
-    disableAutoScroll,
-  ]);
+    // Update previous count via ref (no state needed)
+    previousLogCountRef.current = sseLogs.length;
+    // loadInitialLogs & disableAutoScroll are stable callbacks that change when
+    // sseLogs changes, so we omit them to prevent unnecessary reruns and potential
+    // race conditions.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sseLogs, isMountedRef]);
 
   // Memoize combined logs to prevent unnecessary recalculations
-  const allLogs = useCallback(() => {
+  // Using useMemo instead of useCallback since we call this every render
+  const logs = useMemo(() => {
     return [...sseLogs, ...initialLogs, ...additionalLogs]
       .filter(
         (log, index, self) =>
@@ -227,8 +227,6 @@ const AnalysisLogs = ({ analysis }) => {
         return new Date(b.timestamp) - new Date(a.timestamp);
       });
   }, [sseLogs, initialLogs, additionalLogs]);
-
-  const logs = allLogs();
 
   // Store active event listeners to ensure cleanup on unmount
   const activeListenersRef = useRef({ onMouseMove: null, onMouseUp: null });

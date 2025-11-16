@@ -16,28 +16,35 @@ import { PrimaryButton, SecondaryButton } from '../global';
 
 const ConnectionStatus = () => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const { connectionStatus, requestStatusUpdate } = useConnection();
+  const { connectionStatus, requestStatusUpdate, forceReconnect } =
+    useConnection();
   const { backendStatus } = useBackend();
 
   const getOverallStatusColor = () => {
-    if (!backendStatus) return 'red';
+    // If no backend status or SSE disconnected, system is offline
+    if (!backendStatus || connectionStatus !== 'connected') return 'red';
 
     let disconnectedCount = 0;
 
     if (backendStatus.container_health.status !== 'healthy')
       disconnectedCount++;
-    if (connectionStatus !== 'connected') disconnectedCount++;
     if (backendStatus.tagoConnection.runningAnalyses === 0) {
       disconnectedCount++;
     }
 
-    if (disconnectedCount === 3) return 'red';
+    if (disconnectedCount === 2) return 'yellow';
     if (disconnectedCount >= 1) return 'yellow';
     return 'green';
   };
 
   const getStatusText = () => {
-    if (!backendStatus) return 'Loading...';
+    // If no backend status, check connection status to determine message
+    if (!backendStatus) {
+      if (connectionStatus === 'connecting') return 'Connecting...';
+      if (connectionStatus === 'disconnected') return 'Backend Offline';
+      if (connectionStatus === 'failed') return 'Connection Failed';
+      return 'Loading...';
+    }
     if (connectionStatus === 'server_restarting') return 'Server Restarting...';
     if (connectionStatus === 'manual_restart_required')
       return 'Manual Restart Required';
@@ -63,8 +70,14 @@ const ConnectionStatus = () => {
     }
   };
 
-  const handleRetryConnection = () => {
-    requestStatusUpdate();
+  const handleRetryConnection = async () => {
+    // If backend is offline (no metrics), force reconnect SSE
+    if (!backendStatus && connectionStatus !== 'connected') {
+      await forceReconnect();
+    } else {
+      // Otherwise just refresh status
+      await requestStatusUpdate();
+    }
   };
 
   const handleOpenSettings = () => {
@@ -164,7 +177,9 @@ const ConnectionStatus = () => {
                       backendStatus &&
                       backendStatus.container_health.status === 'healthy'
                         ? 'teal'
-                        : 'red'
+                        : !backendStatus && connectionStatus === 'connected'
+                          ? 'yellow'
+                          : 'red'
                     }
                     size={8}
                     styles={{
@@ -173,14 +188,20 @@ const ConnectionStatus = () => {
                           backendStatus &&
                           backendStatus.container_health.status === 'healthy'
                             ? 'linear-gradient(135deg, var(--mantine-color-teal-6) 0%, var(--mantine-color-green-6) 100%)'
-                            : 'linear-gradient(135deg, var(--mantine-color-red-6) 0%, var(--mantine-color-pink-6) 100%)',
+                            : !backendStatus && connectionStatus === 'connected'
+                              ? 'linear-gradient(135deg, var(--mantine-color-yellow-6) 0%, var(--mantine-color-orange-6) 100%)'
+                              : 'linear-gradient(135deg, var(--mantine-color-red-6) 0%, var(--mantine-color-pink-6) 100%)',
                       },
                     }}
                   >
                     <Box />
                   </Indicator>
                   <Text size="sm" tt="capitalize" fw={500}>
-                    {backendStatus?.container_health.status || 'unknown'}
+                    {backendStatus?.container_health.status ||
+                      (connectionStatus === 'connected' ||
+                      connectionStatus === 'connecting'
+                        ? 'waiting'
+                        : 'offline')}
                   </Text>
                 </Group>
               </Group>

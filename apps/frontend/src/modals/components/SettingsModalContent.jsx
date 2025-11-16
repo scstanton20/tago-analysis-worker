@@ -1,19 +1,25 @@
 import { useState, lazy, Suspense } from 'react';
 import { Stack, Group, Text, Tabs, Box } from '@mantine/core';
-import { IconBook, IconTransfer, IconChartBar } from '@tabler/icons-react';
 import {
-  ContentBox,
+  IconBook,
+  IconTransfer,
+  IconChartBar,
+  IconCode,
+} from '@tabler/icons-react';
+import {
+  PaperCard,
   LoadingState,
   SecondaryButton,
 } from '../../components/global';
 const DNSCacheSettings = lazy(() => import('./settings/DNSCacheSettings'));
 const MetricsDashboard = lazy(() => import('./settings/MetricsDashboard'));
+const UtilsDocs = lazy(() => import('./settings/UtilsDocs'));
 
 /**
  * SettingsModalContent
  *
  * Modal content for application settings with tabbed interface.
- * Provides access to API documentation, metrics dashboard, and DNS cache settings.
+ * Provides access to API documentation, metrics dashboard, utilities documentation, and DNS cache settings.
  *
  * Note: This component does not accept any props.
  */
@@ -27,12 +33,15 @@ const SettingsModalContent = () => {
 
   return (
     <Tabs value={activeTab} onChange={setActiveTab} orientation="vertical">
-      <Group align="flex-start" gap="md" style={{ minHeight: 400 }}>
+      <Group align="flex-start" gap="md" style={{ minHeight: 800 }}>
         {/* Sidebar */}
         <Box style={{ minWidth: 100 }}>
           <Tabs.List>
             <Tabs.Tab value="api" leftSection={<IconBook size={16} />}>
               API Docs
+            </Tabs.Tab>
+            <Tabs.Tab value="utils" leftSection={<IconCode size={16} />}>
+              Utils Docs
             </Tabs.Tab>
             <Tabs.Tab value="metrics" leftSection={<IconChartBar size={16} />}>
               Metrics
@@ -60,7 +69,7 @@ const SettingsModalContent = () => {
                 <Text size="lg" fw={600} mb="sm">
                   API Documentation
                 </Text>
-                <ContentBox>
+                <PaperCard>
                   <Stack gap="sm">
                     <Text size="sm" c="dimmed">
                       Access API documentation and developer resources.
@@ -74,8 +83,12 @@ const SettingsModalContent = () => {
                       Open API Documentation
                     </SecondaryButton>
                   </Stack>
-                </ContentBox>
+                </PaperCard>
               </Stack>
+            </Tabs.Panel>
+
+            <Tabs.Panel value="utils">
+              <UtilsDocs />
             </Tabs.Panel>
 
             <Tabs.Panel value="metrics">
