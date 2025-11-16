@@ -55,4 +55,4 @@ config.files = {
   config: path.join(config.paths.config, 'analyses-config.json'),
 };
 
-export default config;
+export { config };

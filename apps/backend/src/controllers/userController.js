@@ -5,8 +5,7 @@ import {
   executeQueryAll,
   executeUpdate,
 } from '../utils/authDatabase.js';
-import { sseManager } from '../utils/sse.js';
-import { handleError } from '../utils/responseHelpers.js';
+import { sseManager } from '../utils/sse/index.js';
 
 /**
  * Controller class for managing user operations
@@ -19,7 +18,7 @@ import { handleError } from '../utils/responseHelpers.js';
  * All methods are static and follow Express route handler pattern (req, res).
  * Request-scoped logging is available via req.log.
  */
-class UserController {
+export class UserController {
   /**
    * Add user to organization
    * Creates membership in Better Auth organization using the organization plugin
@@ -45,39 +44,33 @@ class UserController {
       'Adding user to organization',
     );
 
-    try {
-      // Use server-side better-auth API to add member
-      const result = await auth.api.addMember({
-        body: {
+    // Use server-side better-auth API to add member
+    const result = await auth.api.addMember({
+      body: {
+        userId,
+        organizationId,
+        role,
+      },
+    });
+
+    if (result.error) {
+      req.log.error(
+        {
+          action: 'addToOrganization',
           userId,
           organizationId,
-          role,
+          err: result.error,
         },
-      });
-
-      if (result.error) {
-        req.log.error(
-          {
-            action: 'addToOrganization',
-            userId,
-            organizationId,
-            err: result.error,
-          },
-          'Better Auth addMember error',
-        );
-        return res.status(400).json({ error: result.error.message });
-      }
-
-      req.log.info(
-        { action: 'addToOrganization', userId, organizationId, role },
-        'User added to organization',
+        'Better Auth addMember error',
       );
-      res.json({ success: true, data: result.data });
-    } catch (error) {
-      handleError(res, error, 'adding user to organization', {
-        logger: req.logger,
-      });
+      return res.status(400).json({ error: result.error.message });
     }
+
+    req.log.info(
+      { action: 'addToOrganization', userId, organizationId, role },
+      'User added to organization',
+    );
+    res.json({ success: true, data: result.data });
   }
 
   /**
@@ -132,133 +125,15 @@ class UserController {
       'Assigning user to teams',
     );
 
-    const results = [];
-    const errors = [];
+    // Ensure user is organization member
+    await UserController.ensureUserIsOrgMember(userId, req.log);
 
-    try {
-      // Use database operations for team assignments
-      // Get organization ID
-      const org = executeQuery(
-        'SELECT id FROM organization WHERE slug = ?',
-        ['main'],
-        'getting main organization',
-      );
-      if (!org) {
-        throw new Error('Main organization not found');
-      }
-
-      // Ensure user is a member of the organization before adding to teams
-      const existingOrgMember = executeQuery(
-        'SELECT id FROM member WHERE userId = ? AND organizationId = ?',
-        [userId, org.id],
-        'checking existing organization membership',
-      );
-
-      if (!existingOrgMember) {
-        req.log.info(
-          { action: 'assignUserToTeams', userId, organizationId: org.id },
-          'Adding user to organization',
-        );
-        const addMemberResult = await auth.api.addMember({
-          body: {
-            userId,
-            organizationId: org.id,
-            role: 'member',
-          },
-        });
-
-        if (addMemberResult.error) {
-          throw new Error(
-            `Failed to add user to organization: ${addMemberResult.error.message}`,
-          );
-        }
-        req.log.info(
-          { action: 'assignUserToTeams', userId },
-          'Added user to organization',
-        );
-      }
-
-      // Process each team assignment using database operations
-      for (const assignment of teamAssignments) {
-        const { teamId, permissions = [] } = assignment;
-
-        if (!teamId) {
-          errors.push('teamId is required for each team assignment');
-          continue;
-        }
-
-        try {
-          // Check if user is already a member of this team
-          const existingMember = executeQuery(
-            'SELECT * FROM teamMember WHERE userId = ? AND teamId = ?',
-            [userId, teamId],
-            `checking existing team membership for user ${userId} in team ${teamId}`,
-          );
-
-          if (existingMember) {
-            // Update permissions for existing member
-            const permissionsJson = JSON.stringify(
-              permissions.length > 0 ? permissions : ['analysis.view'],
-            );
-
-            executeUpdate(
-              'UPDATE teamMember SET permissions = ? WHERE userId = ? AND teamId = ?',
-              [permissionsJson, userId, teamId],
-              `updating permissions for user ${userId} in team ${teamId}`,
-            );
-
-            results.push({
-              teamId,
-              permissions,
-              status: 'updated_permissions',
-            });
-            req.log.info(
-              { action: 'assignUserToTeams', userId, teamId },
-              'Updated team permissions',
-            );
-          } else {
-            // Add user to team
-            const permissionsJson = JSON.stringify(
-              permissions.length > 0
-                ? permissions
-                : ['analysis.view', 'analysis.run'],
-            );
-
-            executeUpdate(
-              'INSERT INTO teamMember (id, userId, teamId, permissions, createdAt) VALUES (?, ?, ?, ?, ?)',
-              [
-                uuidv4(),
-                userId,
-                teamId,
-                permissionsJson,
-                new Date().toISOString(),
-              ],
-              `adding user ${userId} to team ${teamId}`,
-            );
-
-            results.push({
-              teamId,
-              permissions,
-              status: 'success',
-            });
-            req.log.info(
-              { action: 'assignUserToTeams', userId, teamId },
-              'Added user to team',
-            );
-          }
-        } catch (teamError) {
-          errors.push(
-            `Error adding user to team ${teamId}: ${teamError.message}`,
-          );
-        }
-      }
-    } catch (outerError) {
-      req.log.error(
-        { action: 'assignUserToTeams', userId, err: outerError },
-        'Error in team assignment process',
-      );
-      errors.push(`Process error: ${outerError.message}`);
-    }
+    // Process team assignments
+    const { results, errors } = await UserController.processTeamAssignments(
+      userId,
+      teamAssignments,
+      req.log,
+    );
 
     req.log.info(
       {
@@ -277,23 +152,12 @@ class UserController {
       });
     }
 
-    // Send SSE notification to the affected user to refresh their data
+    // Send SSE notification and refresh init data
     if (results.length > 0) {
-      const teamCount = results.length;
-      const message = `You have been assigned to ${teamCount} team${teamCount !== 1 ? 's' : ''}`;
-
-      sseManager.sendToUser(userId, {
-        type: 'userTeamsUpdated',
-        data: {
-          userId,
-          message,
-          action: 'refresh',
-          showNotification: true,
-        },
-      });
-
-      // Refresh SSE init data with updated permissions
-      await sseManager.refreshInitDataForUser(userId);
+      await UserController.sendTeamAssignmentNotifications(
+        userId,
+        results.length,
+      );
     }
 
     res.json({
@@ -303,6 +167,211 @@ class UserController {
         errors: errors.length > 0 ? errors : null,
       },
     });
+  }
+
+  /**
+   * Ensure user is member of main organization
+   * Adds user to organization if not already a member
+   *
+   * @param {string} userId - User ID
+   * @param {Object} log - Logger instance
+   * @returns {Promise<void>}
+   * @throws {Error} If organization not found or add member fails
+   */
+  static async ensureUserIsOrgMember(userId, log) {
+    const org = executeQuery(
+      'SELECT id FROM organization WHERE slug = ?',
+      ['main'],
+      'getting main organization',
+    );
+    if (!org) {
+      throw new Error('Main organization not found');
+    }
+
+    const existingOrgMember = executeQuery(
+      'SELECT id FROM member WHERE userId = ? AND organizationId = ?',
+      [userId, org.id],
+      'checking existing organization membership',
+    );
+
+    if (!existingOrgMember) {
+      log.info(
+        { action: 'ensureUserIsOrgMember', userId, organizationId: org.id },
+        'Adding user to organization',
+      );
+      const addMemberResult = await auth.api.addMember({
+        body: {
+          userId,
+          organizationId: org.id,
+          role: 'member',
+        },
+      });
+
+      if (addMemberResult.error) {
+        throw new Error(
+          `Failed to add user to organization: ${addMemberResult.error.message}`,
+        );
+      }
+      log.info(
+        { action: 'ensureUserIsOrgMember', userId },
+        'Added user to organization',
+      );
+    }
+  }
+
+  /**
+   * Process team assignments for a user
+   * Adds or updates user's team memberships with permissions
+   * Can optionally provide current team IDs for optimized membership checks
+   *
+   * @param {string} userId - User ID
+   * @param {Array<Object>} teamAssignments - Array of {teamId, permissions}
+   * @param {Object} log - Logger instance
+   * @param {Array<string>} currentTeamIds - Current team IDs (optional, will check DB if not provided)
+   * @returns {Promise<{results: Array, errors: Array}>}
+   */
+  static async processTeamAssignments(
+    userId,
+    teamAssignments,
+    log,
+    currentTeamIds = null,
+  ) {
+    const results = [];
+    const errors = [];
+
+    for (const assignment of teamAssignments) {
+      const { teamId, permissions = [] } = assignment;
+
+      if (!teamId) {
+        errors.push('teamId is required for each team assignment');
+        continue;
+      }
+
+      try {
+        // When currentTeamIds is provided, we know the membership status
+        // Otherwise, check the database
+        const alreadyMember =
+          currentTeamIds !== null ? currentTeamIds.includes(teamId) : null;
+
+        await UserController.addOrUpdateTeamMembership(
+          userId,
+          teamId,
+          permissions,
+          log,
+          results,
+          alreadyMember,
+        );
+      } catch (teamError) {
+        errors.push(
+          `Error adding user to team ${teamId}: ${teamError.message}`,
+        );
+      }
+    }
+
+    return { results, errors };
+  }
+
+  /**
+   * Add or update user's team membership
+   * Updates permissions if user is already a member, otherwise creates new membership
+   * Uses different default permissions for update vs add to match original behavior
+   *
+   * @param {string} userId - User ID
+   * @param {string} teamId - Team ID
+   * @param {Array<string>} permissions - Permission strings
+   * @param {Object} log - Logger instance
+   * @param {Array} results - Results array to push outcome to
+   * @param {boolean|null} alreadyMember - Known membership status or null to check DB
+   * @returns {Promise<void>}
+   */
+  static async addOrUpdateTeamMembership(
+    userId,
+    teamId,
+    permissions,
+    log,
+    results,
+    alreadyMember = null,
+  ) {
+    // If alreadyMember not provided, check database
+    const isMember =
+      alreadyMember !== null
+        ? alreadyMember
+        : !!executeQuery(
+            'SELECT * FROM teamMember WHERE userId = ? AND teamId = ?',
+            [userId, teamId],
+            `checking existing team membership for user ${userId} in team ${teamId}`,
+          );
+
+    if (isMember) {
+      // Update permissions - default to analysis.view only
+      const permissionsJson = JSON.stringify(
+        permissions.length > 0 ? permissions : ['analysis.view'],
+      );
+
+      executeUpdate(
+        'UPDATE teamMember SET permissions = ? WHERE userId = ? AND teamId = ?',
+        [permissionsJson, userId, teamId],
+        `updating permissions for user ${userId} in team ${teamId}`,
+      );
+
+      results.push({
+        teamId,
+        permissions,
+        status: 'updated_permissions',
+      });
+      log.info(
+        { action: 'addOrUpdateTeamMembership', userId, teamId },
+        'Updated team permissions',
+      );
+    } else {
+      // Add user to team - default to view and run
+      const permissionsJson = JSON.stringify(
+        permissions.length > 0
+          ? permissions
+          : ['analysis.view', 'analysis.run'],
+      );
+
+      executeUpdate(
+        'INSERT INTO teamMember (id, userId, teamId, permissions, createdAt) VALUES (?, ?, ?, ?, ?)',
+        [uuidv4(), userId, teamId, permissionsJson, new Date().toISOString()],
+        `adding user ${userId} to team ${teamId}`,
+      );
+
+      results.push({
+        teamId,
+        permissions,
+        status: 'success',
+      });
+      log.info(
+        { action: 'addOrUpdateTeamMembership', userId, teamId },
+        'Added user to team',
+      );
+    }
+  }
+
+  /**
+   * Send team assignment notifications to user
+   * Sends SSE event and refreshes user's init data
+   *
+   * @param {string} userId - User ID
+   * @param {number} teamCount - Number of teams assigned
+   * @returns {Promise<void>}
+   */
+  static async sendTeamAssignmentNotifications(userId, teamCount) {
+    const message = `You have been assigned to ${teamCount} team${teamCount !== 1 ? 's' : ''}`;
+
+    sseManager.sendToUser(userId, {
+      type: 'userTeamsUpdated',
+      data: {
+        userId,
+        message,
+        action: 'refresh',
+        showNotification: true,
+      },
+    });
+
+    // Refresh SSE init data with updated permissions
+    await sseManager.refreshInitDataForUser(userId);
   }
 
   /**
@@ -355,92 +424,86 @@ class UserController {
       'Getting team memberships',
     );
 
-    try {
-      // Check if the target user (userId) is an admin
-      const targetUser = executeQuery(
-        'SELECT role FROM user WHERE id = ?',
-        [userId],
-        `getting role for user ${userId}`,
-      );
+    // Check if the target user (userId) is an admin
+    const targetUser = executeQuery(
+      'SELECT role FROM user WHERE id = ?',
+      [userId],
+      `getting role for user ${userId}`,
+    );
 
-      // If target user is an admin, return all teams with full permissions
-      if (targetUser?.role === 'admin') {
-        const allTeams = executeQueryAll(
-          `
-          SELECT id, name
-          FROM team
-          ORDER BY name
-        `,
-          [],
-          'getting all teams for admin user',
-        );
-
-        req.log.info(
-          {
-            action: 'getUserTeamMemberships',
-            userId,
-            count: allTeams.length,
-            isAdmin: true,
-          },
-          'All teams retrieved for admin user',
-        );
-
-        // Admin users get all permissions on all teams
-        const adminPermissions = [
-          'view_analyses',
-          'run_analyses',
-          'upload_analyses',
-          'download_analyses',
-          'edit_analyses',
-          'delete_analyses',
-        ];
-
-        return res.json({
-          success: true,
-          data: {
-            teams: allTeams.map((team) => ({
-              id: team.id,
-              name: team.name,
-              permissions: adminPermissions,
-            })),
-          },
-        });
-      }
-
-      // For regular users, get their specific team memberships
-      const memberships = executeQueryAll(
+    // If target user is an admin, return all teams with full permissions
+    if (targetUser?.role === 'admin') {
+      const allTeams = executeQueryAll(
         `
-        SELECT t.id, t.name, m.permissions
-        FROM teamMember m
-        JOIN team t ON m.teamId = t.id
-        WHERE m.userId = ?
+        SELECT id, name
+        FROM team
+        ORDER BY name
       `,
-        [userId],
-        `getting team memberships for user ${userId}`,
+        [],
+        'getting all teams for admin user',
       );
 
       req.log.info(
-        { action: 'getUserTeamMemberships', userId, count: memberships.length },
-        'Team memberships retrieved',
+        {
+          action: 'getUserTeamMemberships',
+          userId,
+          count: allTeams.length,
+          isAdmin: true,
+        },
+        'All teams retrieved for admin user',
       );
 
-      res.json({
+      // Admin users get all permissions on all teams
+      const adminPermissions = [
+        'view_analyses',
+        'run_analyses',
+        'upload_analyses',
+        'download_analyses',
+        'edit_analyses',
+        'delete_analyses',
+      ];
+
+      return res.json({
         success: true,
         data: {
-          teams: memberships.map((membership) => ({
-            id: membership.id,
-            name: membership.name,
-            permissions: membership.permissions
-              ? JSON.parse(membership.permissions)
-              : [],
+          teams: allTeams.map((team) => ({
+            id: team.id,
+            name: team.name,
+            permissions: adminPermissions,
           })),
         },
       });
-    } catch (error) {
-      handleError(res, error, 'getting user team memberships', {
-        logger: req.logger,
-      });
     }
+
+    // For regular users, get their specific team memberships
+    const memberships = executeQueryAll(
+      `
+      SELECT t.id, t.name, m.permissions
+      FROM teamMember m
+      JOIN team t ON m.teamId = t.id
+      WHERE m.userId = ?
+    `,
+      [userId],
+      `getting team memberships for user ${userId}`,
+    );
+
+    req.log.info(
+      { action: 'getUserTeamMemberships', userId, count: memberships.length },
+      'Team memberships retrieved',
+    );
+
+    res.json({
+      success: true,
+      data: {
+        teams: memberships.map((membership) => ({
+          id: membership.id,
+          name: membership.name,
+          permissions: membership.permissions
+            ? JSON.parse(membership.permissions)
+            : [],
+        })),
+      },
+    });
   }
 
   /**
@@ -472,7 +535,6 @@ class UserController {
     const { userId } = req.params;
     const { teamAssignments } = req.body;
 
-    // Validation handled by middleware
     req.log.info(
       {
         action: 'updateUserTeamAssignments',
@@ -482,192 +544,121 @@ class UserController {
       'Updating team assignments',
     );
 
-    try {
-      // Use database query to get current team memberships
-      const currentMemberships = executeQueryAll(
-        'SELECT teamId FROM teamMember WHERE userId = ?',
-        [userId],
-        `getting current team memberships for user ${userId}`,
+    // Get current and new team IDs
+    const { currentTeamIds, teamsToRemove } =
+      UserController.calculateTeamChanges(userId, teamAssignments);
+
+    // Ensure user is organization member
+    await UserController.ensureUserIsOrgMember(userId, req.log);
+
+    // Remove teams user is no longer assigned to
+    await UserController.removeUserFromTeams(userId, teamsToRemove, req.log);
+
+    // Add/update team assignments
+    const { results, errors } = await UserController.processTeamAssignments(
+      userId,
+      teamAssignments,
+      req.log,
+      currentTeamIds,
+    );
+
+    // Send notifications
+    await UserController.sendTeamUpdateNotifications(
+      userId,
+      teamAssignments.length,
+    );
+
+    req.log.info(
+      {
+        action: 'updateUserTeamAssignments',
+        userId,
+        successCount: results.length,
+        errorCount: errors.length,
+      },
+      'Team assignments updated',
+    );
+
+    res.json({
+      success: true,
+      data: {
+        assignments: results,
+        errors: errors.length > 0 ? errors : null,
+      },
+    });
+  }
+
+  /**
+   * Calculate which teams to add, update, or remove for a user
+   * Compares current and new team assignments
+   *
+   * @param {string} userId - User ID
+   * @param {Array<Object>} teamAssignments - New team assignments
+   * @returns {{currentTeamIds: Array, teamsToRemove: Array}}
+   */
+  static calculateTeamChanges(userId, teamAssignments) {
+    const currentMemberships = executeQueryAll(
+      'SELECT teamId FROM teamMember WHERE userId = ?',
+      [userId],
+      `getting current team memberships for user ${userId}`,
+    );
+    const currentTeamIds = currentMemberships.map((m) => m.teamId);
+    const newTeamIds = teamAssignments.map((assignment) => assignment.teamId);
+    const teamsToRemove = currentTeamIds.filter(
+      (teamId) => !newTeamIds.includes(teamId),
+    );
+
+    return { currentTeamIds, teamsToRemove };
+  }
+
+  /**
+   * Remove user from specified teams
+   * Deletes team memberships from database
+   *
+   * @param {string} userId - User ID
+   * @param {Array<string>} teamIds - Team IDs to remove from
+   * @param {Object} log - Logger instance
+   * @returns {Promise<void>}
+   */
+  static async removeUserFromTeams(userId, teamIds, log) {
+    for (const teamId of teamIds) {
+      executeUpdate(
+        'DELETE FROM teamMember WHERE userId = ? AND teamId = ?',
+        [userId, teamId],
+        `removing user ${userId} from team ${teamId}`,
       );
-      const currentTeamIds = currentMemberships.map((m) => m.teamId);
-
-      const newTeamIds = teamAssignments.map((assignment) => assignment.teamId);
-      const teamsToRemove = currentTeamIds.filter(
-        (teamId) => !newTeamIds.includes(teamId),
+      log.info(
+        { action: 'removeUserFromTeams', userId, teamId },
+        'Removed user from team',
       );
-
-      // Get organization ID
-      const org = executeQuery(
-        'SELECT id FROM organization WHERE slug = ?',
-        ['main'],
-        'getting main organization',
-      );
-      if (!org) {
-        throw new Error('Main organization not found');
-      }
-
-      // Ensure user is a member of the organization before updating teams
-      const existingOrgMember = executeQuery(
-        'SELECT id FROM member WHERE userId = ? AND organizationId = ?',
-        [userId, org.id],
-        'checking existing organization membership',
-      );
-
-      if (!existingOrgMember) {
-        req.log.info(
-          {
-            action: 'updateUserTeamAssignments',
-            userId,
-            organizationId: org.id,
-          },
-          'Adding user to organization',
-        );
-        const addMemberResult = await auth.api.addMember({
-          body: {
-            userId,
-            organizationId: org.id,
-            role: 'member',
-          },
-        });
-
-        if (addMemberResult.error) {
-          throw new Error(
-            `Failed to add user to organization: ${addMemberResult.error.message}`,
-          );
-        }
-        req.log.info(
-          { action: 'updateUserTeamAssignments', userId },
-          'Added user to organization',
-        );
-      }
-
-      // Remove user from teams they're no longer assigned to
-      for (const teamId of teamsToRemove) {
-        executeUpdate(
-          'DELETE FROM teamMember WHERE userId = ? AND teamId = ?',
-          [userId, teamId],
-          `removing user ${userId} from team ${teamId}`,
-        );
-        req.log.info(
-          { action: 'updateUserTeamAssignments', userId, teamId },
-          'Removed user from team',
-        );
-      }
-
-      // Add user to new teams (or update existing memberships)
-      const results = [];
-      const errors = [];
-
-      for (const assignment of teamAssignments) {
-        const { teamId, permissions = [] } = assignment;
-
-        if (!teamId) {
-          errors.push('teamId is required for each team assignment');
-          continue;
-        }
-
-        try {
-          // Check if user is already a member of this team
-          const alreadyMember = currentTeamIds.includes(teamId);
-
-          if (!alreadyMember) {
-            // Add user to team with permissions using database
-            const permissionsJson = JSON.stringify(
-              permissions.length > 0
-                ? permissions
-                : ['analysis.view', 'analysis.run'],
-            );
-
-            executeUpdate(
-              'INSERT INTO teamMember (id, userId, teamId, permissions, createdAt) VALUES (?, ?, ?, ?, ?)',
-              [
-                uuidv4(),
-                userId,
-                teamId,
-                permissionsJson,
-                new Date().toISOString(),
-              ],
-              `adding user ${userId} to team ${teamId}`,
-            );
-
-            req.log.info(
-              { action: 'updateUserTeamAssignments', userId, teamId },
-              'Added user to team',
-            );
-          } else {
-            // Update permissions for existing member
-            const permissionsJson = JSON.stringify(
-              permissions.length > 0
-                ? permissions
-                : ['analysis.view', 'analysis.run'],
-            );
-
-            executeUpdate(
-              'UPDATE teamMember SET permissions = ? WHERE userId = ? AND teamId = ?',
-              [permissionsJson, userId, teamId],
-              `updating permissions for user ${userId} in team ${teamId}`,
-            );
-
-            req.log.info(
-              { action: 'updateUserTeamAssignments', userId, teamId },
-              'Updated team permissions',
-            );
-          }
-
-          results.push({
-            teamId,
-            permissions,
-            status: alreadyMember ? 'updated_permissions' : 'success',
-          });
-        } catch (teamError) {
-          errors.push(
-            `Error updating team assignment ${teamId}: ${teamError.message}`,
-          );
-        }
-      }
-
-      // Send SSE notification to the affected user to refresh their data
-      const teamCount = teamAssignments.length;
-      const message =
-        teamCount > 0
-          ? `You have been assigned to ${teamCount} team${teamCount !== 1 ? 's' : ''}`
-          : 'Your team access has been removed';
-
-      sseManager.sendToUser(userId, {
-        type: 'userTeamsUpdated',
-        data: {
-          userId,
-          message,
-          action: 'refresh',
-          showNotification: true,
-        },
-      });
-
-      // Refresh SSE init data with updated permissions
-      await sseManager.refreshInitDataForUser(userId);
-
-      req.log.info(
-        {
-          action: 'updateUserTeamAssignments',
-          userId,
-          successCount: results.length,
-          errorCount: errors.length,
-        },
-        'Team assignments updated',
-      );
-
-      res.json({
-        success: true,
-        data: {
-          assignments: results,
-          errors: errors.length > 0 ? errors : null,
-        },
-      });
-    } catch (error) {
-      handleError(res, error, 'updating user team assignments', {
-        logger: req.logger,
-      });
     }
+  }
+
+  /**
+   * Send team update notifications to user
+   * Sends SSE event and refreshes user's init data
+   *
+   * @param {string} userId - User ID
+   * @param {number} teamCount - Number of teams after update
+   * @returns {Promise<void>}
+   */
+  static async sendTeamUpdateNotifications(userId, teamCount) {
+    const message =
+      teamCount > 0
+        ? `You have been assigned to ${teamCount} team${teamCount !== 1 ? 's' : ''}`
+        : 'Your team access has been removed';
+
+    sseManager.sendToUser(userId, {
+      type: 'userTeamsUpdated',
+      data: {
+        userId,
+        message,
+        action: 'refresh',
+        showNotification: true,
+      },
+    });
+
+    // Refresh SSE init data with updated permissions
+    await sseManager.refreshInitDataForUser(userId);
   }
 
   /**
@@ -730,82 +721,76 @@ class UserController {
       'Updating organization role',
     );
 
-    try {
-      // Use better-auth API to update member role
-      const result = await auth.api.updateMemberRole({
-        headers: req.headers, // Pass request headers for authentication
-        body: {
-          memberId: userId, // Better Auth expects 'memberId' not 'userId'
+    // Use better-auth API to update member role
+    const result = await auth.api.updateMemberRole({
+      headers: req.headers, // Pass request headers for authentication
+      body: {
+        memberId: userId, // Better Auth expects 'memberId' not 'userId'
+        organizationId,
+        role,
+      },
+    });
+
+    if (result.error) {
+      req.log.error(
+        {
+          action: 'updateUserOrganizationRole',
+          err: result.error,
+          userId,
           organizationId,
           role,
         },
-      });
-
-      if (result.error) {
-        req.log.error(
-          {
-            action: 'updateUserOrganizationRole',
-            err: result.error,
-            userId,
-            organizationId,
-            role,
-          },
-          'Better Auth updateMemberRole error',
-        );
-        const statusCode = result.error.status === 'UNAUTHORIZED' ? 401 : 400;
-        return res.status(statusCode).json({ error: result.error.message });
-      }
-
-      req.log.info(
-        { action: 'updateUserOrganizationRole', userId, role, organizationId },
-        'Organization role updated',
+        'Better Auth updateMemberRole error',
       );
-
-      // Send SSE notification to the affected user to refresh their data
-      // Role changes may affect permissions
-      const roleLabel = role === 'admin' ? 'Administrator' : 'User';
-      sseManager.sendToUser(userId, {
-        type: 'userRoleUpdated',
-        data: {
-          userId,
-          role,
-          message: `Your role has been updated to ${roleLabel}`,
-          action: 'refresh',
-          showNotification: true,
-        },
-      });
-
-      // Refresh SSE init data with updated permissions
-      await sseManager.refreshInitDataForUser(userId);
-
-      // Broadcast to all admin users to update their user management modal
-      // Get user details using Better Auth API
-      const userResult = await auth.api.getUser({
-        query: {
-          id: userId,
-        },
-      });
-
-      const updatedUser = userResult?.data;
-      const userName = updatedUser?.name || updatedUser?.email || 'User';
-
-      await sseManager.broadcastToAdminUsers({
-        type: 'adminUserRoleUpdated',
-        data: {
-          userId,
-          role,
-          userName,
-          message: `${userName}'s role has been updated to ${roleLabel}`,
-          action: 'refresh_user_list',
-        },
-      });
-
-      res.json({ success: true, data: result.data });
-    } catch (error) {
-      handleError(res, error, 'updating user organization role', {
-        logger: req.logger,
-      });
+      const statusCode = result.error.status === 'UNAUTHORIZED' ? 401 : 400;
+      return res.status(statusCode).json({ error: result.error.message });
     }
+
+    req.log.info(
+      { action: 'updateUserOrganizationRole', userId, role, organizationId },
+      'Organization role updated',
+    );
+
+    // Send SSE notification to the affected user to refresh their data
+    // Role changes may affect permissions
+    const roleLabel = role === 'admin' ? 'Administrator' : 'User';
+    sseManager.sendToUser(userId, {
+      type: 'userRoleUpdated',
+      data: {
+        userId,
+        role,
+        message: `Your role has been updated to ${roleLabel}`,
+        action: 'refresh',
+        showNotification: true,
+      },
+    });
+
+    // Refresh SSE init data with updated permissions
+    await sseManager.refreshInitDataForUser(userId);
+
+    // Broadcast to all admin users to update their user management modal
+    // Get user details using Better Auth API
+    const userResult = await auth.api.getUser({
+      query: {
+        id: userId,
+      },
+    });
+
+    const updatedUser = userResult?.data;
+    const userName = updatedUser?.name || updatedUser?.email || 'User';
+
+    await sseManager.broadcastToAdminUsers({
+      type: 'adminUserRoleUpdated',
+      data: {
+        userId,
+        role,
+        userName,
+        message: `${userName}'s role has been updated to ${roleLabel}`,
+        action: 'refresh_user_list',
+      },
+    });
+
+    res.json({ success: true, data: result.data });
   }
 
   /**
@@ -837,105 +822,100 @@ class UserController {
    * - Admin access required (enforced by router)
    */
   static async removeUserFromOrganization(req, res) {
-    try {
-      const { userId } = req.params;
-      const { organizationId } = req.body;
+    const { userId } = req.params;
+    const { organizationId } = req.body;
 
+    req.log.info(
+      { action: 'removeUserFromOrganization', userId, organizationId },
+      'Removing user from organization',
+    );
+
+    // If organizationId is null, user is not part of any organization
+    // Delete user account using Better Auth
+    if (!organizationId) {
       req.log.info(
-        { action: 'removeUserFromOrganization', userId, organizationId },
-        'Removing user from organization',
+        { action: 'removeUserFromOrganization', userId },
+        'No organizationId - deleting user account',
       );
 
-      // If organizationId is null, user is not part of any organization
-      // Delete user account using Better Auth
-      if (!organizationId) {
-        req.log.info(
-          { action: 'removeUserFromOrganization', userId },
-          'No organizationId - deleting user account',
-        );
-
-        const deleteResult = await auth.api.removeUser({
-          headers: req.headers,
-          body: {
-            userId,
-          },
-        });
-
-        if (deleteResult.error) {
-          req.log.error(
-            { err: deleteResult.error, userId },
-            'Better Auth removeUser error',
-          );
-          const statusCode =
-            deleteResult.error.status === 'UNAUTHORIZED' ? 401 : 400;
-          return res
-            .status(statusCode)
-            .json({ error: deleteResult.error.message });
-        }
-
-        req.log.info({ userId }, 'User account deleted successfully');
-
-        return res.json({
-          success: true,
-          message: 'User deleted successfully',
-        });
-      }
-
-      // User has organizationId, so they must be a member
-      // Remove from organization using Better Auth
-      req.log.info(
-        { action: 'removeUserFromOrganization', userId, organizationId },
-        'Finding member record for removal',
-      );
-
-      // First, find the member record by userId and organizationId
-      // Better Auth removeMember expects member.id, not user.id
-      const member = await executeQuery(
-        'SELECT id FROM member WHERE userId = ? AND organizationId = ?',
-        [userId, organizationId],
-        `finding member for user ${userId} in org ${organizationId}`,
-      );
-
-      if (!member) {
-        req.log.error(
-          { userId, organizationId },
-          'Member not found in organization',
-        );
-        return res.status(404).json({ error: 'Member not found' });
-      }
-
-      req.log.info(
-        { userId, memberId: member.id, organizationId },
-        'Removing user from organization',
-      );
-
-      const result = await auth.api.removeMember({
+      const deleteResult = await auth.api.removeUser({
         headers: req.headers,
         body: {
-          memberIdOrEmail: member.id,
-          organizationId,
+          userId,
         },
       });
 
-      if (result.error) {
+      if (deleteResult.error) {
         req.log.error(
-          { err: result.error, userId, organizationId },
-          'Better Auth removeMember error',
+          { err: deleteResult.error, userId },
+          'Better Auth removeUser error',
         );
-        const statusCode = result.error.status === 'UNAUTHORIZED' ? 401 : 400;
-        return res.status(statusCode).json({ error: result.error.message });
+        const statusCode =
+          deleteResult.error.status === 'UNAUTHORIZED' ? 401 : 400;
+        return res
+          .status(statusCode)
+          .json({ error: deleteResult.error.message });
       }
 
-      req.log.info(
-        { userId, organizationId },
-        '✓ Removed user from organization',
-      );
+      req.log.info({ userId }, 'User account deleted successfully');
 
-      res.json({ success: true, message: 'User removed from organization' });
-    } catch (error) {
-      req.log.error({ err: error }, 'Error removing user from organization');
-      res.status(500).json({ error: error.message });
+      return res.json({
+        success: true,
+        message: 'User deleted successfully',
+      });
     }
+
+    // User has organizationId, so they must be a member
+    // Remove from organization using Better Auth
+    req.log.info(
+      { action: 'removeUserFromOrganization', userId, organizationId },
+      'Finding member record for removal',
+    );
+
+    // First, find the member record by userId and organizationId
+    // Better Auth removeMember expects member.id, not user.id
+    const member = await executeQuery(
+      'SELECT id FROM member WHERE userId = ? AND organizationId = ?',
+      [userId, organizationId],
+      `finding member for user ${userId} in org ${organizationId}`,
+    );
+
+    if (!member) {
+      req.log.error(
+        { userId, organizationId },
+        'Member not found in organization',
+      );
+      return res.status(404).json({ error: 'Member not found' });
+    }
+
+    req.log.info(
+      { userId, memberId: member.id, organizationId },
+      'Removing user from organization',
+    );
+
+    const result = await auth.api.removeMember({
+      headers: req.headers,
+      body: {
+        memberIdOrEmail: member.id,
+        organizationId,
+      },
+    });
+
+    if (result.error) {
+      req.log.error(
+        { err: result.error, userId, organizationId },
+        'Better Auth removeMember error',
+      );
+      const statusCode = result.error.status === 'UNAUTHORIZED' ? 401 : 400;
+      return res.status(statusCode).json({ error: result.error.message });
+    }
+
+    req.log.info(
+      { userId, organizationId },
+      '✓ Removed user from organization',
+    );
+
+    res.json({ success: true, message: 'User removed from organization' });
   }
 
   /**
@@ -978,62 +958,42 @@ class UserController {
       'Setting initial password',
     );
 
-    try {
-      // Use better-auth's internal adapter to update password
-      try {
-        const ctx = await auth.$context;
-        const hashedPassword = await ctx.password.hash(newPassword);
-        await ctx.internalAdapter.updatePassword(req.user.id, hashedPassword);
-        req.log.info(
-          { action: 'setInitialPassword', userId: req.user.id },
-          'Password updated successfully',
-        );
-      } catch (passwordError) {
-        req.log.error(
-          {
-            action: 'setInitialPassword',
-            err: passwordError,
-            userId: req.user.id,
-          },
-          'Error updating password',
-        );
-        return res.status(500).json({
-          error: 'Failed to update password',
-        });
-      }
+    // Use better-auth's internal adapter to update password
+    const ctx = await auth.$context;
+    const hashedPassword = await ctx.password.hash(newPassword);
+    await ctx.internalAdapter.updatePassword(req.user.id, hashedPassword);
+    req.log.info(
+      { action: 'setInitialPassword', userId: req.user.id },
+      'Password updated successfully',
+    );
 
-      // Clear the requiresPasswordChange flag in database
-      const updateResult = executeUpdate(
-        'UPDATE user SET requiresPasswordChange = 0 WHERE id = ?',
-        [req.user.id],
-        `clearing password change flag for user ${req.user.id}`,
+    // Clear the requiresPasswordChange flag in database
+    const updateResult = executeUpdate(
+      'UPDATE user SET requiresPasswordChange = 0 WHERE id = ?',
+      [req.user.id],
+      `clearing password change flag for user ${req.user.id}`,
+    );
+
+    if (updateResult.changes === 0) {
+      req.log.warn(
+        { action: 'setInitialPassword', userId: req.user.id },
+        'No user found to clear password flag',
       );
-
-      if (updateResult.changes === 0) {
-        req.log.warn(
-          { action: 'setInitialPassword', userId: req.user.id },
-          'No user found to clear password flag',
-        );
-      } else {
-        req.log.info(
-          { action: 'setInitialPassword', userId: req.user.id },
-          'Cleared requiresPasswordChange flag',
-        );
-      }
-
+    } else {
       req.log.info(
         { action: 'setInitialPassword', userId: req.user.id },
-        'Password onboarding completed',
+        'Cleared requiresPasswordChange flag',
       );
-      res.json({
-        success: true,
-        message: 'Password set successfully',
-      });
-    } catch (error) {
-      handleError(res, error, 'setting initial password', {
-        logger: req.logger,
-      });
     }
+
+    req.log.info(
+      { action: 'setInitialPassword', userId: req.user.id },
+      'Password onboarding completed',
+    );
+    res.json({
+      success: true,
+      message: 'Password set successfully',
+    });
   }
 
   /**
@@ -1067,29 +1027,18 @@ class UserController {
       'Forcing user logout via SSE',
     );
 
-    try {
-      const closedConnections = await sseManager.forceUserLogout(
-        userId,
-        reason,
-      );
+    const closedConnections = await sseManager.forceUserLogout(userId, reason);
 
-      req.log.info(
-        { action: 'forceLogout', userId, closedConnections },
-        'User forced logout successfully',
-      );
+    req.log.info(
+      { action: 'forceLogout', userId, closedConnections },
+      'User forced logout successfully',
+    );
 
-      res.json({
-        success: true,
-        data: {
-          closedConnections,
-        },
-      });
-    } catch (error) {
-      handleError(res, error, 'forcing user logout', {
-        logger: req.logger,
-      });
-    }
+    res.json({
+      success: true,
+      data: {
+        closedConnections,
+      },
+    });
   }
 }
-
-export default UserController;

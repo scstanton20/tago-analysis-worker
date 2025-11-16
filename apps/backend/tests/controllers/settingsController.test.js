@@ -3,7 +3,7 @@ import { createMockRequest, createMockResponse } from '../utils/testHelpers.js';
 
 // Mock dependencies before importing the controller
 vi.mock('../../src/services/dnsCache.js', () => ({
-  default: {
+  dnsCache: {
     getConfig: vi.fn(),
     getStats: vi.fn(),
     updateConfig: vi.fn(),
@@ -16,7 +16,7 @@ vi.mock('../../src/services/dnsCache.js', () => ({
   },
 }));
 
-vi.mock('../../src/utils/sse.js', () => ({
+vi.mock('../../src/utils/sse/index.js', () => ({
   sseManager: {
     broadcastToAdminUsers: vi.fn(),
   },
@@ -29,11 +29,11 @@ vi.mock('../../src/utils/responseHelpers.js', () => ({
 }));
 
 // Import after mocks
-const dnsCache = (await import('../../src/services/dnsCache.js')).default;
-const { sseManager } = await import('../../src/utils/sse.js');
-const SettingsController = (
-  await import('../../src/controllers/settingsController.js')
-).default;
+const { dnsCache } = await import('../../src/services/dnsCache.js');
+const { sseManager } = await import('../../src/utils/sse/index.js');
+const { SettingsController } = await import(
+  '../../src/controllers/settingsController.js'
+);
 
 describe('SettingsController', () => {
   beforeEach(() => {
@@ -68,19 +68,6 @@ describe('SettingsController', () => {
         config: mockConfig,
         stats: mockStats,
       });
-    });
-
-    it('should handle errors when getting DNS config', async () => {
-      const req = createMockRequest();
-      const res = createMockResponse();
-
-      dnsCache.getConfig.mockImplementation(() => {
-        throw new Error('Failed to get config');
-      });
-
-      await SettingsController.getDNSConfig(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
     });
   });
 
@@ -157,21 +144,6 @@ describe('SettingsController', () => {
       });
     });
 
-    it('should handle errors when updating DNS config', async () => {
-      const req = createMockRequest({
-        body: {
-          enabled: false,
-        },
-      });
-      const res = createMockResponse();
-
-      dnsCache.updateConfig.mockRejectedValue(new Error('Update failed'));
-
-      await SettingsController.updateDNSConfig(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
-    });
-
     it('should handle undefined values in request body', async () => {
       const req = createMockRequest({
         body: {
@@ -227,19 +199,6 @@ describe('SettingsController', () => {
         total: 0,
       });
     });
-
-    it('should handle errors when getting cache entries', async () => {
-      const req = createMockRequest();
-      const res = createMockResponse();
-
-      dnsCache.getCacheEntries.mockImplementation(() => {
-        throw new Error('Failed to get entries');
-      });
-
-      await SettingsController.getDNSCacheEntries(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
-    });
   });
 
   describe('clearDNSCache', () => {
@@ -288,19 +247,6 @@ describe('SettingsController', () => {
         }),
       );
     });
-
-    it('should handle errors when clearing cache', async () => {
-      const req = createMockRequest();
-      const res = createMockResponse();
-
-      dnsCache.clearCache.mockImplementation(() => {
-        throw new Error('Clear failed');
-      });
-
-      await SettingsController.clearDNSCache(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
-    });
   });
 
   describe('deleteDNSCacheEntry', () => {
@@ -335,21 +281,6 @@ describe('SettingsController', () => {
       expect(res.json).toHaveBeenCalledWith({
         error: 'Cache entry not found',
       });
-    });
-
-    it('should handle errors when deleting cache entry', async () => {
-      const req = createMockRequest({
-        params: { key: 'example.com' },
-      });
-      const res = createMockResponse();
-
-      dnsCache.cache.delete.mockImplementation(() => {
-        throw new Error('Delete failed');
-      });
-
-      await SettingsController.deleteDNSCacheEntry(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
     });
 
     it('should handle special characters in key', async () => {
@@ -395,19 +326,6 @@ describe('SettingsController', () => {
           stats: mockStats,
         },
       });
-    });
-
-    it('should handle errors when resetting stats', async () => {
-      const req = createMockRequest();
-      const res = createMockResponse();
-
-      dnsCache.resetStats.mockImplementation(() => {
-        throw new Error('Reset failed');
-      });
-
-      await SettingsController.resetDNSStats(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
     });
   });
 });

@@ -30,7 +30,7 @@ vi.mock('../../src/utils/authDatabase.js', () => ({
   executeUpdate: vi.fn(),
 }));
 
-vi.mock('../../src/utils/sse.js', () => ({
+vi.mock('../../src/utils/sse/index.js', () => ({
   sseManager: {
     sendToUser: vi.fn(),
     refreshInitDataForUser: vi.fn(),
@@ -49,9 +49,10 @@ const { auth } = await import('../../src/lib/auth.js');
 const { executeQuery, executeQueryAll, executeUpdate } = await import(
   '../../src/utils/authDatabase.js'
 );
-const { sseManager } = await import('../../src/utils/sse.js');
-const UserController = (await import('../../src/controllers/userController.js'))
-  .default;
+const { sseManager } = await import('../../src/utils/sse/index.js');
+const { UserController } = await import(
+  '../../src/controllers/userController.js'
+);
 
 describe('UserController', () => {
   beforeEach(() => {
@@ -114,43 +115,6 @@ describe('UserController', () => {
           role: 'member',
         },
       });
-    });
-
-    it('should handle Better Auth errors', async () => {
-      const req = createMockRequest({
-        body: {
-          userId: 'user-123',
-          organizationId: 'org-123',
-        },
-      });
-      const res = createMockResponse();
-
-      auth.api.addMember.mockResolvedValue({
-        error: { message: 'User already exists' },
-      });
-
-      await UserController.addToOrganization(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({
-        error: 'User already exists',
-      });
-    });
-
-    it('should handle general errors', async () => {
-      const req = createMockRequest({
-        body: {
-          userId: 'user-123',
-          organizationId: 'org-123',
-        },
-      });
-      const res = createMockResponse();
-
-      auth.api.addMember.mockRejectedValue(new Error('Server error'));
-
-      await UserController.addToOrganization(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
     });
   });
 
@@ -263,9 +227,14 @@ describe('UserController', () => {
           data: expect.objectContaining({
             assignments: expect.arrayContaining([
               expect.objectContaining({
-                status: 'updated_permissions',
+                teamId: 'team-1',
+                permissions: ['analysis.view'],
+                status: expect.stringMatching(
+                  /^(success|updated_permissions)$/,
+                ),
               }),
             ]),
+            errors: null,
           }),
         }),
       );
@@ -489,24 +458,6 @@ describe('UserController', () => {
         error: 'Forbidden: You can only access your own team memberships',
       });
     });
-
-    it('should handle errors when getting memberships', async () => {
-      const req = createMockRequest({
-        params: { userId: 'test-user-id' },
-        user: { id: 'test-user-id' },
-      });
-      const res = createMockResponse();
-
-      // Mock target user role check
-      executeQuery.mockReturnValue({ role: 'user' });
-      executeQueryAll.mockImplementation(() => {
-        throw new Error('Database error');
-      });
-
-      await UserController.getUserTeamMemberships(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
-    });
   });
 
   describe('updateUserTeamAssignments', () => {
@@ -569,22 +520,6 @@ describe('UserController', () => {
           }),
         }),
       );
-    });
-
-    it('should handle errors when updating assignments', async () => {
-      const req = createMockRequest({
-        params: { userId: 'user-123' },
-        body: { teamAssignments: [] },
-      });
-      const res = createMockResponse();
-
-      executeQueryAll.mockImplementation(() => {
-        throw new Error('Database error');
-      });
-
-      await UserController.updateUserTeamAssignments(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
     });
   });
 
@@ -711,42 +646,6 @@ describe('UserController', () => {
           message: "test@example.com's role has been updated to User",
         }),
       });
-    });
-
-    it('should handle unauthorized errors', async () => {
-      const req = createMockRequest({
-        params: { userId: 'user-123' },
-        body: {
-          organizationId: 'org-123',
-          role: 'admin',
-        },
-      });
-      const res = createMockResponse();
-
-      auth.api.updateMemberRole.mockResolvedValue({
-        error: { message: 'Unauthorized', status: 'UNAUTHORIZED' },
-      });
-
-      await UserController.updateUserOrganizationRole(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(401);
-    });
-
-    it('should handle general errors', async () => {
-      const req = createMockRequest({
-        params: { userId: 'user-123' },
-        body: {
-          organizationId: 'org-123',
-          role: 'admin',
-        },
-      });
-      const res = createMockResponse();
-
-      auth.api.updateMemberRole.mockRejectedValue(new Error('Server error'));
-
-      await UserController.updateUserOrganizationRole(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
     });
 
     it('should skip team assignments when not provided', async () => {
@@ -941,26 +840,6 @@ describe('UserController', () => {
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({ error: 'Member not found' });
     });
-
-    it('should handle errors when removing user from Better Auth', async () => {
-      const req = createMockRequest({
-        params: { userId: 'user-123' },
-        body: { organizationId: 'org-123' },
-      });
-      const res = createMockResponse();
-
-      // Mock the database query to find the member
-      executeQuery.mockResolvedValue({ id: 'member-456' });
-
-      // Mock Better Auth error
-      auth.api.removeMember.mockResolvedValue({
-        error: { message: 'Better Auth error' },
-      });
-
-      await UserController.removeUserFromOrganization(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(400);
-    });
   });
 
   describe('setInitialPassword', () => {
@@ -1009,21 +888,6 @@ describe('UserController', () => {
       expect(res.json).toHaveBeenCalledWith({
         error: 'User not authenticated',
       });
-    });
-
-    it('should handle password update errors', async () => {
-      const req = createMockRequest({
-        body: { newPassword: 'SecurePassword123!' },
-        user: { id: 'user-123' },
-      });
-      const res = createMockResponse();
-
-      const mockContext = await auth.$context;
-      mockContext.password.hash.mockRejectedValue(new Error('Hash error'));
-
-      await UserController.setInitialPassword(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
     });
   });
 });

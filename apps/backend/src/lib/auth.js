@@ -4,7 +4,7 @@ import { passkey } from 'better-auth/plugins/passkey';
 import { username } from 'better-auth/plugins/username';
 import { organization } from 'better-auth/plugins/organization';
 import path from 'path';
-import config from '../config/default.js';
+import { config } from '../config/default.js';
 import {
   safeExistsSync,
   safeMkdirSync,
@@ -17,6 +17,7 @@ import {
   executeUpdate,
 } from '../utils/authDatabase.js';
 import { createChildLogger } from '../utils/logging/logger.js';
+import { AUTH } from '../constants.js';
 
 const authLogger = createChildLogger('auth');
 
@@ -52,8 +53,8 @@ export const auth = betterAuth({
   telemetry: { enabled: false },
   disabledPaths: ['/organization/list-teams'],
   rateLimit: {
-    window: 60, // 1 minute window
-    max: 100,
+    window: AUTH.RATE_LIMIT_WINDOW_SECONDS,
+    max: AUTH.RATE_LIMIT_MAX_REQUESTS,
   },
   user: {
     changeEmail: {
@@ -76,8 +77,8 @@ export const auth = betterAuth({
     requireEmailVerification: false,
   },
   session: {
-    updateAge: 24 * 60 * 60, // 24 hours
-    expiresIn: 60 * 60 * 24 * 7, // 7 days
+    updateAge: AUTH.SESSION_UPDATE_AGE_SECONDS,
+    expiresIn: AUTH.SESSION_EXPIRES_IN_SECONDS,
   },
   databaseHooks: {
     user: {
@@ -119,11 +120,11 @@ export const auth = betterAuth({
     organization({
       allowUserToCreateOrganization: false, // Only admins can create organizations
       organizationLimit: 1, // Single organization for the app
-      membershipLimit: 1000, // Max members per organization
+      membershipLimit: AUTH.ORGANIZATION_MEMBER_LIMIT,
       creatorRole: 'owner', // Default role for organization creator
       teams: {
         enabled: true,
-        maximumTeams: 50, // Allow many departments/teams
+        maximumTeams: AUTH.ORGANIZATION_TEAMS_LIMIT,
         allowRemovingAllTeams: false, // Keep at least one team
       },
       // Define custom fields for teams using schema configuration
@@ -190,7 +191,7 @@ export const auth = betterAuth({
                 {
                   teamOrganizationId: team.organizationId,
                   availableTeams: executeQueryAll(
-                    'SELECT id, name, is_system FROM team WHERE organizationId = ?',
+                    'SELECT id, name, is_system AS isSystem FROM team WHERE organizationId = ?',
                     [team.organizationId],
                     'getting available teams for debugging',
                   ),
@@ -311,7 +312,7 @@ export const auth = betterAuth({
             // Force logout user by closing SSE connections (before deletion)
             // Use dynamic import to avoid circular dependency
             try {
-              const { sseManager } = await import('../utils/sse.js');
+              const { sseManager } = await import('../utils/sse/index.js');
               const closedConnections = await sseManager.forceUserLogout(
                 member.userId,
                 'Your account has been deleted by an administrator',

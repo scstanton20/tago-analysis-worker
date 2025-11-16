@@ -105,7 +105,7 @@ const TeamController = {
 };
 
 vi.mock('../../src/controllers/teamController.js', () => ({
-  default: TeamController,
+  TeamController: TeamController,
 }));
 
 // Logging middleware mock - provides req.log
@@ -150,10 +150,8 @@ describe('Team Routes - WITH REAL AUTH', () => {
     app.use(attachRequestLogger);
 
     // Import routes
-    const { default: teamRoutes } = await import(
-      '../../src/routes/teamRoutes.js'
-    );
-    app.use('/api/teams', teamRoutes);
+    const { teamRouter } = await import('../../src/routes/teamRoutes.js');
+    app.use('/api/teams', teamRouter);
   });
 
   describe('Authentication Requirements', () => {

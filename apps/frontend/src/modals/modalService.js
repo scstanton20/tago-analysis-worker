@@ -148,10 +148,9 @@ export const modalService = {
 
   /**
    * Open Team Management modal
-   * @param {Object} teams - Teams object from useVisibleTeams hook
    * @returns {string} Modal ID
    */
-  openTeamManagement: (teams) => {
+  openTeamManagement: () => {
     const modalId = 'team-management';
 
     modals.openContextModal({
@@ -160,9 +159,7 @@ export const modalService = {
       title: 'Manage Teams',
       size: 'lg',
       closeOnEscape: false,
-      innerProps: {
-        teams,
-      },
+      innerProps: {},
     });
 
     return modalId;

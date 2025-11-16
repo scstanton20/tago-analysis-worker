@@ -10,7 +10,7 @@ vi.mock('fs', () => ({
 
 // Mock config
 vi.mock('../../src/config/default.js', () => ({
-  default: {
+  config: {
     storage: {
       base: '/app',
       createDirs: true,
@@ -61,7 +61,7 @@ describe('storage', () => {
 
   describe('initializeStorage', () => {
     it('should create base storage directory', async () => {
-      await storage.default.initializeStorage();
+      await storage.initializeStorage();
 
       expect(mockSafeMkdir).toHaveBeenCalledWith(
         '/app',
@@ -71,7 +71,7 @@ describe('storage', () => {
     });
 
     it('should create all configured path directories', async () => {
-      await storage.default.initializeStorage();
+      await storage.initializeStorage();
 
       expect(mockSafeMkdir).toHaveBeenCalledWith(
         '/app/analyses-storage',
@@ -91,7 +91,7 @@ describe('storage', () => {
     });
 
     it('should create config file if it does not exist', async () => {
-      await storage.default.initializeStorage();
+      await storage.initializeStorage();
 
       expect(mockSafeWriteFile).toHaveBeenCalledWith(
         '/app/config/config.json',
@@ -103,13 +103,13 @@ describe('storage', () => {
     it('should not create config file if it already exists', async () => {
       mockFsAccess.mockResolvedValue(undefined);
 
-      await storage.default.initializeStorage();
+      await storage.initializeStorage();
 
       expect(mockSafeWriteFile).not.toHaveBeenCalled();
     });
 
     it('should include creation timestamp in new config file', async () => {
-      await storage.default.initializeStorage();
+      await storage.initializeStorage();
 
       const configContent = mockSafeWriteFile.mock.calls.find((call) =>
         call[0].includes('config.json'),
@@ -122,7 +122,7 @@ describe('storage', () => {
     });
 
     it('should use recursive directory creation', async () => {
-      await storage.default.initializeStorage();
+      await storage.initializeStorage();
 
       const mkdirCalls = mockSafeMkdir.mock.calls;
       mkdirCalls.forEach((call) => {
@@ -132,7 +132,7 @@ describe('storage', () => {
 
     it('should skip initialization when createDirs is false', async () => {
       vi.doMock('../../src/config/default.js', () => ({
-        default: {
+        config: {
           storage: {
             base: '/app',
             createDirs: false,
@@ -145,7 +145,7 @@ describe('storage', () => {
       vi.resetModules();
       const storageNoCreate = await import('../../src/utils/storage.js');
 
-      await storageNoCreate.default.initializeStorage();
+      await storageNoCreate.initializeStorage();
 
       expect(mockSafeMkdir).not.toHaveBeenCalled();
       expect(mockSafeWriteFile).not.toHaveBeenCalled();
@@ -163,7 +163,7 @@ describe('storage', () => {
       vi.resetModules();
       const freshStorage = await import('../../src/utils/storage.js');
 
-      await expect(freshStorage.default.initializeStorage()).rejects.toThrow(
+      await expect(freshStorage.initializeStorage()).rejects.toThrow(
         'Permission denied',
       );
     });
@@ -177,7 +177,7 @@ describe('storage', () => {
       const freshStorage = await import('../../src/utils/storage.js');
 
       try {
-        await freshStorage.default.initializeStorage();
+        await freshStorage.initializeStorage();
       } catch {
         // Expected
       }
@@ -192,7 +192,7 @@ describe('storage', () => {
       vi.resetModules();
       const freshStorage = await import('../../src/utils/storage.js');
 
-      await expect(freshStorage.default.initializeStorage()).rejects.toThrow(
+      await expect(freshStorage.initializeStorage()).rejects.toThrow(
         'Write failed',
       );
     });
@@ -200,7 +200,7 @@ describe('storage', () => {
     it('should create directories in parallel', async () => {
       // Re-mock the config to ensure correct paths after previous test's doMock
       vi.doMock('../../src/config/default.js', () => ({
-        default: {
+        config: {
           storage: {
             base: '/app',
             createDirs: true,
@@ -226,7 +226,7 @@ describe('storage', () => {
       vi.resetModules();
       const freshStorage = await import('../../src/utils/storage.js');
 
-      await freshStorage.default.initializeStorage();
+      await freshStorage.initializeStorage();
 
       // Verify all paths were called (order may vary due to Promise.all)
       expect(callOrder.length).toBeGreaterThanOrEqual(4);
@@ -242,14 +242,14 @@ describe('storage', () => {
 
   describe('default export', () => {
     it('should export initializeStorage function', () => {
-      expect(storage.default.initializeStorage).toBeDefined();
-      expect(typeof storage.default.initializeStorage).toBe('function');
+      expect(storage.initializeStorage).toBeDefined();
+      expect(typeof storage.initializeStorage).toBe('function');
     });
   });
 
   describe('config file format', () => {
     it('should create prettified JSON config', async () => {
-      await storage.default.initializeStorage();
+      await storage.initializeStorage();
 
       const configContent = mockSafeWriteFile.mock.calls.find((call) =>
         call[0].includes('config.json'),
@@ -262,7 +262,7 @@ describe('storage', () => {
     });
 
     it('should include version in config', async () => {
-      await storage.default.initializeStorage();
+      await storage.initializeStorage();
 
       const configContent = mockSafeWriteFile.mock.calls.find((call) =>
         call[0].includes('config.json'),
@@ -284,7 +284,7 @@ describe('storage', () => {
       vi.resetModules();
       const freshStorage = await import('../../src/utils/storage.js');
 
-      await expect(freshStorage.default.initializeStorage()).rejects.toThrow(
+      await expect(freshStorage.initializeStorage()).rejects.toThrow(
         'permission denied',
       );
     });
@@ -298,7 +298,7 @@ describe('storage', () => {
       vi.resetModules();
       const freshStorage = await import('../../src/utils/storage.js');
 
-      await expect(freshStorage.default.initializeStorage()).rejects.toThrow(
+      await expect(freshStorage.initializeStorage()).rejects.toThrow(
         'no space left',
       );
     });
@@ -312,7 +312,7 @@ describe('storage', () => {
       vi.resetModules();
       const freshStorage = await import('../../src/utils/storage.js');
 
-      await expect(freshStorage.default.initializeStorage()).rejects.toThrow(
+      await expect(freshStorage.initializeStorage()).rejects.toThrow(
         'read-only',
       );
     });

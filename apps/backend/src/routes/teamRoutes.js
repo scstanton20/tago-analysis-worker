@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import TeamController from '../controllers/teamController.js';
+import { TeamController } from '../controllers/teamController.js';
 import {
   authMiddleware,
   requireAdmin,
@@ -47,7 +47,11 @@ router.use(requireAdmin);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/', asyncHandler(TeamController.getAllTeams));
+router.get(
+  '/',
+  validateRequest(teamValidationSchemas.getAllTeams),
+  asyncHandler(TeamController.getAllTeams, 'get all teams'),
+);
 
 /**
  * @swagger
@@ -98,7 +102,7 @@ router.post(
   '/',
   teamOperationLimiter,
   validateRequest(teamValidationSchemas.createTeam),
-  asyncHandler(TeamController.createTeam),
+  asyncHandler(TeamController.createTeam, 'create team'),
 );
 
 /**
@@ -147,7 +151,7 @@ router.put(
   '/reorder',
   teamOperationLimiter,
   validateRequest(teamValidationSchemas.reorderTeams),
-  asyncHandler(TeamController.reorderTeams),
+  asyncHandler(TeamController.reorderTeams, 'reorder teams'),
 );
 
 /**
@@ -206,7 +210,7 @@ router.put(
   '/:id',
   teamOperationLimiter,
   validateRequest(teamValidationSchemas.updateTeam),
-  asyncHandler(TeamController.updateTeam),
+  asyncHandler(TeamController.updateTeam, 'update team'),
 );
 
 /**
@@ -274,7 +278,7 @@ router.delete(
   '/:id',
   teamOperationLimiter,
   validateRequest(teamValidationSchemas.deleteTeam),
-  asyncHandler(TeamController.deleteTeam),
+  asyncHandler(TeamController.deleteTeam, 'delete team'),
 );
 
 /**
@@ -324,7 +328,7 @@ router.delete(
 router.get(
   '/:id/count',
   validateRequest(teamValidationSchemas.getTeamAnalysisCount),
-  asyncHandler(TeamController.getTeamAnalysisCount),
+  asyncHandler(TeamController.getTeamAnalysisCount, 'get team analysis count'),
 );
 
 // Analysis-team routes
@@ -403,7 +407,7 @@ router.put(
   '/analyses/:name/team',
   teamOperationLimiter,
   validateRequest(teamValidationSchemas.moveAnalysisToTeam),
-  asyncHandler(TeamController.moveAnalysisToTeam),
+  asyncHandler(TeamController.moveAnalysisToTeam, 'move analysis to team'),
 );
 
 // Folder management routes
@@ -473,7 +477,7 @@ router.post(
   '/:teamId/folders',
   teamOperationLimiter,
   validateRequest(teamValidationSchemas.createFolder),
-  asyncHandler(TeamController.createFolder),
+  asyncHandler(TeamController.createFolder, 'create folder'),
 );
 
 /**
@@ -544,7 +548,7 @@ router.put(
   '/:teamId/folders/:folderId',
   teamOperationLimiter,
   validateRequest(teamValidationSchemas.updateFolder),
-  asyncHandler(TeamController.updateFolder),
+  asyncHandler(TeamController.updateFolder, 'update folder'),
 );
 
 /**
@@ -597,7 +601,7 @@ router.delete(
   '/:teamId/folders/:folderId',
   teamOperationLimiter,
   validateRequest(teamValidationSchemas.deleteFolder),
-  asyncHandler(TeamController.deleteFolder),
+  asyncHandler(TeamController.deleteFolder, 'delete folder'),
 );
 
 /**
@@ -656,7 +660,7 @@ router.post(
   '/:teamId/items/move',
   teamOperationLimiter,
   validateRequest(teamValidationSchemas.moveItem),
-  asyncHandler(TeamController.moveItem),
+  asyncHandler(TeamController.moveItem, 'move item'),
 );
 
-export default router;
+export { router as teamRouter };

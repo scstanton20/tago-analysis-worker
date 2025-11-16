@@ -5,16 +5,17 @@ import cors from 'cors';
 import helmet from 'helmet';
 import fileUpload from 'express-fileupload';
 import pinoHttp from 'pino-http';
-import config from './config/default.js';
+import { config } from './config/default.js';
 import { safeReadFileSync } from './utils/safePath.js';
-import { sseManager } from './utils/sse.js';
-import errorHandler from './middleware/errorHandler.js';
+import { sseManager } from './utils/sse/index.js';
+import { errorHandler } from './middleware/errorHandler.js';
 import {
   analysisService,
   initializeAnalyses,
 } from './services/analysisService.js';
-import dnsCache from './services/dnsCache.js';
-import storage from './utils/storage.js';
+import { dnsCache } from './services/dnsCache.js';
+import { initializeStorage } from './utils/storage.js';
+import { SERVER_SHUTDOWN } from './constants.js';
 
 // Route modules
 import * as routes from './routes/index.js';
@@ -27,7 +28,7 @@ import {
 } from './migrations/startup.js';
 
 // Logging
-import logger, { createChildLogger } from './utils/logging/logger.js';
+import { logger, createChildLogger } from './utils/logging/logger.js';
 
 // Metrics
 import { metricsMiddleware } from './utils/metrics-enhanced.js';
@@ -67,7 +68,7 @@ app.use(
         );
       },
     },
-    customLogLevel: function (req, res, err) {
+    customLogLevel: function (_req, res, err) {
       if (res.statusCode >= 500 || err) {
         return 'error';
       } else if (res.statusCode === 401 || res.statusCode === 403) {
@@ -213,7 +214,7 @@ async function startServer() {
 
     // Initialize storage directories first (before any services that write files)
     serverLogger.info('Initializing storage directories');
-    await storage.initializeStorage();
+    await initializeStorage();
     serverLogger.info('Storage directories initialized');
 
     // Initialize DNS cache service early (before any network calls)
@@ -423,10 +424,12 @@ async function gracefulShutdown(signal) {
     }
   }
 
-  // Wait for all analyses to stop (with 5s timeout)
+  // Wait for all analyses to stop (with timeout)
   await Promise.race([
     Promise.all(shutdownPromises),
-    new Promise((resolve) => setTimeout(resolve, 5000)),
+    new Promise((resolve) =>
+      setTimeout(resolve, SERVER_SHUTDOWN.STOP_ANALYSES_TIMEOUT_MS),
+    ),
   ]);
   serverLogger.info(
     `Stopped ${shutdownPromises.length} analyses (or timed out after 5s)`,
@@ -472,7 +475,9 @@ async function gracefulShutdown(signal) {
   });
 
   // Give clients time to receive shutdown notification
-  await new Promise((resolve) => setTimeout(resolve, 1000));
+  await new Promise((resolve) =>
+    setTimeout(resolve, SERVER_SHUTDOWN.CLIENT_NOTIFICATION_DELAY_MS),
+  );
 
   // 8. Close servers with timeout
   serverLogger.info('Closing HTTP/HTTPS servers');
@@ -480,7 +485,7 @@ async function gracefulShutdown(signal) {
     const timeout = setTimeout(() => {
       serverLogger.warn('Server close timeout, forcing exit');
       resolve();
-    }, 3000);
+    }, SERVER_SHUTDOWN.CLOSE_SERVERS_TIMEOUT_MS);
 
     let closedCount = 0;
     const totalServers = (httpsServer ? 1 : 0) + (server ? 1 : 0);

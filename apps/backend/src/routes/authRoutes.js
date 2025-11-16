@@ -59,4 +59,4 @@ const router = Router();
 
 // This router is used only for documentation purposes
 // The actual endpoints are handled by Better-Auth middleware
-export default router;
+export { router as authRouter };

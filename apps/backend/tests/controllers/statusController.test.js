@@ -21,7 +21,7 @@ vi.mock('../../src/services/analysisService.js', () => ({
   },
 }));
 
-vi.mock('../../src/utils/sse.js', () => ({
+vi.mock('../../src/utils/sse/index.js', () => ({
   sseManager: {
     getContainerState: vi.fn(),
   },
@@ -61,10 +61,10 @@ vi.mock('ms', () => ({
 
 // Import after mocks
 const fs = await import('fs');
-const { sseManager } = await import('../../src/utils/sse.js');
-const StatusController = (
-  await import('../../src/controllers/statusController.js')
-).default;
+const { sseManager } = await import('../../src/utils/sse/index.js');
+const { StatusController } = await import(
+  '../../src/controllers/statusController.js'
+);
 
 describe('StatusController', () => {
   beforeEach(() => {
@@ -354,19 +354,6 @@ describe('StatusController', () => {
           }),
         }),
       );
-    });
-
-    it('should handle general errors', async () => {
-      const req = createMockRequest();
-      const res = createMockResponse();
-
-      sseManager.getContainerState.mockImplementation(() => {
-        throw new Error('SSE manager error');
-      });
-
-      await StatusController.getSystemStatus(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
     });
 
     it('should include server time in response', async () => {

@@ -402,4 +402,172 @@ describe('analysisSchemas', () => {
       });
     });
   });
+
+  describe('getAnalyses schema', () => {
+    describe('query validation', () => {
+      it('should validate empty query object', () => {
+        const validData = {};
+
+        const result = schemas.getAnalyses.query.safeParse(validData);
+
+        expect(result.success).toBe(true);
+        expect(result.data).toEqual({});
+      });
+
+      it('should validate query with all optional parameters', () => {
+        const validData = {
+          page: '1',
+          limit: '50',
+          search: 'test analysis',
+          teamId: 'team-123',
+          status: 'running',
+        };
+
+        const result = schemas.getAnalyses.query.safeParse(validData);
+
+        expect(result.success).toBe(true);
+        expect(result.data.page).toBe(1);
+        expect(result.data.limit).toBe(50);
+      });
+
+      it('should validate query with partial parameters', () => {
+        const validData = {
+          search: 'analysis',
+          status: 'stopped',
+        };
+
+        const result = schemas.getAnalyses.query.safeParse(validData);
+
+        expect(result.success).toBe(true);
+      });
+
+      it('should transform page string to number', () => {
+        const validData = { page: '5' };
+
+        const result = schemas.getAnalyses.query.safeParse(validData);
+
+        expect(result.success).toBe(true);
+        expect(result.data.page).toBe(5);
+        expect(typeof result.data.page).toBe('number');
+      });
+
+      it('should transform limit string to number', () => {
+        const validData = { limit: '100' };
+
+        const result = schemas.getAnalyses.query.safeParse(validData);
+
+        expect(result.success).toBe(true);
+        expect(result.data.limit).toBe(100);
+        expect(typeof result.data.limit).toBe('number');
+      });
+
+      it('should reject invalid page format', () => {
+        const invalidData = { page: 'invalid' };
+
+        const result = schemas.getAnalyses.query.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0].path).toContain('page');
+        expect(result.error?.issues[0].message).toContain(
+          'Page must be a valid positive integer',
+        );
+      });
+
+      it('should reject invalid limit format', () => {
+        const invalidData = { limit: 'abc' };
+
+        const result = schemas.getAnalyses.query.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0].path).toContain('limit');
+        expect(result.error?.issues[0].message).toContain(
+          'Limit must be a valid positive integer',
+        );
+      });
+
+      it('should reject search query exceeding 255 characters', () => {
+        const invalidData = { search: 'a'.repeat(256) };
+
+        const result = schemas.getAnalyses.query.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0].path).toContain('search');
+        expect(result.error?.issues[0].message).toContain(
+          'Search query must not exceed 255 characters',
+        );
+      });
+
+      it('should accept search query at max length (255 characters)', () => {
+        const validData = { search: 'a'.repeat(255) };
+
+        const result = schemas.getAnalyses.query.safeParse(validData);
+
+        expect(result.success).toBe(true);
+      });
+
+      it('should reject invalid status value', () => {
+        const invalidData = { status: 'invalid_status' };
+
+        const result = schemas.getAnalyses.query.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0].path).toContain('status');
+        expect(result.error?.issues[0].message).toContain(
+          'Status must be one of',
+        );
+      });
+
+      it('should accept valid status values', () => {
+        const validStatuses = ['running', 'stopped', 'error'];
+
+        validStatuses.forEach((status) => {
+          const result = schemas.getAnalyses.query.safeParse({ status });
+          expect(result.success).toBe(true);
+          expect(result.data.status).toBe(status);
+        });
+      });
+
+      it('should reject unexpected query parameters (strict mode)', () => {
+        const invalidData = {
+          page: '1',
+          unexpectedField: 'value',
+        };
+
+        const result = schemas.getAnalyses.query.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0].code).toBe('unrecognized_keys');
+      });
+
+      it('should reject negative page number', () => {
+        const invalidData = { page: '-1' };
+
+        const result = schemas.getAnalyses.query.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject page with decimal', () => {
+        const invalidData = { page: '1.5' };
+
+        const result = schemas.getAnalyses.query.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0].message).toContain(
+          'Page must be a valid positive integer',
+        );
+      });
+
+      it('should reject limit with decimal', () => {
+        const invalidData = { limit: '10.5' };
+
+        const result = schemas.getAnalyses.query.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0].message).toContain(
+          'Limit must be a valid positive integer',
+        );
+      });
+    });
+  });
 });

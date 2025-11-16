@@ -3,7 +3,7 @@ import path from 'path';
 import { promises as fs } from 'fs';
 import fsSync from 'fs';
 import sanitize from 'sanitize-filename';
-import config from '../config/default.js';
+import { config } from '../config/default.js';
 
 /**
  * Validates that a path is safe and doesn't contain directory traversal attempts

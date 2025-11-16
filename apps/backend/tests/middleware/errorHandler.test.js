@@ -13,8 +13,10 @@ describe('errorHandler middleware', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    const module = await import('../../src/middleware/errorHandler.js');
-    errorHandler = module.default;
+    const { errorHandler: handler } = await import(
+      '../../src/middleware/errorHandler.js'
+    );
+    errorHandler = handler;
 
     req = createMockRequest();
     res = createMockResponse();

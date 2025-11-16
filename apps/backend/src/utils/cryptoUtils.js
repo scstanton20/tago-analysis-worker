@@ -1,7 +1,7 @@
 /** AES-256-GCM encryption utilities with PBKDF2 key derivation */
 // utils/cryptoUtils.js
 import crypto from 'crypto';
-import config from '../config/default.js';
+import { config } from '../config/default.js';
 import { createChildLogger } from './logging/logger.js';
 
 const logger = createChildLogger('crypto-utils');

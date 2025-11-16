@@ -48,8 +48,10 @@ describe('TeamService', () => {
     };
 
     // Re-import to get fresh instance
-    const module = await import('../../src/services/teamService.js');
-    teamService = module.default;
+    const { teamService: service } = await import(
+      '../../src/services/teamService.js'
+    );
+    teamService = service;
 
     // Reset service state
     teamService.initialized = false;
@@ -105,8 +107,8 @@ describe('TeamService', () => {
           organizationId: 'org-123',
           createdAt: '2025-01-01',
           color: '#3B82F6',
-          order_index: 0,
-          is_system: 1,
+          orderIndex: 0,
+          isSystem: 1,
         },
         {
           id: 'team-2',
@@ -114,8 +116,8 @@ describe('TeamService', () => {
           organizationId: 'org-123',
           createdAt: '2025-01-02',
           color: '#10B981',
-          order_index: 1,
-          is_system: 0,
+          orderIndex: 1,
+          isSystem: 0,
         },
       ]);
 
@@ -123,9 +125,11 @@ describe('TeamService', () => {
 
       expect(teams).toHaveLength(2);
       expect(teams[0].isSystem).toBe(true);
+      expect(teams[0].orderIndex).toBe(0);
       expect(teams[1].isSystem).toBe(false);
+      expect(teams[1].orderIndex).toBe(1);
       expect(executeQueryAll).toHaveBeenCalledWith(
-        expect.stringContaining('SELECT id, name'),
+        expect.stringContaining('order_index AS orderIndex'),
         ['org-123'],
         'getting all teams',
       );
@@ -152,8 +156,8 @@ describe('TeamService', () => {
         organizationId: 'org-123',
         createdAt: '2025-01-01',
         color: '#10B981',
-        order_index: 1,
-        is_system: 0,
+        orderIndex: 1,
+        isSystem: 0,
       });
 
       const team = await teamService.getTeam('team-1');
@@ -161,6 +165,7 @@ describe('TeamService', () => {
       expect(team.id).toBe('team-1');
       expect(team.name).toBe('Team Alpha');
       expect(team.isSystem).toBe(false);
+      expect(team.orderIndex).toBe(1);
     });
 
     it('should return undefined if team not found', async () => {
@@ -194,6 +199,8 @@ describe('TeamService', () => {
 
       expect(team.id).toBe('team-new');
       expect(team.name).toBe('New Team');
+      expect(team.orderIndex).toBe(0);
+      expect(team.isSystem).toBe(false);
       expect(auth.api.createTeam).toHaveBeenCalledWith({
         body: {
           name: 'New Team',
@@ -227,12 +234,13 @@ describe('TeamService', () => {
         is_system: false,
       });
 
-      await teamService.createTeam({
+      const team = await teamService.createTeam({
         name: 'Custom Team',
         color: '#EF4444',
         order: 5,
       });
 
+      expect(team.orderIndex).toBe(5);
       expect(auth.api.createTeam).toHaveBeenCalledWith({
         body: expect.objectContaining({
           color: '#EF4444',
@@ -270,8 +278,8 @@ describe('TeamService', () => {
                 name: 'Updated Team',
                 organizationId: 'org-123',
                 color: '#10B981',
-                order_index: 2,
-                is_system: 0,
+                orderIndex: 2,
+                isSystem: 0,
               };
             }
           }),
@@ -323,7 +331,7 @@ describe('TeamService', () => {
       ).rejects.toThrow('No valid fields to update');
     });
 
-    it('should update order_index', async () => {
+    it('should update orderIndex', async () => {
       let selectCount = 0;
       const mockDb = {
         prepare: vi.fn((sql) => {
@@ -338,8 +346,8 @@ describe('TeamService', () => {
                     name: 'Team 1',
                     organizationId: 'org-123',
                     color: '#3B82F6',
-                    order_index: 0,
-                    is_system: 0,
+                    orderIndex: 0,
+                    isSystem: 0,
                   };
                 }
                 // Second SELECT (returning updated team)
@@ -348,8 +356,8 @@ describe('TeamService', () => {
                   name: 'Team 1',
                   organizationId: 'org-123',
                   color: '#3B82F6',
-                  order_index: 5,
-                  is_system: 0,
+                  orderIndex: 5,
+                  isSystem: 0,
                 };
               }),
             };
@@ -365,7 +373,7 @@ describe('TeamService', () => {
 
       const team = await teamService.updateTeam('team-1', { order: 5 });
 
-      expect(team.order_index).toBe(5);
+      expect(team.orderIndex).toBe(5);
     });
   });
 
@@ -575,7 +583,7 @@ describe('TeamService', () => {
       await teamService.initialize(mockAnalysisService);
     });
 
-    it('should reorder teams by updating order_index', async () => {
+    it('should reorder teams by updating orderIndex', async () => {
       const mockDb = {
         prepare: vi.fn((sql) => {
           if (sql.includes('UPDATE')) {
@@ -583,8 +591,8 @@ describe('TeamService', () => {
           }
           return {
             all: vi.fn(() => [
-              { id: 'team-2', name: 'Team 2', order_index: 0, is_system: 0 },
-              { id: 'team-1', name: 'Team 1', order_index: 1, is_system: 0 },
+              { id: 'team-2', name: 'Team 2', orderIndex: 0, isSystem: 0 },
+              { id: 'team-1', name: 'Team 1', orderIndex: 1, isSystem: 0 },
             ]),
           };
         }),
@@ -596,7 +604,9 @@ describe('TeamService', () => {
 
       expect(teams).toHaveLength(2);
       expect(teams[0].id).toBe('team-2');
+      expect(teams[0].orderIndex).toBe(0);
       expect(teams[1].id).toBe('team-1');
+      expect(teams[1].orderIndex).toBe(1);
     });
   });
 
@@ -636,6 +646,152 @@ describe('TeamService', () => {
     beforeEach(async () => {
       await teamService.initialize(mockAnalysisService);
       executeQuery.mockReturnValue({ id: 'team-1', name: 'Team 1' });
+    });
+
+    describe('traverseTree', () => {
+      it('should traverse items and call visitor for each', () => {
+        const items = [
+          { id: 'item-1', type: 'analysis', analysisName: 'a1' },
+          { id: 'item-2', type: 'analysis', analysisName: 'a2' },
+        ];
+
+        const visited = [];
+        teamService.traverseTree(items, (item) => {
+          visited.push(item.id);
+          return null;
+        });
+
+        expect(visited).toEqual(['item-1', 'item-2']);
+      });
+
+      it('should stop traversal when visitor returns non-null value', () => {
+        const items = [
+          { id: 'item-1', type: 'analysis', analysisName: 'a1' },
+          { id: 'item-2', type: 'analysis', analysisName: 'a2' },
+          { id: 'item-3', type: 'analysis', analysisName: 'a3' },
+        ];
+
+        const result = teamService.traverseTree(items, (item) => {
+          if (item.id === 'item-2') return item;
+          return null;
+        });
+
+        expect(result.id).toBe('item-2');
+      });
+
+      it('should recursively traverse nested folders', () => {
+        const items = [
+          {
+            id: 'folder-1',
+            type: 'folder',
+            items: [
+              { id: 'nested-1', type: 'analysis', analysisName: 'a1' },
+              {
+                id: 'folder-2',
+                type: 'folder',
+                items: [
+                  { id: 'deeply-nested', type: 'analysis', analysisName: 'a2' },
+                ],
+              },
+            ],
+          },
+        ];
+
+        const visited = [];
+        teamService.traverseTree(items, (item) => {
+          visited.push(item.id);
+          return null;
+        });
+
+        expect(visited).toEqual([
+          'folder-1',
+          'nested-1',
+          'folder-2',
+          'deeply-nested',
+        ]);
+      });
+
+      it('should provide parent in visitor callback', () => {
+        const items = [
+          {
+            id: 'folder-1',
+            type: 'folder',
+            items: [{ id: 'child-1', type: 'analysis', analysisName: 'a1' }],
+          },
+        ];
+
+        let capturedParent = null;
+        teamService.traverseTree(items, (item, parent) => {
+          if (item.id === 'child-1') {
+            capturedParent = parent;
+          }
+          return null;
+        });
+
+        expect(capturedParent.id).toBe('folder-1');
+      });
+
+      it('should provide null parent for root items', () => {
+        const items = [{ id: 'item-1', type: 'analysis', analysisName: 'a1' }];
+
+        let capturedParent = undefined;
+        teamService.traverseTree(items, (item, parent) => {
+          capturedParent = parent;
+          return null;
+        });
+
+        expect(capturedParent).toBeNull();
+      });
+
+      it('should provide index in visitor callback', () => {
+        const items = [
+          { id: 'item-1', type: 'analysis', analysisName: 'a1' },
+          { id: 'item-2', type: 'analysis', analysisName: 'a2' },
+          { id: 'item-3', type: 'analysis', analysisName: 'a3' },
+        ];
+
+        const indices = [];
+        teamService.traverseTree(items, (item, parent, index) => {
+          indices.push(index);
+          return null;
+        });
+
+        expect(indices).toEqual([0, 1, 2]);
+      });
+
+      it('should return null if no visitor returns value', () => {
+        const items = [
+          { id: 'item-1', type: 'analysis', analysisName: 'a1' },
+          { id: 'item-2', type: 'analysis', analysisName: 'a2' },
+        ];
+
+        const result = teamService.traverseTree(items, () => null);
+
+        expect(result).toBeNull();
+      });
+
+      it('should handle empty items array', () => {
+        const items = [];
+
+        const result = teamService.traverseTree(items, (item) => item);
+
+        expect(result).toBeNull();
+      });
+
+      it('should not confuse undefined return with null', () => {
+        const items = [
+          { id: 'item-1', type: 'analysis', analysisName: 'a1' },
+          { id: 'item-2', type: 'analysis', analysisName: 'a2' },
+        ];
+
+        const result = teamService.traverseTree(items, (item) => {
+          if (item.id === 'item-2') return undefined;
+          return null;
+        });
+
+        // Should continue searching past undefined
+        expect(result).toBeNull();
+      });
     });
 
     describe('findItemById', () => {

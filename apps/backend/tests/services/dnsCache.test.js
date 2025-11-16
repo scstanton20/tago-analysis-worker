@@ -50,7 +50,7 @@ vi.mock('../../src/utils/metrics-enhanced.js', () => ({
 }));
 
 vi.mock('../../src/config/default.js', () => ({
-  default: {
+  config: {
     paths: {
       config: '/tmp/config',
     },
@@ -92,8 +92,8 @@ describe('DNSCacheService', () => {
     process.env.DNS_CACHE_MAX_ENTRIES = '1000';
 
     // Re-import to get fresh instance
-    const module = await import('../../src/services/dnsCache.js');
-    dnsCache = module.default;
+    const { dnsCache: cache } = await import('../../src/services/dnsCache.js');
+    dnsCache = cache;
 
     // Reset service state
     dnsCache.cache.clear();

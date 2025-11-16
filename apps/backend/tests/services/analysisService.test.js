@@ -49,16 +49,14 @@ vi.mock('../../src/utils/cryptoUtils.js', () => ({
   decrypt: vi.fn((value) => value.replace('encrypted_', '')),
 }));
 
-const mockGetAllTeams = vi
-  .fn()
-  .mockResolvedValue([{ id: 'uncategorized', name: 'Uncategorized' }]);
-
 vi.mock('../../src/services/teamService.js', () => ({
-  default: {
+  teamService: {
     initialize: vi.fn().mockResolvedValue(undefined),
     addItemToTeamStructure: vi.fn().mockResolvedValue(undefined),
     ensureAnalysisHasTeam: vi.fn().mockResolvedValue(undefined),
-    getAllTeams: mockGetAllTeams,
+    getAllTeams: vi
+      .fn()
+      .mockResolvedValue([{ id: 'uncategorized', name: 'Uncategorized' }]),
     getTeam: vi.fn().mockResolvedValue({ id: 'team-1', name: 'Team 1' }),
   },
 }));
@@ -92,7 +90,7 @@ vi.mock('../../src/config/default.js', () => {
     config: `${mockConfig.paths.config}/analyses-config.json`,
   };
 
-  return { default: mockConfig };
+  return { config: mockConfig };
 });
 
 vi.mock('fs', () => ({
@@ -105,10 +103,7 @@ vi.mock('fs', () => ({
 const { safeMkdir, safeWriteFile, safeReadFile, safeReaddir } = await import(
   '../../src/utils/safePath.js'
 );
-const teamService = (await import('../../src/services/teamService.js')).default;
-
-// Export the mock function so we can reset it in tests
-export { mockGetAllTeams };
+const { teamService } = await import('../../src/services/teamService.js');
 
 describe('AnalysisService', () => {
   let analysisService;
@@ -192,7 +187,7 @@ describe('AnalysisService', () => {
       // Mock file reading for initializeVersionManagement
       safeReadFile.mockResolvedValue('console.log("test analysis");');
       // Reset and configure getAllTeams mock
-      mockGetAllTeams.mockResolvedValueOnce([
+      teamService.getAllTeams.mockResolvedValueOnce([
         { id: 'uncategorized', name: 'Uncategorized' },
       ]);
 
@@ -943,9 +938,9 @@ describe('AnalysisService', () => {
 
     it('should update configuration', async () => {
       // Import the mocked AnalysisProcess class
-      const AnalysisProcess = (
-        await import('../../src/models/analysisProcess.js')
-      ).default;
+      const { AnalysisProcess } = await import(
+        '../../src/models/analysisProcess/index.js'
+      );
 
       // Create an instance using the mocked class
       const analysis = new AnalysisProcess('test-analysis', analysisService);

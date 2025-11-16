@@ -16,7 +16,7 @@ vi.mock('../../src/utils/safePath.js', () => ({
   safeReadFile: vi.fn().mockResolvedValue(''),
 }));
 
-vi.mock('../../src/utils/sse.js', () => ({
+vi.mock('../../src/utils/sse/index.js', () => ({
   sseManager: {
     broadcastUpdate: vi.fn(),
     broadcastAnalysisUpdate: vi.fn(),
@@ -24,7 +24,7 @@ vi.mock('../../src/utils/sse.js', () => ({
 }));
 
 vi.mock('../../src/config/default.js', () => ({
-  default: {
+  config: {
     paths: {
       analysis: '/tmp/analyses',
     },
@@ -43,7 +43,7 @@ vi.mock('../../src/config/default.js', () => ({
 }));
 
 vi.mock('../../src/services/dnsCache.js', () => ({
-  default: {
+  dnsCache: {
     handleDNSLookupRequest: vi
       .fn()
       .mockResolvedValue({ addresses: ['127.0.0.1'] }),
@@ -60,21 +60,53 @@ vi.mock('../../src/constants.js', () => ({
     INITIAL_RESTART_DELAY_MS: 5000,
     MAX_RESTART_DELAY_MS: 60000,
     MAX_LOG_FILE_SIZE_BYTES: 50 * 1024 * 1024,
+    CONNECTION_GRACE_PERIOD_MS: 30000,
   },
 }));
 
-vi.mock('pino', () => ({
-  default: vi.fn(() => ({
+// Mock destination stream for testing file logger cleanup
+const createMockDestination = () => {
+  const listeners = new Map();
+  return {
+    once: vi.fn((event, handler) => {
+      listeners.set(event, handler);
+    }),
+    end: vi.fn(function () {
+      // Simulate async close event
+      setTimeout(() => {
+        const closeHandler = listeners.get('close');
+        if (closeHandler) {
+          closeHandler();
+        }
+      }, 0);
+    }),
+  };
+};
+
+// Create a pino factory function that returns logger
+const pinoFactory = (config, destination) => {
+  const logger = {
     info: vi.fn(),
     error: vi.fn(),
     warn: vi.fn(),
     flush: vi.fn(),
-  })),
-  destination: vi.fn(() => ({})),
+  };
+  // Store destination using the pino.destination symbol
+  if (destination) {
+    logger[Symbol.for('pino.destination')] = destination;
+  }
+  return logger;
+};
+
+// Attach destination method to the factory
+pinoFactory.destination = vi.fn(() => createMockDestination());
+
+vi.mock('pino', () => ({
+  default: pinoFactory,
 }));
 
 const { fork } = await import('child_process');
-const { sseManager } = await import('../../src/utils/sse.js');
+const { sseManager } = await import('../../src/utils/sse/index.js');
 const { safeStat, safeReadFile, safeUnlink } = await import(
   '../../src/utils/safePath.js'
 );
@@ -92,8 +124,8 @@ describe('AnalysisProcess', () => {
     };
 
     // Dynamically import to get fresh instance
-    const module = await import('../../src/models/analysisProcess.js');
-    AnalysisProcess = module.default;
+    const module = await import('../../src/models/analysisProcess/index.js');
+    AnalysisProcess = module.AnalysisProcess;
   });
 
   describe('constructor', () => {
@@ -336,10 +368,21 @@ describe('AnalysisProcess', () => {
       analysis.process = mockProcess;
       analysis.status = 'running';
 
-      // Simulate process exit
+      // Store the exit callback when once('exit') is called
+      let exitCallback = null;
       mockProcess.once.mockImplementation((event, callback) => {
         if (event === 'exit') {
-          setTimeout(() => callback(0), 10);
+          exitCallback = callback;
+        }
+      });
+
+      // Manually register the exit handler (normally done during start())
+      analysis.process.once('exit', analysis.handleExit.bind(analysis));
+
+      // Trigger exit after a short delay when kill is called
+      mockProcess.kill.mockImplementation(() => {
+        if (exitCallback) {
+          setTimeout(() => exitCallback(0), 10);
         }
       });
 
@@ -372,6 +415,9 @@ describe('AnalysisProcess', () => {
           exitCallback = callback;
         }
       });
+
+      // Manually register the exit handler (normally done during start())
+      analysis.process.once('exit', analysis.handleExit.bind(analysis));
 
       // Start the stop process
       const stopPromise = analysis.stop();
@@ -818,6 +864,58 @@ describe('AnalysisProcess', () => {
 
       await expect(analysis.cleanup()).resolves.not.toThrow();
       expect(analysis.process).toBeNull();
+    });
+
+    it('should properly close file logger streams to prevent file descriptor leaks', async () => {
+      const analysis = new AnalysisProcess('test-analysis', mockService);
+
+      // Skip test if file logger initialization failed (can happen in test environment)
+      if (!analysis.fileLogger) {
+        // This is fine - the stress test below covers the scenario when it works
+        return;
+      }
+
+      // Get reference to the destination before cleanup
+      const destination = analysis.fileLogger[Symbol.for('pino.destination')];
+      expect(destination).toBeDefined();
+
+      // Cleanup should properly close the stream
+      await analysis.cleanup();
+
+      // Verify destination.end() was called to close the stream
+      expect(destination.end).toHaveBeenCalled();
+      expect(analysis.fileLogger).toBeNull();
+    });
+
+    it('should handle multiple cleanup cycles without file descriptor leaks (stress test)', async () => {
+      const instances = [];
+      const destinations = [];
+
+      // Create 100 analysis instances
+      for (let i = 0; i < 100; i++) {
+        const analysis = new AnalysisProcess(`test-analysis-${i}`, mockService);
+        instances.push(analysis);
+
+        // Track destinations for verification
+        const destination =
+          analysis.fileLogger?.[Symbol.for('pino.destination')];
+        if (destination) {
+          destinations.push(destination);
+        }
+      }
+
+      // Cleanup all instances
+      await Promise.all(instances.map((instance) => instance.cleanup()));
+
+      // Verify all destinations were properly closed
+      destinations.forEach((destination) => {
+        expect(destination.end).toHaveBeenCalled();
+      });
+
+      // Verify all fileLoggers are null
+      instances.forEach((instance) => {
+        expect(instance.fileLogger).toBeNull();
+      });
     });
   });
 

@@ -25,7 +25,7 @@ import {
 } from '../utils/authHelpers.js';
 
 // Mock SSE manager
-vi.mock('../../src/utils/sse.js', () => ({
+vi.mock('../../src/utils/sse/index.js', () => ({
   sseManager: {
     getContainerState: vi.fn(() => ({
       status: 'ready',
@@ -90,14 +90,12 @@ describe('Status Routes - WITH REAL AUTH', () => {
     app.use(attachRequestLogger); // Use mocked logging middleware
 
     // Import SSE manager
-    const sseModule = await import('../../src/utils/sse.js');
+    const sseModule = await import('../../src/utils/sse/index.js');
     sseManager = sseModule.sseManager;
 
     // Import routes - NO AUTH (public endpoint)
-    const { default: statusRoutes } = await import(
-      '../../src/routes/statusRoutes.js'
-    );
-    app.use('/api/status', statusRoutes);
+    const { statusRouter } = await import('../../src/routes/statusRoutes.js');
+    app.use('/api/status', statusRouter);
   });
 
   describe('GET /api/status - Public Endpoint', () => {

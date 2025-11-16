@@ -166,5 +166,5 @@ export function parseLogLine(line, asObject = true) {
   }
 }
 
-// Export main logger as default
-export default logger;
+// Export main logger
+export { logger };

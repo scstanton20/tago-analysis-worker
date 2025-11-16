@@ -1,7 +1,10 @@
 import { Router } from 'express';
-import { handleSSEConnection, sseManager } from '../utils/sse.js';
+import { handleSSEConnection, sseManager } from '../utils/sse/index.js';
 import { sseCompression } from '../middleware/compression.js';
 import { authMiddleware } from '../middleware/betterAuthMiddleware.js';
+import { validateRequest } from '../middleware/validateRequest.js';
+import { sseValidationSchemas } from '../validation/sseSchemas.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
 
 const router = Router();
 
@@ -83,7 +86,12 @@ router.use(authMiddleware);
  *                 value:
  *                   error: "Invalid user"
  */
-router.get('/events', sseCompression(), handleSSEConnection);
+router.get(
+  '/events',
+  validateRequest(sseValidationSchemas.connectSSE),
+  sseCompression(),
+  handleSSEConnection,
+);
 
 /**
  * @swagger
@@ -152,9 +160,13 @@ router.get('/events', sseCompression(), handleSSEConnection);
  *       401:
  *         description: Authentication required
  */
-router.post('/subscribe', async (req, res) => {
-  await sseManager.handleSubscribeRequest(req, res);
-});
+router.post(
+  '/subscribe',
+  validateRequest(sseValidationSchemas.subscribe),
+  asyncHandler(async (req, res) => {
+    await sseManager.handleSubscribeRequest(req, res);
+  }, 'subscribe to analysis channels'),
+);
 
 /**
  * @swagger
@@ -213,8 +225,12 @@ router.post('/subscribe', async (req, res) => {
  *       401:
  *         description: Authentication required
  */
-router.post('/unsubscribe', async (req, res) => {
-  await sseManager.handleUnsubscribeRequest(req, res);
-});
+router.post(
+  '/unsubscribe',
+  validateRequest(sseValidationSchemas.unsubscribe),
+  asyncHandler(async (req, res) => {
+    await sseManager.handleUnsubscribeRequest(req, res);
+  }, 'unsubscribe from analysis channels'),
+);
 
-export default router;
+export { router as sseRouter };

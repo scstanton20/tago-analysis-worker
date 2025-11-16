@@ -39,6 +39,10 @@ import {
   executeTransaction,
 } from '../utils/authDatabase.js';
 import { createChildLogger } from '../utils/logging/logger.js';
+import {
+  convertSQLiteBooleans,
+  convertSQLiteBooleansArray,
+} from '../utils/databaseHelpers.js';
 
 // Module-level logger for background operations (initialization)
 // Public methods accept logger parameter for request-scoped logging
@@ -149,16 +153,23 @@ class TeamService {
       logger.info({ action: 'getAllTeams' }, 'Getting all teams');
 
       const teams = executeQueryAll(
-        'SELECT id, name, organizationId, createdAt, color, order_index, is_system FROM team WHERE organizationId = ? ORDER BY is_system DESC, order_index, name',
+        `SELECT
+          id,
+          name,
+          organizationId,
+          createdAt,
+          color,
+          order_index AS orderIndex,
+          is_system AS isSystem
+        FROM team
+        WHERE organizationId = ?
+        ORDER BY isSystem DESC, orderIndex, name`,
         [this.organizationId],
         'getting all teams',
       );
 
       // Convert is_system from integer to boolean for frontend
-      const result = teams.map((team) => ({
-        ...team,
-        isSystem: team.is_system === 1,
-      }));
+      const result = convertSQLiteBooleansArray(teams, ['isSystem']);
 
       logger.info(
         { action: 'getAllTeams', teamCount: result.length },
@@ -185,15 +196,24 @@ class TeamService {
     try {
       logger.info({ action: 'getTeam', teamId: id }, 'Getting team');
 
-      const team = executeQuery(
-        'SELECT id, name, organizationId, createdAt, color, order_index, is_system FROM team WHERE id = ? AND organizationId = ?',
+      let team = executeQuery(
+        `SELECT
+          id,
+          name,
+          organizationId,
+          createdAt,
+          color,
+          order_index AS orderIndex,
+          is_system AS isSystem
+        FROM team
+        WHERE id = ? AND organizationId = ?`,
         [id, this.organizationId],
         `getting team ${id}`,
       );
 
       if (team) {
         // Convert is_system from integer to boolean for frontend
-        team.isSystem = team.is_system === 1;
+        team = convertSQLiteBooleans(team, ['isSystem']);
         logger.info(
           { action: 'getTeam', teamId: id, teamName: team.name },
           'Team retrieved',
@@ -264,15 +284,18 @@ class TeamService {
       // Better-auth API returns the team object directly
       const teamData = teamResult;
 
-      const team = {
-        id: teamData.id,
-        name: teamData.name,
-        organizationId: teamData.organizationId,
-        createdAt: teamData.createdAt,
-        color: teamData.color,
-        order_index: teamData.order_index,
-        isSystem: teamData.is_system === 1,
-      };
+      const team = convertSQLiteBooleans(
+        {
+          id: teamData.id,
+          name: teamData.name,
+          organizationId: teamData.organizationId,
+          createdAt: teamData.createdAt,
+          color: teamData.color,
+          orderIndex: teamData.order_index,
+          isSystem: teamData.is_system,
+        },
+        ['isSystem'],
+      );
 
       logger.info(
         { action: 'createTeam', teamId: team.id, teamName: team.name },
@@ -320,7 +343,16 @@ class TeamService {
         // Check if team exists first
         const existing = db
           .prepare(
-            'SELECT id, name, organizationId, createdAt, color, order_index, is_system FROM team WHERE id = ? AND organizationId = ?',
+            `SELECT
+              id,
+              name,
+              organizationId,
+              createdAt,
+              color,
+              order_index AS orderIndex,
+              is_system AS isSystem
+            FROM team
+            WHERE id = ? AND organizationId = ?`,
           )
           .get(id, this.organizationId);
 
@@ -356,16 +388,22 @@ class TeamService {
         // Return updated team
         const updatedTeam = db
           .prepare(
-            'SELECT id, name, organizationId, createdAt, color, order_index, is_system FROM team WHERE id = ? AND organizationId = ?',
+            `SELECT
+              id,
+              name,
+              organizationId,
+              createdAt,
+              color,
+              order_index AS orderIndex,
+              is_system AS isSystem
+            FROM team
+            WHERE id = ? AND organizationId = ?`,
           )
           .get(id, this.organizationId);
 
         // Convert is_system from integer to boolean for frontend
         const result = updatedTeam
-          ? {
-              ...updatedTeam,
-              isSystem: updatedTeam.is_system === 1,
-            }
+          ? convertSQLiteBooleans(updatedTeam, ['isSystem'])
           : null;
 
         logger.info(
@@ -620,15 +658,24 @@ class TeamService {
         // Return all teams in new order
         const teams = db
           .prepare(
-            'SELECT id, name, organizationId, createdAt, color, order_index, is_system FROM team WHERE organizationId = ? ORDER BY is_system DESC, order_index, name',
+            `SELECT
+              id,
+              name,
+              organizationId,
+              createdAt,
+              color,
+              order_index AS orderIndex,
+              is_system AS isSystem
+            FROM team
+            WHERE organizationId = ?
+            ORDER BY isSystem DESC, orderIndex, name`,
           )
           .all(this.organizationId);
 
         // Convert is_system from integer to boolean for frontend
-        const teamsWithBoolean = teams.map((team) => ({
-          ...team,
-          isSystem: team.is_system === 1,
-        }));
+        const teamsWithBoolean = convertSQLiteBooleansArray(teams, [
+          'isSystem',
+        ]);
 
         logger.info(
           { action: 'reorderTeams', teamCount: orderedIds.length, orderedIds },
@@ -665,41 +712,65 @@ class TeamService {
   }
 
   /**
-   * Recursively find an item by ID in the tree structure
-   * @param {Array} items - Array of items to search
-   * @param {string} id - Item ID to find
-   * @returns {Object|null} Found item or null
+   * Generic tree traversal utility using visitor pattern
+   * Recursively traverses a hierarchical tree structure and calls a visitor function for each item.
+   * Traversal stops early if visitor returns a non-null/non-undefined value.
+   *
+   * @param {Array} items - Tree items to traverse (array of objects with optional nested 'items' arrays)
+   * @param {Function} visitor - Callback function invoked for each item: (item, parent, index) => result | null
+   *   - item: Current item being visited
+   *   - parent: Parent item (null for root-level items)
+   *   - index: Index of item in parent's items array
+   * @param {Object|null} [parent=null] - Parent item (used internally for recursion)
+   * @returns {*} First non-null/non-undefined result from visitor, or null if no match found
+   *
+   * @example
+   * // Find item by ID
+   * const item = traverseTree(items, (item) =>
+   *   item.id === targetId ? item : null
+   * );
+   *
+   * @example
+   * // Find item with parent context
+   * const result = traverseTree(items, (item, parent, index) =>
+   *   item.id === targetId ? { item, parent, index } : null
+   * );
    */
-  findItemById(items, id) {
-    for (const item of items) {
-      if (item.id === id) return item;
+  traverseTree(items, visitor, parent = null) {
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const result = visitor(item, parent, i);
+      if (result !== null && result !== undefined) return result;
+
       if (item.type === 'folder' && item.items) {
-        const found = this.findItemById(item.items, id);
-        if (found) return found;
+        const found = this.traverseTree(item.items, visitor, item);
+        if (found !== null && found !== undefined) return found;
       }
     }
     return null;
   }
 
   /**
+   * Recursively find an item by ID in the tree structure
+   * @param {Array} items - Array of items to search
+   * @param {string} id - Item ID to find
+   * @returns {Object|null} Found item or null
+   */
+  findItemById(items, id) {
+    return this.traverseTree(items, (item) => (item.id === id ? item : null));
+  }
+
+  /**
    * Find an item with its parent and index for manipulation
    * @param {Array} items - Array of items to search
    * @param {string} id - Item ID to find
-   * @param {Object|null} parent - Parent item (used in recursion)
    * @returns {Object} Object with parent, item, and index
    */
-  findItemWithParent(items, id, parent = null) {
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      if (item.id === id) {
-        return { parent, item, index: i };
-      }
-      if (item.type === 'folder' && item.items) {
-        const found = this.findItemWithParent(item.items, id, item);
-        if (found.item) return found;
-      }
-    }
-    return { parent: null, item: null, index: -1 };
+  findItemWithParent(items, id) {
+    const result = this.traverseTree(items, (item, parent, index) =>
+      item.id === id ? { parent, item, index } : null,
+    );
+    return result || { parent: null, item: null, index: -1 };
   }
 
   /**
@@ -778,23 +849,22 @@ class TeamService {
       return; // Nothing to remove
     }
 
-    const removeFromArray = (items) => {
-      for (let i = items.length - 1; i >= 0; i--) {
-        const item = items[i];
+    // Use traverseTree to find and remove the item
+    const result = this.traverseTree(
+      configData.teamStructure[teamId].items,
+      (item, parent, index) => {
         if (item.type === 'analysis' && item.analysisName === analysisName) {
-          items.splice(i, 1);
-          return true;
+          const itemsArray = parent
+            ? parent.items
+            : configData.teamStructure[teamId].items;
+          itemsArray.splice(index, 1);
+          return true; // Return true to stop traversal
         }
-        if (item.type === 'folder' && item.items) {
-          if (removeFromArray(item.items)) {
-            return true;
-          }
-        }
-      }
-      return false;
-    };
+        return null;
+      },
+    );
 
-    const removed = removeFromArray(configData.teamStructure[teamId].items);
+    const removed = result === true;
     await this.analysisService.updateConfig(configData);
     logger.info(
       { action: 'removeItemFromTeamStructure', teamId, analysisName, removed },
@@ -1021,17 +1091,11 @@ class TeamService {
 
     // Prevent moving folder into its own descendant
     if (item.type === 'folder' && targetParentId) {
-      const isDescendant = (folderId, items) => {
-        for (const child of items) {
-          if (child.id === folderId) return true;
-          if (child.type === 'folder' && child.items) {
-            if (isDescendant(folderId, child.items)) return true;
-          }
-        }
-        return false;
-      };
+      const isDescendant = this.traverseTree(item.items || [], (child) =>
+        child.id === targetParentId ? true : null,
+      );
 
-      if (isDescendant(targetParentId, item.items || [])) {
+      if (isDescendant) {
         throw new Error('Cannot move folder into its own descendant');
       }
     }
@@ -1068,4 +1132,4 @@ class TeamService {
 // Singleton instance
 const teamService = new TeamService();
 
-export { teamService as default, TeamService };
+export { teamService, TeamService };

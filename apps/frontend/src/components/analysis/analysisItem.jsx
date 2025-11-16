@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react';
 import PropTypes from 'prop-types';
-import { Paper, Group, Text, Button, Badge, Stack, Box } from '@mantine/core';
+import { Paper, Group, Text, Button, Stack, Box } from '@mantine/core';
 import {
   IconPlayerPlay,
   IconPlayerStop,
@@ -57,9 +57,6 @@ export default function AnalysisItem({
   const teamsArray = isAdmin
     ? allTeams
     : allTeams.filter((team) => canAccessTeam(team.id));
-  const currentTeam = teamsArray.find(
-    (t) => t.id === (analysis.teamId || analysis.team),
-  );
   const isUncategorized =
     (!analysis.teamId && !analysis.team) ||
     analysis.teamId === 'uncategorized' ||
@@ -236,25 +233,6 @@ export default function AnalysisItem({
               </Text>
             </Box>
             <StatusBadge status={analysis.status || 'stopped'} />
-            {currentTeam && (
-              <Badge
-                variant="light"
-                color="brand"
-                size="sm"
-                leftSection={
-                  <Box
-                    w={8}
-                    h={8}
-                    style={{
-                      borderRadius: '50%',
-                      backgroundColor: currentTeam.color,
-                    }}
-                  />
-                }
-              >
-                {currentTeam.name}
-              </Badge>
-            )}
           </Group>
 
           <Group gap="xs">

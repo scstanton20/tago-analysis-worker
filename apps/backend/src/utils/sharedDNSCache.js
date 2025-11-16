@@ -61,7 +61,7 @@ function installIPCInterceptors() {
   };
 
   // Override dnsPromises.resolve4 to use shared cache via IPC
-  dnsPromises.resolve4 = async (hostname) => {
+  dnsPromises.resolve4 = (hostname) => {
     const reqId = ++requestId;
 
     return new Promise((resolve, reject) => {
@@ -86,7 +86,7 @@ function installIPCInterceptors() {
   };
 
   // Override dnsPromises.resolve6 to use shared cache via IPC
-  dnsPromises.resolve6 = async (hostname) => {
+  dnsPromises.resolve6 = (hostname) => {
     const reqId = ++requestId;
 
     return new Promise((resolve, reject) => {

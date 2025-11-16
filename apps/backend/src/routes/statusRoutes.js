@@ -1,6 +1,8 @@
 import { Router } from 'express';
-import StatusController from '../controllers/statusController.js';
+import { StatusController } from '../controllers/statusController.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { validateRequest } from '../middleware/validateRequest.js';
+import { statusValidationSchemas } from '../validation/statusSchemas.js';
 
 const router = Router();
 
@@ -89,6 +91,10 @@ const router = Router();
  *                   type: string
  *                   example: "Detailed error message"
  */
-router.get('/', asyncHandler(StatusController.getSystemStatus));
+router.get(
+  '/',
+  validateRequest(statusValidationSchemas.getSystemStatus),
+  asyncHandler(StatusController.getSystemStatus, 'get system status'),
+);
 
-export default router;
+export { router as statusRouter };

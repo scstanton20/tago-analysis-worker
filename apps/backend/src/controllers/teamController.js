@@ -1,9 +1,6 @@
-import teamService from '../services/teamService.js';
-import { sseManager } from '../utils/sse.js';
-import {
-  handleError,
-  broadcastTeamStructureUpdate,
-} from '../utils/responseHelpers.js';
+import { teamService } from '../services/teamService.js';
+import { sseManager } from '../utils/sse/index.js';
+import { broadcastTeamStructureUpdate } from '../utils/responseHelpers.js';
 
 /**
  * Controller class for managing teams and team structure
@@ -16,7 +13,7 @@ import {
  * All methods are static and follow Express route handler pattern (req, res).
  * Request-scoped logging is available via req.log.
  */
-class TeamController {
+export class TeamController {
   /**
    * Retrieve all teams
    * Returns complete team list with metadata
@@ -32,16 +29,12 @@ class TeamController {
   static async getAllTeams(req, res) {
     req.log.info({ action: 'getAllTeams' }, 'Retrieving all teams');
 
-    try {
-      const teams = await teamService.getAllTeams(req.log);
-      req.log.info(
-        { action: 'getAllTeams', count: teams.length },
-        'Teams retrieved',
-      );
-      res.json(teams);
-    } catch (error) {
-      handleError(res, error, 'retrieving teams', { logger: req.logger });
-    }
+    const teams = await teamService.getAllTeams(req.log);
+    req.log.info(
+      { action: 'getAllTeams', count: teams.length },
+      'Teams retrieved',
+    );
+    res.json(teams);
   }
 
   /**
@@ -72,32 +65,28 @@ class TeamController {
     // Validation handled by middleware
     req.log.info({ action: 'createTeam', teamName: name }, 'Creating team');
 
-    try {
-      const team = await teamService.createTeam(
-        {
-          name,
-          color,
-          order,
-        },
-        req.headers,
-        req.log,
-      );
+    const team = await teamService.createTeam(
+      {
+        name,
+        color,
+        order,
+      },
+      req.headers,
+      req.log,
+    );
 
-      req.log.info(
-        { action: 'createTeam', teamId: team.id, teamName: name },
-        'Team created',
-      );
+    req.log.info(
+      { action: 'createTeam', teamId: team.id, teamName: name },
+      'Team created',
+    );
 
-      // Broadcast to admin users only (they manage teams)
-      sseManager.broadcastToAdminUsers({
-        type: 'teamCreated',
-        team: team,
-      });
+    // Broadcast to admin users only (they manage teams)
+    sseManager.broadcastToAdminUsers({
+      type: 'teamCreated',
+      team: team,
+    });
 
-      res.status(201).json(team);
-    } catch (error) {
-      handleError(res, error, 'creating team', { logger: req.logger });
-    }
+    res.status(201).json(team);
   }
 
   /**
@@ -127,21 +116,17 @@ class TeamController {
       'Updating team',
     );
 
-    try {
-      const team = await teamService.updateTeam(id, updates, req.log);
+    const team = await teamService.updateTeam(id, updates, req.log);
 
-      req.log.info({ action: 'updateTeam', teamId: id }, 'Team updated');
+    req.log.info({ action: 'updateTeam', teamId: id }, 'Team updated');
 
-      // Broadcast update to admin users only
-      sseManager.broadcastToAdminUsers({
-        type: 'teamUpdated',
-        team: team,
-      });
+    // Broadcast update to admin users only
+    sseManager.broadcastToAdminUsers({
+      type: 'teamUpdated',
+      team: team,
+    });
 
-      res.json(team);
-    } catch (error) {
-      handleError(res, error, 'updating team', { logger: req.logger });
-    }
+    res.json(team);
   }
 
   /**
@@ -166,22 +151,18 @@ class TeamController {
     const { id } = req.params;
     req.log.info({ action: 'deleteTeam', teamId: id }, 'Deleting team');
 
-    try {
-      // Delete team (hooks handle analysis migration automatically)
-      const result = await teamService.deleteTeam(id, req.headers, req.log);
+    // Delete team (hooks handle analysis migration automatically)
+    const result = await teamService.deleteTeam(id, req.headers, req.log);
 
-      req.log.info({ action: 'deleteTeam', teamId: id }, 'Team deleted');
+    req.log.info({ action: 'deleteTeam', teamId: id }, 'Team deleted');
 
-      // Broadcast deletion to admin users only
-      sseManager.broadcastToAdminUsers({
-        type: 'teamDeleted',
-        deleted: id,
-      });
+    // Broadcast deletion to admin users only
+    sseManager.broadcastToAdminUsers({
+      type: 'teamDeleted',
+      deleted: id,
+    });
 
-      res.json(result);
-    } catch (error) {
-      handleError(res, error, 'deleting team', { logger: req.logger });
-    }
+    res.json(result);
   }
 
   /**
@@ -211,21 +192,17 @@ class TeamController {
       'Reordering teams',
     );
 
-    try {
-      const teams = await teamService.reorderTeams(orderedIds, req.log);
+    const teams = await teamService.reorderTeams(orderedIds, req.log);
 
-      req.log.info({ action: 'reorderTeams' }, 'Teams reordered');
+    req.log.info({ action: 'reorderTeams' }, 'Teams reordered');
 
-      // Broadcast reorder to admin users only
-      sseManager.broadcastToAdminUsers({
-        type: 'teamsReordered',
-        teams: teams,
-      });
+    // Broadcast reorder to admin users only
+    sseManager.broadcastToAdminUsers({
+      type: 'teamsReordered',
+      teams: teams,
+    });
 
-      res.json(teams);
-    } catch (error) {
-      handleError(res, error, 'reordering teams', { logger: req.logger });
-    }
+    res.json(teams);
   }
 
   /**
@@ -265,38 +242,30 @@ class TeamController {
       'Moving analysis to team',
     );
 
-    try {
-      const result = await teamService.moveAnalysisToTeam(
-        name,
-        teamId,
-        req.log,
-      );
+    const result = await teamService.moveAnalysisToTeam(name, teamId, req.log);
 
-      req.log.info(
-        {
-          action: 'moveAnalysisToTeam',
-          analysisName: name,
-          fromTeam: result.from,
-          toTeam: result.to,
-        },
-        'Analysis moved',
-      );
+    req.log.info(
+      {
+        action: 'moveAnalysisToTeam',
+        analysisName: name,
+        fromTeam: result.from,
+        toTeam: result.to,
+      },
+      'Analysis moved',
+    );
 
-      // Broadcast move notification to users with access to involved teams
-      sseManager.broadcastAnalysisMove(result.analysis, result.from, result.to);
+    // Broadcast move notification to users with access to involved teams
+    sseManager.broadcastAnalysisMove(result.analysis, result.from, result.to);
 
-      // Broadcast structure updates for both teams so tree updates in real-time
-      if (result.from) {
-        await broadcastTeamStructureUpdate(sseManager, result.from);
-      }
-      if (result.to) {
-        await broadcastTeamStructureUpdate(sseManager, result.to);
-      }
-
-      res.json(result);
-    } catch (error) {
-      handleError(res, error, 'moving analysis', { logger: req.logger });
+    // Broadcast structure updates for both teams so tree updates in real-time
+    if (result.from) {
+      await broadcastTeamStructureUpdate(sseManager, result.from);
     }
+    if (result.to) {
+      await broadcastTeamStructureUpdate(sseManager, result.to);
+    }
+
+    res.json(result);
   }
 
   /**
@@ -320,16 +289,12 @@ class TeamController {
       'Getting team analysis count',
     );
 
-    try {
-      const count = await teamService.getAnalysisCountByTeamId(id, req.log);
-      req.log.info(
-        { action: 'getTeamAnalysisCount', teamId: id, count },
-        'Analysis count retrieved',
-      );
-      res.json({ count });
-    } catch (error) {
-      handleError(res, error, 'getting analysis count', { logger: req.logger });
-    }
+    const count = await teamService.getAnalysisCountByTeamId(id, req.log);
+    req.log.info(
+      { action: 'getTeamAnalysisCount', teamId: id, count },
+      'Analysis count retrieved',
+    );
+    res.json({ count });
   }
 
   /**
@@ -367,38 +332,34 @@ class TeamController {
       'Creating folder',
     );
 
-    try {
-      const folder = await teamService.createFolder(
+    const folder = await teamService.createFolder(
+      teamId,
+      parentFolderId,
+      name,
+      req.log,
+    );
+
+    req.log.info(
+      {
+        action: 'createFolder',
         teamId,
-        parentFolderId,
-        name,
-        req.log,
-      );
+        folderId: folder.id,
+        folderName: name,
+      },
+      'Folder created',
+    );
 
-      req.log.info(
-        {
-          action: 'createFolder',
-          teamId,
-          folderId: folder.id,
-          folderName: name,
-        },
-        'Folder created',
-      );
+    // Broadcast to team members
+    sseManager.broadcastToTeamUsers(teamId, {
+      type: 'folderCreated',
+      teamId,
+      folder,
+    });
 
-      // Broadcast to team members
-      sseManager.broadcastToTeamUsers(teamId, {
-        type: 'folderCreated',
-        teamId,
-        folder,
-      });
+    // Broadcast structure update
+    await broadcastTeamStructureUpdate(sseManager, teamId);
 
-      // Broadcast structure update
-      await broadcastTeamStructureUpdate(sseManager, teamId);
-
-      res.status(201).json(folder);
-    } catch (error) {
-      handleError(res, error, 'creating folder', { logger: req.logger });
-    }
+    res.status(201).json(folder);
   }
 
   /**
@@ -434,33 +395,29 @@ class TeamController {
       'Updating folder',
     );
 
-    try {
-      const folder = await teamService.updateFolder(
-        teamId,
-        folderId,
-        updates,
-        req.log,
-      );
+    const folder = await teamService.updateFolder(
+      teamId,
+      folderId,
+      updates,
+      req.log,
+    );
 
-      req.log.info(
-        { action: 'updateFolder', teamId, folderId },
-        'Folder updated',
-      );
+    req.log.info(
+      { action: 'updateFolder', teamId, folderId },
+      'Folder updated',
+    );
 
-      // Broadcast to team members
-      sseManager.broadcastToTeamUsers(teamId, {
-        type: 'folderUpdated',
-        teamId,
-        folder,
-      });
+    // Broadcast to team members
+    sseManager.broadcastToTeamUsers(teamId, {
+      type: 'folderUpdated',
+      teamId,
+      folder,
+    });
 
-      // Broadcast structure update
-      await broadcastTeamStructureUpdate(sseManager, teamId);
+    // Broadcast structure update
+    await broadcastTeamStructureUpdate(sseManager, teamId);
 
-      res.json(folder);
-    } catch (error) {
-      handleError(res, error, 'updating folder', { logger: req.logger });
-    }
+    res.json(folder);
   }
 
   /**
@@ -488,28 +445,24 @@ class TeamController {
       'Deleting folder',
     );
 
-    try {
-      const result = await teamService.deleteFolder(teamId, folderId, req.log);
+    const result = await teamService.deleteFolder(teamId, folderId, req.log);
 
-      req.log.info(
-        { action: 'deleteFolder', teamId, folderId },
-        'Folder deleted',
-      );
+    req.log.info(
+      { action: 'deleteFolder', teamId, folderId },
+      'Folder deleted',
+    );
 
-      // Broadcast to team members
-      sseManager.broadcastToTeamUsers(teamId, {
-        type: 'folderDeleted',
-        teamId,
-        ...result,
-      });
+    // Broadcast to team members
+    sseManager.broadcastToTeamUsers(teamId, {
+      type: 'folderDeleted',
+      teamId,
+      ...result,
+    });
 
-      // Broadcast structure update
-      await broadcastTeamStructureUpdate(sseManager, teamId);
+    // Broadcast structure update
+    await broadcastTeamStructureUpdate(sseManager, teamId);
 
-      res.json(result);
-    } catch (error) {
-      handleError(res, error, 'deleting folder', { logger: req.logger });
-    }
+    res.json(result);
   }
 
   /**
@@ -544,25 +497,19 @@ class TeamController {
       'Moving item',
     );
 
-    try {
-      const result = await teamService.moveItem(
-        teamId,
-        itemId,
-        newParentId,
-        newIndex,
-        req.log,
-      );
+    const result = await teamService.moveItem(
+      teamId,
+      itemId,
+      newParentId,
+      newIndex,
+      req.log,
+    );
 
-      req.log.info({ action: 'moveItem', teamId, itemId }, 'Item moved');
+    req.log.info({ action: 'moveItem', teamId, itemId }, 'Item moved');
 
-      // Broadcast full structure update to team members
-      await broadcastTeamStructureUpdate(sseManager, teamId);
+    // Broadcast full structure update to team members
+    await broadcastTeamStructureUpdate(sseManager, teamId);
 
-      res.json(result);
-    } catch (error) {
-      handleError(res, error, 'moving item', { logger: req.logger });
-    }
+    res.json(result);
   }
 }
-
-export default TeamController;

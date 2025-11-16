@@ -13,6 +13,36 @@ const filenameSchema = z
 
 export const analysisValidationSchemas = {
   /**
+   * GET /api/analyses - Get all analyses with optional filtering
+   */
+  getAnalyses: {
+    query: z
+      .object({
+        page: z
+          .string()
+          .regex(/^\d+$/, 'Page must be a valid positive integer')
+          .transform((val) => parseInt(val, 10))
+          .optional(),
+        limit: z
+          .string()
+          .regex(/^\d+$/, 'Limit must be a valid positive integer')
+          .transform((val) => parseInt(val, 10))
+          .optional(),
+        search: z
+          .string()
+          .max(255, 'Search query must not exceed 255 characters')
+          .optional(),
+        teamId: z.string().optional(),
+        status: z
+          .enum(['running', 'stopped', 'error'], {
+            message: 'Status must be one of: running, stopped, error',
+          })
+          .optional(),
+      })
+      .strict(),
+  },
+
+  /**
    * POST /api/analyses/upload - Upload new analysis
    */
   uploadAnalysis: {

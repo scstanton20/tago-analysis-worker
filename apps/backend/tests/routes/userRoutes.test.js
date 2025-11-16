@@ -49,7 +49,7 @@ vi.mock('../../src/validation/userSchemas.js', () => ({
 }));
 
 vi.mock('../../src/controllers/userController.js', () => ({
-  default: {
+  UserController: {
     getUserTeamMemberships: vi.fn((req, res) =>
       res.json({
         success: true,
@@ -158,6 +158,7 @@ vi.mock('../../src/middleware/loggingMiddleware.js', () => ({
 describe('User Routes - WITH REAL AUTH', () => {
   let app;
   let UserController;
+  // eslint-disable-next-line no-unused-vars
   let adminUser;
   let teamOwnerUser;
   let teamViewerUser;
@@ -189,13 +190,11 @@ describe('User Routes - WITH REAL AUTH', () => {
     const controllerModule = await import(
       '../../src/controllers/userController.js'
     );
-    UserController = controllerModule.default;
+    UserController = controllerModule.UserController;
 
     // Import routes with REAL auth middleware
-    const { default: userRoutes } = await import(
-      '../../src/routes/userRoutes.js'
-    );
-    app.use('/api/users', userRoutes);
+    const { userRouter } = await import('../../src/routes/userRoutes.js');
+    app.use('/api/users', userRouter);
   });
 
   describe('Authentication Requirements', () => {

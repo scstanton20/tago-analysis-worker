@@ -17,7 +17,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import { promises as fs } from 'fs';
-import config from '../config/default.js';
+import { config } from '../config/default.js';
 import { encrypt, decrypt } from '../utils/cryptoUtils.js';
 import {
   safeMkdir,
@@ -29,10 +29,11 @@ import {
   getAnalysisPath,
   isAnalysisNameSafe,
 } from '../utils/safePath.js';
-import AnalysisProcess from '../models/analysisProcess.js';
-import teamService from './teamService.js';
+import { AnalysisProcess } from '../models/analysisProcess/index.js';
+import { teamService } from './teamService.js';
 import { createChildLogger, parseLogLine } from '../utils/logging/logger.js';
 import { collectChildProcessMetrics } from '../utils/metrics-enhanced.js';
+import { FILE_SIZE, ANALYSIS_SERVICE } from '../constants.js';
 
 // Module-level logger for background operations (health checks, metrics, initialization)
 // Public methods accept logger parameter for request-scoped logging
@@ -46,7 +47,7 @@ const moduleLogger = createChildLogger('analysis-service');
 function formatFileSize(bytes) {
   if (bytes === 0) return '0 B';
 
-  const k = 1024;
+  const k = FILE_SIZE.KILOBYTES;
   const sizes = ['B', 'KB', 'MB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
 
@@ -719,10 +720,13 @@ class AnalysisService {
   /**
    * Get initial logs for SSE connection with pagination
    * @param {string} analysisName - Name of the analysis
-   * @param {number} [limit=50] - Maximum number of log entries to return
+   * @param {number} [limit] - Maximum number of log entries to return
    * @returns {Promise<Object>} Object with logs array and total count
    */
-  async getInitialLogs(analysisName, limit = 50) {
+  async getInitialLogs(
+    analysisName,
+    limit = ANALYSIS_SERVICE.DEFAULT_LOGS_LIMIT,
+  ) {
     const analysis = this.analyses.get(analysisName);
     if (!analysis) {
       return { logs: [], totalCount: 0 };
@@ -939,12 +943,17 @@ class AnalysisService {
    * Get paginated logs for an analysis
    * @param {string} analysisName - Name of the analysis
    * @param {number} [page=1] - Page number for pagination
-   * @param {number} [limit=100] - Number of log entries per page
+   * @param {number} [limit] - Number of log entries per page
    * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
    * @returns {Promise<Object>} Object with logs, pagination info, and source
    * @throws {Error} If analysis not found
    */
-  async getLogs(analysisName, page = 1, limit = 100, logger = moduleLogger) {
+  async getLogs(
+    analysisName,
+    page = 1,
+    limit = ANALYSIS_SERVICE.DEFAULT_PAGINATION_LIMIT,
+    logger = moduleLogger,
+  ) {
     logger.info(
       { action: 'getLogs', analysisName, page, limit },
       'Getting logs',
@@ -977,11 +986,15 @@ class AnalysisService {
    * Get paginated logs from file system
    * @param {string} analysisName - Name of the analysis
    * @param {number} [page=1] - Page number for pagination
-   * @param {number} [limit=100] - Number of log entries per page
+   * @param {number} [limit] - Number of log entries per page
    * @returns {Promise<Object>} Object with logs, pagination info, and source
    * @throws {Error} If file read fails (except ENOENT)
    */
-  async getLogsFromFile(analysisName, page = 1, limit = 100) {
+  async getLogsFromFile(
+    analysisName,
+    page = 1,
+    limit = ANALYSIS_SERVICE.DEFAULT_PAGINATION_LIMIT,
+  ) {
     try {
       const logFile = path.join(
         config.paths.analysis,
@@ -1017,7 +1030,11 @@ class AnalysisService {
    * @param {number} limit - Logs per page
    * @returns {Promise<Object>} Paginated logs
    */
-  async streamLogsFromFile(logFile, page = 1, limit = 100) {
+  async streamLogsFromFile(
+    logFile,
+    page = 1,
+    limit = ANALYSIS_SERVICE.DEFAULT_PAGINATION_LIMIT,
+  ) {
     const { createReadStream } = await import('fs');
     const { createInterface } = await import('readline');
 
@@ -1038,7 +1055,10 @@ class AnalysisService {
           totalCount++;
 
           // Only collect lines we need for this page (plus some buffer for sorting)
-          if (lines.length < endIndex + 100) {
+          if (
+            lines.length <
+            endIndex + ANALYSIS_SERVICE.LOG_REVERSE_SORT_BUFFER
+          ) {
             // Buffer for reverse sort
             const parsed = parseLogLine(line, true);
             if (parsed) {
@@ -1502,7 +1522,9 @@ class AnalysisService {
     if (wasRunning) {
       await this.runAnalysis(analysisName);
       // Small delay to ensure the restart log is visible
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve) =>
+        setTimeout(resolve, ANALYSIS_SERVICE.SMALL_DELAY_MS),
+      );
       await this.addLog(analysisName, 'Analysis restarted after rollback');
     }
 
@@ -1916,7 +1938,10 @@ class AnalysisService {
    * @param {number} timeoutMs - Maximum time to wait in milliseconds
    * @returns {Promise<boolean>} True if connected, false if timeout
    */
-  async waitForAnalysisConnection(analysis, timeoutMs = 10000) {
+  async waitForAnalysisConnection(
+    analysis,
+    timeoutMs = ANALYSIS_SERVICE.CONNECTION_TIMEOUT_MS,
+  ) {
     return new Promise((resolve) => {
       const startTime = Date.now();
       let resolved = false;
@@ -1947,7 +1972,7 @@ class AnalysisService {
             resolve(false);
           }
         }
-      }, 100); // Check every 100ms
+      }, ANALYSIS_SERVICE.CONNECTION_CHECK_INTERVAL_MS);
     });
   }
 
@@ -1974,16 +1999,55 @@ class AnalysisService {
     );
 
     // Collect analyses that need starting
+    const toStart = this.collectAnalysesToStart(shouldBeRunning, results);
+
+    if (toStart.length === 0) {
+      moduleLogger.info('No analyses need starting');
+      return results;
+    }
+
+    // Create batches and process them
+    const BATCH_SIZE = parseInt(
+      process.env.ANALYSIS_BATCH_SIZE ||
+        String(ANALYSIS_SERVICE.BATCH_SIZE_DEFAULT),
+      10,
+    );
+    const batches = this.createAnalysisBatches(toStart, BATCH_SIZE);
+
+    moduleLogger.info(
+      `Starting ${batches.length} batches of up to ${BATCH_SIZE} analyses each`,
+    );
+
+    // Process each batch and collect connection results
+    await this.processBatches(batches, results);
+
+    moduleLogger.info(
+      `State verification complete: ${results.succeeded.length}/${toStart.length} started, ` +
+        `${results.connected.length}/${results.succeeded.length} connected successfully`,
+    );
+
+    return results;
+  }
+
+  /**
+   * Collect analyses that need to be started
+   * Filters out already-running and healthy analyses
+   *
+   * @param {Array<string>} shouldBeRunning - Names of analyses that should be running
+   * @param {Object} results - Results object to populate
+   * @returns {Array<{name: string, analysis: AnalysisProcess}>}
+   */
+  collectAnalysesToStart(shouldBeRunning, results) {
     const toStart = [];
+
     for (const analysisName of shouldBeRunning) {
       const analysis = this.analyses.get(analysisName);
       if (!analysis) continue;
 
       results.attempted.push(analysisName);
-
-      // Skip if already running and healthy (actual process exists and is alive)
       const hasLiveProcess =
         analysis.process && !analysis.process.killed && analysis.process.pid;
+
       if (analysis.status === 'running' && hasLiveProcess) {
         results.alreadyRunning.push(analysisName);
         moduleLogger.debug(
@@ -1992,8 +2056,7 @@ class AnalysisService {
         continue;
       }
 
-      // If status shows running but no live process exists (e.g., after power outage),
-      // reset status to stopped before restarting
+      // Reset status if process is dead but marked as running
       if (analysis.status === 'running' && !hasLiveProcess) {
         moduleLogger.info(
           `${analysisName} status shows running but no live process found - resetting status and restarting`,
@@ -2005,103 +2068,124 @@ class AnalysisService {
       toStart.push({ name: analysisName, analysis });
     }
 
-    if (toStart.length === 0) {
-      moduleLogger.info('No analyses need starting');
-      return results;
-    }
+    return toStart;
+  }
 
-    moduleLogger.info(
-      `Starting ${toStart.length} analyses in batches with connection verification`,
-    );
-
-    // Batch size: 5 analyses at a time (configurable via environment)
-    const BATCH_SIZE = parseInt(process.env.ANALYSIS_BATCH_SIZE || '5', 10);
+  /**
+   * Split analyses into batches for concurrent processing
+   *
+   * @param {Array} toStart - Analyses to start
+   * @param {number} batchSize - Size of each batch
+   * @returns {Array<Array>} Array of batches
+   */
+  createAnalysisBatches(toStart, batchSize) {
     const batches = [];
-
-    // Split into batches
-    for (let i = 0; i < toStart.length; i += BATCH_SIZE) {
-      batches.push(toStart.slice(i, i + BATCH_SIZE));
+    for (let i = 0; i < toStart.length; i += batchSize) {
+      batches.push(toStart.slice(i, i + batchSize));
     }
+    return batches;
+  }
 
-    moduleLogger.info(
-      `Starting ${batches.length} batches of up to ${BATCH_SIZE} analyses each`,
-    );
-
-    let totalStarted = 0;
-    let totalConnected = 0;
-
-    // Process each batch
+  /**
+   * Process all batches of analyses
+   * Starts each batch and waits for connections
+   *
+   * @param {Array<Array>} batches - Batches of analyses to process
+   * @param {Object} results - Results object to populate
+   * @returns {Promise<void>}
+   */
+  async processBatches(batches, results) {
     for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
       const batch = batches[batchIndex];
       moduleLogger.info(
         `Starting batch ${batchIndex + 1}/${batches.length} with ${batch.length} analyses`,
       );
 
-      // Start all analyses in this batch concurrently
-      const startPromises = batch.map(async ({ name, analysis }) => {
-        try {
-          moduleLogger.info(`Starting ${name}`);
-          await analysis.start();
-          totalStarted++;
-          results.succeeded.push(name);
-          await this.addLog(
-            name,
-            'Restarted during intended state verification',
-          );
-          return { name, analysis, started: true };
-        } catch (error) {
-          moduleLogger.error(
-            { err: error, analysisName: name },
-            'Failed to start analysis',
-          );
-          results.failed.push({ name, error: error.message });
-          return { name, analysis, started: false, error };
-        }
-      });
+      await this.processBatch(batch, results);
 
-      // Wait for all in batch to start
-      const startResults = await Promise.all(startPromises);
+      moduleLogger.info(`Batch ${batchIndex + 1} complete`);
 
-      // Now wait for all in batch to connect (with timeout)
-      const connectionPromises = startResults
-        .filter((r) => r.started)
-        .map(async ({ name, analysis }) => {
-          const connected = await this.waitForAnalysisConnection(
-            analysis,
-            10000,
-          );
-
-          if (connected) {
-            moduleLogger.info(`${name} connected successfully`);
-            totalConnected++;
-            results.connected.push(name);
-          } else {
-            moduleLogger.warn(`${name} connection timeout (proceeding anyway)`);
-            results.connectionTimeouts.push(name);
-          }
-
-          return { name, connected };
-        });
-
-      // Wait for all connections in this batch (or timeout)
-      await Promise.all(connectionPromises);
-
-      moduleLogger.info(
-        `Batch ${batchIndex + 1} complete: ${connectionPromises.length} analyses started`,
-      );
-
-      // Small delay between batches to avoid overwhelming system
+      // Delay between batches
       if (batchIndex < batches.length - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 1000)); // 1s between batches
+        await new Promise((resolve) =>
+          setTimeout(resolve, ANALYSIS_SERVICE.BATCH_DELAY_MS),
+        );
       }
     }
+  }
 
-    moduleLogger.info(
-      `State verification complete: ${totalStarted}/${toStart.length} started, ` +
-        `${totalConnected}/${totalStarted} connected successfully`,
+  /**
+   * Process a single batch of analyses
+   * Starts all, then waits for connections
+   *
+   * @param {Array} batch - Batch of analyses to process
+   * @param {Object} results - Results object to populate
+   * @returns {Promise<void>}
+   */
+  async processBatch(batch, results) {
+    // Start all analyses in batch concurrently
+    const startPromises = batch.map(({ name, analysis }) =>
+      this.startAnalysisWithLogging(name, analysis, results),
     );
 
-    return results;
+    const startResults = await Promise.all(startPromises);
+
+    // Wait for connections
+    const connectionPromises = startResults
+      .filter((r) => r.started)
+      .map(({ name, analysis }) =>
+        this.verifyAnalysisConnection(name, analysis, results),
+      );
+
+    await Promise.all(connectionPromises);
+  }
+
+  /**
+   * Start a single analysis and log the result
+   *
+   * @param {string} name - Analysis name
+   * @param {Object} analysis - Analysis object
+   * @param {Object} results - Results object to populate
+   * @returns {Promise<{name: string, analysis: Object, started: boolean, error?: Error}>}
+   */
+  async startAnalysisWithLogging(name, analysis, results) {
+    try {
+      moduleLogger.info(`Starting ${name}`);
+      await analysis.start();
+      results.succeeded.push(name);
+      await this.addLog(name, 'Restarted during intended state verification');
+      return { name, analysis, started: true };
+    } catch (error) {
+      moduleLogger.error(
+        { err: error, analysisName: name },
+        'Failed to start analysis',
+      );
+      results.failed.push({ name, error: error.message });
+      return { name, analysis, started: false, error };
+    }
+  }
+
+  /**
+   * Verify analysis connection and update results
+   *
+   * @param {string} name - Analysis name
+   * @param {Object} analysis - Analysis object
+   * @param {Object} results - Results object to populate
+   * @returns {Promise<void>}
+   */
+  async verifyAnalysisConnection(name, analysis, results) {
+    const connected = await this.waitForAnalysisConnection(
+      analysis,
+      ANALYSIS_SERVICE.CONNECTION_TIMEOUT_MS,
+    );
+
+    if (connected) {
+      moduleLogger.info(`${name} connected successfully`);
+      results.connected.push(name);
+    } else {
+      moduleLogger.warn(`${name} connection timeout (proceeding anyway)`);
+      results.connectionTimeouts.push(name);
+    }
   }
 
   /**
@@ -2115,8 +2199,8 @@ class AnalysisService {
       clearInterval(this.healthCheckInterval);
     }
 
-    // Run health check every 5 minutes
-    const healthCheckIntervalMs = 5 * 60 * 1000; // 5 minutes
+    // Run health check at configured interval
+    const healthCheckIntervalMs = ANALYSIS_SERVICE.HEALTH_CHECK_INTERVAL_MS;
 
     this.healthCheckInterval = setInterval(async () => {
       moduleLogger.debug('Running periodic health check for analyses');
@@ -2197,8 +2281,8 @@ class AnalysisService {
       clearInterval(this.metricsInterval);
     }
 
-    // Collect metrics every 1 second
-    const metricsIntervalMs = 1 * 1000; // 1 second
+    // Collect metrics at configured interval
+    const metricsIntervalMs = ANALYSIS_SERVICE.METRICS_COLLECTION_INTERVAL_MS;
 
     this.metricsInterval = setInterval(async () => {
       try {

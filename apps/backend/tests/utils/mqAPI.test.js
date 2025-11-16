@@ -19,7 +19,8 @@ describe('mqAPI', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    mqAPI = await import('../../src/utils/mqAPI.js');
+    const module = await import('../../src/utils/mqAPI.js');
+    mqAPI = module.default;
   });
 
   describe('getToken', () => {
@@ -304,17 +305,15 @@ describe('mqAPI', () => {
     });
   });
 
-  describe('default export', () => {
-    it('should provide default export with all functions', () => {
-      const defaultExport = mqAPI.default;
-
-      expect(defaultExport.getAPIVersion).toBeDefined();
-      expect(defaultExport.getDevices).toBeDefined();
-      expect(defaultExport.getGateways).toBeDefined();
-      expect(defaultExport.getAccount).toBeDefined();
-      expect(defaultExport.getToken).toBeDefined();
-      expect(defaultExport.createDevice).toBeDefined();
-      expect(defaultExport.config).toBeDefined();
+  describe('named exports', () => {
+    it('should provide named exports for all functions', () => {
+      expect(mqAPI.getAPIVersion).toBeDefined();
+      expect(mqAPI.getDevices).toBeDefined();
+      expect(mqAPI.getGateways).toBeDefined();
+      expect(mqAPI.getAccount).toBeDefined();
+      expect(mqAPI.getToken).toBeDefined();
+      expect(mqAPI.createDevice).toBeDefined();
+      expect(mqAPI.config).toBeDefined();
     });
   });
 });

@@ -21,6 +21,7 @@ import { Box, Stack, Text, Divider } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { LoadingState } from '../../components/global';
 import { useTeamManagement } from '../../hooks/useTeamManagement';
+import { useVisibleTeams } from '../../hooks/useVisibleTeams';
 const TeamCreateForm = lazy(() =>
   import('../../components/teams/TeamCreateForm').then((m) => ({
     default: m.TeamCreateForm,
@@ -34,19 +35,17 @@ const TeamListItem = lazy(() =>
 import { teamService } from '../../services/teamService';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import logger from '../../utils/logger';
-import PropTypes from 'prop-types';
 
 /**
  * TeamManagementModalContent
  * Content component for team management modal
+ * Now uses useVisibleTeams hook directly to be reactive to SSE events
  *
- * @param {Object} props - Component props
- * @param {Object} props.innerProps - Modal inner props
- * @param {Object} props.innerProps.teams - Teams object from useVisibleTeams hook
  * @returns {JSX.Element} Modal content
  */
-function TeamManagementModalContent({ innerProps }) {
-  const { teams } = innerProps;
+function TeamManagementModalContent() {
+  // Use hook directly to get reactive team data
+  const { teamsObject: teams } = useVisibleTeams();
 
   const {
     newTeamName,
@@ -184,11 +183,5 @@ function TeamManagementModalContent({ innerProps }) {
     </Suspense>
   );
 }
-
-TeamManagementModalContent.propTypes = {
-  innerProps: PropTypes.shape({
-    teams: PropTypes.object.isRequired,
-  }).isRequired,
-};
 
 export default TeamManagementModalContent;

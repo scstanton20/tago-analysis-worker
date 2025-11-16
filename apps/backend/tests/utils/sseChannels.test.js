@@ -58,7 +58,7 @@ vi.mock('../../src/services/analysisService.js', () => ({
 }));
 
 vi.mock('../../src/services/teamService.js', () => ({
-  default: {
+  teamService: {
     getAllTeams: vi.fn(() => Promise.resolve([])),
   },
 }));
@@ -87,7 +87,6 @@ vi.mock('../../src/utils/authDatabase.js', () => ({
 describe('SSE Channel-Based Subscription Management', () => {
   let sse;
   let mockSession;
-  let mockChannel;
   let mockReq;
   let mockRes;
   let betterSSE;
@@ -152,7 +151,7 @@ describe('SSE Channel-Based Subscription Management', () => {
     // Import SSE module once (don't reset modules - it breaks mocks for dynamic imports)
     if (!sse) {
       // eslint-disable-next-line require-atomic-updates
-      sse = await import('../../src/utils/sse.js');
+      sse = await import('../../src/utils/sse/index.js');
     }
 
     // Ensure any pending async operations from previous tests are settled
@@ -878,10 +877,6 @@ describe('SSE Channel-Based Subscription Management', () => {
           ...mockReq,
           user: { id: 'user-1' },
         });
-        const session2 = await sse.sseManager.addClient('user-2', mockRes, {
-          ...mockReq,
-          user: { id: 'user-2' },
-        });
 
         await sse.sseManager.subscribeToAnalysis(
           session1.id,
@@ -1013,13 +1008,10 @@ describe('SSE Channel-Based Subscription Management', () => {
 
     describe('global broadcasts (non-log)', () => {
       it('should send init to global channel (all sessions)', async () => {
+        /* eslint-disable-next-line no-unused-vars */
         const session1 = await sse.sseManager.addClient('user-1', mockRes, {
           ...mockReq,
           user: { id: 'user-1' },
-        });
-        const session2 = await sse.sseManager.addClient('user-2', mockRes, {
-          ...mockReq,
-          user: { id: 'user-2' },
         });
 
         sse.sseManager.broadcast({ type: 'init', data: 'test' });
@@ -1464,12 +1456,6 @@ describe('SSE Channel-Based Subscription Management', () => {
           throw new Error('Push failed');
         });
 
-        const session = await sse.sseManager.addClient(
-          'user-123',
-          mockRes,
-          mockReq,
-        );
-
         expect(() => {
           sse.sseManager.broadcast({ type: 'test', data: 'test' });
         }).not.toThrow();
@@ -1548,8 +1534,9 @@ describe('SSE Channel-Based Subscription Management', () => {
         const { analysisService } = await import(
           '../../src/services/analysisService.js'
         );
-        const teamService = (await import('../../src/services/teamService.js'))
-          .default;
+        const { teamService } = await import(
+          '../../src/services/teamService.js'
+        );
         const { executeQuery } = await import(
           '../../src/utils/authDatabase.js'
         );
@@ -1670,6 +1657,7 @@ describe('SSE Channel-Based Subscription Management', () => {
           mockReq,
         );
 
+        // eslint-disable-next-line require-atomic-updates
         mockReq.body = {
           sessionId: session.id,
           analyses: ['analysis-1', 'analysis-2'],
@@ -1730,6 +1718,7 @@ describe('SSE Channel-Based Subscription Management', () => {
           'user-123',
         );
 
+        // eslint-disable-next-line require-atomic-updates
         mockReq.body = {
           sessionId: session.id,
           analyses: ['analysis-1'],

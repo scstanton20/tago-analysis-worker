@@ -1,7 +1,7 @@
 /** Storage initialization utility with path traversal protection */
 // utils/storage.js
 import { promises as fs } from 'fs';
-import config from '../config/default.js';
+import { config } from '../config/default.js';
 import { safeMkdir, safeWriteFile } from './safePath.js';
 import { createChildLogger } from './logging/logger.js';
 
@@ -43,4 +43,4 @@ async function initializeStorage() {
   }
 }
 
-export default { initializeStorage };
+export { initializeStorage };

@@ -1039,4 +1039,68 @@ describe('teamSchemas', () => {
       expect(result.error?.issues[0].path).toContain('newIndex');
     });
   });
+
+  describe('getAllTeams schema', () => {
+    describe('query validation', () => {
+      it('should validate empty query object', () => {
+        const validData = {};
+
+        const result = schemas.getAllTeams.query.safeParse(validData);
+
+        expect(result.success).toBe(true);
+        expect(result.data).toEqual({});
+      });
+
+      it('should reject query with any parameters (strict mode)', () => {
+        const invalidData = { someParam: 'value' };
+
+        const result = schemas.getAllTeams.query.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0].code).toBe('unrecognized_keys');
+      });
+
+      it('should reject multiple unexpected parameters', () => {
+        const invalidData = {
+          param1: 'value1',
+          param2: 'value2',
+        };
+
+        const result = schemas.getAllTeams.query.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0].code).toBe('unrecognized_keys');
+      });
+
+      it('should reject common filter parameters', () => {
+        const invalidData = {
+          includeStructure: true,
+          includeAnalysisCount: false,
+        };
+
+        const result = schemas.getAllTeams.query.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0].code).toBe('unrecognized_keys');
+      });
+
+      it('should reject pagination parameters', () => {
+        const invalidData = { page: '1', limit: '10' };
+
+        const result = schemas.getAllTeams.query.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0].code).toBe('unrecognized_keys');
+      });
+
+      it('should reject search parameters', () => {
+        const invalidData = { search: 'team name' };
+
+        const result = schemas.getAllTeams.query.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0].code).toBe('unrecognized_keys');
+      });
+    });
+  });
 });

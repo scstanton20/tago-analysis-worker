@@ -198,7 +198,7 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
   const { isAdmin: hasAdminPerms } = usePermissions();
 
   // Use custom hook for visible teams and analysis counts
-  const { teamsArray, teamsObject, getTeamAnalysisCount } = useVisibleTeams();
+  const { teamsArray, getTeamAnalysisCount } = useVisibleTeams();
 
   const [draggedAnalysis, setDraggedAnalysis] = useState(null);
   const [activeTeamId, setActiveTeamId] = useState(null);
@@ -287,7 +287,7 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
                 variant="light"
                 color="brand"
                 size="lg"
-                onClick={() => modalService.openTeamManagement(teamsObject)}
+                onClick={() => modalService.openTeamManagement()}
                 aria-label="Manage teams"
               >
                 <IconBrandAsana size={18} aria-hidden="true" />

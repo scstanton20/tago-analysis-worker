@@ -26,8 +26,8 @@ import {
 } from '../utils/authHelpers.js';
 
 // Mock only SSE connection handler - NOT authentication!
-vi.mock('../../src/utils/sse.js', async () => {
-  const actual = await vi.importActual('../../src/utils/sse.js');
+vi.mock('../../src/utils/sse/index.js', async () => {
+  const actual = await vi.importActual('../../src/utils/sse/index.js');
   return {
     ...actual,
     handleSSEConnection: vi.fn((req, res) => {
@@ -84,6 +84,7 @@ vi.mock('../../src/middleware/compression.js', () => ({
 describe('SSE Routes - WITH REAL AUTH', () => {
   let app;
   let handleSSEConnection;
+  // eslint-disable-next-line no-unused-vars
   let sseManager;
 
   beforeAll(async () => {
@@ -105,15 +106,13 @@ describe('SSE Routes - WITH REAL AUTH', () => {
     app.use(attachRequestLogger); // Use mocked logging middleware
 
     // Import SSE utilities
-    const sseModule = await import('../../src/utils/sse.js');
+    const sseModule = await import('../../src/utils/sse/index.js');
     handleSSEConnection = sseModule.handleSSEConnection;
     sseManager = sseModule.sseManager;
 
     // Import routes with REAL auth middleware
-    const { default: sseRoutes } = await import(
-      '../../src/routes/sseRoutes.js'
-    );
-    app.use('/api/sse', sseRoutes);
+    const { sseRouter } = await import('../../src/routes/sseRoutes.js');
+    app.use('/api/sse', sseRouter);
   });
 
   describe('Authentication Requirements', () => {

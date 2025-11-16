@@ -5,7 +5,7 @@
 import dns from 'dns';
 import { promises as dnsPromises } from 'dns';
 import path from 'path';
-import config from '../config/default.js';
+import { config } from '../config/default.js';
 import { safeReadFile, safeWriteFile } from '../utils/safePath.js';
 import { createChildLogger } from '../utils/logging/logger.js';
 import { dnsCacheHits, dnsCacheMisses } from '../utils/metrics-enhanced.js';
@@ -117,15 +117,28 @@ class DNSCacheService {
     this.originalResolve4 = dnsPromises.resolve4;
     this.originalResolve6 = dnsPromises.resolve6;
 
-    // Override dns.lookup (used by most Node.js networking)
-    dns.lookup = (hostname, options, callback) => {
+    // Install individual interceptors
+    dns.lookup = this.createCachedLookup();
+    dnsPromises.resolve4 = this.createCachedResolve4();
+    dnsPromises.resolve6 = this.createCachedResolve6();
+
+    logger.info('DNS interceptors installed');
+  }
+
+  /**
+   * Create a cached dns.lookup interceptor
+   * Handles callback-based DNS lookups with caching and SSRF protection
+   * @returns {Function} Interceptor function for dns.lookup
+   */
+  createCachedLookup() {
+    return (hostname, options, callback) => {
       // Handle different function signatures
       if (typeof options === 'function') {
         callback = options;
         options = {};
       }
 
-      // SSRF Protection: Validate hostname before resolution
+      // Validate hostname before attempting resolution
       const hostnameValidation = validateHostname(hostname);
       if (!hostnameValidation.allowed) {
         this.stats.errors++;
@@ -143,52 +156,25 @@ class DNSCacheService {
       const cached = this.getFromCache(cacheKey);
       if (cached) {
         this.checkAndResetTTLPeriod();
-        this.stats.hits++;
-        dnsCacheHits.inc(); // Update Prometheus metrics
-        logger.debug({ hostname, family, cached }, 'DNS cache hit');
-        return process.nextTick(() =>
+        this.respondWithCacheHit('lookup', hostname, () =>
           callback(null, cached.address, cached.family),
         );
+        return;
       }
 
       // Cache miss - perform actual lookup
-      this.checkAndResetTTLPeriod();
-      this.stats.misses++;
-      dnsCacheMisses.inc(); // Update Prometheus metrics
-      this.originalLookup.call(
-        dns,
-        hostname,
-        options,
-        (err, address, family) => {
-          if (!err && address) {
-            // SSRF Protection: Validate resolved address
-            const addressValidation = validateResolvedAddress(
-              hostname,
-              address,
-              family,
-            );
-            if (!addressValidation.allowed) {
-              this.stats.errors++;
-              const error = new Error(
-                `SSRF Protection: ${addressValidation.reason}`,
-              );
-              error.code = 'ENOTFOUND';
-              return callback(error, null, null);
-            }
-
-            this.addToCache(cacheKey, { address, family });
-            logger.debug({ hostname, address, family }, 'DNS result cached');
-          } else if (err) {
-            this.stats.errors++;
-          }
-          callback(err, address, family);
-        },
-      );
+      this.handleLookupCacheMiss(hostname, options, family, cacheKey, callback);
     };
+  }
 
-    // Override dnsPromises.resolve4
-    dnsPromises.resolve4 = async (hostname) => {
-      // SSRF Protection: Validate hostname before resolution
+  /**
+   * Create a cached dnsPromises.resolve4 interceptor
+   * Handles promise-based IPv4 address resolution with caching and SSRF protection
+   * @returns {Function} Interceptor function for dnsPromises.resolve4
+   */
+  createCachedResolve4() {
+    return async (hostname) => {
+      // Validate hostname before attempting resolution
       const hostnameValidation = validateHostname(hostname);
       if (!hostnameValidation.allowed) {
         this.stats.errors++;
@@ -201,56 +187,28 @@ class DNSCacheService {
 
       const cacheKey = `resolve4:${hostname}`;
 
+      // Check cache first
       const cached = this.getFromCache(cacheKey);
       if (cached) {
         this.checkAndResetTTLPeriod();
-        this.stats.hits++;
-        dnsCacheHits.inc(); // Update Prometheus metrics
+        this.recordCacheHit('resolve4', hostname);
         logger.debug({ hostname, cached }, 'DNS resolve4 cache hit');
         return cached.addresses;
       }
 
-      try {
-        this.checkAndResetTTLPeriod();
-        this.stats.misses++;
-        dnsCacheMisses.inc(); // Update Prometheus metrics
-        const addresses = await this.originalResolve4.call(
-          dnsPromises,
-          hostname,
-        );
-
-        // SSRF Protection: Validate resolved addresses
-        const addressesValidation = validateResolvedAddresses(
-          hostname,
-          addresses,
-        );
-        if (!addressesValidation.allowed) {
-          this.stats.errors++;
-          const error = new Error(
-            `SSRF Protection: ${addressesValidation.reason}`,
-          );
-          error.code = 'ENOTFOUND';
-          throw error;
-        }
-
-        // Use filtered addresses if some were blocked
-        const safeAddresses =
-          addressesValidation.filteredAddresses || addresses;
-        this.addToCache(cacheKey, { addresses: safeAddresses });
-        logger.debug(
-          { hostname, addresses: safeAddresses },
-          'DNS resolve4 result cached',
-        );
-        return safeAddresses;
-      } catch (error) {
-        this.stats.errors++;
-        throw error;
-      }
+      // Cache miss - perform actual resolution
+      return this.handleResolve4CacheMiss(hostname, cacheKey);
     };
+  }
 
-    // Override dnsPromises.resolve6
-    dnsPromises.resolve6 = async (hostname) => {
-      // SSRF Protection: Validate hostname before resolution
+  /**
+   * Create a cached dnsPromises.resolve6 interceptor
+   * Handles promise-based IPv6 address resolution with caching and SSRF protection
+   * @returns {Function} Interceptor function for dnsPromises.resolve6
+   */
+  createCachedResolve6() {
+    return async (hostname) => {
+      // Validate hostname before attempting resolution
       const hostnameValidation = validateHostname(hostname);
       if (!hostnameValidation.allowed) {
         this.stats.errors++;
@@ -263,54 +221,159 @@ class DNSCacheService {
 
       const cacheKey = `resolve6:${hostname}`;
 
+      // Check cache first
       const cached = this.getFromCache(cacheKey);
       if (cached) {
         this.checkAndResetTTLPeriod();
-        this.stats.hits++;
-        dnsCacheHits.inc(); // Update Prometheus metrics
+        this.recordCacheHit('resolve6', hostname);
         logger.debug({ hostname, cached }, 'DNS resolve6 cache hit');
         return cached.addresses;
       }
 
-      try {
-        this.checkAndResetTTLPeriod();
-        this.stats.misses++;
-        dnsCacheMisses.inc(); // Update Prometheus metrics
-        const addresses = await this.originalResolve6.call(
-          dnsPromises,
-          hostname,
-        );
+      // Cache miss - perform actual resolution
+      return this.handleResolve6CacheMiss(hostname, cacheKey);
+    };
+  }
 
-        // SSRF Protection: Validate resolved addresses
-        const addressesValidation = validateResolvedAddresses(
+  /**
+   * Handle cache miss for dns.lookup by performing actual lookup
+   * Validates resolved address and updates cache
+   * @private
+   */
+  handleLookupCacheMiss(hostname, options, _family, cacheKey, callback) {
+    this.checkAndResetTTLPeriod();
+    this.recordCacheMiss();
+
+    this.originalLookup.call(dns, hostname, options, (err, address, family) => {
+      if (!err && address) {
+        // SSRF Protection: Validate resolved address
+        const addressValidation = validateResolvedAddress(
           hostname,
-          addresses,
+          address,
+          family,
         );
-        if (!addressesValidation.allowed) {
+        if (!addressValidation.allowed) {
           this.stats.errors++;
           const error = new Error(
-            `SSRF Protection: ${addressesValidation.reason}`,
+            `SSRF Protection: ${addressValidation.reason}`,
           );
           error.code = 'ENOTFOUND';
-          throw error;
+          return callback(error, null, null);
         }
 
-        // Use filtered addresses if some were blocked
-        const safeAddresses =
-          addressesValidation.filteredAddresses || addresses;
-        this.addToCache(cacheKey, { addresses: safeAddresses });
-        logger.debug(
-          { hostname, addresses: safeAddresses },
-          'DNS resolve6 result cached',
-        );
-        return safeAddresses;
-      } catch (error) {
+        this.addToCache(cacheKey, { address, family });
+        logger.debug({ hostname, address, family }, 'DNS result cached');
+      } else if (err) {
         this.stats.errors++;
+      }
+      callback(err, address, family);
+    });
+  }
+
+  /**
+   * Handle cache miss for dnsPromises.resolve4 by performing actual resolution
+   * Validates resolved addresses and updates cache
+   * @private
+   */
+  async handleResolve4CacheMiss(hostname, cacheKey) {
+    try {
+      this.checkAndResetTTLPeriod();
+      this.recordCacheMiss();
+      const addresses = await this.originalResolve4.call(dnsPromises, hostname);
+
+      // SSRF Protection: Validate resolved addresses
+      const addressesValidation = validateResolvedAddresses(
+        hostname,
+        addresses,
+      );
+      if (!addressesValidation.allowed) {
+        this.stats.errors++;
+        const error = new Error(
+          `SSRF Protection: ${addressesValidation.reason}`,
+        );
+        error.code = 'ENOTFOUND';
         throw error;
       }
-    };
 
-    logger.info('DNS interceptors installed');
+      // Use filtered addresses if some were blocked
+      const safeAddresses = addressesValidation.filteredAddresses || addresses;
+      this.addToCache(cacheKey, { addresses: safeAddresses });
+      logger.debug(
+        { hostname, addresses: safeAddresses },
+        'DNS resolve4 result cached',
+      );
+      return safeAddresses;
+    } catch (error) {
+      this.stats.errors++;
+      throw error;
+    }
+  }
+
+  /**
+   * Handle cache miss for dnsPromises.resolve6 by performing actual resolution
+   * Validates resolved addresses and updates cache
+   * @private
+   */
+  async handleResolve6CacheMiss(hostname, cacheKey) {
+    try {
+      this.checkAndResetTTLPeriod();
+      this.recordCacheMiss();
+      const addresses = await this.originalResolve6.call(dnsPromises, hostname);
+
+      // SSRF Protection: Validate resolved addresses
+      const addressesValidation = validateResolvedAddresses(
+        hostname,
+        addresses,
+      );
+      if (!addressesValidation.allowed) {
+        this.stats.errors++;
+        const error = new Error(
+          `SSRF Protection: ${addressesValidation.reason}`,
+        );
+        error.code = 'ENOTFOUND';
+        throw error;
+      }
+
+      // Use filtered addresses if some were blocked
+      const safeAddresses = addressesValidation.filteredAddresses || addresses;
+      this.addToCache(cacheKey, { addresses: safeAddresses });
+      logger.debug(
+        { hostname, addresses: safeAddresses },
+        'DNS resolve6 result cached',
+      );
+      return safeAddresses;
+    } catch (error) {
+      this.stats.errors++;
+      throw error;
+    }
+  }
+
+  /**
+   * Record a cache hit and update metrics
+   * @private
+   */
+  recordCacheHit(operation, hostname) {
+    this.stats.hits++;
+    dnsCacheHits.inc();
+    logger.debug({ hostname, operation }, 'DNS cache hit');
+  }
+
+  /**
+   * Record a cache miss and update metrics
+   * @private
+   */
+  recordCacheMiss() {
+    this.stats.misses++;
+    dnsCacheMisses.inc();
+  }
+
+  /**
+   * Respond with cached data asynchronously
+   * @private
+   */
+  respondWithCacheHit(operation, hostname, callback) {
+    this.recordCacheHit(operation, hostname);
+    return process.nextTick(callback);
   }
 
   uninstallInterceptors() {
@@ -735,4 +798,4 @@ class DNSCacheService {
 // Create singleton instance
 const dnsCache = new DNSCacheService();
 
-export default dnsCache;
+export { dnsCache };

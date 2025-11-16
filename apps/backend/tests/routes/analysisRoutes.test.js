@@ -53,7 +53,7 @@ vi.mock('fs/promises', () => ({
 }));
 
 // Mock SSE for testing (external service)
-vi.mock('../../src/utils/sse.js', () => ({
+vi.mock('../../src/utils/sse/index.js', () => ({
   sseManager: {
     broadcastUpdate: vi.fn(),
     broadcastAnalysisUpdate: vi.fn(),
@@ -98,7 +98,7 @@ const AnalysisController = {
 };
 
 vi.mock('../../src/controllers/analysisController.js', () => ({
-  default: AnalysisController,
+  AnalysisController: AnalysisController,
 }));
 
 // Logging middleware mock - provides req.log
@@ -144,10 +144,10 @@ describe('Analysis Routes - WITH REAL AUTH', () => {
     app.use(attachRequestLogger); // Use mocked logging middleware
 
     // Import routes
-    const { default: analysisRoutes } = await import(
+    const { analysisRouter } = await import(
       '../../src/routes/analysisRoutes.js'
     );
-    app.use('/api/analyses', analysisRoutes);
+    app.use('/api/analyses', analysisRouter);
   });
 
   describe('Authentication Requirements', () => {

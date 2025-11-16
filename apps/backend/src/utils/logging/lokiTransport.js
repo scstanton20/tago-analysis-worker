@@ -2,6 +2,7 @@
 // This avoids serialization issues with pino-loki when using transport.targets
 
 import { Transform } from 'node:stream';
+import { LOGGING } from '../../constants.js';
 
 export class LokiTransport extends Transform {
   constructor(options) {
@@ -10,9 +11,9 @@ export class LokiTransport extends Transform {
     this.host = options.host;
     this.labels = options.labels || {};
     this.basicAuth = options.basicAuth;
-    this.timeout = options.timeout || 30000;
+    this.timeout = options.timeout || LOGGING.LOKI_TIMEOUT_MS;
     this.batching = options.batching ?? false;
-    this.batchInterval = options.interval || 5000;
+    this.batchInterval = options.interval || LOGGING.LOKI_BATCH_INTERVAL_MS;
     this.batch = [];
     this.timer = null;
 
@@ -34,13 +35,17 @@ export class LokiTransport extends Transform {
       let timestampNano;
       if (typeof log.time === 'string') {
         // ISO string - parse to milliseconds then convert to nanoseconds
-        timestampNano = String(new Date(log.time).getTime() * 1000000);
+        timestampNano = String(
+          new Date(log.time).getTime() * LOGGING.NANOSECONDS_PER_MILLISECOND,
+        );
       } else if (typeof log.time === 'number') {
         // Unix timestamp in milliseconds - convert to nanoseconds
-        timestampNano = String(log.time * 1000000);
+        timestampNano = String(log.time * LOGGING.NANOSECONDS_PER_MILLISECOND);
       } else {
         // Fallback to current time
-        timestampNano = String(Date.now() * 1000000);
+        timestampNano = String(
+          Date.now() * LOGGING.NANOSECONDS_PER_MILLISECOND,
+        );
       }
 
       // Convert pino log to Loki format

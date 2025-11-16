@@ -30,6 +30,8 @@ export function FormActionButtons({
   reverseOrder = false,
   size = 'sm',
   className,
+  // eslint-disable-next-line no-unused-vars
+  singleButton, // Destructure to prevent passing to DOM
   ...props
 }) {
   const submitButton = (
@@ -124,6 +126,8 @@ FormActionButtons.propTypes = {
   size: PropTypes.string,
   /** Additional CSS class */
   className: PropTypes.string,
+  /** Single button mode (prevents prop from being passed to DOM) */
+  singleButton: PropTypes.bool,
 };
 
 export default FormActionButtons;

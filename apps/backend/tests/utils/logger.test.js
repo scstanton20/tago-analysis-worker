@@ -203,7 +203,7 @@ describe('logger', () => {
 
       const logger = await import('../../src/utils/logging/logger.js');
 
-      expect(logger.default).toBeDefined();
+      expect(logger.logger).toBeDefined();
     });
 
     it('should use info level in production', async () => {
@@ -213,7 +213,7 @@ describe('logger', () => {
 
       const logger = await import('../../src/utils/logging/logger.js');
 
-      expect(logger.default).toBeDefined();
+      expect(logger.logger).toBeDefined();
     });
 
     it('should respect LOG_LEVEL environment variable', async () => {
@@ -222,7 +222,7 @@ describe('logger', () => {
 
       const logger = await import('../../src/utils/logging/logger.js');
 
-      expect(logger.default).toBeDefined();
+      expect(logger.logger).toBeDefined();
     });
 
     it('should configure Loki transport when URL is set', async () => {
@@ -231,7 +231,7 @@ describe('logger', () => {
 
       const logger = await import('../../src/utils/logging/logger.js');
 
-      expect(logger.default).toBeDefined();
+      expect(logger.logger).toBeDefined();
     });
 
     it('should parse Loki labels from environment', async () => {
@@ -241,7 +241,7 @@ describe('logger', () => {
 
       const logger = await import('../../src/utils/logging/logger.js');
 
-      expect(logger.default).toBeDefined();
+      expect(logger.logger).toBeDefined();
     });
   });
 
@@ -250,8 +250,8 @@ describe('logger', () => {
       vi.resetModules();
       const logger = await import('../../src/utils/logging/logger.js');
 
-      expect(logger.default).toBeDefined();
-      expect(typeof logger.default.info).toBe('function');
+      expect(logger.logger).toBeDefined();
+      expect(typeof logger.logger.info).toBe('function');
     });
 
     it('should export createChildLogger', async () => {
@@ -282,9 +282,7 @@ describe('logger', () => {
   describe('serializers', () => {
     it('should serialize process information', async () => {
       vi.resetModules();
-      const { default: logger } = await import(
-        '../../src/utils/logging/logger.js'
-      );
+      const { logger } = await import('../../src/utils/logging/logger.js');
 
       const mockProcess = {
         pid: 12345,
@@ -302,18 +300,14 @@ describe('logger', () => {
 
     it('should handle null process in serializer', async () => {
       vi.resetModules();
-      const { default: logger } = await import(
-        '../../src/utils/logging/logger.js'
-      );
+      const { logger } = await import('../../src/utils/logging/logger.js');
 
       expect(() => logger.info({ process: null }, 'test')).not.toThrow();
     });
 
     it('should serialize error information', async () => {
       vi.resetModules();
-      const { default: logger } = await import(
-        '../../src/utils/logging/logger.js'
-      );
+      const { logger } = await import('../../src/utils/logging/logger.js');
 
       const testError = new Error('Test error');
       testError.code = 'ENOENT';
@@ -328,18 +322,14 @@ describe('logger', () => {
 
     it('should handle null error in serializer', async () => {
       vi.resetModules();
-      const { default: logger } = await import(
-        '../../src/utils/logging/logger.js'
-      );
+      const { logger } = await import('../../src/utils/logging/logger.js');
 
       expect(() => logger.error({ err: null }, 'test')).not.toThrow();
     });
 
     it('should serialize HTTP request information', async () => {
       vi.resetModules();
-      const { default: logger } = await import(
-        '../../src/utils/logging/logger.js'
-      );
+      const { logger } = await import('../../src/utils/logging/logger.js');
 
       const mockRequest = {
         method: 'POST',
@@ -360,18 +350,14 @@ describe('logger', () => {
 
     it('should handle null request in serializer', async () => {
       vi.resetModules();
-      const { default: logger } = await import(
-        '../../src/utils/logging/logger.js'
-      );
+      const { logger } = await import('../../src/utils/logging/logger.js');
 
       expect(() => logger.info({ req: null }, 'test')).not.toThrow();
     });
 
     it('should serialize HTTP response information', async () => {
       vi.resetModules();
-      const { default: logger } = await import(
-        '../../src/utils/logging/logger.js'
-      );
+      const { logger } = await import('../../src/utils/logging/logger.js');
 
       const mockResponse = {
         statusCode: 200,
@@ -391,18 +377,14 @@ describe('logger', () => {
 
     it('should handle null response in serializer', async () => {
       vi.resetModules();
-      const { default: logger } = await import(
-        '../../src/utils/logging/logger.js'
-      );
+      const { logger } = await import('../../src/utils/logging/logger.js');
 
       expect(() => logger.info({ res: null }, 'test')).not.toThrow();
     });
 
     it('should handle response without getHeader method', async () => {
       vi.resetModules();
-      const { default: logger } = await import(
-        '../../src/utils/logging/logger.js'
-      );
+      const { logger } = await import('../../src/utils/logging/logger.js');
 
       const mockResponse = {
         statusCode: 200,
@@ -415,9 +397,7 @@ describe('logger', () => {
 
     it('should handle request without headers or connection', async () => {
       vi.resetModules();
-      const { default: logger } = await import(
-        '../../src/utils/logging/logger.js'
-      );
+      const { logger } = await import('../../src/utils/logging/logger.js');
 
       const mockRequest = {
         method: 'GET',
@@ -429,9 +409,7 @@ describe('logger', () => {
 
     it('should limit process spawnargs to 3 items', async () => {
       vi.resetModules();
-      const { default: logger } = await import(
-        '../../src/utils/logging/logger.js'
-      );
+      const { logger } = await import('../../src/utils/logging/logger.js');
 
       const mockProcess = {
         pid: 12345,
@@ -451,7 +429,7 @@ describe('logger', () => {
 
       const logger = await import('../../src/utils/logging/logger.js');
 
-      expect(logger.default).toBeDefined();
+      expect(logger.logger).toBeDefined();
     });
 
     it('should handle empty label string', async () => {
@@ -461,7 +439,7 @@ describe('logger', () => {
 
       const logger = await import('../../src/utils/logging/logger.js');
 
-      expect(logger.default).toBeDefined();
+      expect(logger.logger).toBeDefined();
     });
 
     it('should handle malformed label pairs', async () => {
@@ -471,7 +449,7 @@ describe('logger', () => {
 
       const logger = await import('../../src/utils/logging/logger.js');
 
-      expect(logger.default).toBeDefined();
+      expect(logger.logger).toBeDefined();
     });
 
     it('should handle labels with spaces', async () => {
@@ -481,7 +459,7 @@ describe('logger', () => {
 
       const logger = await import('../../src/utils/logging/logger.js');
 
-      expect(logger.default).toBeDefined();
+      expect(logger.logger).toBeDefined();
     });
 
     it('should handle labels without values', async () => {
@@ -491,7 +469,7 @@ describe('logger', () => {
 
       const logger = await import('../../src/utils/logging/logger.js');
 
-      expect(logger.default).toBeDefined();
+      expect(logger.logger).toBeDefined();
     });
   });
 
@@ -504,7 +482,7 @@ describe('logger', () => {
 
       const logger = await import('../../src/utils/logging/logger.js');
 
-      expect(logger.default).toBeDefined();
+      expect(logger.logger).toBeDefined();
     });
 
     it('should configure Loki without authentication', async () => {
@@ -515,7 +493,7 @@ describe('logger', () => {
 
       const logger = await import('../../src/utils/logging/logger.js');
 
-      expect(logger.default).toBeDefined();
+      expect(logger.logger).toBeDefined();
     });
 
     it('should configure Loki with only username (no auth)', async () => {
@@ -526,7 +504,7 @@ describe('logger', () => {
 
       const logger = await import('../../src/utils/logging/logger.js');
 
-      expect(logger.default).toBeDefined();
+      expect(logger.logger).toBeDefined();
     });
 
     it('should configure Loki with only password (no auth)', async () => {
@@ -537,7 +515,7 @@ describe('logger', () => {
 
       const logger = await import('../../src/utils/logging/logger.js');
 
-      expect(logger.default).toBeDefined();
+      expect(logger.logger).toBeDefined();
     });
 
     it('should configure Loki with custom batching settings', async () => {
@@ -547,7 +525,7 @@ describe('logger', () => {
 
       const logger = await import('../../src/utils/logging/logger.js');
 
-      expect(logger.default).toBeDefined();
+      expect(logger.logger).toBeDefined();
     });
 
     it('should configure Loki with custom interval', async () => {
@@ -557,7 +535,7 @@ describe('logger', () => {
 
       const logger = await import('../../src/utils/logging/logger.js');
 
-      expect(logger.default).toBeDefined();
+      expect(logger.logger).toBeDefined();
     });
 
     it('should configure Loki with custom timeout', async () => {
@@ -567,7 +545,7 @@ describe('logger', () => {
 
       const logger = await import('../../src/utils/logging/logger.js');
 
-      expect(logger.default).toBeDefined();
+      expect(logger.logger).toBeDefined();
     });
 
     it('should use default interval when not specified', async () => {
@@ -577,7 +555,7 @@ describe('logger', () => {
 
       const logger = await import('../../src/utils/logging/logger.js');
 
-      expect(logger.default).toBeDefined();
+      expect(logger.logger).toBeDefined();
     });
 
     it('should use default timeout when not specified', async () => {
@@ -587,7 +565,7 @@ describe('logger', () => {
 
       const logger = await import('../../src/utils/logging/logger.js');
 
-      expect(logger.default).toBeDefined();
+      expect(logger.logger).toBeDefined();
     });
   });
 
@@ -599,7 +577,7 @@ describe('logger', () => {
 
       const logger = await import('../../src/utils/logging/logger.js');
 
-      expect(logger.default).toBeDefined();
+      expect(logger.logger).toBeDefined();
     });
 
     it('should exclude module from console when LOG_INCLUDE_MODULE is false', async () => {
@@ -609,7 +587,7 @@ describe('logger', () => {
 
       const logger = await import('../../src/utils/logging/logger.js');
 
-      expect(logger.default).toBeDefined();
+      expect(logger.logger).toBeDefined();
     });
 
     it('should exclude module from console by default', async () => {
@@ -619,7 +597,7 @@ describe('logger', () => {
 
       const logger = await import('../../src/utils/logging/logger.js');
 
-      expect(logger.default).toBeDefined();
+      expect(logger.logger).toBeDefined();
     });
   });
 
@@ -633,7 +611,7 @@ describe('logger', () => {
       // This test verifies the module loads, which is the expected behavior
       try {
         const logger = await import('../../src/utils/logging/logger.js');
-        expect(logger.default).toBeDefined();
+        expect(logger.logger).toBeDefined();
       } catch (error) {
         // If Pino throws an error about custom formatters with multiple targets,
         // that's expected behavior and not a bug in our logger
@@ -648,7 +626,7 @@ describe('logger', () => {
 
       const logger = await import('../../src/utils/logging/logger.js');
 
-      expect(logger.default).toBeDefined();
+      expect(logger.logger).toBeDefined();
     });
 
     it('should handle no transports configured', async () => {
@@ -658,7 +636,7 @@ describe('logger', () => {
 
       const logger = await import('../../src/utils/logging/logger.js');
 
-      expect(logger.default).toBeDefined();
+      expect(logger.logger).toBeDefined();
     });
   });
 
@@ -771,7 +749,7 @@ describe('logger', () => {
 
       const logger = await import('../../src/utils/logging/logger.js');
 
-      expect(logger.default).toBeDefined();
+      expect(logger.logger).toBeDefined();
     });
 
     it('should handle invalid LOG_LEVEL', async () => {
@@ -791,7 +769,7 @@ describe('logger', () => {
 
       const logger = await import('../../src/utils/logging/logger.js');
 
-      expect(logger.default).toBeDefined();
+      expect(logger.logger).toBeDefined();
     });
 
     it('should handle invalid LOKI_TIMEOUT', async () => {
@@ -801,7 +779,7 @@ describe('logger', () => {
 
       const logger = await import('../../src/utils/logging/logger.js');
 
-      expect(logger.default).toBeDefined();
+      expect(logger.logger).toBeDefined();
     });
 
     it('should handle createChildLogger with empty name', async () => {

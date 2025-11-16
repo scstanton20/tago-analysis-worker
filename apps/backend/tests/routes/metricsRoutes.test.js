@@ -85,10 +85,8 @@ describe('Metrics Routes - WITH REAL AUTH', () => {
     register = metricsModule.register;
 
     // Import routes with REAL auth middleware
-    const { default: metricsRoutes } = await import(
-      '../../src/routes/metricsRoutes.js'
-    );
-    app.use('/api/metrics', metricsRoutes);
+    const { metricsRouter } = await import('../../src/routes/metricsRoutes.js');
+    app.use('/api/metrics', metricsRouter);
   });
 
   describe('Authentication Requirements', () => {

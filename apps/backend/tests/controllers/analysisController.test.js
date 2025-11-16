@@ -29,7 +29,7 @@ vi.mock('../../src/services/analysisService.js', () => ({
   },
 }));
 
-vi.mock('../../src/utils/sse.js', () => ({
+vi.mock('../../src/utils/sse/index.js', () => ({
   sseManager: {
     broadcastAnalysisUpdate: vi.fn(),
     broadcastToTeamUsers: vi.fn(),
@@ -51,7 +51,7 @@ vi.mock('../../src/utils/responseHelpers.js', () => ({
 }));
 
 vi.mock('../../src/config/default.js', () => ({
-  default: {
+  config: {
     paths: {
       analysis: '/tmp/test-analyses',
     },
@@ -68,10 +68,10 @@ vi.mock('fs', () => ({
 const { analysisService } = await import(
   '../../src/services/analysisService.js'
 );
-const { sseManager } = await import('../../src/utils/sse.js');
-const AnalysisController = (
-  await import('../../src/controllers/analysisController.js')
-).default;
+const { sseManager } = await import('../../src/utils/sse/index.js');
+const { AnalysisController } = await import(
+  '../../src/controllers/analysisController.js'
+);
 
 describe('AnalysisController', () => {
   beforeEach(() => {
@@ -155,26 +155,6 @@ describe('AnalysisController', () => {
         }),
       );
     });
-
-    it('should handle upload errors', async () => {
-      const req = createMockRequest({
-        files: {
-          analysis: createMockFile(),
-        },
-        body: {
-          teamId: 'team-123',
-        },
-      });
-      const res = createMockResponse();
-
-      analysisService.uploadAnalysis.mockRejectedValue(
-        new Error('Upload failed'),
-      );
-
-      await AnalysisController.uploadAnalysis(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
-    });
   });
 
   describe('getAnalyses', () => {
@@ -221,19 +201,6 @@ describe('AnalysisController', () => {
 
       expect(res.json).toHaveBeenCalledWith(mockAnalyses);
     });
-
-    it('should handle errors when getting analyses', async () => {
-      const req = createMockRequest();
-      const res = createMockResponse();
-
-      analysisService.getAllAnalyses.mockRejectedValue(
-        new Error('Failed to get analyses'),
-      );
-
-      await AnalysisController.getAnalyses(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
-    });
   });
 
   describe('runAnalysis', () => {
@@ -251,21 +218,6 @@ describe('AnalysisController', () => {
       expect(res.json).toHaveBeenCalledWith({ success: true });
       // No SSE broadcast expected here - the actual process lifecycle event
       // (analysisUpdate) will be sent from analysisProcess.js when the child process starts
-    });
-
-    it('should handle run errors', async () => {
-      const req = createMockRequest({
-        params: { fileName: 'test-analysis' },
-      });
-      const res = createMockResponse();
-
-      analysisService.runAnalysis.mockRejectedValue(
-        new Error('Failed to start'),
-      );
-
-      await AnalysisController.runAnalysis(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
     });
   });
 
@@ -286,21 +238,6 @@ describe('AnalysisController', () => {
       expect(res.json).toHaveBeenCalledWith({ success: true });
       // No SSE broadcast expected here - the actual process lifecycle event
       // (analysisUpdate) will be sent from analysisProcess.js when the child process exits
-    });
-
-    it('should handle stop errors', async () => {
-      const req = createMockRequest({
-        params: { fileName: 'test-analysis' },
-      });
-      const res = createMockResponse();
-
-      analysisService.stopAnalysis.mockRejectedValue(
-        new Error('Failed to stop'),
-      );
-
-      await AnalysisController.stopAnalysis(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
     });
   });
 
@@ -336,22 +273,6 @@ describe('AnalysisController', () => {
       );
       expect(res.json).toHaveBeenCalledWith({ success: true });
       expect(sseManager.broadcastAnalysisUpdate).toHaveBeenCalled();
-    });
-
-    it('should handle delete errors', async () => {
-      const req = createMockRequest({
-        params: { fileName: 'test-analysis' },
-      });
-      const res = createMockResponse();
-
-      analysisService.getAllAnalyses.mockResolvedValue({});
-      analysisService.deleteAnalysis.mockRejectedValue(
-        new Error('Failed to delete'),
-      );
-
-      await AnalysisController.deleteAnalysis(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
     });
   });
 
@@ -410,22 +331,6 @@ describe('AnalysisController', () => {
         error: 'Invalid version number',
       });
     });
-
-    it('should return 404 if file not found', async () => {
-      const req = createMockRequest({
-        params: { fileName: 'test-analysis' },
-        query: {},
-      });
-      const res = createMockResponse();
-
-      const error = new Error('File not found');
-      error.code = 'ENOENT';
-      analysisService.getAnalysisContent.mockRejectedValue(error);
-
-      await AnalysisController.getAnalysisContent(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(404);
-    });
   });
 
   describe('updateAnalysis', () => {
@@ -461,22 +366,6 @@ describe('AnalysisController', () => {
       );
       expect(sseManager.broadcastAnalysisUpdate).toHaveBeenCalled();
     });
-
-    it('should handle update errors', async () => {
-      const req = createMockRequest({
-        params: { fileName: 'test-analysis' },
-        body: { content: 'console.log("updated");' },
-      });
-      const res = createMockResponse();
-
-      analysisService.updateAnalysis.mockRejectedValue(
-        new Error('Update failed'),
-      );
-
-      await AnalysisController.updateAnalysis(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
-    });
   });
 
   describe('renameAnalysis', () => {
@@ -510,22 +399,6 @@ describe('AnalysisController', () => {
           message: 'Analysis renamed successfully',
         }),
       );
-    });
-
-    it('should handle rename errors', async () => {
-      const req = createMockRequest({
-        params: { fileName: 'old-name' },
-        body: { newFileName: 'new-name' },
-      });
-      const res = createMockResponse();
-
-      analysisService.renameAnalysis.mockRejectedValue(
-        new Error('Rename failed'),
-      );
-
-      await AnalysisController.renameAnalysis(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
     });
   });
 
@@ -576,22 +449,6 @@ describe('AnalysisController', () => {
         100,
       );
     });
-
-    it('should handle get logs errors', async () => {
-      const req = createMockRequest({
-        params: { fileName: 'test-analysis' },
-        query: {},
-      });
-      const res = createMockResponse();
-
-      analysisService.getLogs.mockRejectedValue(
-        new Error('Failed to get logs'),
-      );
-
-      await AnalysisController.getLogs(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
-    });
   });
 
   describe('clearLogs', () => {
@@ -614,21 +471,6 @@ describe('AnalysisController', () => {
         message: 'Logs cleared',
       });
       expect(sseManager.broadcastAnalysisUpdate).toHaveBeenCalled();
-    });
-
-    it('should handle clear logs errors', async () => {
-      const req = createMockRequest({
-        params: { fileName: 'test-analysis' },
-      });
-      const res = createMockResponse();
-
-      analysisService.clearLogs.mockRejectedValue(
-        new Error('Failed to clear logs'),
-      );
-
-      await AnalysisController.clearLogs(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
     });
   });
 
@@ -656,21 +498,6 @@ describe('AnalysisController', () => {
         versions: mockVersions,
         currentVersion: 2,
       });
-    });
-
-    it('should handle get versions errors', async () => {
-      const req = createMockRequest({
-        params: { fileName: 'test-analysis' },
-      });
-      const res = createMockResponse();
-
-      analysisService.getVersions.mockRejectedValue(
-        new Error('Failed to get versions'),
-      );
-
-      await AnalysisController.getVersions(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
     });
   });
 
@@ -708,22 +535,6 @@ describe('AnalysisController', () => {
       );
       expect(sseManager.broadcastAnalysisUpdate).toHaveBeenCalled();
     });
-
-    it('should handle rollback errors', async () => {
-      const req = createMockRequest({
-        params: { fileName: 'test-analysis' },
-        body: { version: 1 },
-      });
-      const res = createMockResponse();
-
-      analysisService.rollbackToVersion.mockRejectedValue(
-        new Error('Rollback failed'),
-      );
-
-      await AnalysisController.rollbackToVersion(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
-    });
   });
 
   describe('updateEnvironment', () => {
@@ -759,22 +570,6 @@ describe('AnalysisController', () => {
       );
       expect(sseManager.broadcastAnalysisUpdate).toHaveBeenCalled();
     });
-
-    it('should handle update environment errors', async () => {
-      const req = createMockRequest({
-        params: { fileName: 'test-analysis' },
-        body: { env: { KEY: 'value' } },
-      });
-      const res = createMockResponse();
-
-      analysisService.updateEnvironment.mockRejectedValue(
-        new Error('Update failed'),
-      );
-
-      await AnalysisController.updateEnvironment(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
-    });
   });
 
   describe('getEnvironment', () => {
@@ -794,21 +589,6 @@ describe('AnalysisController', () => {
         'test-analysis',
       );
       expect(res.json).toHaveBeenCalledWith(mockEnv);
-    });
-
-    it('should handle get environment errors', async () => {
-      const req = createMockRequest({
-        params: { fileName: 'test-analysis' },
-      });
-      const res = createMockResponse();
-
-      analysisService.getEnvironment.mockRejectedValue(
-        new Error('Failed to get environment'),
-      );
-
-      await AnalysisController.getEnvironment(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
     });
   });
 });

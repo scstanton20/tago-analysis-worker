@@ -3,6 +3,14 @@ import { z } from 'zod';
 
 export const teamValidationSchemas = {
   /**
+   * GET /api/teams - Get all teams
+   * Validates that no query parameters are provided (strict empty object)
+   */
+  getAllTeams: {
+    query: z.object({}).strict(),
+  },
+
+  /**
    * POST /api/teams - Create new team
    */
   createTeam: {

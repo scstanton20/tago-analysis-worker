@@ -3,7 +3,7 @@ import { createMockRequest, createMockResponse } from '../utils/testHelpers.js';
 
 // Mock dependencies before importing the controller
 vi.mock('../../src/services/teamService.js', () => ({
-  default: {
+  teamService: {
     getAllTeams: vi.fn(),
     createTeam: vi.fn(),
     updateTeam: vi.fn(),
@@ -18,7 +18,7 @@ vi.mock('../../src/services/teamService.js', () => ({
   },
 }));
 
-vi.mock('../../src/utils/sse.js', () => ({
+vi.mock('../../src/utils/sse/index.js', () => ({
   sseManager: {
     broadcastToAdminUsers: vi.fn(),
     broadcastAnalysisMove: vi.fn(),
@@ -34,13 +34,14 @@ vi.mock('../../src/utils/responseHelpers.js', () => ({
 }));
 
 // Import after mocks
-const teamService = (await import('../../src/services/teamService.js')).default;
-const { sseManager } = await import('../../src/utils/sse.js');
+const { teamService } = await import('../../src/services/teamService.js');
+const { sseManager } = await import('../../src/utils/sse/index.js');
 const { broadcastTeamStructureUpdate } = await import(
   '../../src/utils/responseHelpers.js'
 );
-const TeamController = (await import('../../src/controllers/teamController.js'))
-  .default;
+const { TeamController } = await import(
+  '../../src/controllers/teamController.js'
+);
 
 describe('TeamController', () => {
   beforeEach(() => {
@@ -74,19 +75,6 @@ describe('TeamController', () => {
       await TeamController.getAllTeams(req, res);
 
       expect(res.json).toHaveBeenCalledWith([]);
-    });
-
-    it('should handle errors when retrieving teams', async () => {
-      const req = createMockRequest();
-      const res = createMockResponse();
-
-      teamService.getAllTeams.mockRejectedValue(
-        new Error('Failed to retrieve teams'),
-      );
-
-      await TeamController.getAllTeams(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
     });
   });
 
@@ -156,23 +144,6 @@ describe('TeamController', () => {
         req.log,
       );
     });
-
-    it('should handle errors when creating team', async () => {
-      const req = createMockRequest({
-        body: {
-          name: 'Invalid Team',
-        },
-      });
-      const res = createMockResponse();
-
-      teamService.createTeam.mockRejectedValue(
-        new Error('Team creation failed'),
-      );
-
-      await TeamController.createTeam(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
-    });
   });
 
   describe('updateTeam', () => {
@@ -210,20 +181,6 @@ describe('TeamController', () => {
         team: mockTeam,
       });
     });
-
-    it('should handle errors when updating team', async () => {
-      const req = createMockRequest({
-        params: { id: 'team-1' },
-        body: { name: 'New Name' },
-      });
-      const res = createMockResponse();
-
-      teamService.updateTeam.mockRejectedValue(new Error('Update failed'));
-
-      await TeamController.updateTeam(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
-    });
   });
 
   describe('deleteTeam', () => {
@@ -252,19 +209,6 @@ describe('TeamController', () => {
         type: 'teamDeleted',
         deleted: 'team-1',
       });
-    });
-
-    it('should handle errors when deleting team', async () => {
-      const req = createMockRequest({
-        params: { id: 'team-1' },
-      });
-      const res = createMockResponse();
-
-      teamService.deleteTeam.mockRejectedValue(new Error('Delete failed'));
-
-      await TeamController.deleteTeam(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
     });
   });
 
@@ -296,21 +240,6 @@ describe('TeamController', () => {
         type: 'teamsReordered',
         teams: mockTeams,
       });
-    });
-
-    it('should handle errors when reordering teams', async () => {
-      const req = createMockRequest({
-        body: {
-          orderedIds: ['team-1', 'team-2'],
-        },
-      });
-      const res = createMockResponse();
-
-      teamService.reorderTeams.mockRejectedValue(new Error('Reorder failed'));
-
-      await TeamController.reorderTeams(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
     });
   });
 
@@ -369,22 +298,6 @@ describe('TeamController', () => {
         req.log,
       );
     });
-
-    it('should handle errors when moving analysis', async () => {
-      const req = createMockRequest({
-        params: { name: 'test-analysis' },
-        body: { teamId: 'team-2' },
-      });
-      const res = createMockResponse();
-
-      teamService.moveAnalysisToTeam.mockRejectedValue(
-        new Error('Move failed'),
-      );
-
-      await TeamController.moveAnalysisToTeam(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
-    });
   });
 
   describe('getTeamAnalysisCount', () => {
@@ -416,21 +329,6 @@ describe('TeamController', () => {
       await TeamController.getTeamAnalysisCount(req, res);
 
       expect(res.json).toHaveBeenCalledWith({ count: 0 });
-    });
-
-    it('should handle errors when getting count', async () => {
-      const req = createMockRequest({
-        params: { id: 'team-1' },
-      });
-      const res = createMockResponse();
-
-      teamService.getAnalysisCountByTeamId.mockRejectedValue(
-        new Error('Count failed'),
-      );
-
-      await TeamController.getTeamAnalysisCount(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
     });
   });
 
@@ -501,22 +399,6 @@ describe('TeamController', () => {
         req.log,
       );
     });
-
-    it('should handle errors when creating folder', async () => {
-      const req = createMockRequest({
-        params: { teamId: 'team-1' },
-        body: { name: 'New Folder' },
-      });
-      const res = createMockResponse();
-
-      teamService.createFolder.mockRejectedValue(
-        new Error('Folder creation failed'),
-      );
-
-      await TeamController.createFolder(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
-    });
   });
 
   describe('updateFolder', () => {
@@ -559,23 +441,6 @@ describe('TeamController', () => {
         folder: mockFolder,
       });
     });
-
-    it('should handle errors when updating folder', async () => {
-      const req = createMockRequest({
-        params: {
-          teamId: 'team-1',
-          folderId: 'folder-1',
-        },
-        body: { name: 'New Name' },
-      });
-      const res = createMockResponse();
-
-      teamService.updateFolder.mockRejectedValue(new Error('Update failed'));
-
-      await TeamController.updateFolder(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
-    });
   });
 
   describe('deleteFolder', () => {
@@ -612,22 +477,6 @@ describe('TeamController', () => {
         sseManager,
         'team-1',
       );
-    });
-
-    it('should handle errors when deleting folder', async () => {
-      const req = createMockRequest({
-        params: {
-          teamId: 'team-1',
-          folderId: 'folder-1',
-        },
-      });
-      const res = createMockResponse();
-
-      teamService.deleteFolder.mockRejectedValue(new Error('Delete failed'));
-
-      await TeamController.deleteFolder(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
     });
   });
 
@@ -692,24 +541,6 @@ describe('TeamController', () => {
         2,
         req.log,
       );
-    });
-
-    it('should handle errors when moving item', async () => {
-      const req = createMockRequest({
-        params: { teamId: 'team-1' },
-        body: {
-          itemId: 'folder-1',
-          newParentId: 'folder-2',
-          newIndex: 0,
-        },
-      });
-      const res = createMockResponse();
-
-      teamService.moveItem.mockRejectedValue(new Error('Move failed'));
-
-      await TeamController.moveItem(req, res);
-
-      expect(res.status).toHaveBeenCalledWith(500);
     });
   });
 });

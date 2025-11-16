@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import path from 'path';
-import config from '../config/default.js';
+import { config } from '../config/default.js';
 import { createChildLogger } from './logging/logger.js';
 
 // Module-level logger for database operations

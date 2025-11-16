@@ -17,7 +17,7 @@ vi.mock('fs', () => ({
 }));
 
 vi.mock('../../src/config/default.js', () => ({
-  default: {
+  config: {
     paths: {
       analysis: '/tmp/test-analyses-storage/analyses',
     },

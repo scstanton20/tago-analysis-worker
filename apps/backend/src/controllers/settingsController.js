@@ -1,6 +1,5 @@
-import dnsCache from '../services/dnsCache.js';
-import { sseManager } from '../utils/sse.js';
-import { handleError } from '../utils/responseHelpers.js';
+import { dnsCache } from '../services/dnsCache.js';
+import { sseManager } from '../utils/sse/index.js';
 
 /**
  * Controller class for managing application settings
@@ -9,7 +8,7 @@ import { handleError } from '../utils/responseHelpers.js';
  * All methods are static and follow Express route handler pattern (req, res).
  * Request-scoped logging is available via req.log.
  */
-class SettingsController {
+export class SettingsController {
   /**
    * Retrieve DNS cache configuration and statistics
    * Returns current DNS cache settings and performance metrics
@@ -25,24 +24,18 @@ class SettingsController {
   static async getDNSConfig(req, res) {
     req.log.info({ action: 'getDNSConfig' }, 'Getting DNS configuration');
 
-    try {
-      const config = dnsCache.getConfig();
-      const stats = dnsCache.getStats();
+    const config = dnsCache.getConfig();
+    const stats = dnsCache.getStats();
 
-      req.log.info(
-        { action: 'getDNSConfig', cacheSize: stats.size },
-        'DNS configuration retrieved',
-      );
+    req.log.info(
+      { action: 'getDNSConfig', cacheSize: stats.size },
+      'DNS configuration retrieved',
+    );
 
-      res.json({
-        config,
-        stats,
-      });
-    } catch (error) {
-      handleError(res, error, 'getting DNS configuration', {
-        logger: req.logger,
-      });
-    }
+    res.json({
+      config,
+      stats,
+    });
   }
 
   /**
@@ -79,33 +72,27 @@ class SettingsController {
       'Updating DNS configuration',
     );
 
-    try {
-      await dnsCache.updateConfig(newConfig);
+    await dnsCache.updateConfig(newConfig);
 
-      const config = dnsCache.getConfig();
-      const stats = dnsCache.getStats();
+    const config = dnsCache.getConfig();
+    const stats = dnsCache.getStats();
 
-      req.log.info({ action: 'updateDNSConfig', config }, 'DNS config updated');
+    req.log.info({ action: 'updateDNSConfig', config }, 'DNS config updated');
 
-      // Broadcast DNS cache config update via SSE (admin only)
-      sseManager.broadcastToAdminUsers({
-        type: 'dnsConfigUpdated',
-        data: {
-          config,
-          stats,
-        },
-      });
-
-      res.json({
-        message: 'DNS configuration updated successfully',
+    // Broadcast DNS cache config update via SSE (admin only)
+    sseManager.broadcastToAdminUsers({
+      type: 'dnsConfigUpdated',
+      data: {
         config,
         stats,
-      });
-    } catch (error) {
-      handleError(res, error, 'updating DNS configuration', {
-        logger: req.logger,
-      });
-    }
+      },
+    });
+
+    res.json({
+      message: 'DNS configuration updated successfully',
+      config,
+      stats,
+    });
   }
 
   /**
@@ -123,23 +110,17 @@ class SettingsController {
   static async getDNSCacheEntries(req, res) {
     req.log.info({ action: 'getDNSCacheEntries' }, 'Getting DNS cache entries');
 
-    try {
-      const entries = dnsCache.getCacheEntries();
+    const entries = dnsCache.getCacheEntries();
 
-      req.log.info(
-        { action: 'getDNSCacheEntries', count: entries.length },
-        'DNS cache entries retrieved',
-      );
+    req.log.info(
+      { action: 'getDNSCacheEntries', count: entries.length },
+      'DNS cache entries retrieved',
+    );
 
-      res.json({
-        entries,
-        total: entries.length,
-      });
-    } catch (error) {
-      handleError(res, error, 'getting DNS cache entries', {
-        logger: req.logger,
-      });
-    }
+    res.json({
+      entries,
+      total: entries.length,
+    });
   }
 
   /**
@@ -161,32 +142,28 @@ class SettingsController {
   static async clearDNSCache(req, res) {
     req.log.info({ action: 'clearDNSCache' }, 'Clearing DNS cache');
 
-    try {
-      const entriesCleared = dnsCache.clearCache();
-      const stats = dnsCache.getStats();
+    const entriesCleared = dnsCache.clearCache();
+    const stats = dnsCache.getStats();
 
-      req.log.info(
-        { action: 'clearDNSCache', entriesCleared },
-        'DNS cache cleared',
-      );
+    req.log.info(
+      { action: 'clearDNSCache', entriesCleared },
+      'DNS cache cleared',
+    );
 
-      // Broadcast DNS cache cleared via SSE (admin only)
-      sseManager.broadcastToAdminUsers({
-        type: 'dnsCacheCleared',
-        data: {
-          entriesCleared,
-          stats,
-        },
-      });
-
-      res.json({
-        message: 'DNS cache cleared successfully',
+    // Broadcast DNS cache cleared via SSE (admin only)
+    sseManager.broadcastToAdminUsers({
+      type: 'dnsCacheCleared',
+      data: {
         entriesCleared,
         stats,
-      });
-    } catch (error) {
-      handleError(res, error, 'clearing DNS cache', { logger: req.logger });
-    }
+      },
+    });
+
+    res.json({
+      message: 'DNS cache cleared successfully',
+      entriesCleared,
+      stats,
+    });
   }
 
   /**
@@ -216,29 +193,23 @@ class SettingsController {
       'Deleting DNS cache entry',
     );
 
-    try {
-      const deleted = dnsCache.cache.delete(key);
+    const deleted = dnsCache.cache.delete(key);
 
-      if (deleted) {
-        req.log.info(
-          { action: 'deleteDNSCacheEntry', key },
-          'DNS cache entry deleted',
-        );
-        res.json({
-          message: 'DNS cache entry deleted successfully',
-          key,
-        });
-      } else {
-        req.log.warn(
-          { action: 'deleteDNSCacheEntry', key },
-          'Cache entry not found',
-        );
-        res.status(404).json({ error: 'Cache entry not found' });
-      }
-    } catch (error) {
-      handleError(res, error, 'deleting DNS cache entry', {
-        logger: req.logger,
+    if (deleted) {
+      req.log.info(
+        { action: 'deleteDNSCacheEntry', key },
+        'DNS cache entry deleted',
+      );
+      res.json({
+        message: 'DNS cache entry deleted successfully',
+        key,
       });
+    } else {
+      req.log.warn(
+        { action: 'deleteDNSCacheEntry', key },
+        'Cache entry not found',
+      );
+      res.status(404).json({ error: 'Cache entry not found' });
     }
   }
 
@@ -261,30 +232,22 @@ class SettingsController {
   static async resetDNSStats(req, res) {
     req.log.info({ action: 'resetDNSStats' }, 'Resetting DNS cache statistics');
 
-    try {
-      dnsCache.resetStats();
-      const stats = dnsCache.getStats();
+    dnsCache.resetStats();
+    const stats = dnsCache.getStats();
 
-      req.log.info({ action: 'resetDNSStats' }, 'DNS cache stats reset');
+    req.log.info({ action: 'resetDNSStats' }, 'DNS cache stats reset');
 
-      // Broadcast DNS cache stats reset via SSE (admin only)
-      sseManager.broadcastToAdminUsers({
-        type: 'dnsStatsReset',
-        data: {
-          stats,
-        },
-      });
-
-      res.json({
-        message: 'DNS cache statistics reset successfully',
+    // Broadcast DNS cache stats reset via SSE (admin only)
+    sseManager.broadcastToAdminUsers({
+      type: 'dnsStatsReset',
+      data: {
         stats,
-      });
-    } catch (error) {
-      handleError(res, error, 'resetting DNS statistics', {
-        logger: req.logger,
-      });
-    }
+      },
+    });
+
+    res.json({
+      message: 'DNS cache statistics reset successfully',
+      stats,
+    });
   }
 }
-
-export default SettingsController;

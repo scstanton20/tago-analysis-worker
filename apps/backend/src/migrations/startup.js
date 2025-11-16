@@ -3,8 +3,8 @@ import { execSync } from 'child_process';
 import Database from 'better-sqlite3';
 import path from 'path';
 import crypto from 'crypto';
-import config from '../config/default.js';
-import { sseManager } from '../utils/sse.js';
+import { config } from '../config/default.js';
+import { sseManager } from '../utils/sse/index.js';
 import { auth } from '../lib/auth.js';
 import {
   executeQuery,
@@ -141,13 +141,8 @@ export async function createAdminUserIfNeeded() {
       message: 'Checking for admin user',
     });
 
-    const existingAdmin = executeQuery(
-      'SELECT id FROM user WHERE email = ? OR role = ?',
-      ['admin@example.com', 'admin'],
-      'checking for existing admin user',
-    );
-
-    if (existingAdmin) {
+    // Check if admin already exists
+    if (adminUserExists()) {
       return;
     }
 
@@ -157,172 +152,213 @@ export async function createAdminUserIfNeeded() {
       message: 'Creating admin user',
     });
 
-    const result = await auth.api.signUpEmail({
-      body: {
-        name: 'Administrator',
-        email: 'admin@example.com',
-        password: 'Admin123',
-        username: 'admin',
-      },
-      headers: {},
-    });
+    // Create admin user via Better Auth
+    const result = await createAdminUser();
+    if (!result.user) {
+      logger.error('Failed to create admin user');
+      return;
+    }
 
-    if (result.user) {
-      const updateResult = executeUpdate(
-        'UPDATE user SET role = ?, requiresPasswordChange = 1 WHERE id = ?',
-        ['admin', result.user.id],
-        'updating admin user role and password change flag',
+    // Update admin role in database
+    const updateResult = executeUpdate(
+      'UPDATE user SET role = ?, requiresPasswordChange = 1 WHERE id = ?',
+      ['admin', result.user.id],
+      'updating admin user role and password change flag',
+    );
+
+    if (updateResult.changes > 0) {
+      logger.info(
+        { userId: result.user.id },
+        '✓ Admin user created successfully',
       );
 
-      if (updateResult.changes > 0) {
-        logger.info(
-          { userId: result.user.id },
-          '✓ Admin user created successfully',
-        );
+      // Create organization and teams
+      await setupOrganizationAndTeams(result.user.id);
 
-        // Create main organization and add admin to it
-        logger.info('Creating main organization...');
-        sseManager.updateContainerState({
-          status: 'creating_organization',
-          message: 'Creating main organization',
-        });
-
-        try {
-          // Use transaction to ensure organization setup is atomic
-          executeTransaction((db) => {
-            const existingOrg = db
-              .prepare('SELECT id FROM organization WHERE slug = ?')
-              .get('main');
-
-            let organizationId = existingOrg?.id;
-
-            if (!existingOrg) {
-              // Create organization directly in database during startup
-              const orgUuid = uuidv4();
-              db.prepare(
-                'INSERT INTO organization (id, name, slug, createdAt) VALUES (?, ?, ?, ?)',
-              ).run(
-                orgUuid,
-                'Tago Analysis Worker',
-                'main',
-                new Date().toISOString(),
-              );
-              organizationId = orgUuid;
-              logger.info({ organizationId }, '✓ Main organization created');
-
-              // Create uncategorized team for the new organization
-              const teamUuid = uuidv4();
-              db.prepare(
-                'INSERT INTO team (id, name, organizationId, createdAt, color, order_index, is_system) VALUES (?, ?, ?, ?, ?, ?, ?)',
-              ).run(
-                teamUuid,
-                'Uncategorized',
-                organizationId,
-                new Date().toISOString(),
-                '#9ca3af',
-                0,
-                1,
-              );
-              logger.info(
-                { teamId: teamUuid, organizationId },
-                '✓ Uncategorized team created',
-              );
-            } else {
-              logger.info(
-                { organizationId },
-                '✓ Main organization already exists',
-              );
-
-              // Ensure uncategorized team exists for existing organization
-              const existingTeam = db
-                .prepare(
-                  'SELECT id FROM team WHERE organizationId = ? AND name = ? AND is_system = 1',
-                )
-                .get(organizationId, 'Uncategorized');
-
-              if (!existingTeam) {
-                logger.info('Creating missing uncategorized team...');
-                const teamUuid = uuidv4();
-                db.prepare(
-                  'INSERT INTO team (id, name, organizationId, createdAt, color, order_index, is_system) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                ).run(
-                  teamUuid,
-                  'Uncategorized',
-                  organizationId,
-                  new Date().toISOString(),
-                  '#9ca3af',
-                  0,
-                  1,
-                );
-                logger.info(
-                  { teamId: teamUuid, organizationId },
-                  '✓ Uncategorized team created for existing organization',
-                );
-              } else {
-                logger.info(
-                  { teamId: existingTeam.id },
-                  '✓ Uncategorized team already exists',
-                );
-              }
-            }
-
-            if (organizationId) {
-              // Add admin as organization member
-              const existingMember = db
-                .prepare(
-                  'SELECT id FROM member WHERE userId = ? AND organizationId = ?',
-                )
-                .get(result.user.id, organizationId);
-
-              if (!existingMember) {
-                db.prepare(
-                  'INSERT INTO member (id, organizationId, userId, role, createdAt) VALUES (?, ?, ?, ?, ?)',
-                ).run(
-                  crypto.randomUUID(),
-                  organizationId,
-                  result.user.id,
-                  'owner',
-                  new Date().toISOString(),
-                );
-                logger.info(
-                  {
-                    userId: result.user.id,
-                    organizationId,
-                    role: 'owner',
-                  },
-                  '✓ Admin added to organization as owner',
-                );
-              }
-            }
-
-            return organizationId;
-          }, 'organization and team setup during admin user creation');
-        } catch (orgError) {
-          logger.error(
-            {
-              error: orgError.message,
-              stack: orgError.stack,
-              name: orgError.name,
-            },
-            '❌ Organization setup failed',
-          );
-        }
-
-        logger.info(
-          {
-            email: 'admin@example.com',
-            username: 'admin',
-            password: 'Admin123',
-          },
-          'Admin user credentials created',
-        );
-      } else {
-        logger.warn('Admin user created but role assignment may have failed');
-      }
+      logAdminUserCredentials();
     } else {
-      logger.error('Failed to create admin user');
+      logger.warn('Admin user created but role assignment may have failed');
     }
   } catch (error) {
     logger.error({ error: error.message }, 'Error with admin user setup');
   }
+}
+
+/**
+ * Check if admin user already exists
+ * @returns {boolean} True if admin exists
+ */
+function adminUserExists() {
+  const existingAdmin = executeQuery(
+    'SELECT id FROM user WHERE email = ? OR role = ?',
+    ['admin@example.com', 'admin'],
+    'checking for existing admin user',
+  );
+  return !!existingAdmin;
+}
+
+/**
+ * Create admin user via Better Auth
+ * @returns {Promise<Object>} Result with user data
+ */
+async function createAdminUser() {
+  return auth.api.signUpEmail({
+    body: {
+      name: 'Administrator',
+      email: 'admin@example.com',
+      password: 'Admin123',
+      username: 'admin',
+    },
+    headers: {},
+  });
+}
+
+/**
+ * Setup main organization and teams
+ * Creates organization if missing and ensures uncategorized team exists
+ * @param {string} adminUserId - Admin user ID
+ * @returns {Promise<void>}
+ */
+async function setupOrganizationAndTeams(adminUserId) {
+  logger.info('Creating main organization...');
+  sseManager.updateContainerState({
+    status: 'creating_organization',
+    message: 'Creating main organization',
+  });
+
+  try {
+    executeTransaction((db) => {
+      const organizationId = setupOrganization(db);
+      if (organizationId) {
+        setupUncategorizedTeam(db, organizationId);
+        addAdminToOrganization(db, adminUserId, organizationId);
+      }
+      return organizationId;
+    }, 'organization and team setup during admin user creation');
+  } catch (orgError) {
+    logger.error(
+      {
+        error: orgError.message,
+        stack: orgError.stack,
+        name: orgError.name,
+      },
+      '❌ Organization setup failed',
+    );
+  }
+}
+
+/**
+ * Setup main organization, creating if needed
+ * @param {Object} db - Database instance
+ * @returns {string} Organization ID
+ */
+function setupOrganization(db) {
+  const existingOrg = db
+    .prepare('SELECT id FROM organization WHERE slug = ?')
+    .get('main');
+
+  if (existingOrg) {
+    logger.info(
+      { organizationId: existingOrg.id },
+      '✓ Main organization already exists',
+    );
+    return existingOrg.id;
+  }
+
+  const orgUuid = uuidv4();
+  db.prepare(
+    'INSERT INTO organization (id, name, slug, createdAt) VALUES (?, ?, ?, ?)',
+  ).run(orgUuid, 'Tago Analysis Worker', 'main', new Date().toISOString());
+  logger.info({ organizationId: orgUuid }, '✓ Main organization created');
+  return orgUuid;
+}
+
+/**
+ * Ensure uncategorized team exists for organization
+ * @param {Object} db - Database instance
+ * @param {string} organizationId - Organization ID
+ * @returns {void}
+ */
+function setupUncategorizedTeam(db, organizationId) {
+  const existingTeam = db
+    .prepare(
+      'SELECT id FROM team WHERE organizationId = ? AND name = ? AND is_system = 1',
+    )
+    .get(organizationId, 'Uncategorized');
+
+  if (existingTeam) {
+    logger.info(
+      { teamId: existingTeam.id },
+      '✓ Uncategorized team already exists',
+    );
+    return;
+  }
+
+  logger.info('Creating missing uncategorized team...');
+  const teamUuid = uuidv4();
+  db.prepare(
+    'INSERT INTO team (id, name, organizationId, createdAt, color, order_index, is_system) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  ).run(
+    teamUuid,
+    'Uncategorized',
+    organizationId,
+    new Date().toISOString(),
+    '#9ca3af',
+    0,
+    1,
+  );
+  logger.info(
+    { teamId: teamUuid, organizationId },
+    '✓ Uncategorized team created',
+  );
+}
+
+/**
+ * Add admin user to organization as owner
+ * @param {Object} db - Database instance
+ * @param {string} userId - User ID
+ * @param {string} organizationId - Organization ID
+ * @returns {void}
+ */
+function addAdminToOrganization(db, userId, organizationId) {
+  const existingMember = db
+    .prepare('SELECT id FROM member WHERE userId = ? AND organizationId = ?')
+    .get(userId, organizationId);
+
+  if (existingMember) {
+    return;
+  }
+
+  db.prepare(
+    'INSERT INTO member (id, organizationId, userId, role, createdAt) VALUES (?, ?, ?, ?, ?)',
+  ).run(
+    crypto.randomUUID(),
+    organizationId,
+    userId,
+    'owner',
+    new Date().toISOString(),
+  );
+  logger.info(
+    {
+      userId: userId,
+      organizationId,
+      role: 'owner',
+    },
+    '✓ Admin added to organization as owner',
+  );
+}
+
+/**
+ * Log admin user credentials
+ * @returns {void}
+ */
+function logAdminUserCredentials() {
+  logger.info(
+    {
+      email: 'admin@example.com',
+      username: 'admin',
+      password: 'Admin123',
+    },
+    'Admin user credentials created',
+  );
 }

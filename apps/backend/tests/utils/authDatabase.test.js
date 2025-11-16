@@ -23,7 +23,7 @@ vi.mock('better-sqlite3', () => ({
 }));
 
 vi.mock('../../src/config/default.js', () => ({
-  default: {
+  config: {
     storage: {
       base: '/app',
     },

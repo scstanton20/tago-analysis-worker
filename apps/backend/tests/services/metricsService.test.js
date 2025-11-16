@@ -42,32 +42,43 @@ describe('MetricsService', () => {
   });
 
   describe('parsePrometheusMetrics', () => {
-    it('should parse metrics with labels', () => {
+    it('should parse metrics with labels into a Map', () => {
       const metricsString = `tago_analysis_cpu_percent{analysis_name="test-analysis"} 25.5
 tago_analysis_memory_bytes{analysis_name="test-analysis"} 104857600`;
 
       const result = metricsService.parsePrometheusMetrics(metricsString);
 
-      expect(result).toHaveLength(2);
-      expect(result[0]).toEqual({
+      expect(result).toBeInstanceOf(Map);
+      expect(result.size).toBe(2); // Two different metric names
+
+      const cpuMetrics = result.get('tago_analysis_cpu_percent');
+      expect(cpuMetrics).toHaveLength(1);
+      expect(cpuMetrics[0]).toEqual({
         name: 'tago_analysis_cpu_percent',
         labels: { analysis_name: 'test-analysis' },
         value: 25.5,
       });
-      expect(result[1]).toEqual({
+
+      const memoryMetrics = result.get('tago_analysis_memory_bytes');
+      expect(memoryMetrics).toHaveLength(1);
+      expect(memoryMetrics[0]).toEqual({
         name: 'tago_analysis_memory_bytes',
         labels: { analysis_name: 'test-analysis' },
         value: 104857600,
       });
     });
 
-    it('should parse metrics without labels', () => {
+    it('should parse metrics without labels into a Map', () => {
       const metricsString = 'tago_backend_uptime 3600.5';
 
       const result = metricsService.parsePrometheusMetrics(metricsString);
 
-      expect(result).toHaveLength(1);
-      expect(result[0]).toEqual({
+      expect(result).toBeInstanceOf(Map);
+      expect(result.size).toBe(1);
+
+      const uptimeMetrics = result.get('tago_backend_uptime');
+      expect(uptimeMetrics).toHaveLength(1);
+      expect(uptimeMetrics[0]).toEqual({
         name: 'tago_backend_uptime',
         labels: {},
         value: 3600.5,
@@ -82,8 +93,9 @@ tago_test 42`;
 
       const result = metricsService.parsePrometheusMetrics(metricsString);
 
-      expect(result).toHaveLength(1);
-      expect(result[0].name).toBe('tago_test');
+      expect(result).toBeInstanceOf(Map);
+      expect(result.size).toBe(1);
+      expect(result.get('tago_test')[0].name).toBe('tago_test');
     });
 
     it('should handle scientific notation', () => {
@@ -91,7 +103,7 @@ tago_test 42`;
 
       const result = metricsService.parsePrometheusMetrics(metricsString);
 
-      expect(result[0].value).toBe(1.23e10);
+      expect(result.get('tago_metric')[0].value).toBe(1.23e10);
     });
 
     it('should parse multiple labels', () => {
@@ -100,31 +112,82 @@ tago_test 42`;
 
       const result = metricsService.parsePrometheusMetrics(metricsString);
 
-      expect(result[0].labels).toEqual({
+      expect(result.get('tago_http_requests_total')[0].labels).toEqual({
         method: 'GET',
         status: '200',
         endpoint: '/api/test',
       });
     });
+
+    it('should group metrics with same name together', () => {
+      const metricsString = `tago_http_requests_total{status="200"} 100
+tago_http_requests_total{status="500"} 5`;
+
+      const result = metricsService.parsePrometheusMetrics(metricsString);
+
+      expect(result).toBeInstanceOf(Map);
+      expect(result.size).toBe(1);
+
+      const requestMetrics = result.get('tago_http_requests_total');
+      expect(requestMetrics).toHaveLength(2);
+      expect(requestMetrics[0].labels.status).toBe('200');
+      expect(requestMetrics[1].labels.status).toBe('500');
+    });
+  });
+
+  describe('getMetricsByName', () => {
+    it('should get metrics by name from the Map', () => {
+      const metricsMap = new Map([
+        [
+          'tago_cpu',
+          [{ name: 'tago_cpu', labels: { process: 'a1' }, value: 10 }],
+        ],
+        [
+          'tago_memory',
+          [{ name: 'tago_memory', labels: { process: 'a1' }, value: 100 }],
+        ],
+      ]);
+
+      const result = metricsService.getMetricsByName(metricsMap, 'tago_cpu');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].name).toBe('tago_cpu');
+    });
+
+    it('should return empty array if metric not found', () => {
+      const metricsMap = new Map();
+
+      const result = metricsService.getMetricsByName(
+        metricsMap,
+        'tago_missing',
+      );
+
+      expect(result).toEqual([]);
+    });
   });
 
   describe('getMetricValue', () => {
     it('should get metric value with matching labels', () => {
-      const metrics = [
-        {
-          name: 'tago_analysis_processes',
-          labels: { state: 'running', type: 'all' },
-          value: 5,
-        },
-        {
-          name: 'tago_analysis_processes',
-          labels: { state: 'stopped', type: 'all' },
-          value: 2,
-        },
-      ];
+      const metricsMap = new Map([
+        [
+          'tago_analysis_processes',
+          [
+            {
+              name: 'tago_analysis_processes',
+              labels: { state: 'running', type: 'all' },
+              value: 5,
+            },
+            {
+              name: 'tago_analysis_processes',
+              labels: { state: 'stopped', type: 'all' },
+              value: 2,
+            },
+          ],
+        ],
+      ]);
 
       const result = metricsService.getMetricValue(
-        metrics,
+        metricsMap,
         'tago_analysis_processes',
         {
           state: 'running',
@@ -136,16 +199,21 @@ tago_test 42`;
     });
 
     it('should return 0 if metric not found', () => {
-      const metrics = [
-        {
-          name: 'tago_other_metric',
-          labels: {},
-          value: 10,
-        },
-      ];
+      const metricsMap = new Map([
+        [
+          'tago_other_metric',
+          [
+            {
+              name: 'tago_other_metric',
+              labels: {},
+              value: 10,
+            },
+          ],
+        ],
+      ]);
 
       const result = metricsService.getMetricValue(
-        metrics,
+        metricsMap,
         'tago_missing_metric',
         {},
       );
@@ -154,16 +222,21 @@ tago_test 42`;
     });
 
     it('should match empty labels', () => {
-      const metrics = [
-        {
-          name: 'tago_backend_uptime',
-          labels: {},
-          value: 1234,
-        },
-      ];
+      const metricsMap = new Map([
+        [
+          'tago_backend_uptime',
+          [
+            {
+              name: 'tago_backend_uptime',
+              labels: {},
+              value: 1234,
+            },
+          ],
+        ],
+      ]);
 
       const result = metricsService.getMetricValue(
-        metrics,
+        metricsMap,
         'tago_backend_uptime',
       );
 
@@ -173,27 +246,41 @@ tago_test 42`;
 
   describe('sumMetricValues', () => {
     it('should sum all metrics with same name', () => {
-      const metrics = [
-        {
-          name: 'tago_analysis_memory_bytes',
-          labels: { analysis_name: 'a1' },
-          value: 100,
-        },
-        {
-          name: 'tago_analysis_memory_bytes',
-          labels: { analysis_name: 'a2' },
-          value: 200,
-        },
-        {
-          name: 'tago_analysis_memory_bytes',
-          labels: { analysis_name: 'a3' },
-          value: 150,
-        },
-        { name: 'tago_other_metric', labels: {}, value: 500 },
-      ];
+      const metricsMap = new Map([
+        [
+          'tago_analysis_memory_bytes',
+          [
+            {
+              name: 'tago_analysis_memory_bytes',
+              labels: { analysis_name: 'a1' },
+              value: 100,
+            },
+            {
+              name: 'tago_analysis_memory_bytes',
+              labels: { analysis_name: 'a2' },
+              value: 200,
+            },
+            {
+              name: 'tago_analysis_memory_bytes',
+              labels: { analysis_name: 'a3' },
+              value: 150,
+            },
+          ],
+        ],
+        [
+          'tago_other_metric',
+          [
+            {
+              name: 'tago_other_metric',
+              labels: {},
+              value: 500,
+            },
+          ],
+        ],
+      ]);
 
       const result = metricsService.sumMetricValues(
-        metrics,
+        metricsMap,
         'tago_analysis_memory_bytes',
       );
 
@@ -201,15 +288,28 @@ tago_test 42`;
     });
 
     it('should return 0 if no matching metrics', () => {
-      const metrics = [{ name: 'tago_other', labels: {}, value: 10 }];
+      const metricsMap = new Map([
+        [
+          'tago_other',
+          [
+            {
+              name: 'tago_other',
+              labels: {},
+              value: 10,
+            },
+          ],
+        ],
+      ]);
 
-      const result = metricsService.sumMetricValues(metrics, 'tago_missing');
+      const result = metricsService.sumMetricValues(metricsMap, 'tago_missing');
 
       expect(result).toBe(0);
     });
 
-    it('should handle empty metrics array', () => {
-      const result = metricsService.sumMetricValues([], 'tago_test');
+    it('should handle empty metrics Map', () => {
+      const metricsMap = new Map();
+
+      const result = metricsService.sumMetricValues(metricsMap, 'tago_test');
 
       expect(result).toBe(0);
     });
@@ -217,34 +317,52 @@ tago_test 42`;
 
   describe('calculateDNSHitRate', () => {
     it('should calculate hit rate correctly', () => {
-      const metrics = [
-        { name: 'tago_dns_cache_hits_total', labels: {}, value: 80 },
-        { name: 'tago_dns_cache_misses_total', labels: {}, value: 20 },
-      ];
+      const metricsMap = new Map([
+        [
+          'tago_dns_cache_hits_total',
+          [{ name: 'tago_dns_cache_hits_total', labels: {}, value: 80 }],
+        ],
+        [
+          'tago_dns_cache_misses_total',
+          [{ name: 'tago_dns_cache_misses_total', labels: {}, value: 20 }],
+        ],
+      ]);
 
-      const hitRate = metricsService.calculateDNSHitRate(metrics);
+      const hitRate = metricsService.calculateDNSHitRate(metricsMap);
 
       expect(hitRate).toBe(80);
     });
 
     it('should return 0 if no hits or misses', () => {
-      const metrics = [
-        { name: 'tago_dns_cache_hits_total', labels: {}, value: 0 },
-        { name: 'tago_dns_cache_misses_total', labels: {}, value: 0 },
-      ];
+      const metricsMap = new Map([
+        [
+          'tago_dns_cache_hits_total',
+          [{ name: 'tago_dns_cache_hits_total', labels: {}, value: 0 }],
+        ],
+        [
+          'tago_dns_cache_misses_total',
+          [{ name: 'tago_dns_cache_misses_total', labels: {}, value: 0 }],
+        ],
+      ]);
 
-      const hitRate = metricsService.calculateDNSHitRate(metrics);
+      const hitRate = metricsService.calculateDNSHitRate(metricsMap);
 
       expect(hitRate).toBe(0);
     });
 
     it('should handle 100% hit rate', () => {
-      const metrics = [
-        { name: 'tago_dns_cache_hits_total', labels: {}, value: 100 },
-        { name: 'tago_dns_cache_misses_total', labels: {}, value: 0 },
-      ];
+      const metricsMap = new Map([
+        [
+          'tago_dns_cache_hits_total',
+          [{ name: 'tago_dns_cache_hits_total', labels: {}, value: 100 }],
+        ],
+        [
+          'tago_dns_cache_misses_total',
+          [{ name: 'tago_dns_cache_misses_total', labels: {}, value: 0 }],
+        ],
+      ]);
 
-      const hitRate = metricsService.calculateDNSHitRate(metrics);
+      const hitRate = metricsService.calculateDNSHitRate(metricsMap);
 
       expect(hitRate).toBe(100);
     });
@@ -252,28 +370,33 @@ tago_test 42`;
 
   describe('calculateHTTPMetrics', () => {
     it('should calculate request rate and error rate', () => {
-      const metrics = [
-        {
-          name: 'tago_http_requests_total',
-          labels: { status: '200' },
-          value: 90,
-        },
-        {
-          name: 'tago_http_requests_total',
-          labels: { status: '404' },
-          value: 5,
-        },
-        {
-          name: 'tago_http_requests_total',
-          labels: { status: '500' },
-          value: 5,
-        },
-      ];
+      const metricsMap = new Map([
+        [
+          'tago_http_requests_total',
+          [
+            {
+              name: 'tago_http_requests_total',
+              labels: { status: '200' },
+              value: 90,
+            },
+            {
+              name: 'tago_http_requests_total',
+              labels: { status: '404' },
+              value: 5,
+            },
+            {
+              name: 'tago_http_requests_total',
+              labels: { status: '500' },
+              value: 5,
+            },
+          ],
+        ],
+      ]);
 
       // Clear previous values to ensure clean calculation
       metricsService.lastValues.clear();
 
-      const result = metricsService.calculateHTTPMetrics(metrics);
+      const result = metricsService.calculateHTTPMetrics(metricsMap);
 
       expect(result.errorRate).toBeCloseTo(5, 1); // 5/100 * 100 = 5%
       expect(result).toHaveProperty('requestRate');
@@ -282,27 +405,39 @@ tago_test 42`;
     });
 
     it('should calculate latency percentiles', () => {
-      const metrics = [
-        {
-          name: 'tago_http_requests_total',
-          labels: { status: '200' },
-          value: 100,
-        },
-        { name: 'tago_http_duration_seconds', labels: {}, value: 0.1 },
-        { name: 'tago_http_duration_seconds', labels: {}, value: 0.2 },
-        { name: 'tago_http_duration_seconds', labels: {}, value: 0.5 },
-        { name: 'tago_http_duration_seconds', labels: {}, value: 0.15 },
-        { name: 'tago_http_duration_seconds', labels: {}, value: 0.25 },
-      ];
+      const metricsMap = new Map([
+        [
+          'tago_http_requests_total',
+          [
+            {
+              name: 'tago_http_requests_total',
+              labels: { status: '200' },
+              value: 100,
+            },
+          ],
+        ],
+        [
+          'tago_http_duration_seconds',
+          [
+            { name: 'tago_http_duration_seconds', labels: {}, value: 0.1 },
+            { name: 'tago_http_duration_seconds', labels: {}, value: 0.2 },
+            { name: 'tago_http_duration_seconds', labels: {}, value: 0.5 },
+            { name: 'tago_http_duration_seconds', labels: {}, value: 0.15 },
+            { name: 'tago_http_duration_seconds', labels: {}, value: 0.25 },
+          ],
+        ],
+      ]);
 
-      const result = metricsService.calculateHTTPMetrics(metrics);
+      const result = metricsService.calculateHTTPMetrics(metricsMap);
 
       expect(result.p95Latency).toBeGreaterThan(0);
       expect(result.p99Latency).toBeGreaterThan(0);
     });
 
-    it('should handle empty metrics', () => {
-      const result = metricsService.calculateHTTPMetrics([]);
+    it('should handle empty metrics Map', () => {
+      const metricsMap = new Map();
+
+      const result = metricsService.calculateHTTPMetrics(metricsMap);
 
       expect(result.requestRate).toBe(0);
       expect(result.errorRate).toBe(0);
@@ -645,9 +780,12 @@ tago_another_valid{label="value"} 456`;
 
       const result = metricsService.parsePrometheusMetrics(metricsString);
 
-      expect(result).toHaveLength(2);
-      expect(result[0].name).toBe('tago_valid_metric');
-      expect(result[1].name).toBe('tago_another_valid');
+      expect(result).toBeInstanceOf(Map);
+      expect(result.size).toBe(2);
+      expect(result.get('tago_valid_metric')[0].name).toBe('tago_valid_metric');
+      expect(result.get('tago_another_valid')[0].name).toBe(
+        'tago_another_valid',
+      );
     });
 
     it('should handle negative values', () => {
@@ -655,7 +793,7 @@ tago_another_valid{label="value"} 456`;
 
       const result = metricsService.parsePrometheusMetrics(metricsString);
 
-      expect(result[0].value).toBe(-42.5);
+      expect(result.get('tago_metric')[0].value).toBe(-42.5);
     });
 
     it('should handle very large numbers', () => {
@@ -663,7 +801,7 @@ tago_another_valid{label="value"} 456`;
 
       const result = metricsService.parsePrometheusMetrics(metricsString);
 
-      expect(result[0].value).toBe(999999999999999);
+      expect(result.get('tago_metric')[0].value).toBe(999999999999999);
     });
 
     it('should handle zero values', () => {
@@ -672,8 +810,8 @@ tago_metric2{label="test"} 0.0`;
 
       const result = metricsService.parsePrometheusMetrics(metricsString);
 
-      expect(result[0].value).toBe(0);
-      expect(result[1].value).toBe(0);
+      expect(result.get('tago_metric1')[0].value).toBe(0);
+      expect(result.get('tago_metric2')[0].value).toBe(0);
     });
   });
 });

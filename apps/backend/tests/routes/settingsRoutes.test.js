@@ -35,7 +35,7 @@ vi.mock('../../src/middleware/validateRequest.js', () => ({
 }));
 
 vi.mock('../../src/controllers/settingsController.js', () => ({
-  default: {
+  SettingsController: {
     getDNSConfig: vi.fn((req, res) =>
       res.json({
         config: { enabled: true, ttl: 300, maxEntries: 1000 },
@@ -135,13 +135,13 @@ describe('Settings Routes - WITH REAL AUTH', () => {
     const controllerModule = await import(
       '../../src/controllers/settingsController.js'
     );
-    SettingsController = controllerModule.default;
+    SettingsController = controllerModule.SettingsController;
 
     // Import routes with REAL auth middleware
-    const { default: settingsRoutes } = await import(
+    const { settingsRouter } = await import(
       '../../src/routes/settingsRoutes.js'
     );
-    app.use('/api/settings', settingsRoutes);
+    app.use('/api/settings', settingsRouter);
   });
 
   describe('Authentication Requirements', () => {
@@ -595,6 +595,124 @@ describe('Settings Routes - WITH REAL AUTH', () => {
       expect(SettingsController.clearDNSCache).toHaveBeenCalled();
       expect(SettingsController.deleteDNSCacheEntry).toHaveBeenCalled();
       expect(SettingsController.resetDNSStats).toHaveBeenCalled();
+    });
+  });
+
+  describe('Query Parameter Validation - getDNSConfig', () => {
+    it('should reject getDNSConfig with unexpected query parameters', async () => {
+      // This test verifies the schema rejects unexpected query params
+      // Even though validateRequest is mocked, we verify the schema exists
+      const { settingsValidationSchemas } = await import(
+        '../../src/validation/settingsSchemas.js'
+      );
+
+      expect(settingsValidationSchemas.getDNSConfig).toBeDefined();
+      expect(settingsValidationSchemas.getDNSConfig.query).toBeDefined();
+
+      // Test that the schema validates correctly (empty query)
+      const emptyResult =
+        settingsValidationSchemas.getDNSConfig.query.safeParse({});
+      expect(emptyResult.success).toBe(true);
+
+      // Test that the schema rejects unexpected params (strict mode)
+      const invalidResult =
+        settingsValidationSchemas.getDNSConfig.query.safeParse({
+          unexpected: 'param',
+        });
+      expect(invalidResult.success).toBe(false);
+    });
+
+    it('should allow getDNSConfig without query parameters', async () => {
+      const adminCookie = await getSessionCookie('admin');
+
+      await request(app)
+        .get('/api/settings/dns/config')
+        .set('Cookie', adminCookie)
+        .expect(200);
+
+      expect(SettingsController.getDNSConfig).toHaveBeenCalled();
+    });
+  });
+
+  describe('Query Parameter Validation - getDNSCacheEntries', () => {
+    it('should validate pagination parameters for getDNSCacheEntries', async () => {
+      const { settingsValidationSchemas } = await import(
+        '../../src/validation/settingsSchemas.js'
+      );
+
+      expect(settingsValidationSchemas.getDNSCacheEntries).toBeDefined();
+      expect(settingsValidationSchemas.getDNSCacheEntries.query).toBeDefined();
+
+      // Valid page and limit
+      const validResult =
+        settingsValidationSchemas.getDNSCacheEntries.query.safeParse({
+          page: '1',
+          limit: '50',
+        });
+      expect(validResult.success).toBe(true);
+      if (validResult.success) {
+        expect(validResult.data.page).toBe(1);
+        expect(validResult.data.limit).toBe(50);
+      }
+
+      // Invalid page (not a number)
+      const invalidPageResult =
+        settingsValidationSchemas.getDNSCacheEntries.query.safeParse({
+          page: 'invalid',
+        });
+      expect(invalidPageResult.success).toBe(false);
+
+      // Invalid limit (exceeds max)
+      const invalidLimitResult =
+        settingsValidationSchemas.getDNSCacheEntries.query.safeParse({
+          limit: '5000',
+        });
+      expect(invalidLimitResult.success).toBe(false);
+
+      // Valid filter parameter
+      const filterResult =
+        settingsValidationSchemas.getDNSCacheEntries.query.safeParse({
+          filter: 'example.com',
+        });
+      expect(filterResult.success).toBe(true);
+
+      // Empty query (all optional)
+      const emptyResult =
+        settingsValidationSchemas.getDNSCacheEntries.query.safeParse({});
+      expect(emptyResult.success).toBe(true);
+    });
+
+    it('should allow getDNSCacheEntries without query parameters', async () => {
+      const adminCookie = await getSessionCookie('admin');
+
+      await request(app)
+        .get('/api/settings/dns/entries')
+        .set('Cookie', adminCookie)
+        .expect(200);
+
+      expect(SettingsController.getDNSCacheEntries).toHaveBeenCalled();
+    });
+
+    it('should allow getDNSCacheEntries with pagination parameters', async () => {
+      const adminCookie = await getSessionCookie('admin');
+
+      await request(app)
+        .get('/api/settings/dns/entries?page=1&limit=50')
+        .set('Cookie', adminCookie)
+        .expect(200);
+
+      expect(SettingsController.getDNSCacheEntries).toHaveBeenCalled();
+    });
+
+    it('should allow getDNSCacheEntries with filter parameter', async () => {
+      const adminCookie = await getSessionCookie('admin');
+
+      await request(app)
+        .get('/api/settings/dns/entries?filter=example.com')
+        .set('Cookie', adminCookie)
+        .expect(200);
+
+      expect(SettingsController.getDNSCacheEntries).toHaveBeenCalled();
     });
   });
 

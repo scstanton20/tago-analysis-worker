@@ -41,8 +41,8 @@ describe('Auth Routes - Documentation Only', () => {
     app.use(express.json());
 
     // Import routes (documentation-only)
-    const routesModule = await import('../../src/routes/authRoutes.js');
-    authRoutes = routesModule.default;
+    const { authRouter } = await import('../../src/routes/authRoutes.js');
+    authRoutes = authRouter;
 
     // Mount routes
     app.use('/api/auth', authRoutes);

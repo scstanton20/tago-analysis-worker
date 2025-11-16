@@ -1,18 +1,16 @@
 import { analysisService } from '../services/analysisService.js';
-import { sseManager } from '../utils/sse.js';
+import { sseManager } from '../utils/sse/index.js';
 import path from 'path';
-import config from '../config/default.js';
+import { config } from '../config/default.js';
 import { promises as fs } from 'fs';
 import sanitize from 'sanitize-filename';
+import { FILE_SIZE } from '../constants.js';
 import {
   safeWriteFile,
   safeUnlink,
   sanitizeAndValidateFilename,
 } from '../utils/safePath.js';
-import {
-  handleError,
-  broadcastTeamStructureUpdate,
-} from '../utils/responseHelpers.js';
+import { broadcastTeamStructureUpdate } from '../utils/responseHelpers.js';
 
 /**
  * Controller class for managing analysis operations
@@ -22,7 +20,7 @@ import {
  * All methods are static and follow Express route handler pattern (req, res).
  * Request-scoped logging is available via req.log.
  */
-class AnalysisController {
+export class AnalysisController {
   /**
    * Upload a new analysis file
    * Creates analysis directory structure, saves file, and assigns to team/folder
@@ -61,21 +59,24 @@ class AnalysisController {
     const analysis = req.files.analysis;
 
     // Check file size (50MB limit)
-    const maxSize = 50 * 1024 * 1024; // 50MB in bytes
-    if (analysis.size > maxSize) {
+    if (analysis.size > FILE_SIZE.MEGABYTES_50) {
       req.log.warn(
         {
           action: 'uploadAnalysis',
           fileName: analysis.name,
           fileSize: analysis.size,
-          maxSize: maxSize,
+          maxSize: FILE_SIZE.MEGABYTES_50,
         },
         'Upload failed: file size exceeds limit',
       );
       return res.status(413).json({
         error: 'File size exceeds the maximum limit of 50MB',
         maxSizeMB: 50,
-        fileSizeMB: (analysis.size / (1024 * 1024)).toFixed(2),
+        fileSizeMB: (
+          analysis.size /
+          FILE_SIZE.KILOBYTES /
+          FILE_SIZE.KILOBYTES
+        ).toFixed(2),
       });
     }
 
@@ -92,43 +93,39 @@ class AnalysisController {
       'Uploading analysis',
     );
 
-    try {
-      const result = await analysisService.uploadAnalysis(
-        analysis,
-        teamId,
-        targetFolderId,
-      );
+    const result = await analysisService.uploadAnalysis(
+      analysis,
+      teamId,
+      targetFolderId,
+    );
 
-      req.log.info(
-        { action: 'uploadAnalysis', analysisName: result.analysisName, teamId },
-        'Analysis uploaded',
-      );
+    req.log.info(
+      { action: 'uploadAnalysis', analysisName: result.analysisName, teamId },
+      'Analysis uploaded',
+    );
 
-      // Get the complete analysis data to broadcast
-      const analysisData = await analysisService.getAllAnalyses();
-      const createdAnalysis = analysisData[result.analysisName];
+    // Get the complete analysis data to broadcast
+    const analysisData = await analysisService.getAllAnalyses();
+    const createdAnalysis = analysisData[result.analysisName];
 
-      // Broadcast analysis creation to team users only
-      sseManager.broadcastAnalysisUpdate(
-        result.analysisName,
-        {
-          type: 'analysisCreated',
-          data: {
-            analysis: result.analysisName,
-            teamId: teamId,
-            analysisData: createdAnalysis,
-          },
+    // Broadcast analysis creation to team users only
+    sseManager.broadcastAnalysisUpdate(
+      result.analysisName,
+      {
+        type: 'analysisCreated',
+        data: {
+          analysis: result.analysisName,
+          teamId: teamId,
+          analysisData: createdAnalysis,
         },
-        teamId,
-      );
+      },
+      teamId,
+    );
 
-      // Broadcast team structure update
-      await broadcastTeamStructureUpdate(sseManager, teamId);
+    // Broadcast team structure update
+    await broadcastTeamStructureUpdate(sseManager, teamId);
 
-      res.json(result);
-    } catch (error) {
-      handleError(res, error, 'uploading analysis', { logger: req.logger });
-    }
+    res.json(result);
   }
 
   /**
@@ -154,41 +151,34 @@ class AnalysisController {
       'Retrieving analyses',
     );
 
-    try {
-      // Get analyses filtered at service layer for security
-      let analyses;
+    // Get analyses filtered at service layer for security
+    let analyses;
 
-      if (req.user.role === 'admin') {
-        // Admin users see all analyses - no filter
-        analyses = await analysisService.getAllAnalyses(null, req.log);
-        req.log.info(
-          { action: 'getAnalyses', count: Object.keys(analyses).length },
-          'All analyses retrieved (admin)',
-        );
-      } else {
-        // Get user's allowed team IDs for view_analyses permission
-        const { getUserTeamIds } = await import(
-          '../middleware/betterAuthMiddleware.js'
-        );
+    if (req.user.role === 'admin') {
+      // Admin users see all analyses - no filter
+      analyses = await analysisService.getAllAnalyses(null, req.log);
+      req.log.info(
+        { action: 'getAnalyses', count: Object.keys(analyses).length },
+        'All analyses retrieved (admin)',
+      );
+    } else {
+      // Get user's allowed team IDs for view_analyses permission
+      const { getUserTeamIds } = await import(
+        '../middleware/betterAuthMiddleware.js'
+      );
 
-        const allowedTeamIds = getUserTeamIds(req.user.id, 'view_analyses');
+      const allowedTeamIds = getUserTeamIds(req.user.id, 'view_analyses');
 
-        // Service filters by team ID before loading file stats (prevents timing attacks)
-        analyses = await analysisService.getAllAnalyses(
-          allowedTeamIds,
-          req.log,
-        );
+      // Service filters by team ID before loading file stats (prevents timing attacks)
+      analyses = await analysisService.getAllAnalyses(allowedTeamIds, req.log);
 
-        req.log.info(
-          { action: 'getAnalyses', count: Object.keys(analyses).length },
-          'Filtered analyses retrieved',
-        );
-      }
-
-      res.json(analyses);
-    } catch (error) {
-      handleError(res, error, 'retrieving analyses', { logger: req.logger });
+      req.log.info(
+        { action: 'getAnalyses', count: Object.keys(analyses).length },
+        'Filtered analyses retrieved',
+      );
     }
+
+    res.json(analyses);
   }
 
   /**
@@ -214,18 +204,14 @@ class AnalysisController {
 
     req.log.info({ action: 'runAnalysis', fileName }, 'Running analysis');
 
-    try {
-      const result = await analysisService.runAnalysis(fileName);
+    const result = await analysisService.runAnalysis(fileName);
 
-      req.log.info({ action: 'runAnalysis', fileName }, 'Analysis started');
+    req.log.info({ action: 'runAnalysis', fileName }, 'Analysis started');
 
-      // No SSE broadcast needed here - the actual process lifecycle event
-      // (analysisUpdate) will be sent from analysisProcess.js when the child process starts
+    // No SSE broadcast needed here - the actual process lifecycle event
+    // (analysisUpdate) will be sent from analysisProcess.js when the child process starts
 
-      res.json(result);
-    } catch (error) {
-      handleError(res, error, 'running analysis', { logger: req.logger });
-    }
+    res.json(result);
   }
 
   /**
@@ -251,18 +237,14 @@ class AnalysisController {
 
     req.log.info({ action: 'stopAnalysis', fileName }, 'Stopping analysis');
 
-    try {
-      const result = await analysisService.stopAnalysis(fileName);
+    const result = await analysisService.stopAnalysis(fileName);
 
-      req.log.info({ action: 'stopAnalysis', fileName }, 'Analysis stopped');
+    req.log.info({ action: 'stopAnalysis', fileName }, 'Analysis stopped');
 
-      // No SSE broadcast needed here - the actual process lifecycle event
-      // (analysisUpdate) will be sent from analysisProcess.js when the child process exits
+    // No SSE broadcast needed here - the actual process lifecycle event
+    // (analysisUpdate) will be sent from analysisProcess.js when the child process exits
 
-      res.json(result);
-    } catch (error) {
-      handleError(res, error, 'stopping analysis', { logger: req.logger });
-    }
+    res.json(result);
   }
 
   /**
@@ -290,44 +272,40 @@ class AnalysisController {
 
     req.log.info({ action: 'deleteAnalysis', fileName }, 'Deleting analysis');
 
-    try {
-      // Get analysis data before deletion for broadcast
-      const analyses = await analysisService.getAllAnalyses();
-      const analysisToDelete = analyses[fileName];
+    // Get analysis data before deletion for broadcast
+    const analyses = await analysisService.getAllAnalyses();
+    const analysisToDelete = analyses[fileName];
 
-      await analysisService.deleteAnalysis(fileName);
+    await analysisService.deleteAnalysis(fileName);
 
-      req.log.info(
-        {
-          action: 'deleteAnalysis',
+    req.log.info(
+      {
+        action: 'deleteAnalysis',
+        fileName,
+        teamId: analysisToDelete?.teamId,
+      },
+      'Analysis deleted',
+    );
+
+    // Broadcast deletion with analysis data
+    sseManager.broadcastAnalysisUpdate(
+      fileName,
+      {
+        type: 'analysisDeleted',
+        data: {
           fileName,
           teamId: analysisToDelete?.teamId,
         },
-        'Analysis deleted',
-      );
+      },
+      analysisToDelete?.teamId,
+    );
 
-      // Broadcast deletion with analysis data
-      sseManager.broadcastAnalysisUpdate(
-        fileName,
-        {
-          type: 'analysisDeleted',
-          data: {
-            fileName,
-            teamId: analysisToDelete?.teamId,
-          },
-        },
-        analysisToDelete?.teamId,
-      );
-
-      // Broadcast team structure update
-      if (analysisToDelete?.teamId) {
-        await broadcastTeamStructureUpdate(sseManager, analysisToDelete.teamId);
-      }
-
-      res.json({ success: true });
-    } catch (error) {
-      handleError(res, error, 'deleting analysis', { logger: req.logger });
+    // Broadcast team structure update
+    if (analysisToDelete?.teamId) {
+      await broadcastTeamStructureUpdate(sseManager, analysisToDelete.teamId);
     }
+
+    res.json({ success: true });
   }
 
   /**
@@ -360,53 +338,38 @@ class AnalysisController {
       'Getting analysis content',
     );
 
-    try {
-      let content;
+    let content;
 
-      if (version !== undefined) {
-        // Get version-specific content
-        const versionNumber = parseInt(version, 10);
-        if (isNaN(versionNumber) || versionNumber < 0) {
-          req.log.warn(
-            {
-              action: 'getAnalysisContent',
-              fileName,
-              version,
-            },
-            'Invalid version number',
-          );
-          return res.status(400).json({ error: 'Invalid version number' });
-        }
-        content = await analysisService.getVersionContent(
-          fileName,
-          versionNumber,
-        );
-      } else {
-        // Get current content
-        content = await analysisService.getAnalysisContent(fileName);
-      }
-
-      req.log.info(
-        { action: 'getAnalysisContent', fileName, version },
-        'Analysis content retrieved',
-      );
-
-      res.set('Content-Type', 'text/plain');
-      res.send(content);
-    } catch (error) {
-      if (error.code === 'ENOENT') {
+    if (version !== undefined) {
+      // Get version-specific content
+      const versionNumber = parseInt(version, 10);
+      if (isNaN(versionNumber) || versionNumber < 0) {
         req.log.warn(
-          { action: 'getAnalysisContent', fileName },
-          'Analysis file not found',
+          {
+            action: 'getAnalysisContent',
+            fileName,
+            version,
+          },
+          'Invalid version number',
         );
-        return res.status(404).json({
-          error: `Analysis file ${fileName} not found`,
-        });
+        return res.status(400).json({ error: 'Invalid version number' });
       }
-      handleError(res, error, 'getting analysis content', {
-        logger: req.logger,
-      });
+      content = await analysisService.getVersionContent(
+        fileName,
+        versionNumber,
+      );
+    } else {
+      // Get current content
+      content = await analysisService.getAnalysisContent(fileName);
     }
+
+    req.log.info(
+      { action: 'getAnalysisContent', fileName, version },
+      'Analysis content retrieved',
+    );
+
+    res.set('Content-Type', 'text/plain');
+    res.send(content);
   }
 
   /**
@@ -439,43 +402,39 @@ class AnalysisController {
     // Validation handled by middleware
     req.log.info({ action: 'updateAnalysis', fileName }, 'Updating analysis');
 
-    try {
-      const result = await analysisService.updateAnalysis(fileName, {
-        content,
-      });
+    const result = await analysisService.updateAnalysis(fileName, {
+      content,
+    });
 
-      req.log.info(
-        {
-          action: 'updateAnalysis',
-          fileName,
-          restarted: result.restarted,
-        },
-        'Analysis updated',
-      );
-
-      // Get updated analysis data
-      const analyses = await analysisService.getAllAnalyses();
-      const updatedAnalysis = analyses[fileName];
-
-      // Broadcast update with complete analysis data
-      sseManager.broadcastAnalysisUpdate(fileName, {
-        type: 'analysisUpdated',
-        data: {
-          fileName,
-          status: 'updated',
-          restarted: result.restarted,
-          ...updatedAnalysis,
-        },
-      });
-
-      res.json({
-        success: true,
-        message: 'Analysis updated successfully',
+    req.log.info(
+      {
+        action: 'updateAnalysis',
+        fileName,
         restarted: result.restarted,
-      });
-    } catch (error) {
-      handleError(res, error, 'updating analysis', { logger: req.logger });
-    }
+      },
+      'Analysis updated',
+    );
+
+    // Get updated analysis data
+    const analyses = await analysisService.getAllAnalyses();
+    const updatedAnalysis = analyses[fileName];
+
+    // Broadcast update with complete analysis data
+    sseManager.broadcastAnalysisUpdate(fileName, {
+      type: 'analysisUpdated',
+      data: {
+        fileName,
+        status: 'updated',
+        restarted: result.restarted,
+        ...updatedAnalysis,
+      },
+    });
+
+    res.json({
+      success: true,
+      message: 'Analysis updated successfully',
+      restarted: result.restarted,
+    });
   }
 
   /**
@@ -517,51 +476,47 @@ class AnalysisController {
       'Renaming analysis',
     );
 
-    try {
-      const result = await analysisService.renameAnalysis(
-        fileName,
-        sanitizedNewFileName,
-      );
+    const result = await analysisService.renameAnalysis(
+      fileName,
+      sanitizedNewFileName,
+    );
 
-      req.log.info(
-        {
-          action: 'renameAnalysis',
-          oldFileName: fileName,
-          newFileName: sanitizedNewFileName,
-          restarted: result.restarted,
-        },
-        'Analysis renamed',
-      );
-
-      // Get updated analysis data
-      const analyses = await analysisService.getAllAnalyses();
-      const renamedAnalysis = analyses[sanitizedNewFileName];
-
-      // Broadcast update with complete analysis data
-      sseManager.broadcastAnalysisUpdate(sanitizedNewFileName, {
-        type: 'analysisRenamed',
-        data: {
-          oldFileName: fileName,
-          newFileName: sanitizedNewFileName,
-          status: 'updated',
-          restarted: result.restarted,
-          ...renamedAnalysis,
-        },
-      });
-
-      // Broadcast team structure update so team-based analysis lists update in real-time
-      if (renamedAnalysis?.teamId) {
-        await broadcastTeamStructureUpdate(sseManager, renamedAnalysis.teamId);
-      }
-
-      res.json({
-        success: true,
-        message: 'Analysis renamed successfully',
+    req.log.info(
+      {
+        action: 'renameAnalysis',
+        oldFileName: fileName,
+        newFileName: sanitizedNewFileName,
         restarted: result.restarted,
-      });
-    } catch (error) {
-      handleError(res, error, 'renaming analysis', { logger: req.logger });
+      },
+      'Analysis renamed',
+    );
+
+    // Get updated analysis data
+    const analyses = await analysisService.getAllAnalyses();
+    const renamedAnalysis = analyses[sanitizedNewFileName];
+
+    // Broadcast update with complete analysis data
+    sseManager.broadcastAnalysisUpdate(sanitizedNewFileName, {
+      type: 'analysisRenamed',
+      data: {
+        oldFileName: fileName,
+        newFileName: sanitizedNewFileName,
+        status: 'updated',
+        restarted: result.restarted,
+        ...renamedAnalysis,
+      },
+    });
+
+    // Broadcast team structure update so team-based analysis lists update in real-time
+    if (renamedAnalysis?.teamId) {
+      await broadcastTeamStructureUpdate(sseManager, renamedAnalysis.teamId);
     }
+
+    res.json({
+      success: true,
+      message: 'Analysis renamed successfully',
+      restarted: result.restarted,
+    });
   }
 
   /**
@@ -594,22 +549,18 @@ class AnalysisController {
       'Getting analysis logs',
     );
 
-    try {
-      const logs = await analysisService.getLogs(fileName, page, limit);
+    const logs = await analysisService.getLogs(fileName, page, limit);
 
-      req.log.info(
-        {
-          action: 'getLogs',
-          fileName,
-          count: logs.logs?.length,
-        },
-        'Logs retrieved',
-      );
+    req.log.info(
+      {
+        action: 'getLogs',
+        fileName,
+        count: logs.logs?.length,
+      },
+      'Logs retrieved',
+    );
 
-      res.json(logs);
-    } catch (error) {
-      handleError(res, error, 'getting logs', { logger: req.logger });
-    }
+    res.json(logs);
   }
 
   /**
@@ -646,73 +597,92 @@ class AnalysisController {
     const fileName = sanitizeAndValidateFilename(req.params.fileName);
     const { timeRange } = req.query;
 
-    // Validation handled by middleware
     req.log.info(
       { action: 'downloadLogs', fileName, timeRange },
       'Downloading logs',
     );
 
+    if (timeRange === 'all') {
+      return AnalysisController.handleFullLogDownload(fileName, req, res);
+    }
+
+    return AnalysisController.handleFilteredLogDownload(
+      fileName,
+      timeRange,
+      req,
+      res,
+    );
+  }
+
+  /**
+   * Handle download of complete log file
+   * Streams the full analysis.log file directly
+   *
+   * @param {string} fileName - Analysis file name
+   * @param {Object} req - Express request
+   * @param {Object} res - Express response
+   * @returns {Promise<void>}
+   */
+  static async handleFullLogDownload(fileName, req, res) {
+    const expectedLogFile = path.join(
+      config.paths.analysis,
+      fileName,
+      'logs',
+      'analysis.log',
+    );
+
+    // Verify file exists
     try {
-      // Get logs from analysisService using sanitized filename
+      await fs.access(expectedLogFile);
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        req.log.warn(
+          { action: 'downloadLogs', fileName },
+          'Log file not found',
+        );
+        return res.status(404).json({
+          error: `Log file for ${fileName} not found`,
+        });
+      }
+      throw error;
+    }
+
+    AnalysisController.setLogDownloadHeaders(fileName, res);
+
+    req.log.info({ action: 'downloadLogs', fileName }, 'Streaming log file');
+
+    // Stream file directly
+    res.sendFile(path.resolve(expectedLogFile), (err) => {
+      if (err && !res.headersSent) {
+        req.log.error(
+          { action: 'downloadLogs', fileName, err },
+          'Error streaming log file',
+        );
+        return res.status(500).json({ error: 'Failed to download file' });
+      }
+    });
+  }
+
+  /**
+   * Handle download of filtered log file by time range
+   * Creates temporary filtered file and streams it
+   *
+   * @param {string} fileName - Analysis file name
+   * @param {string} timeRange - Time range filter (1h, 24h, etc.)
+   * @param {Object} req - Express request
+   * @param {Object} res - Express response
+   * @returns {Promise<void>}
+   */
+  static async handleFilteredLogDownload(fileName, timeRange, req, res) {
+    try {
+      // Get filtered log content
       const result = await analysisService.getLogsForDownload(
         fileName,
         timeRange,
       );
-
-      if (timeRange === 'all') {
-        // Construct the log file path using sanitized fileName
-        const expectedLogFile = path.join(
-          config.paths.analysis,
-          fileName,
-          'logs',
-          'analysis.log',
-        );
-
-        // Verify the file exists before attempting to serve it
-        try {
-          await fs.access(expectedLogFile);
-        } catch (error) {
-          if (error.code === 'ENOENT') {
-            req.log.warn(
-              { action: 'downloadLogs', fileName },
-              'Log file not found',
-            );
-            return res.status(404).json({
-              error: `Log file for ${fileName} not found`,
-            });
-          }
-          throw error;
-        }
-
-        // Set download headers
-        const downloadFilename = `${sanitize(path.parse(fileName).name)}.log`;
-        res.setHeader(
-          'Content-Disposition',
-          `attachment; filename="${downloadFilename}"`,
-        );
-        res.setHeader('Content-Type', 'text/plain');
-
-        req.log.info(
-          { action: 'downloadLogs', fileName, timeRange },
-          'Streaming log file',
-        );
-
-        // Stream the file directly - no memory loading
-        return res.sendFile(path.resolve(expectedLogFile), (err) => {
-          if (err && !res.headersSent) {
-            req.log.error(
-              { action: 'downloadLogs', fileName, err },
-              'Error streaming log file',
-            );
-            return res.status(500).json({ error: 'Failed to download file' });
-          }
-        });
-      }
-
-      // For filtered time ranges, use the content approach since files are smaller
       const { content } = result;
 
-      // Create temporary file path in the analysis logs directory
+      // Create temp file
       const tempLogFile = path.join(
         config.paths.analysis,
         fileName,
@@ -722,74 +692,68 @@ class AnalysisController {
 
       const resolvedTempLogFile = path.resolve(tempLogFile);
 
-      try {
-        await safeWriteFile(
-          resolvedTempLogFile,
-          content,
-          config.paths.analysis,
-        );
+      await safeWriteFile(resolvedTempLogFile, content, config.paths.analysis);
 
-        // Set download headers
-        const downloadFilename = `${sanitize(path.parse(fileName).name)}.log`;
-        res.setHeader(
-          'Content-Disposition',
-          `attachment; filename="${downloadFilename}"`,
-        );
-        res.setHeader('Content-Type', 'text/plain');
+      AnalysisController.setLogDownloadHeaders(fileName, res);
 
-        req.log.info(
-          { action: 'downloadLogs', fileName, timeRange },
-          'Sending filtered log file',
-        );
+      req.log.info(
+        { action: 'downloadLogs', fileName, timeRange },
+        'Sending filtered log file',
+      );
 
-        // Send the file and clean up after
-        res.sendFile(resolvedTempLogFile, (err) => {
-          // Clean up temp file
-          safeUnlink(resolvedTempLogFile, config.paths.analysis).catch(
-            (unlinkError) => {
-              req.log.error(
-                {
-                  action: 'downloadLogs',
-                  fileName,
-                  err: unlinkError,
-                },
-                'Error cleaning up temporary file',
-              );
-            },
-          );
-
-          if (err && !res.headersSent) {
+      // Send and clean up
+      res.sendFile(resolvedTempLogFile, (err) => {
+        safeUnlink(resolvedTempLogFile, config.paths.analysis).catch(
+          (unlinkError) => {
             req.log.error(
-              { action: 'downloadLogs', fileName, err },
-              'Error sending file',
+              {
+                action: 'downloadLogs',
+                fileName,
+                err: unlinkError,
+              },
+              'Error cleaning up temporary file',
             );
-            return res.status(500).json({ error: 'Failed to download file' });
-          }
-        });
-      } catch (writeError) {
-        req.log.error(
-          {
-            action: 'downloadLogs',
-            fileName,
-            err: writeError,
           },
-          'Error writing temporary file',
         );
-        return res
-          .status(500)
-          .json({ error: 'Failed to generate download file' });
-      }
-    } catch (error) {
-      if (error.message.includes('Log file not found')) {
-        req.log.warn(
-          { action: 'downloadLogs', fileName },
-          'Log file not found',
-        );
-        return res.status(404).json({ error: error.message });
-      }
 
-      handleError(res, error, 'downloading logs', { logger: req.logger });
+        if (err && !res.headersSent) {
+          req.log.error(
+            { action: 'downloadLogs', fileName, err },
+            'Error sending file',
+          );
+          return res.status(500).json({ error: 'Failed to download file' });
+        }
+      });
+    } catch (writeError) {
+      req.log.error(
+        {
+          action: 'downloadLogs',
+          fileName,
+          err: writeError,
+        },
+        'Error writing temporary file',
+      );
+      return res.status(500).json({
+        error: 'Failed to generate download file',
+      });
     }
+  }
+
+  /**
+   * Set HTTP headers for log file download
+   * Configures Content-Disposition and Content-Type
+   *
+   * @param {string} fileName - Analysis file name
+   * @param {Object} res - Express response
+   * @returns {void}
+   */
+  static setLogDownloadHeaders(fileName, res) {
+    const downloadFilename = `${sanitize(path.parse(fileName).name)}.log`;
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${downloadFilename}"`,
+    );
+    res.setHeader('Content-Type', 'text/plain');
   }
 
   /**
@@ -815,29 +779,25 @@ class AnalysisController {
 
     req.log.info({ action: 'clearLogs', fileName }, 'Clearing analysis logs');
 
-    try {
-      const result = await analysisService.clearLogs(fileName);
+    const result = await analysisService.clearLogs(fileName);
 
-      req.log.info({ action: 'clearLogs', fileName }, 'Logs cleared');
+    req.log.info({ action: 'clearLogs', fileName }, 'Logs cleared');
 
-      // Broadcast logs cleared with the "Log file cleared" message included
-      // This avoids race conditions with separate log events
-      sseManager.broadcastAnalysisUpdate(fileName, {
-        type: 'logsCleared',
-        data: {
-          fileName,
-          clearMessage: {
-            timestamp: new Date().toLocaleString(),
-            message: 'Log file cleared',
-            level: 'info',
-          },
+    // Broadcast logs cleared with the "Log file cleared" message included
+    // This avoids race conditions with separate log events
+    sseManager.broadcastAnalysisUpdate(fileName, {
+      type: 'logsCleared',
+      data: {
+        fileName,
+        clearMessage: {
+          timestamp: new Date().toLocaleString(),
+          message: 'Log file cleared',
+          level: 'info',
         },
-      });
+      },
+    });
 
-      res.json(result);
-    } catch (error) {
-      handleError(res, error, 'clearing logs', { logger: req.logger });
-    }
+    res.json(result);
   }
 
   /**
@@ -871,49 +831,45 @@ class AnalysisController {
       'Downloading analysis',
     );
 
-    try {
-      let content;
-      if (version && version !== '0') {
-        // Download specific version
-        const versionNumber = parseInt(version, 10);
-        if (isNaN(versionNumber) || versionNumber < 1) {
-          req.log.warn(
-            {
-              action: 'downloadAnalysis',
-              fileName,
-              version,
-            },
-            'Download failed: invalid version number',
-          );
-          return res.status(400).json({ error: 'Invalid version number' });
-        }
-        content = await analysisService.getVersionContent(
-          fileName,
-          versionNumber,
+    let content;
+    if (version && version !== '0') {
+      // Download specific version
+      const versionNumber = parseInt(version, 10);
+      if (isNaN(versionNumber) || versionNumber < 1) {
+        req.log.warn(
+          {
+            action: 'downloadAnalysis',
+            fileName,
+            version,
+          },
+          'Download failed: invalid version number',
         );
-      } else {
-        // Download current version
-        content = await analysisService.getAnalysisContent(fileName);
+        return res.status(400).json({ error: 'Invalid version number' });
       }
-
-      req.log.info(
-        { action: 'downloadAnalysis', fileName, version },
-        'Analysis download prepared',
+      content = await analysisService.getVersionContent(
+        fileName,
+        versionNumber,
       );
-
-      // Set the download filename using headers with sanitized name
-      const versionSuffix = version && version !== '0' ? `_v${version}` : '';
-      const downloadFilename = `${sanitize(fileName)}${versionSuffix}.js`;
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename="${downloadFilename}"`,
-      );
-      res.setHeader('Content-Type', 'application/javascript');
-
-      res.send(content);
-    } catch (error) {
-      handleError(res, error, 'downloading analysis', { logger: req.logger });
+    } else {
+      // Download current version
+      content = await analysisService.getAnalysisContent(fileName);
     }
+
+    req.log.info(
+      { action: 'downloadAnalysis', fileName, version },
+      'Analysis download prepared',
+    );
+
+    // Set the download filename using headers with sanitized name
+    const versionSuffix = version && version !== '0' ? `_v${version}` : '';
+    const downloadFilename = `${sanitize(fileName)}${versionSuffix}.js`;
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${downloadFilename}"`,
+    );
+    res.setHeader('Content-Type', 'application/javascript');
+
+    res.send(content);
   }
 
   /**
@@ -941,22 +897,18 @@ class AnalysisController {
       'Getting analysis versions',
     );
 
-    try {
-      const versions = await analysisService.getVersions(fileName);
+    const versions = await analysisService.getVersions(fileName);
 
-      req.log.info(
-        {
-          action: 'getVersions',
-          fileName,
-          count: versions.length,
-        },
-        'Versions retrieved',
-      );
+    req.log.info(
+      {
+        action: 'getVersions',
+        fileName,
+        count: versions.length,
+      },
+      'Versions retrieved',
+    );
 
-      res.json(versions);
-    } catch (error) {
-      handleError(res, error, 'getting versions', { logger: req.logger });
-    }
+    res.json(versions);
   }
 
   /**
@@ -998,47 +950,43 @@ class AnalysisController {
       'Rolling back analysis',
     );
 
-    try {
-      const result = await analysisService.rollbackToVersion(
+    const result = await analysisService.rollbackToVersion(
+      fileName,
+      versionNumber,
+    );
+
+    req.log.info(
+      {
+        action: 'rollbackToVersion',
         fileName,
-        versionNumber,
-      );
-
-      req.log.info(
-        {
-          action: 'rollbackToVersion',
-          fileName,
-          version: versionNumber,
-          restarted: result.restarted,
-        },
-        'Analysis rolled back',
-      );
-
-      // Get updated analysis data
-      const analyses = await analysisService.getAllAnalyses();
-      const updatedAnalysis = analyses[fileName];
-
-      // Broadcast rollback with complete analysis data
-      sseManager.broadcastAnalysisUpdate(fileName, {
-        type: 'analysisRolledBack',
-        data: {
-          fileName,
-          version: versionNumber,
-          status: 'rolled back',
-          restarted: result.restarted,
-          ...updatedAnalysis,
-        },
-      });
-
-      res.json({
-        success: true,
-        message: `Analysis rolled back to version ${versionNumber}`,
         version: versionNumber,
         restarted: result.restarted,
-      });
-    } catch (error) {
-      handleError(res, error, 'rolling back analysis', { logger: req.logger });
-    }
+      },
+      'Analysis rolled back',
+    );
+
+    // Get updated analysis data
+    const analyses = await analysisService.getAllAnalyses();
+    const updatedAnalysis = analyses[fileName];
+
+    // Broadcast rollback with complete analysis data
+    sseManager.broadcastAnalysisUpdate(fileName, {
+      type: 'analysisRolledBack',
+      data: {
+        fileName,
+        version: versionNumber,
+        status: 'rolled back',
+        restarted: result.restarted,
+        ...updatedAnalysis,
+      },
+    });
+
+    res.json({
+      success: true,
+      message: `Analysis rolled back to version ${versionNumber}`,
+      version: versionNumber,
+      restarted: result.restarted,
+    });
   }
 
   /**
@@ -1074,41 +1022,37 @@ class AnalysisController {
       'Updating environment variables',
     );
 
-    try {
-      const result = await analysisService.updateEnvironment(fileName, env);
+    const result = await analysisService.updateEnvironment(fileName, env);
 
-      req.log.info(
-        {
-          action: 'updateEnvironment',
-          fileName,
-          restarted: result.restarted,
-        },
-        'Environment updated',
-      );
-
-      // Get updated analysis data
-      const analyses = await analysisService.getAllAnalyses();
-      const updatedAnalysis = analyses[fileName];
-
-      // Broadcast update with complete analysis data
-      sseManager.broadcastAnalysisUpdate(fileName, {
-        type: 'analysisEnvironmentUpdated',
-        data: {
-          fileName,
-          status: 'updated',
-          restarted: result.restarted,
-          ...updatedAnalysis,
-        },
-      });
-
-      res.json({
-        success: true,
-        message: 'Environment updated successfully',
+    req.log.info(
+      {
+        action: 'updateEnvironment',
+        fileName,
         restarted: result.restarted,
-      });
-    } catch (error) {
-      handleError(res, error, 'updating environment', { logger: req.logger });
-    }
+      },
+      'Environment updated',
+    );
+
+    // Get updated analysis data
+    const analyses = await analysisService.getAllAnalyses();
+    const updatedAnalysis = analyses[fileName];
+
+    // Broadcast update with complete analysis data
+    sseManager.broadcastAnalysisUpdate(fileName, {
+      type: 'analysisEnvironmentUpdated',
+      data: {
+        fileName,
+        status: 'updated',
+        restarted: result.restarted,
+        ...updatedAnalysis,
+      },
+    });
+
+    res.json({
+      success: true,
+      message: 'Environment updated successfully',
+      restarted: result.restarted,
+    });
   }
 
   /**
@@ -1137,19 +1081,13 @@ class AnalysisController {
       'Getting environment variables',
     );
 
-    try {
-      const env = await analysisService.getEnvironment(fileName);
+    const env = await analysisService.getEnvironment(fileName);
 
-      req.log.info(
-        { action: 'getEnvironment', fileName },
-        'Environment variables retrieved',
-      );
+    req.log.info(
+      { action: 'getEnvironment', fileName },
+      'Environment variables retrieved',
+    );
 
-      res.json(env);
-    } catch (error) {
-      handleError(res, error, 'getting environment', { logger: req.logger });
-    }
+    res.json(env);
   }
 }
-
-export default AnalysisController;

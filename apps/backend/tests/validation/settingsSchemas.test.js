@@ -361,4 +361,94 @@ describe('settingsSchemas', () => {
       expect(result.error?.issues[0].path).toContain('key');
     });
   });
+
+  describe('clearDNSCache', () => {
+    it('should validate with empty body (no parameters required)', () => {
+      const validData = {};
+
+      const result = schemas.clearDNSCache.body.safeParse(validData);
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should reject body with unexpected fields', () => {
+      const invalidData = {
+        unexpectedField: 'value',
+      };
+
+      const result = schemas.clearDNSCache.body.safeParse(invalidData);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0].code).toBe('unrecognized_keys');
+    });
+
+    it('should reject non-object body', () => {
+      const invalidData = 'string';
+
+      const result = schemas.clearDNSCache.body.safeParse(invalidData);
+
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject null body', () => {
+      const invalidData = null;
+
+      const result = schemas.clearDNSCache.body.safeParse(invalidData);
+
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject array body', () => {
+      const invalidData = [];
+
+      const result = schemas.clearDNSCache.body.safeParse(invalidData);
+
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('resetDNSStats', () => {
+    it('should validate with empty body (no parameters required)', () => {
+      const validData = {};
+
+      const result = schemas.resetDNSStats.body.safeParse(validData);
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should reject body with unexpected fields', () => {
+      const invalidData = {
+        unexpectedField: 'value',
+      };
+
+      const result = schemas.resetDNSStats.body.safeParse(invalidData);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0].code).toBe('unrecognized_keys');
+    });
+
+    it('should reject non-object body', () => {
+      const invalidData = 'string';
+
+      const result = schemas.resetDNSStats.body.safeParse(invalidData);
+
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject null body', () => {
+      const invalidData = null;
+
+      const result = schemas.resetDNSStats.body.safeParse(invalidData);
+
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject array body', () => {
+      const invalidData = [];
+
+      const result = schemas.resetDNSStats.body.safeParse(invalidData);
+
+      expect(result.success).toBe(false);
+    });
+  });
 });

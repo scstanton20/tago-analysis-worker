@@ -252,7 +252,7 @@ export const PermissionsProvider = ({ children }) => {
               name: sseTeam.name,
               color: sseTeam.color,
               isSystem: sseTeam.isSystem,
-              order_index: sseTeam.order_index,
+              orderIndex: sseTeam.orderIndex,
               permissions: [
                 'view_analyses',
                 'run_analyses',
@@ -296,7 +296,7 @@ export const PermissionsProvider = ({ children }) => {
             name: sseTeam.name,
             color: sseTeam.color,
             isSystem: sseTeam.isSystem,
-            order_index: sseTeam.order_index,
+            orderIndex: sseTeam.orderIndex,
           };
         });
       },

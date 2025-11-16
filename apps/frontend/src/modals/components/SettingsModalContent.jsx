@@ -54,7 +54,7 @@ const SettingsModalContent = () => {
             <Tabs.Panel value="api">
               <Stack gap="md">
                 <Text size="lg" fw={600} mb="sm">
-                  API & Documentation
+                  API Documentation
                 </Text>
                 <ContentBox>
                   <Stack gap="sm">

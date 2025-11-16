@@ -69,7 +69,7 @@ export const versionOperationLimiter = rateLimit({
 // Rate limiter for team management operations (create, update, delete, folder operations)
 export const teamOperationLimiter = rateLimit({
   windowMs: RATE_LIMIT.WINDOW_FIFTEEN_MINUTES_MS,
-  max: getLimit(200, 'TEST_RATE_LIMIT_TEAM_OPS'),
+  max: getLimit(RATE_LIMIT.TEAM_OPERATIONS_MAX, 'TEST_RATE_LIMIT_TEAM_OPS'),
   message: {
     error: 'Too many team operations from this IP, please try again later.',
   },
@@ -80,7 +80,7 @@ export const teamOperationLimiter = rateLimit({
 // Rate limiter for user management operations (add, update, delete, assign teams)
 export const userOperationLimiter = rateLimit({
   windowMs: RATE_LIMIT.WINDOW_FIFTEEN_MINUTES_MS,
-  max: getLimit(200, 'TEST_RATE_LIMIT_USER_OPS'),
+  max: getLimit(RATE_LIMIT.USER_OPERATIONS_MAX, 'TEST_RATE_LIMIT_USER_OPS'),
   message: {
     error: 'Too many user operations from this IP, please try again later.',
   },
@@ -91,7 +91,10 @@ export const userOperationLimiter = rateLimit({
 // Rate limiter for settings operations (DNS config, cache management)
 export const settingsOperationLimiter = rateLimit({
   windowMs: RATE_LIMIT.WINDOW_FIFTEEN_MINUTES_MS,
-  max: getLimit(200, 'TEST_RATE_LIMIT_SETTINGS_OPS'),
+  max: getLimit(
+    RATE_LIMIT.SETTINGS_OPERATIONS_MAX,
+    'TEST_RATE_LIMIT_SETTINGS_OPS',
+  ),
   message: {
     error: 'Too many settings operations from this IP, please try again later.',
   },

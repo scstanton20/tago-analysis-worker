@@ -152,19 +152,7 @@ async function createDevice(token, deviceData) {
   }
 }
 
-// Named exports
-export {
-  getAPIVersion,
-  getDevices,
-  getGateways,
-  getAccount,
-  getAPICall,
-  getToken,
-  createDevice,
-  MQ_CONFIG as config,
-};
-
-// Default export for compatibility
+// Default export for use in analyses processes
 export default {
   getAPIVersion,
   getDevices,
