@@ -3,7 +3,7 @@ import PropTypes from 'prop-types';
 import { ConnectionContext } from './contexts/ConnectionContext.js';
 import { useAuth } from '../../hooks/useAuth';
 import logger from '../../utils/logger';
-import { showError } from '../../utils/notificationService.jsx';
+import { showError, showSuccess } from '../../utils/notificationService.jsx';
 
 // Get environment variables directly from Vite (no env.js dependency)
 const isDevelopment = import.meta.env.DEV;
@@ -60,18 +60,10 @@ export function SSEConnectionProvider({ children, onMessage }) {
         onMessage({ type: 'statusUpdate', data });
       }
       // Show success notification when status update completes
-      const { showSuccess } = await import(
-        '../../utils/notificationService.jsx'
-      );
-      await showSuccess(
-        'Status refreshed successfully',
-        'Status Updated',
-        3000,
-      );
+      showSuccess('Status refreshed successfully', 'Status Updated', 3000);
     } catch (error) {
       logger.error('Error requesting status update:', error);
-      const { showError } = await import('../../utils/notificationService.jsx');
-      await showError('Failed to refresh status', 'Error', 4000);
+      showError('Failed to refresh status', 'Error', 4000);
     }
   }, [isAuthenticated, onMessage]);
 

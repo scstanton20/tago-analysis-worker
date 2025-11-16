@@ -2,6 +2,7 @@
  * Notification preset generators for common operation patterns.
  * Reduces duplication in notification configurations.
  */
+import { showError } from './notificationService.jsx';
 
 /**
  * Creates a preset for operations with a named entity (e.g., "Uploading analysis.js...")
@@ -53,8 +54,7 @@ export const createErrorOnlyPreset = (errorMessage) => {
       const result = await promise;
       return result;
     } catch (err) {
-      const { showError } = await import('./notificationService.jsx');
-      await showError(err.message || errorMessage);
+      showError(err.message || errorMessage);
       throw err;
     }
   };
