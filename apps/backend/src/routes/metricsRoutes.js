@@ -8,7 +8,28 @@ import { metricsValidationSchemas } from '../validation/metricsSchemas.js';
 const router = express.Router();
 
 router.use(authMiddleware);
-// Prometheus metrics endpoint
+/**
+ * @swagger
+ * /metrics:
+ *   get:
+ *     summary: Get Prometheus metrics
+ *     description: Returns application metrics in Prometheus/OpenMetrics format for monitoring and observability
+ *     tags: [Monitoring]
+ *     responses:
+ *       200:
+ *         description: Metrics retrieved successfully
+ *         content:
+ *           application/openmetrics-text:
+ *             schema:
+ *               type: string
+ *               description: Prometheus-formatted metrics
+ *       401:
+ *         description: Authentication required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 router.get(
   '/metrics',
   validateRequest(metricsValidationSchemas.getMetrics),

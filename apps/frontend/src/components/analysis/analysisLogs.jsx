@@ -12,12 +12,11 @@ import {
   Text,
   Badge,
   Stack,
-  Button,
   Center,
   Loader,
   Box,
 } from '@mantine/core';
-import { EmptyState } from '../global/layout/EmptyState';
+import { EmptyState, UtilityButton } from '../global';
 
 const LOGS_PER_PAGE = 100;
 
@@ -412,9 +411,9 @@ const AnalysisLogs = ({ analysis }) => {
                     </Text>
                   </Group>
                 ) : (
-                  <Button variant="subtle" size="xs" onClick={loadMoreLogs}>
+                  <UtilityButton size="xs" onClick={loadMoreLogs}>
                     Load more logs...
-                  </Button>
+                  </UtilityButton>
                 )}
               </Center>
             )}

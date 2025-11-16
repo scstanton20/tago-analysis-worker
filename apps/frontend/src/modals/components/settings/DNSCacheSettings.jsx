@@ -6,7 +6,6 @@ import {
   Text,
   Switch,
   NumberInput,
-  Button,
   Group,
   SimpleGrid,
   Badge,
@@ -18,7 +17,13 @@ import {
   Divider,
   Progress,
 } from '@mantine/core';
-import { FormAlert, PaperCard } from '../../../components/global';
+import {
+  FormAlert,
+  PaperCard,
+  SuccessButton,
+  UtilityButton,
+  DangerButton,
+} from '../../../components/global';
 import { useNotifications } from '../../../hooks/useNotifications';
 import { useAsyncOperation } from '../../../hooks/async/useAsyncOperation';
 import {
@@ -297,7 +302,7 @@ function DNSCacheSettings() {
 
           {hasUnsavedChanges && (
             <Group justify="center">
-              <Button
+              <SuccessButton
                 leftSection={<IconDeviceFloppy size={16} />}
                 onClick={handleSaveConfig}
                 disabled={
@@ -307,7 +312,7 @@ function DNSCacheSettings() {
                 }
               >
                 Save Configuration
-              </Button>
+              </SuccessButton>
             </Group>
           )}
         </Stack>
@@ -318,14 +323,13 @@ function DNSCacheSettings() {
         title="Cache Statistics"
         icon={<IconChartBar size={20} />}
         actions={
-          <Button
+          <UtilityButton
             size="xs"
-            variant="subtle"
             leftSection={<IconRefresh size={14} />}
             onClick={handleResetStats}
           >
             Reset Stats
-          </Button>
+          </UtilityButton>
         }
       >
         <Stack gap="md">
@@ -396,20 +400,17 @@ function DNSCacheSettings() {
       <PaperCard
         title="Cache Management"
         actions={
-          <Button
+          <DangerButton
             size="xs"
-            variant="light"
-            color="red"
             leftSection={<IconClearAll size={14} />}
             onClick={handleClearCache}
           >
             Clear Cache
-          </Button>
+          </DangerButton>
         }
       >
         <Stack gap="md">
-          <Button
-            variant="subtle"
+          <UtilityButton
             onClick={() => {
               setShowEntries(!showEntries);
               if (!showEntries && entries.length === 0) {
@@ -419,7 +420,7 @@ function DNSCacheSettings() {
           >
             {showEntries ? 'Hide' : 'Show'} Cache Entries (
             {stats?.cacheSize || 0})
-          </Button>
+          </UtilityButton>
 
           {showEntries && (
             <>

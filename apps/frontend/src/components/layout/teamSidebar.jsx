@@ -23,14 +23,13 @@ import {
   Group,
   Text,
   ActionIcon,
-  Button,
   Badge,
   ColorSwatch,
   ScrollArea,
   NavLink,
   Tooltip,
 } from '@mantine/core';
-import { EmptyState } from '../global/layout/EmptyState';
+import { EmptyState, PrimaryButton } from '../global';
 import {
   IconBrandAsana,
   IconGripVertical,
@@ -270,17 +269,14 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
         </Group>
 
         <Group mt="md" gap="xs">
-          <Button
+          <PrimaryButton
             variant={!selectedTeam ? 'gradient' : 'default'}
-            gradient={
-              !selectedTeam ? { from: 'brand.6', to: 'accent.6' } : undefined
-            }
             size="xs"
             style={{ flex: 1 }}
             onClick={() => handleTeamClick(null)}
           >
             All Analyses
-          </Button>
+          </PrimaryButton>
           {hasAdminPerms && (
             <Tooltip label="Manage teams">
               <ActionIcon

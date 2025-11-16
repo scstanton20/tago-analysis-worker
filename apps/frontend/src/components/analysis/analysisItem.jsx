@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react';
 import PropTypes from 'prop-types';
-import { Paper, Group, Text, Button, Stack, Box } from '@mantine/core';
+import { Paper, Group, Text, Stack, Box } from '@mantine/core';
 import {
   IconPlayerPlay,
   IconPlayerStop,
@@ -12,7 +12,14 @@ import {
   IconFolderCog,
   IconHistory,
 } from '@tabler/icons-react';
-import { ActionMenu, ConfirmDialog, LoadingState } from '../global';
+import {
+  ActionMenu,
+  ConfirmDialog,
+  LoadingState,
+  SuccessButton,
+  DangerButton,
+  SecondaryButton,
+} from '../global';
 import { analysisService } from '../../services/analysisService';
 import { teamService } from '../../services/teamService';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
@@ -239,38 +246,33 @@ export default function AnalysisItem({
             {/* Primary Actions */}
             {canRunAnalyses(analysis) &&
               (analysis.status === 'running' ? (
-                <Button
+                <DangerButton
                   onClick={handleStop}
                   loading={isLoading}
-                  color="red"
                   size="xs"
                   leftSection={<IconPlayerStop size={16} />}
                 >
                   Stop
-                </Button>
+                </DangerButton>
               ) : (
-                <Button
+                <SuccessButton
                   onClick={handleRun}
                   loading={isLoading}
-                  variant="gradient"
-                  gradient={{ from: 'teal.6', to: 'green.6' }}
                   size="xs"
                   leftSection={<IconPlayerPlay size={16} />}
                 >
                   Run
-                </Button>
+                </SuccessButton>
               ))}
 
             {/* Log Actions */}
-            <Button
+            <SecondaryButton
               onClick={onToggleLogs}
-              variant="light"
-              color="brand"
               size="xs"
               leftSection={<IconFileText size={16} />}
             >
               {showLogs ? 'Hide Logs' : 'Show Logs'}
-            </Button>
+            </SecondaryButton>
 
             {/* Show menu if user has any permissions */}
             {(isAdmin ||

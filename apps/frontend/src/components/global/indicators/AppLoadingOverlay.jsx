@@ -1,5 +1,6 @@
 import PropTypes from 'prop-types';
-import { LoadingOverlay, Portal, Stack, Text, Button } from '@mantine/core';
+import { LoadingOverlay, Portal, Stack, Text } from '@mantine/core';
+import { PrimaryButton } from '../buttons';
 import Logo from '../../ui/logo';
 
 /**
@@ -32,14 +33,9 @@ export default function AppLoadingOverlay({
                 </Text>
               )}
               {showRetry && (
-                <Button
-                  onClick={() => window.location.reload()}
-                  variant="gradient"
-                  gradient={{ from: 'brand.6', to: 'accent.6' }}
-                  mt="md"
-                >
+                <PrimaryButton onClick={() => window.location.reload()} mt="md">
                   Retry Connection
-                </Button>
+                </PrimaryButton>
               )}
             </Stack>
           ),

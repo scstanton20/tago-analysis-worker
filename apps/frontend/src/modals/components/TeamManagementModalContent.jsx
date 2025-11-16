@@ -48,10 +48,6 @@ function TeamManagementModalContent() {
   const { teamsObject: teams } = useVisibleTeams();
 
   const {
-    newTeamName,
-    setNewTeamName,
-    newTeamColor,
-    setNewTeamColor,
     editingId,
     editingName,
     setEditingName,
@@ -128,10 +124,6 @@ function TeamManagementModalContent() {
       <Stack>
         {/* Create New Team */}
         <TeamCreateForm
-          newTeamName={newTeamName}
-          setNewTeamName={setNewTeamName}
-          newTeamColor={newTeamColor}
-          setNewTeamColor={setNewTeamColor}
           usedNames={usedNames}
           usedColors={usedColors}
           isLoading={isLoading}

@@ -62,13 +62,29 @@ router.use(authMiddleware);
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/Error'
+ *               $ref: '#/components/schemas/ValidationError'
  *       403:
  *         description: Insufficient permissions
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/Error'
+ *       413:
+ *         description: File size exceeds maximum limit (50MB)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: "File size exceeds the maximum limit of 50MB"
+ *                 maxSizeMB:
+ *                   type: number
+ *                   example: 50
+ *                 fileSizeMB:
+ *                   type: string
+ *                   example: "12.34"
  */
 router.post(
   '/upload',

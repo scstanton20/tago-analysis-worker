@@ -4,7 +4,6 @@ import {
   Container,
   Title,
   Text,
-  Button,
   Stack,
   Paper,
   Code,
@@ -15,7 +14,7 @@ import {
   IconAlertCircle,
   IconRefresh,
 } from '@tabler/icons-react';
-import { IconLabel } from './global';
+import { IconLabel, PrimaryButton, SecondaryButton } from './global';
 import logger from '../utils/logger';
 
 /**
@@ -71,21 +70,16 @@ function ComponentErrorFallback({ error, reset, componentName }) {
         )}
 
         <Group gap="xs">
-          <Button
+          <SecondaryButton
             onClick={reset}
             size="sm"
-            color="red"
             leftSection={<IconRefresh size={16} />}
           >
             Retry
-          </Button>
-          <Button
-            onClick={() => window.location.reload()}
-            size="sm"
-            color="gray"
-          >
+          </SecondaryButton>
+          <SecondaryButton onClick={() => window.location.reload()} size="sm">
             Reload Page
-          </Button>
+          </SecondaryButton>
         </Group>
       </Stack>
     </Paper>
@@ -134,14 +128,9 @@ function GlobalErrorFallback({ error, reset }) {
             </Paper>
           )}
 
-          <Button
-            onClick={reset}
-            size="lg"
-            variant="gradient"
-            gradient={{ from: 'brand.6', to: 'accent.6' }}
-          >
+          <PrimaryButton onClick={reset} size="lg">
             Reload Application
-          </Button>
+          </PrimaryButton>
         </Stack>
       </Paper>
     </Container>

@@ -55,7 +55,7 @@ export function PasswordTab({
           onSubmit={handlePasswordSubmit}
           onCancel={handleClose}
           loading={passwordLoading}
-          disabled={passwordSuccess}
+          disabled={passwordSuccess || !passwordForm.isDirty()}
           submitLabel="Change Password"
         />
       </Stack>

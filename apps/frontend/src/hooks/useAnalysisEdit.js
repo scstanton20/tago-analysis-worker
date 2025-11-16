@@ -27,6 +27,7 @@ export function useAnalysisEdit({
   readOnly = false,
 }) {
   const [content, setContent] = useState('');
+  const [originalContent, setOriginalContent] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [newFileName, setNewFileName] = useState(currentAnalysis.name);
@@ -73,10 +74,14 @@ export function useAnalysisEdit({
   /**
    * Handle editor content change
    */
-  const handleEditorChange = useCallback((newContent) => {
-    setContent(newContent);
-    setHasChanges(true);
-  }, []);
+  const handleEditorChange = useCallback(
+    (newContent) => {
+      setContent(newContent);
+      // Only mark as changed if content differs from original
+      setHasChanges(newContent !== originalContent);
+    },
+    [originalContent],
+  );
 
   /**
    * Check if prettier would make changes to the current content
@@ -164,6 +169,7 @@ export function useAnalysisEdit({
 
         if (!isCancelled) {
           setContent(fileContent);
+          setOriginalContent(fileContent);
           setHasChanges(false);
         }
       });
@@ -235,6 +241,8 @@ export function useAnalysisEdit({
         );
       }
 
+      // Update original content to match saved content
+      setOriginalContent(contentToSave);
       setHasChanges(false);
       return true; // Indicate successful save
     });

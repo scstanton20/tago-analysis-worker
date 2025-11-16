@@ -73,12 +73,56 @@ Users can have different permissions in different teams, and admin users have gl
               type: 'string',
               description: 'Error message',
             },
-            code: {
+            stack: {
               type: 'string',
-              description: 'Error code',
+              description:
+                'Error stack trace (only included in development mode)',
             },
           },
           required: ['error'],
+        },
+        ValidationError: {
+          type: 'object',
+          properties: {
+            error: {
+              type: 'string',
+              description: 'Error message',
+              example: 'Validation error',
+            },
+            code: {
+              type: 'string',
+              description: 'Validation error code',
+              enum: [
+                'INVALID_REQUEST_BODY',
+                'INVALID_QUERY_PARAMETERS',
+                'INVALID_ROUTE_PARAMETERS',
+                'INVALID_FILENAME',
+              ],
+              example: 'INVALID_REQUEST_BODY',
+            },
+            details: {
+              type: 'array',
+              description: 'Validation error details',
+              items: {
+                type: 'object',
+                properties: {
+                  path: {
+                    type: 'string',
+                    description: 'Path to the invalid field',
+                  },
+                  message: {
+                    type: 'string',
+                    description: 'Validation error message',
+                  },
+                  code: {
+                    type: 'string',
+                    description: 'Zod error code',
+                  },
+                },
+              },
+            },
+          },
+          required: ['error', 'code', 'details'],
         },
         SecurityInfo: {
           type: 'object',

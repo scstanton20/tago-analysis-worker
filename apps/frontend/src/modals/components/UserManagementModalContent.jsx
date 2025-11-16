@@ -9,14 +9,19 @@ import {
   Stack,
   Group,
   CopyButton,
-  Button,
   Text,
+  // eslint-disable-next-line no-restricted-imports -- Special case: complex success alert with user credentials and copy functionality
   Alert,
   ActionIcon,
   Tooltip,
   CloseButton,
 } from '@mantine/core';
-import { FormAlert, ContentBox, LoadingState } from '../../components/global';
+import {
+  FormAlert,
+  ContentBox,
+  LoadingState,
+  PrimaryButton,
+} from '../../components/global';
 import { IconPlus, IconUser, IconCopy, IconCheck } from '@tabler/icons-react';
 import { modals } from '@mantine/modals';
 import { useAuth } from '../../hooks/useAuth';
@@ -70,8 +75,7 @@ function UserManagementModalContent({ id }) {
     handleUnbanUser,
     handleCancel,
     handleCreate,
-    handleUsernameChange,
-    handleEmailChange,
+    handleUsernameBlur,
     toggleDepartment,
     toggleDepartmentPermission,
   } = useUserManagement({
@@ -179,13 +183,9 @@ function UserManagementModalContent({ id }) {
                 </Stack>
               </Alert>
 
-              <Button
-                onClick={() => setCreatedUserInfo(null)}
-                variant="gradient"
-                gradient={{ from: 'brand.6', to: 'accent.6' }}
-              >
+              <PrimaryButton onClick={() => setCreatedUserInfo(null)}>
                 Continue
-              </Button>
+              </PrimaryButton>
             </Stack>
           </ContentBox>
         ) : !showCreateForm ? (
@@ -194,15 +194,13 @@ function UserManagementModalContent({ id }) {
               <Text size="sm" c="dimmed">
                 Manage user accounts and permissions
               </Text>
-              <Button
+              <PrimaryButton
                 leftSection={<IconPlus size="1rem" />}
                 onClick={handleCreate}
-                variant="gradient"
-                gradient={{ from: 'brand.6', to: 'accent.6' }}
                 size="sm"
               >
                 Add User
-              </Button>
+              </PrimaryButton>
             </Group>
 
             <ContentBox p="xs">
@@ -230,8 +228,7 @@ function UserManagementModalContent({ id }) {
               availableActions={actions}
               onSubmit={handleSubmit}
               onCancel={handleCancel}
-              onUsernameChange={handleUsernameChange}
-              onEmailChange={handleEmailChange}
+              onUsernameBlur={handleUsernameBlur}
               onToggleDepartment={toggleDepartment}
               onTogglePermission={toggleDepartmentPermission}
             />

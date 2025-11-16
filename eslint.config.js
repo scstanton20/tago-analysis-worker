@@ -46,6 +46,10 @@ export default [
   // Frontend React specific configuration
   {
     files: ['**/frontend/**/*.{js,jsx}'],
+    ignores: [
+      // Allow global components to import raw Mantine components (they wrap them)
+      '**/frontend/**/components/global/**/*.{js,jsx}',
+    ],
     languageOptions: {
       globals: {
         ...globals.browser,
@@ -69,6 +73,95 @@ export default [
         'warn',
         { allowConstantExport: true },
       ],
+
+      // Button component enforcement - prevent raw Mantine component usage
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@mantine/core',
+              importNames: ['Button'],
+              message:
+                'Do not import Button directly from @mantine/core. Use semantic button components instead: PrimaryButton, SecondaryButton, DangerButton, SuccessButton, UtilityButton, CancelButton, or FormActionButtons from "../global"',
+            },
+            {
+              name: '@mantine/core',
+              importNames: ['Alert'],
+              message:
+                'Do not import Alert directly from @mantine/core. Use FormAlert from "../global" for consistent alert styling.',
+            },
+          ],
+        },
+      ],
+
+      // Prevent default imports from button components (enforce named imports only)
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            'ImportDeclaration[source.value*="/buttons/"] > ImportDefaultSpecifier',
+          message:
+            'Default imports from button components are not allowed. Use named imports instead: import { PrimaryButton } from "../global"',
+        },
+        {
+          selector:
+            'ImportDeclaration[source.value="../global"] > ImportDefaultSpecifier',
+          message:
+            'Default imports from global components are not allowed. Use named imports instead: import { PrimaryButton, FormAlert } from "../global"',
+        },
+      ],
+
+      // Accessibility - ensure icon-only buttons have labels
+      'jsx-a11y/control-has-associated-label': [
+        'error',
+        {
+          labelAttributes: ['label', 'aria-label'],
+          controlComponents: ['Button', 'ActionIcon'],
+          ignoreElements: ['a', 'button', 'input', 'select', 'textarea'],
+          ignoreRoles: [
+            'link',
+            'button',
+            'checkbox',
+            'switch',
+            'radio',
+            'tab',
+            'option',
+          ],
+          depth: 3,
+        },
+      ],
+    },
+  },
+
+  // Global components configuration - allow raw Mantine imports
+  {
+    files: ['**/frontend/**/components/global/**/*.{js,jsx}'],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+      },
+      parserOptions: {
+        ecmaVersion: 'latest',
+        ecmaFeatures: { jsx: true },
+        sourceType: 'module',
+      },
+    },
+    plugins: {
+      react: react,
+      'react-hooks': reactHooks,
+      'react-refresh': reactRefresh,
+      'jsx-a11y': jsxA11y,
+    },
+    rules: {
+      ...reactHooks.configs.recommended.rules,
+      ...jsxA11y.flatConfigs.recommended.rules,
+      'react-refresh/only-export-components': [
+        'warn',
+        { allowConstantExport: true },
+      ],
+      // Explicitly allow Button and Alert imports in global components
+      'no-restricted-imports': 'off',
     },
   },
 

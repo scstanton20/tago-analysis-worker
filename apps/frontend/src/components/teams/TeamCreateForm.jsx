@@ -5,37 +5,56 @@
  */
 
 import PropTypes from 'prop-types';
+import { useForm } from '@mantine/form';
 import { Box, Stack, Group, Text, TextInput, ColorSwatch } from '@mantine/core';
 import { TeamColorPicker, PREDEFINED_COLORS } from './TeamColorPicker';
 import { FormActionButtons } from '../global';
 
-export function TeamCreateForm({
-  newTeamName,
-  setNewTeamName,
-  newTeamColor,
-  setNewTeamColor,
-  usedNames,
-  usedColors,
-  isLoading,
-  onSubmit,
-}) {
-  const isNameInUse =
-    usedNames.has(newTeamName.toLowerCase().trim()) && newTeamName.trim();
+export function TeamCreateForm({ usedNames, usedColors, isLoading, onSubmit }) {
+  // Form setup with validation
+  const form = useForm({
+    initialValues: {
+      name: '',
+      color: '#228BE6', // default blue
+    },
+    validate: {
+      name: (value) => {
+        if (!value?.trim()) return 'Team name is required';
+        if (usedNames.has(value.toLowerCase().trim())) {
+          return 'This name is already in use';
+        }
+        return null;
+      },
+      color: (value) => (!value ? 'Color is required' : null),
+    },
+  });
+
+  // Handle form submission
+  const handleSubmit = form.onSubmit((values) => {
+    // Call parent's onSubmit with form values
+    onSubmit(values);
+  });
+
+  // Handle cancel - reset form to initial state
+  const handleCancel = () => {
+    form.reset();
+  };
 
   return (
     <Box>
       <Text size="sm" fw={600} mb="sm">
         Create New Team
       </Text>
-      <form onSubmit={onSubmit}>
+      <form onSubmit={handleSubmit}>
         <Stack gap="sm">
           <TextInput
-            value={newTeamName}
-            onChange={(e) => setNewTeamName(e.target.value)}
-            placeholder="Team name"
+            label="Team Name"
+            placeholder="Enter team name"
+            description="Choose a unique name for your team"
             size="sm"
             disabled={isLoading}
-            error={isNameInUse ? 'This name is already in use' : null}
+            required
+            {...form.getInputProps('name')}
           />
 
           <Box>
@@ -43,24 +62,29 @@ export function TeamCreateForm({
               Choose a color (required):
             </Text>
             <TeamColorPicker
-              selectedColor={newTeamColor}
+              selectedColor={form.values.color}
               usedColors={usedColors}
-              onColorSelect={setNewTeamColor}
+              onColorSelect={(color) => form.setFieldValue('color', color)}
               size={32}
               showLabel={false}
               showSelected={false}
             />
+            {form.errors.color && (
+              <Text size="xs" c="red" mt="xs">
+                {form.errors.color}
+              </Text>
+            )}
           </Box>
 
           <Group justify="space-between">
-            {newTeamColor ? (
+            {form.values.color ? (
               <Group gap="xs">
                 <Text size="xs" c="dimmed">
                   Selected:
                 </Text>
-                <ColorSwatch color={newTeamColor} size={20} />
+                <ColorSwatch color={form.values.color} size={20} />
                 <Text size="xs" fw={500}>
-                  {newTeamColor}
+                  {form.values.color}
                 </Text>
               </Group>
             ) : (
@@ -69,15 +93,12 @@ export function TeamCreateForm({
               </Text>
             )}
             <FormActionButtons
-              onSubmit={onSubmit}
-              disabled={
-                !newTeamName.trim() || !newTeamColor || isNameInUse || isLoading
-              }
+              onSubmit={handleSubmit}
+              onCancel={form.isDirty() ? handleCancel : undefined}
+              disabled={!form.isValid() || isLoading}
               loading={isLoading}
               size="sm"
-              submitColor="green"
               submitLabel="Create"
-              singleButton
             />
           </Group>
         </Stack>
@@ -87,10 +108,6 @@ export function TeamCreateForm({
 }
 
 TeamCreateForm.propTypes = {
-  newTeamName: PropTypes.string.isRequired,
-  setNewTeamName: PropTypes.func.isRequired,
-  newTeamColor: PropTypes.string.isRequired,
-  setNewTeamColor: PropTypes.func.isRequired,
   usedNames: PropTypes.instanceOf(Set).isRequired,
   usedColors: PropTypes.instanceOf(Set).isRequired,
   isLoading: PropTypes.bool,

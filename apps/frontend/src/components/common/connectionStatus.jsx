@@ -6,13 +6,13 @@ import {
   Stack,
   Group,
   Text,
-  Button,
   Divider,
   Box,
   Indicator,
 } from '@mantine/core';
 import { IconRefresh, IconSettings } from '@tabler/icons-react';
 import { modalService } from '../../modals/modalService';
+import { PrimaryButton, SecondaryButton } from '../global';
 
 const ConnectionStatus = () => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -263,26 +263,23 @@ const ConnectionStatus = () => {
                   <Text size="sm" c="dimmed" fw={500}>
                     {getStatusText()}
                   </Text>
-                  <Button
-                    variant="gradient"
-                    gradient={{ from: 'brand.5', to: 'accent.6' }}
+                  <PrimaryButton
                     size="xs"
-                    onClick={handleRetryConnection}
                     leftSection={<IconRefresh size={14} />}
+                    onClick={handleRetryConnection}
                   >
                     Refresh Status
-                  </Button>
+                  </PrimaryButton>
                 </>
               )}
-              <Button
-                variant="light"
+              <SecondaryButton
                 size="xs"
                 onClick={handleOpenSettings}
                 leftSection={<IconSettings size={14} />}
                 fullWidth
               >
                 Settings
-              </Button>
+              </SecondaryButton>
             </Stack>
           </Stack>
         </Popover.Dropdown>

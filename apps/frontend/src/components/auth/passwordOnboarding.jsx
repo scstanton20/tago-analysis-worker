@@ -2,19 +2,17 @@ import { useState } from 'react';
 import PropTypes from 'prop-types';
 import {
   PasswordInput,
-  Button,
   Title,
   Text,
   Box,
   Stack,
-  Alert,
   Container,
   Card,
 } from '@mantine/core';
 import { IconKey } from '@tabler/icons-react';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import { useAsyncOperation } from '../../hooks/async/useAsyncOperation';
-import { FormAlert } from '../global/alerts/FormAlert';
+import { FormAlert, PrimaryButton } from '../global';
 import Logo from '../ui/logo.jsx';
 import { validatePassword } from '../../utils/userValidation';
 
@@ -63,6 +61,29 @@ export default function PasswordOnboarding({
     if (passwordChangeOperation.error) {
       passwordChangeOperation.setError(null);
     }
+  };
+
+  // Check if form is valid and button should be enabled
+  const isFormValid =
+    formData.newPassword &&
+    formData.confirmPassword &&
+    formData.newPassword === formData.confirmPassword &&
+    !validatePassword(formData.newPassword);
+
+  // Real-time validation feedback
+  const getPasswordError = () => {
+    if (!formData.newPassword) return null;
+    return validatePassword(formData.newPassword);
+  };
+
+  const getConfirmPasswordError = () => {
+    if (!formData.confirmPassword) return null;
+    if (formData.newPassword && formData.confirmPassword) {
+      if (formData.newPassword !== formData.confirmPassword) {
+        return 'Passwords do not match';
+      }
+    }
+    return null;
   };
 
   return (
@@ -121,17 +142,6 @@ export default function PasswordOnboarding({
                 </Text>
               </Box>
 
-              <Alert
-                icon={<IconKey size="1rem" />}
-                color="orange"
-                variant="light"
-                radius="md"
-              >
-                Please set a new password to complete your account setup and
-                access the application. Password must be at least 6 characters
-                and contain at least one uppercase letter.
-              </Alert>
-
               <FormAlert type="error" message={passwordChangeOperation.error} />
 
               <Stack gap="md">
@@ -142,6 +152,8 @@ export default function PasswordOnboarding({
                   onChange={(e) =>
                     handleInputChange('newPassword', e.target.value)
                   }
+                  error={getPasswordError()}
+                  description="Must be at least 6 characters with one uppercase letter"
                   required
                   size="md"
                   autoComplete="new-password"
@@ -156,6 +168,7 @@ export default function PasswordOnboarding({
                   onChange={(e) =>
                     handleInputChange('confirmPassword', e.target.value)
                   }
+                  error={getConfirmPasswordError()}
                   required
                   size="md"
                   autoComplete="new-password"
@@ -164,14 +177,13 @@ export default function PasswordOnboarding({
                 />
               </Stack>
 
-              <Button
+              <PrimaryButton
                 type="submit"
                 loading={passwordChangeOperation.loading}
+                disabled={!isFormValid}
                 fullWidth
                 size="md"
                 leftSection={<IconKey size="1rem" />}
-                variant="gradient"
-                gradient={{ from: 'brand.6', to: 'accent.6' }}
                 radius="md"
                 style={{
                   fontWeight: 600,
@@ -180,7 +192,7 @@ export default function PasswordOnboarding({
                 {passwordChangeOperation.loading
                   ? 'Changing Password...'
                   : 'Change Password'}
-              </Button>
+              </PrimaryButton>
             </Stack>
           </form>
         </Card>

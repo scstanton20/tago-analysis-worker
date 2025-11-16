@@ -9,7 +9,6 @@ import {
   Stack,
   Group,
   Text,
-  Button,
   Paper,
   Center,
   Loader,
@@ -24,7 +23,7 @@ import {
   IconPlus,
   IconTrash,
 } from '@tabler/icons-react';
-import { FormAlert, PaperCard } from '../global';
+import { FormAlert, PaperCard, FormActionButtons } from '../global';
 
 export function PasskeysTab({
   isWebAuthnSupported,
@@ -79,17 +78,13 @@ export function PasskeysTab({
                   {...passkeyForm.getInputProps('name')}
                 />
 
-                <Group justify="flex-end">
-                  <Button
-                    type="submit"
-                    loading={registeringPasskey}
-                    leftSection={<IconPlus size={16} />}
-                    variant="gradient"
-                    gradient={{ from: 'brand.6', to: 'accent.6' }}
-                  >
-                    Register Passkey
-                  </Button>
-                </Group>
+                <FormActionButtons
+                  loading={registeringPasskey}
+                  disabled={!passkeyForm.isDirty()}
+                  submitLabel="Register Passkey"
+                  submitIcon={<IconPlus size={16} />}
+                  singleButton
+                />
               </Stack>
             </form>
           </PaperCard>

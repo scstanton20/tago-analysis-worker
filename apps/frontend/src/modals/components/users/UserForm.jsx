@@ -3,6 +3,7 @@ import {
   Stack,
   Group,
   Text,
+  // eslint-disable-next-line no-restricted-imports -- Special case: conditional informational alerts with embedded Text components
   Alert,
   TextInput,
   PasswordInput,
@@ -25,8 +26,7 @@ export default function UserForm({
   availableActions,
   onSubmit,
   onCancel,
-  onUsernameChange,
-  onEmailChange,
+  onUsernameBlur,
   onToggleDepartment,
   onTogglePermission,
 }) {
@@ -79,11 +79,9 @@ export default function UserForm({
           description={
             editingUser
               ? 'User must update their own email through profile settings'
-              : undefined
+              : 'Must include @ and a valid domain (e.g., user@example.com)'
           }
-          onChange={(event) => onEmailChange(event.currentTarget.value)}
-          value={form.values.email}
-          error={form.errors.email}
+          {...form.getInputProps('email')}
         />
 
         <TextInput
@@ -92,12 +90,11 @@ export default function UserForm({
           description={
             editingUser
               ? 'User must update their own username through profile settings'
-              : 'Users can login with either email or username'
+              : 'At least 3 characters, letters, numbers, hyphens, underscores, and dots only'
           }
           disabled={!!editingUser}
-          onChange={(event) => onUsernameChange(event.currentTarget.value)}
-          value={form.values.username}
-          error={form.errors.username}
+          {...form.getInputProps('username')}
+          onBlur={(event) => onUsernameBlur(event.currentTarget.value)}
         />
 
         {editingUser && (
@@ -176,7 +173,7 @@ export default function UserForm({
           onSubmit={onSubmit}
           onCancel={onCancel}
           submitLabel={editingUser ? 'Update User' : 'Create User'}
-          cancelDisabled={!form.isDirty()}
+          disabled={!form.isDirty()}
           submitType="submit"
           justify="flex-end"
           gap="sm"
@@ -225,8 +222,7 @@ UserForm.propTypes = {
   ).isRequired,
   onSubmit: PropTypes.func.isRequired,
   onCancel: PropTypes.func.isRequired,
-  onUsernameChange: PropTypes.func.isRequired,
-  onEmailChange: PropTypes.func.isRequired,
+  onUsernameBlur: PropTypes.func.isRequired,
   onToggleDepartment: PropTypes.func.isRequired,
   onTogglePermission: PropTypes.func.isRequired,
 };

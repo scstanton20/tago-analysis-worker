@@ -4,7 +4,6 @@ import { useInterval, useTimeout } from '../../hooks/useInterval';
 import {
   TextInput,
   PasswordInput,
-  Button,
   Title,
   Text,
   Box,
@@ -14,7 +13,7 @@ import {
   Divider,
 } from '@mantine/core';
 import { IconLogin, IconFingerprint } from '@tabler/icons-react';
-import { FormAlert } from '../global';
+import { FormAlert, PrimaryButton, SecondaryButton } from '../global';
 import { signIn, signInPasskey } from '../../lib/auth.js';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import { useAsyncOperation } from '../../hooks/async/useAsyncOperation';
@@ -248,14 +247,12 @@ export default function LoginPage() {
                 />
               </Stack>
 
-              <Button
+              <PrimaryButton
                 type="submit"
                 loading={loginOperation.loading}
                 fullWidth
                 size="md"
                 leftSection={<IconLogin size="1rem" />}
-                variant="gradient"
-                gradient={{ from: 'brand.6', to: 'accent.6' }}
                 radius="md"
                 style={{
                   fontWeight: 600,
@@ -263,19 +260,18 @@ export default function LoginPage() {
                 disabled={passkeyOperation.loading}
               >
                 {loginOperation.loading ? 'Signing in...' : 'Sign In'}
-              </Button>
+              </PrimaryButton>
 
               {isWebAuthnSupported && (
                 <>
                   <Divider label="OR" labelPosition="center" />
 
-                  <Button
+                  <SecondaryButton
                     onClick={handlePasskeyLogin}
                     loading={passkeyOperation.loading}
                     fullWidth
                     size="md"
                     leftSection={<IconFingerprint size="1rem" />}
-                    variant="light"
                     color="blue"
                     radius="md"
                     style={{
@@ -286,7 +282,7 @@ export default function LoginPage() {
                     {passkeyOperation.loading
                       ? 'Authenticating...'
                       : 'Sign in with Passkey'}
-                  </Button>
+                  </SecondaryButton>
 
                   <Text size="xs" c="dimmed" ta="center">
                     Use Face ID, Touch ID, Windows Hello, or your security key

@@ -14,17 +14,7 @@ import {
 import AnalysisItem from './analysisItem';
 import AnalysisTree from './analysisTree';
 import { modalService } from '../../modals/modalService';
-import {
-  Paper,
-  Stack,
-  Group,
-  Text,
-  Button,
-  Center,
-  Loader,
-  Box,
-  Alert,
-} from '@mantine/core';
+import { Stack, Group, Text, Center, Loader, Box } from '@mantine/core';
 import { ActionMenu } from '../global/menus/ActionMenu';
 import { modals } from '@mantine/modals';
 import {
@@ -35,7 +25,15 @@ import {
   IconCheck,
   IconX,
 } from '@tabler/icons-react';
-import { FormAlert, EmptyState, PaperCard } from '../global';
+import {
+  FormAlert,
+  EmptyState,
+  PaperCard,
+  SecondaryButton,
+  CancelButton,
+  SuccessButton,
+  ContentBox,
+} from '../global';
 import teamService from '../../services/teamService';
 import {
   showSuccess,
@@ -394,7 +392,7 @@ export default function AnalysisList({
   }
 
   return (
-    <Paper p="lg" withBorder radius="md">
+    <ContentBox p="lg" radius="md">
       <Stack>
         {/* Header */}
         <Group justify="space-between" mb="md">
@@ -437,47 +435,39 @@ export default function AnalysisList({
             selectedTeam &&
             (reorderMode ? (
               <Group gap="xs">
-                <Button
+                <SecondaryButton
                   onClick={() => handleCreateFolder(null)}
-                  variant="light"
                   size="sm"
-                  color="brand"
                   leftSection={<IconFolderPlus size={16} />}
                 >
                   Create Folder
-                </Button>
-                <Button
+                </SecondaryButton>
+                <CancelButton
                   onClick={handleCancelReorder}
-                  variant="light"
                   size="sm"
-                  color="gray"
                   leftSection={<IconX size={16} />}
                 >
                   Cancel
-                </Button>
-                <Button
+                </CancelButton>
+                <SuccessButton
                   onClick={handleApplyReorders}
-                  variant="filled"
                   size="sm"
-                  color="green"
                   leftSection={<IconCheck size={16} />}
                 >
                   Done
-                </Button>
+                </SuccessButton>
               </Group>
             ) : (
               <Group gap="xs">
-                <Button
+                <SecondaryButton
                   onClick={toggleAllLogs}
-                  variant="light"
                   size="sm"
-                  color="brand"
                   leftSection={<IconFileText size={16} />}
                 >
                   {openLogIds.size === analysesArray.length
                     ? 'Close All Logs'
                     : 'Open All Logs'}
-                </Button>
+                </SecondaryButton>
                 <ActionMenu
                   items={[
                     {
@@ -497,17 +487,15 @@ export default function AnalysisList({
             ))}
           {/* Log toggle button for non-team views */}
           {hasAnalyses && !selectedTeam && (
-            <Button
+            <SecondaryButton
               onClick={toggleAllLogs}
-              variant="light"
               size="sm"
-              color="brand"
               leftSection={<IconFileText size={16} />}
             >
               {openLogIds.size === analysesArray.length
                 ? 'Close All Logs'
                 : 'Open All Logs'}
-            </Button>
+            </SecondaryButton>
           )}
         </Group>
 
@@ -517,20 +505,13 @@ export default function AnalysisList({
             /* No Team Access State */
             <Center py="xl">
               <Stack align="center" gap="md">
-                <Alert
+                <FormAlert
+                  type="warning"
                   icon={<IconUserX size={20} />}
-                  color="orange"
-                  variant="light"
+                  title="No Team Access"
+                  message="You haven't been assigned to any teams yet. Please contact an administrator to request access to the teams you need."
                   style={{ maxWidth: 500 }}
-                >
-                  <Stack gap="sm">
-                    <Text fw={500}>No Team Access</Text>
-                    <Text size="sm">
-                      You haven't been assigned to any teams yet. Please contact
-                      an administrator to request access to the teams you need.
-                    </Text>
-                  </Stack>
-                </Alert>
+                />
               </Stack>
             </Center>
           ) : selectedTeam ? (
@@ -620,7 +601,7 @@ export default function AnalysisList({
           )}
         </Stack>
       </Stack>
-    </Paper>
+    </ContentBox>
   );
 }
 

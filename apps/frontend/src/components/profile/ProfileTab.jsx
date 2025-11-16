@@ -5,8 +5,13 @@
  */
 
 import PropTypes from 'prop-types';
-import { Stack, Group, Text, Button, Box, TextInput } from '@mantine/core';
-import { FormAlert, FormActionButtons, ContentBox } from '../global';
+import { Stack, Group, Text, Box, TextInput } from '@mantine/core';
+import {
+  FormAlert,
+  FormActionButtons,
+  ContentBox,
+  SecondaryButton,
+} from '../global';
 
 export function ProfileTab({
   user,
@@ -58,13 +63,12 @@ export function ProfileTab({
             </Group>
           </Stack>
           <Group justify="flex-end" mt="md">
-            <Button
-              variant="light"
+            <SecondaryButton
               size="sm"
               onClick={() => setIsEditingProfile(true)}
             >
               Edit Profile
-            </Button>
+            </SecondaryButton>
           </Group>
         </ContentBox>
       ) : (
@@ -115,6 +119,7 @@ export function ProfileTab({
               onSubmit={handleProfileSubmit}
               onCancel={handleCancelProfileEdit}
               loading={profileLoading}
+              disabled={!profileForm.isDirty()}
               submitLabel="Save Changes"
             />
           </Stack>

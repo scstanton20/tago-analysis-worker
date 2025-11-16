@@ -1,7 +1,11 @@
 import { useState, lazy, Suspense } from 'react';
-import { Stack, Group, Text, Button, Tabs, Box } from '@mantine/core';
+import { Stack, Group, Text, Tabs, Box } from '@mantine/core';
 import { IconBook, IconTransfer, IconChartBar } from '@tabler/icons-react';
-import { ContentBox, LoadingState } from '../../components/global';
+import {
+  ContentBox,
+  LoadingState,
+  SecondaryButton,
+} from '../../components/global';
 const DNSCacheSettings = lazy(() => import('./settings/DNSCacheSettings'));
 const MetricsDashboard = lazy(() => import('./settings/MetricsDashboard'));
 
@@ -61,15 +65,14 @@ const SettingsModalContent = () => {
                     <Text size="sm" c="dimmed">
                       Access API documentation and developer resources.
                     </Text>
-                    <Button
-                      variant="light"
+                    <SecondaryButton
                       size="sm"
                       onClick={handleOpenApiDocs}
                       leftSection={<IconBook size={16} />}
                       fullWidth
                     >
                       Open API Documentation
-                    </Button>
+                    </SecondaryButton>
                   </Stack>
                 </ContentBox>
               </Stack>

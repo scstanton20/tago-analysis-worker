@@ -1,23 +1,40 @@
-import { Group, Button } from '@mantine/core';
+import { Group } from '@mantine/core';
 import PropTypes from 'prop-types';
+import { PrimaryButton } from './PrimaryButton';
+import { SuccessButton } from './SuccessButton';
+import { DangerButton } from './DangerButton';
+import { CancelButton } from './CancelButton';
 
 /**
  * FormActionButtons - Reusable form action button group
  *
  * Standardizes submit/cancel button groups used in forms across the app.
+ * Supports semantic presets for consistent button styling.
  *
  */
+
+// Preset mapping for submit button types
+const SUBMIT_BUTTON_MAP = {
+  primary: PrimaryButton,
+  success: SuccessButton,
+  danger: DangerButton,
+};
+
 export function FormActionButtons({
   onSubmit,
   onCancel,
   submitLabel = 'Submit',
   cancelLabel = 'Cancel',
   loading = false,
-  submitVariant = 'gradient',
-  submitGradient = { from: 'brand.6', to: 'accent.6' },
+  // New preset system
+  submitPreset = 'primary',
+  // Legacy props (deprecated but supported for backward compatibility)
+  submitVariant,
+  submitGradient,
   submitColor,
-  cancelVariant = 'default',
+  cancelVariant,
   cancelColor,
+  // Common props
   disabled = false,
   cancelDisabled = false,
   justify = 'flex-end',
@@ -34,37 +51,61 @@ export function FormActionButtons({
   singleButton, // Destructure to prevent passing to DOM
   ...props
 }) {
+  // Detect if legacy props are being used and show deprecation warning
+  const usingLegacyProps = submitVariant || submitGradient || submitColor;
+  if (usingLegacyProps && import.meta.env.DEV) {
+    console.warn(
+      '[FormActionButtons] The props "submitVariant", "submitGradient", and "submitColor" are deprecated. ' +
+        'Please use "submitPreset" instead with values: "primary", "success", or "danger".',
+    );
+  }
+
+  // Determine which component to use for submit button
+  const SubmitComponent = SUBMIT_BUTTON_MAP[submitPreset] || PrimaryButton;
+  const CancelComponent = CancelButton;
+
+  // Build submit button props
+  const submitProps = {
+    type: submitType,
+    onClick: onSubmit,
+    loading,
+    disabled,
+    fullWidth,
+    leftSection: submitIcon,
+    size,
+  };
+
+  // If using legacy props, apply them to override preset defaults
+  if (usingLegacyProps) {
+    if (submitVariant) submitProps.variant = submitVariant;
+    if (submitGradient) submitProps.gradient = submitGradient;
+    if (submitColor) submitProps.color = submitColor;
+  }
+
+  // Build cancel button props
+  const cancelProps = {
+    onClick: onCancel,
+    disabled: loading || cancelDisabled, // Don't use main 'disabled' for cancel
+    fullWidth,
+    leftSection: cancelIcon,
+    size,
+  };
+
+  // Apply legacy cancel props if provided
+  if (cancelVariant) cancelProps.variant = cancelVariant;
+  if (cancelColor) cancelProps.color = cancelColor;
+
+  // Render buttons using semantic components
   const submitButton = (
-    <Button
-      key="submit"
-      type={submitType}
-      onClick={onSubmit}
-      loading={loading}
-      disabled={disabled}
-      variant={submitVariant}
-      gradient={submitVariant === 'gradient' ? submitGradient : undefined}
-      color={submitColor}
-      fullWidth={fullWidth}
-      leftSection={submitIcon}
-      size={size}
-    >
+    <SubmitComponent key="submit" {...submitProps}>
       {submitLabel}
-    </Button>
+    </SubmitComponent>
   );
 
   const cancelButton = onCancel && (
-    <Button
-      key="cancel"
-      variant={cancelVariant}
-      color={cancelColor}
-      onClick={onCancel}
-      disabled={loading || disabled || cancelDisabled}
-      fullWidth={fullWidth}
-      leftSection={cancelIcon}
-      size={size}
-    >
+    <CancelComponent key="cancel" {...cancelProps}>
       {cancelLabel}
-    </Button>
+    </CancelComponent>
   );
 
   const buttons = reverseOrder
@@ -89,18 +130,20 @@ FormActionButtons.propTypes = {
   cancelLabel: PropTypes.string,
   /** Loading state (disables cancel, shows loader on submit) */
   loading: PropTypes.bool,
-  /** Submit button variant */
+  /** Submit button preset - determines button style and semantic meaning */
+  submitPreset: PropTypes.oneOf(['primary', 'success', 'danger']),
+  /** @deprecated Use submitPreset instead. Submit button variant */
   submitVariant: PropTypes.string,
-  /** Submit button gradient (when variant is 'gradient') */
+  /** @deprecated Use submitPreset instead. Submit button gradient (when variant is 'gradient') */
   submitGradient: PropTypes.shape({
     from: PropTypes.string,
     to: PropTypes.string,
   }),
-  /** Submit button color (overrides gradient) */
+  /** @deprecated Use submitPreset instead. Submit button color (overrides gradient) */
   submitColor: PropTypes.string,
-  /** Cancel button variant */
+  /** Cancel button variant (optional override) */
   cancelVariant: PropTypes.string,
-  /** Cancel button color */
+  /** Cancel button color (optional override) */
   cancelColor: PropTypes.string,
   /** Disabled state (both buttons) */
   disabled: PropTypes.bool,
@@ -129,5 +172,3 @@ FormActionButtons.propTypes = {
   /** Single button mode (prevents prop from being passed to DOM) */
   singleButton: PropTypes.bool,
 };
-
-export default FormActionButtons;

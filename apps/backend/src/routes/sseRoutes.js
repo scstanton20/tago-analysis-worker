@@ -35,7 +35,7 @@ router.use(authMiddleware);
  */
 
 /**
-//  * @swagger
+ * @swagger
  * /sse/events:
  *   get:
  *     summary: Server-Sent Events stream for real-time updates

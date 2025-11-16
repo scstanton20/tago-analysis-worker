@@ -10,7 +10,6 @@ import {
   Stack,
   Group,
   Text,
-  Button,
   TextInput,
   ActionIcon,
   ColorSwatch,
@@ -19,6 +18,7 @@ import {
 import { IconEdit, IconTrash } from '@tabler/icons-react';
 import { useEnterKeySubmit } from '../../hooks/forms/useEnterKeySubmit';
 import { TeamColorPicker } from './TeamColorPicker';
+import { PrimaryButton, CancelButton } from '../global';
 
 /**
  * Team list item in display mode
@@ -127,35 +127,33 @@ function TeamEditMode({
           </Text>
         </Group>
         <Group gap="xs">
+          <CancelButton
+            size="xs"
+            onClick={onCancel}
+            disabled={isLoading}
+          >
+            Cancel
+          </CancelButton>
           {hasColorChanged && (
-            <Button
+            <PrimaryButton
               size="xs"
               onClick={() => onSaveColorChange(team.id)}
               loading={isLoading}
               disabled={isLoading}
             >
               Save
-            </Button>
+            </PrimaryButton>
           )}
           {hasNameChanged && (
-            <Button
+            <PrimaryButton
               size="xs"
-              variant="light"
               onClick={() => onUpdateName(team.id)}
               loading={isLoading}
               disabled={isLoading}
             >
               Save Name
-            </Button>
+            </PrimaryButton>
           )}
-          <Button
-            size="xs"
-            variant="default"
-            onClick={onCancel}
-            disabled={isLoading}
-          >
-            {hasColorChanged || hasNameChanged ? 'Cancel' : 'Done'}
-          </Button>
         </Group>
       </Group>
     </Stack>

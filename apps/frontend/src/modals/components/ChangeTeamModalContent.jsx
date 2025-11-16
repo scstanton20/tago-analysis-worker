@@ -6,6 +6,7 @@ import {
   UnstyledButton,
   Badge,
   ColorSwatch,
+  // eslint-disable-next-line no-restricted-imports -- Special case: dynamic informational alert with embedded Text components
   Alert,
   ScrollArea,
   Group,

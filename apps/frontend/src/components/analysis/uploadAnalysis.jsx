@@ -9,7 +9,6 @@ import {
   Stack,
   Group,
   Text,
-  Button,
   TextInput,
   Tabs,
   Collapse,
@@ -18,7 +17,12 @@ import {
   Select,
   Paper,
 } from '@mantine/core';
-import { FormAlert, ContentBox, LoadingState } from '../global';
+import {
+  FormAlert,
+  ContentBox,
+  LoadingState,
+  FormActionButtons,
+} from '../global';
 import { Dropzone } from '@mantine/dropzone';
 import {
   IconChevronDown,
@@ -45,7 +49,6 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
   const [analysisName, setAnalysisName] = useState('');
   const [editableFileName, setEditableFileName] = useState('');
   const [editorContent, setEditorContent] = useState(DEFAULT_EDITOR_CONTENT);
-  const [formTouched, setFormTouched] = useState(false);
   const [selectedTeamId, setSelectedTeamId] = useState(null);
 
   // UI state
@@ -103,9 +106,6 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
 
   const handleEditorChange = (newContent) => {
     setEditorContent(newContent);
-    if (newContent !== DEFAULT_EDITOR_CONTENT) {
-      setFormTouched(true);
-    }
   };
 
   // If user has no upload permissions anywhere, don't show the component
@@ -132,8 +132,6 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
     editorContent !== DEFAULT_EDITOR_CONTENT ||
     analysisName ||
     editableFileName;
-  const showCancelButton =
-    formTouched || hasFormContent || uploadOperation.error;
   const isSaveDisabled =
     isCurrentAnalysisLoading ||
     (mode === 'create' && !analysisName) ||
@@ -188,8 +186,6 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
       return;
     }
 
-    setFormTouched(true);
-
     if (!file.name.endsWith('.js') && !file.name.endsWith('.js')) {
       uploadOperation.setError('Please select a JavaScript file (.js)');
       resetFileSelection();
@@ -213,14 +209,12 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
 
   const handleEditableFileNameChange = async (e) => {
     const value = e.target.value;
-    setFormTouched(true);
     setEditableFileName(value);
     uploadOperation.setError(await validateFilename(value));
   };
 
   const handleAnalysisNameChange = async (e) => {
     const value = e.target.value;
-    setFormTouched(true);
     setAnalysisName(value);
     uploadOperation.setError(await validateFilename(value));
   };
@@ -241,7 +235,6 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
 
   const handleTeamChange = (teamId) => {
     setSelectedTeamId(teamId);
-    setFormTouched(true);
   };
 
   const handleUpload = async () => {
@@ -289,12 +282,15 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
 
   // Utility functions
   const resetForm = () => {
+    // Blur any focused element to prevent aria-hidden accessibility warning
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
     setSelectedFile(null);
     setEditableFileName('');
     setAnalysisName('');
     setEditorContent(DEFAULT_EDITOR_CONTENT);
     uploadOperation.setError(null);
-    setFormTouched(false);
     setIsExpanded(false);
     setSelectedTeamId(getInitialTeam());
   };
@@ -404,7 +400,6 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
                         uploadOperation.setError(
                           'Please select a JavaScript file (.js)',
                         );
-                        setFormTouched(true);
                       }}
                       maxFiles={1}
                       disabled={isInputDisabled}
@@ -558,26 +553,18 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
             <FormAlert type="error" message={uploadOperation.error} />
 
             {/* Action Buttons */}
-            <Group>
-              <Button
-                onClick={handleUpload}
-                disabled={isSaveDisabled}
-                loading={isCurrentAnalysisLoading}
-                color="green"
-              >
-                Save Analysis
-              </Button>
-
-              {showCancelButton && (
-                <Button
-                  variant="default"
-                  onClick={handleCancel}
-                  disabled={isInputDisabled}
-                >
-                  Cancel
-                </Button>
-              )}
-            </Group>
+            <FormActionButtons
+              onSubmit={handleUpload}
+              onCancel={handleCancel}
+              submitLabel="Save Analysis"
+              cancelLabel="Cancel"
+              loading={isCurrentAnalysisLoading}
+              disabled={isSaveDisabled}
+              cancelDisabled={isInputDisabled}
+              submitType="button"
+              mt={0}
+              justify="flex-start"
+            />
           </Stack>
         </Box>
       </Collapse>

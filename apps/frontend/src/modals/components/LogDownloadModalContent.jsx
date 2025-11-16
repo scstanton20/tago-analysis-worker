@@ -60,8 +60,6 @@ const LogDownloadModalContent = ({ id, innerProps }) => {
         loading={downloadOperation.loading}
         submitLabel="Download"
         submitIcon={<IconDownload size={16} />}
-        submitColor="brand"
-        submitVariant="filled"
         mt="md"
       />
     </Stack>

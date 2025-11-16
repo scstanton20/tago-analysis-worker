@@ -17,8 +17,6 @@ import logger from '../utils/logger';
  * @returns {Object} State and handlers for team management
  */
 export function useTeamManagement({ teams }) {
-  const [newTeamName, setNewTeamName] = useState('');
-  const [newTeamColor, setNewTeamColor] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editingName, setEditingName] = useState('');
   const [editingColor, setEditingColor] = useState('');
@@ -70,14 +68,16 @@ export function useTeamManagement({ teams }) {
 
   /**
    * Create a new team
+   * @param {Object} values - Form values from TeamCreateForm
+   * @param {string} values.name - Team name
+   * @param {string} values.color - Team color
    */
   const handleCreateTeam = useCallback(
-    async (e) => {
-      e.preventDefault();
-      if (!newTeamName.trim() || !newTeamColor || isLoading) return;
+    async (values) => {
+      if (!values.name?.trim() || !values.color || isLoading) return;
 
       // Check for duplicate name
-      if (usedNames.has(newTeamName.toLowerCase().trim())) {
+      if (usedNames.has(values.name.toLowerCase().trim())) {
         notify.error(
           'A team with this name already exists. Please choose a different name.',
         );
@@ -86,15 +86,14 @@ export function useTeamManagement({ teams }) {
 
       await createTeamOperation.execute(async () => {
         await notify.createTeam(
-          teamService.createTeam(newTeamName.trim(), newTeamColor),
-          newTeamName.trim(),
+          teamService.createTeam(values.name.trim(), values.color),
+          values.name.trim(),
         );
-        setNewTeamName('');
-        setNewTeamColor('');
+        // Note: State is no longer used since form manages its own state
       });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [newTeamName, newTeamColor, isLoading, usedNames, notify],
+    [isLoading, usedNames, notify],
   );
 
   /**
@@ -218,8 +217,6 @@ export function useTeamManagement({ teams }) {
    * Reset all form state
    */
   const resetState = useCallback(() => {
-    setNewTeamName('');
-    setNewTeamColor('');
     setEditingId(null);
     setEditingName('');
     setEditingColor('');
@@ -243,10 +240,6 @@ export function useTeamManagement({ teams }) {
 
   return {
     // State
-    newTeamName,
-    setNewTeamName,
-    newTeamColor,
-    setNewTeamColor,
     editingId,
     setEditingId,
     editingName,

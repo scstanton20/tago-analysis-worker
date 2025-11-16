@@ -123,7 +123,34 @@ export function useUserManagement({
       departmentPermissions: {},
     },
     validate: {
-      name: (value) => (!value ? 'Name is required' : null),
+      name: (value) => (!value?.trim() ? 'Name is required' : null),
+      email: (value) => {
+        if (!value?.trim()) return 'Email is required';
+        if (!EMAIL_REGEX.test(value)) {
+          return 'Invalid email format. Must include @ and a valid domain (e.g., user@example.com)';
+        }
+        // Check uniqueness for new users only
+        if (
+          !editingUser &&
+          existingUserData.emails.includes(value.toLowerCase())
+        ) {
+          return 'This email address is already registered';
+        }
+        return null;
+      },
+      username: (value) => {
+        // Username is optional, so allow empty
+        if (!value) return null;
+
+        if (value.length < MIN_USERNAME_LENGTH) {
+          return `Username must be at least ${MIN_USERNAME_LENGTH} characters`;
+        }
+        if (!USERNAME_REGEX.test(value)) {
+          return 'Username can only contain letters, numbers, hyphens, underscores, and dots';
+        }
+        // Note: Async availability check is handled separately in handleUsernameChange
+        return null;
+      },
       role: (value) => (!value ? 'Role is required' : null),
       departmentPermissions: (value, values) => {
         // Only validate team selection for 'user' role during creation
@@ -236,22 +263,21 @@ export function useUserManagement({
     [editingUser, existingUserData.emails],
   );
 
-  const handleUsernameChange = useCallback(
+  /**
+   * Handle username blur to check async availability
+   * Format validation is handled by form's validate object
+   */
+  const handleUsernameBlur = useCallback(
     async (value) => {
-      form.setFieldValue('username', value);
+      // Only check availability if format is valid (no format errors from validate object)
+      if (!value || form.errors.username) return;
+
       const error = await validateUsername(value);
-      form.setFieldError('username', error || undefined);
+      if (error) {
+        form.setFieldError('username', error);
+      }
     },
     [form, validateUsername],
-  );
-
-  const handleEmailChange = useCallback(
-    (value) => {
-      form.setFieldValue('email', value);
-      const error = validateEmail(value);
-      form.setFieldError('email', error || undefined);
-    },
-    [form, validateEmail],
   );
 
   // Department permission helpers
@@ -868,8 +894,7 @@ export function useUserManagement({
     handleUnbanUser,
     handleCancel,
     handleCreate,
-    handleUsernameChange,
-    handleEmailChange,
+    handleUsernameBlur,
     toggleDepartment,
     toggleDepartmentPermission,
   };

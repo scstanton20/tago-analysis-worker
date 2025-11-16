@@ -9,13 +9,16 @@ import {
   Stack,
   Title,
   Box,
-  Button,
   Table,
   Progress,
   Center,
   Tabs,
 } from '@mantine/core';
-import { FormAlert, LoadingState } from '../../../components/global';
+import {
+  FormAlert,
+  LoadingState,
+  UtilityButton,
+} from '../../../components/global';
 import {
   IconRefresh,
   IconAlertCircle,
@@ -463,14 +466,13 @@ function MetricsDashboard() {
               Updated {lastUpdate.toLocaleTimeString()}
             </Text>
           )}
-          <Button
+          <UtilityButton
             leftSection={<IconRefresh size={16} />}
-            variant="light"
             size="sm"
             disabled
           >
             Auto-Refresh
-          </Button>
+          </UtilityButton>
         </Group>
       </Group>
 

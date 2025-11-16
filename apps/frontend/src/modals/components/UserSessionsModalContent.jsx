@@ -5,16 +5,13 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { Stack, Group, Text, Table, Badge, ActionIcon } from '@mantine/core';
 import {
-  Stack,
-  Group,
-  Button,
-  Text,
-  Table,
-  Badge,
-  ActionIcon,
-} from '@mantine/core';
-import { FormAlert, LoadingState } from '../../components/global';
+  FormAlert,
+  LoadingState,
+  SecondaryButton,
+  DangerButton,
+} from '../../components/global';
 import { modals } from '@mantine/modals';
 import {
   IconDeviceLaptop,
@@ -268,24 +265,21 @@ function UserSessionsModalContent({ innerProps }) {
             </Text>
           </Stack>
           <Group gap="sm">
-            <Button
+            <SecondaryButton
               leftSection={<IconRefresh size="1rem" />}
               onClick={loadSessions}
-              variant="light"
               size="sm"
             >
               Refresh
-            </Button>
-            <Button
+            </SecondaryButton>
+            <DangerButton
               leftSection={<IconTrash size="1rem" />}
               onClick={handleRevokeAllSessions}
-              color="red"
-              variant="light"
               size="sm"
               disabled={!sessions.length}
             >
               Revoke All
-            </Button>
+            </DangerButton>
           </Group>
         </Group>
 

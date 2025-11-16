@@ -8,16 +8,17 @@ import { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   Stack,
   Text,
-  Button,
   Group,
   Table,
   Badge,
+  // eslint-disable-next-line no-restricted-imports -- Special case: informational callouts with titles and structured content
   Alert,
   ActionIcon,
   Divider,
   Box,
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
+import { SecondaryButton } from '../../components/global/buttons';
 import {
   IconHistory,
   IconDownload,
@@ -327,9 +328,9 @@ function VersionManagementModalContent({ context, id, innerProps }) {
         )}
 
         <Group justify="flex-end" mt="md">
-          <Button onClick={() => modals.close(id)} variant="light">
+          <SecondaryButton onClick={() => modals.close(id)}>
             Close
-          </Button>
+          </SecondaryButton>
         </Group>
       </Stack>
     </Box>

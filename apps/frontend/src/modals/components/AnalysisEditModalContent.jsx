@@ -13,8 +13,8 @@ import {
   Stack,
   Group,
   Text,
-  Button,
   TextInput,
+  // eslint-disable-next-line no-restricted-imports -- Special case: complex informational callout with title and structured content
   Alert,
   Box,
   ActionIcon,
@@ -27,6 +27,8 @@ import {
   FormAlert,
   FormActionButtons,
   LoadingState,
+  SecondaryButton,
+  CancelButton,
 } from '../../components/global';
 import {
   IconEdit,
@@ -267,14 +269,13 @@ function AnalysisEditModalContent({ id, innerProps }) {
       >
         <Group>
           {!readOnly && !isEnvMode && formatCodeFn && (
-            <Button
+            <SecondaryButton
               leftSection={<IconWand size={16} />}
-              variant="light"
               onClick={handleFormat}
               disabled={isLoading || !hasFormatChanges}
             >
               Format (Ctrl/CMD+Shift+F)
-            </Button>
+            </SecondaryButton>
           )}
           {!readOnly && !isEnvMode && (errorCount > 0 || warningCount > 0) && (
             <Group gap="xs">
@@ -338,13 +339,9 @@ function AnalysisEditModalContent({ id, innerProps }) {
             loading={isLoading}
             disabled={!hasChanges}
             submitLabel="Save Changes"
-            submitColor="brand"
-            submitVariant="filled"
           />
         ) : (
-          <Button variant="default" onClick={() => modals.close(id)}>
-            Close
-          </Button>
+          <CancelButton onClick={() => modals.close(id)}>Close</CancelButton>
         )}
       </Group>
     </Stack>

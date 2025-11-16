@@ -1,7 +1,8 @@
-import { Alert, Button, Group } from '@mantine/core';
+// eslint-disable-next-line no-restricted-imports -- Special case: custom-styled sticky banner with filled variant
+import { Alert, Group } from '@mantine/core';
 import { IconUserCheck, IconX } from '@tabler/icons-react';
 import { useAuth } from '../../hooks/useAuth';
-import { IconLabel } from '../global';
+import { IconLabel, SecondaryButton } from '../global';
 import logger from '../../utils/logger';
 
 export default function ImpersonationBanner() {
@@ -38,7 +39,7 @@ export default function ImpersonationBanner() {
           size="sm"
           fw={600}
         />
-        <Button
+        <SecondaryButton
           size="xs"
           variant="white"
           color="orange"
@@ -46,7 +47,7 @@ export default function ImpersonationBanner() {
           onClick={handleExitImpersonation}
         >
           Exit Impersonation
-        </Button>
+        </SecondaryButton>
       </Group>
     </Alert>
   );
