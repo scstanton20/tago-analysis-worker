@@ -30,9 +30,14 @@ export function TeamCreateForm({ usedNames, usedColors, isLoading, onSubmit }) {
   });
 
   // Handle form submission
-  const handleSubmit = form.onSubmit((values) => {
+  const handleSubmit = form.onSubmit(async (values) => {
     // Call parent's onSubmit with form values
-    onSubmit(values);
+    const success = await onSubmit(values);
+
+    // Reset form on successful creation
+    if (success) {
+      form.reset();
+    }
   });
 
   // Handle cancel - reset form to initial state

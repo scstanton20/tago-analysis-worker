@@ -71,17 +71,18 @@ export function useTeamManagement({ teams }) {
    * @param {Object} values - Form values from TeamCreateForm
    * @param {string} values.name - Team name
    * @param {string} values.color - Team color
+   * @returns {Promise<boolean>} Returns true if team creation was successful
    */
   const handleCreateTeam = useCallback(
     async (values) => {
-      if (!values.name?.trim() || !values.color || isLoading) return;
+      if (!values.name?.trim() || !values.color || isLoading) return false;
 
       // Check for duplicate name
       if (usedNames.has(values.name.toLowerCase().trim())) {
         notify.error(
           'A team with this name already exists. Please choose a different name.',
         );
-        return;
+        return false;
       }
 
       await createTeamOperation.execute(async () => {
@@ -89,8 +90,9 @@ export function useTeamManagement({ teams }) {
           teamService.createTeam(values.name.trim(), values.color),
           values.name.trim(),
         );
-        // Note: State is no longer used since form manages its own state
       });
+
+      return true;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [isLoading, usedNames, notify],
