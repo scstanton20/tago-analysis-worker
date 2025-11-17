@@ -11,6 +11,7 @@ import {
   LoadingState,
   SecondaryButton,
 } from '../../components/global';
+import IframeLoader from './IframeLoader';
 const DNSCacheSettings = lazy(() => import('./settings/DNSCacheSettings'));
 const MetricsDashboard = lazy(() => import('./settings/MetricsDashboard'));
 const UtilsDocs = lazy(() => import('./settings/UtilsDocs'));
@@ -59,81 +60,54 @@ const SettingsModalContent = () => {
 
         {/* Content Area */}
         <Box style={{ flex: 1, height: '100%' }}>
-          {/* API tab - no lazy loading needed */}
-          <Tabs.Panel value="api">
-            <Stack gap="md">
-              <Group justify="space-between" align="center">
-                <Text size="lg" fw={600}>
-                  API Documentation
-                </Text>
-                <SecondaryButton
-                  size="sm"
-                  onClick={handleOpenApiDocs}
-                  leftSection={<IconBook size={16} />}
-                >
-                  Open in New Tab
-                </SecondaryButton>
-              </Group>
-              <PaperCard>
-                <iframe
-                  src={`${window.location.origin}/api/docs`}
-                  title="API Documentation"
-                  style={{
-                    width: '100%',
-                    height: '650px',
-                    border: 'none',
-                    borderRadius: '4px',
-                  }}
-                />
-              </PaperCard>
-            </Stack>
-          </Tabs.Panel>
+          <Suspense
+            fallback={
+              <LoadingState
+                loading={true}
+                skeleton
+                pattern="content"
+                skeletonCount={4}
+              />
+            }
+          >
+            {/* API tab - iframe with loading state */}
+            <Tabs.Panel value="api">
+              <Stack gap="md">
+                <Group justify="space-between" align="center">
+                  <Text size="lg" fw={600}>
+                    API Documentation
+                  </Text>
+                  <SecondaryButton
+                    size="sm"
+                    onClick={handleOpenApiDocs}
+                    leftSection={<IconBook size={16} />}
+                  >
+                    Open in New Tab
+                  </SecondaryButton>
+                </Group>
+                <PaperCard>
+                  <IframeLoader
+                    src={`${window.location.origin}/api/docs`}
+                    title="API Documentation"
+                    height="650px"
+                  />
+                </PaperCard>
+              </Stack>
+            </Tabs.Panel>
 
-          {/* Lazy-loaded tabs with individual Suspense boundaries */}
-          <Tabs.Panel value="utils">
-            <Suspense
-              fallback={
-                <LoadingState
-                  loading={true}
-                  skeleton
-                  pattern="content"
-                  skeletonCount={4}
-                />
-              }
-            >
+            {/* Lazy-loaded tabs */}
+            <Tabs.Panel value="utils">
               <UtilsDocs />
-            </Suspense>
-          </Tabs.Panel>
+            </Tabs.Panel>
 
-          <Tabs.Panel value="metrics">
-            <Suspense
-              fallback={
-                <LoadingState
-                  loading={true}
-                  skeleton
-                  pattern="content"
-                  skeletonCount={4}
-                />
-              }
-            >
+            <Tabs.Panel value="metrics">
               <MetricsDashboard />
-            </Suspense>
-          </Tabs.Panel>
+            </Tabs.Panel>
 
-          <Tabs.Panel value="dns">
-            <Suspense
-              fallback={
-                <LoadingState
-                  loading={true}
-                  skeleton
-                  pattern="content"
-                  skeletonCount={4}
-                />
-              }
-            >
+            <Tabs.Panel value="dns">
               <DNSCacheSettings />
-            </Suspense>
-          </Tabs.Panel>
+            </Tabs.Panel>
+          </Suspense>
         </Box>
       </Group>
     </Tabs>
