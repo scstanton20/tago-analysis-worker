@@ -78,29 +78,51 @@ const SettingsModalContent = () => {
             </Stack>
           </Tabs.Panel>
 
-          {/* Lazy-loaded tabs with Suspense */}
-          <Suspense
-            fallback={
-              <LoadingState
-                loading={true}
-                skeleton
-                pattern="content"
-                skeletonCount={4}
-              />
-            }
-          >
-            <Tabs.Panel value="utils">
+          {/* Lazy-loaded tabs with individual Suspense boundaries */}
+          <Tabs.Panel value="utils">
+            <Suspense
+              fallback={
+                <LoadingState
+                  loading={true}
+                  skeleton
+                  pattern="content"
+                  skeletonCount={4}
+                />
+              }
+            >
               <UtilsDocs />
-            </Tabs.Panel>
+            </Suspense>
+          </Tabs.Panel>
 
-            <Tabs.Panel value="metrics">
+          <Tabs.Panel value="metrics">
+            <Suspense
+              fallback={
+                <LoadingState
+                  loading={true}
+                  skeleton
+                  pattern="content"
+                  skeletonCount={4}
+                />
+              }
+            >
               <MetricsDashboard />
-            </Tabs.Panel>
+            </Suspense>
+          </Tabs.Panel>
 
-            <Tabs.Panel value="dns">
+          <Tabs.Panel value="dns">
+            <Suspense
+              fallback={
+                <LoadingState
+                  loading={true}
+                  skeleton
+                  pattern="content"
+                  skeletonCount={4}
+                />
+              }
+            >
               <DNSCacheSettings />
-            </Tabs.Panel>
-          </Suspense>
+            </Suspense>
+          </Tabs.Panel>
         </Box>
       </Group>
     </Tabs>
