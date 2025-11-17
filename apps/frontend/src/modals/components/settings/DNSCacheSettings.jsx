@@ -9,7 +9,6 @@ import {
   Group,
   SimpleGrid,
   Badge,
-  Loader,
   Card,
   ScrollArea,
   ActionIcon,
@@ -23,6 +22,7 @@ import {
   SuccessButton,
   UtilityButton,
   DangerButton,
+  LoadingState,
 } from '../../../components/global';
 import { useNotifications } from '../../../hooks/useNotifications';
 import { useAsyncOperation, useAsyncMount } from '../../../hooks/async';
@@ -214,301 +214,291 @@ function DNSCacheSettings() {
     return `${hours}h`;
   };
 
-  if (!isAuthenticated) {
-    return (
-      <Stack align="center" justify="center" h={200}>
-        <Loader size="lg" />
-        <Text size="sm" c="dimmed">
-          Authenticating...
-        </Text>
-      </Stack>
-    );
-  }
-
-  if (loadConfigOperation.loading) {
-    return (
-      <Stack align="center" justify="center" h={200}>
-        <Loader size="lg" />
-        <Text size="sm" c="dimmed">
-          Loading DNS cache configuration...
-        </Text>
-      </Stack>
-    );
-  }
-
-  if (!config) {
-    return (
-      <FormAlert
-        type="error"
-        message="Failed to load DNS cache configuration. Please try refreshing the page."
-      />
-    );
-  }
+  // Combined loading state check
+  const isLoading = !isAuthenticated || loadConfigOperation.loading;
 
   return (
-    <Stack gap="md">
-      <Text size="lg" fw={600} mb="sm">
-        DNS Cache Configuration
-      </Text>
-
-      {/* Configuration */}
-      <PaperCard
-        title="DNS Cache Settings"
-        icon={<IconTransfer size={20} />}
-        actions={
-          <Switch
-            checked={config.enabled}
-            onChange={(event) =>
-              handleEnabledToggle(event.currentTarget.checked)
-            }
-            label={config.enabled ? 'Enabled' : 'Disabled'}
-          />
-        }
-      >
+    <LoadingState
+      loading={isLoading}
+      skeleton
+      pattern="content"
+      skeletonCount={4}
+    >
+      {loadConfigOperation.error || (!config && !isLoading) ? (
+        <FormAlert
+          type="error"
+          message="Failed to load DNS cache configuration. Please try refreshing the page."
+        />
+      ) : config ? (
         <Stack gap="md">
-          <SimpleGrid cols={2} spacing="md">
-            <NumberInput
-              label="TTL (milliseconds)"
-              description="How long to cache DNS results"
-              value={pendingTtl}
-              onChange={handleTtlChange}
-              min={1000}
-              max={86400000}
-              step={1000}
-              disabled={!config.enabled}
-              error={validationErrors.ttl}
-              rightSection={
-                pendingTtl && <Text size="xs">{formatTTL(pendingTtl)}</Text>
-              }
-            />
-            <NumberInput
-              label="Max Entries"
-              description="Maximum number of cached entries"
-              value={pendingMaxEntries}
-              onChange={handleMaxEntriesChange}
-              min={10}
-              max={10000}
-              step={10}
-              disabled={!config.enabled}
-              error={validationErrors.maxEntries}
-            />
-          </SimpleGrid>
+          <Text size="lg" fw={600} mb="sm">
+            DNS Cache Configuration
+          </Text>
 
-          {hasUnsavedChanges && (
-            <Group justify="center">
-              <SuccessButton
-                leftSection={<IconDeviceFloppy size={16} />}
-                onClick={handleSaveConfig}
-                disabled={
-                  !config.enabled ||
-                  validationErrors.ttl ||
-                  validationErrors.maxEntries
+          {/* Configuration */}
+          <PaperCard
+            title="DNS Cache Settings"
+            icon={<IconTransfer size={20} />}
+            actions={
+              <Switch
+                checked={config.enabled}
+                onChange={(event) =>
+                  handleEnabledToggle(event.currentTarget.checked)
                 }
-              >
-                Save Configuration
-              </SuccessButton>
-            </Group>
-          )}
-        </Stack>
-      </PaperCard>
-
-      {/* Statistics */}
-      <PaperCard
-        title="Cache Statistics"
-        icon={<IconChartBar size={20} />}
-        actions={
-          <UtilityButton
-            size="xs"
-            leftSection={<IconRefresh size={14} />}
-            onClick={handleResetStats}
+                label={config.enabled ? 'Enabled' : 'Disabled'}
+              />
+            }
           >
-            Reset Stats
-          </UtilityButton>
-        }
-      >
-        <Stack gap="md">
-          <SimpleGrid cols={3} spacing="sm">
-            <Card p="xs" withBorder>
-              <Text size="xs" c="dimmed">
-                Cache Size
-              </Text>
-              <Text size="lg" fw={600}>
-                {stats?.cacheSize || 0}
-              </Text>
-            </Card>
-            <Card p="xs" withBorder>
-              <Text size="xs" c="dimmed">
-                Hit Rate (this TTL)
-              </Text>
-              <Text size="lg" fw={600}>
-                {stats?.hitRate || 0}%
-              </Text>
-            </Card>
-            <Card p="xs" withBorder>
-              <Text size="xs" c="dimmed">
-                Hits / Misses (this TTL)
-              </Text>
-              <Text size="lg" fw={600}>
-                {stats?.hits || 0} / {stats?.misses || 0}
-              </Text>
-            </Card>
-            <Card p="xs" withBorder>
-              <Text size="xs" c="dimmed">
-                TTL Period Progress
-              </Text>
-              <Stack gap={4}>
-                <Progress
-                  value={Math.min(
-                    parseFloat(stats?.ttlPeriodProgress || 0),
-                    100,
-                  )}
-                  size="sm"
-                  color="blue"
+            <Stack gap="md">
+              <SimpleGrid cols={2} spacing="md">
+                <NumberInput
+                  label="TTL (milliseconds)"
+                  description="How long to cache DNS results"
+                  value={pendingTtl}
+                  onChange={handleTtlChange}
+                  min={1000}
+                  max={86400000}
+                  step={1000}
+                  disabled={!config.enabled}
+                  error={validationErrors.ttl}
+                  rightSection={
+                    pendingTtl && <Text size="xs">{formatTTL(pendingTtl)}</Text>
+                  }
                 />
-                <Text size="sm" fw={600}>
-                  {formatTTL(stats?.ttlPeriodRemaining || 0)} left
-                </Text>
-              </Stack>
-            </Card>
-            <Card p="xs" withBorder>
-              <Text size="xs" c="dimmed">
-                Errors
-              </Text>
-              <Text size="lg" fw={600}>
-                {stats?.errors || 0}
-              </Text>
-            </Card>
-            <Card p="xs" withBorder>
-              <Text size="xs" c="dimmed">
-                Evictions
-              </Text>
-              <Text size="lg" fw={600}>
-                {stats?.evictions || 0}
-              </Text>
-            </Card>
-          </SimpleGrid>
-        </Stack>
-      </PaperCard>
+                <NumberInput
+                  label="Max Entries"
+                  description="Maximum number of cached entries"
+                  value={pendingMaxEntries}
+                  onChange={handleMaxEntriesChange}
+                  min={10}
+                  max={10000}
+                  step={10}
+                  disabled={!config.enabled}
+                  error={validationErrors.maxEntries}
+                />
+              </SimpleGrid>
 
-      {/* Cache Management */}
-      <PaperCard
-        title="Cache Management"
-        actions={
-          <DangerButton
-            size="xs"
-            leftSection={<IconClearAll size={14} />}
-            onClick={handleClearCache}
-          >
-            Clear Cache
-          </DangerButton>
-        }
-      >
-        <Stack gap="md">
-          <UtilityButton
-            onClick={() => {
-              setShowEntries(!showEntries);
-              if (!showEntries && entries.length === 0) {
-                loadEntries();
-              }
-            }}
-          >
-            {showEntries ? 'Hide' : 'Show'} Cache Entries (
-            {stats?.cacheSize || 0})
-          </UtilityButton>
-
-          {showEntries && (
-            <>
-              <Divider />
-              {loadEntriesOperation.loading ? (
-                <Stack align="center" py="md">
-                  <Loader size="sm" />
-                </Stack>
-              ) : entries.length === 0 ? (
-                <Text size="sm" c="dimmed" ta="center" py="md">
-                  No cache entries
-                </Text>
-              ) : (
-                <ScrollArea h={300}>
-                  <Stack gap="xs">
-                    {entries.map((entry) => (
-                      <Paper key={entry.key} p="xs" withBorder>
-                        <Group justify="space-between">
-                          <Stack gap={4}>
-                            <Group gap="xs">
-                              <Badge size="sm" variant="light">
-                                {entry.key.split(':')[0]}
-                              </Badge>
-                              <Text size="sm" fw={500}>
-                                {entry.key.includes(':')
-                                  ? entry.key.split(':').slice(1).join(':')
-                                  : entry.key}
-                              </Text>
-                            </Group>
-                            <Group gap="xs">
-                              <Text size="xs" c="dimmed">
-                                TTL: {formatTTL(entry.remainingTTL)}
-                              </Text>
-                              <Text size="xs" c="dimmed">
-                                Age: {formatTTL(entry.age)}
-                              </Text>
-                              {entry.expired && (
-                                <Badge size="xs" color="red">
-                                  Expired
-                                </Badge>
-                              )}
-                            </Group>
-                            {(() => {
-                              // Handle different DNS cache data structures
-                              let addressDisplay = null;
-
-                              if (entry.data?.address) {
-                                if (typeof entry.data.address === 'string') {
-                                  // Single string address
-                                  addressDisplay = entry.data.address;
-                                } else if (Array.isArray(entry.data.address)) {
-                                  // Array of address objects
-                                  const addresses = entry.data.address
-                                    .map((addr) => addr.address || addr)
-                                    .filter((addr) => typeof addr === 'string');
-                                  addressDisplay = addresses.join(', ');
-                                }
-                              } else if (
-                                entry.data?.addresses &&
-                                Array.isArray(entry.data.addresses)
-                              ) {
-                                // Array of string addresses
-                                addressDisplay =
-                                  entry.data.addresses.join(', ');
-                              }
-
-                              return addressDisplay ? (
-                                <Text size="xs" c="dimmed">
-                                  Address: {addressDisplay}
-                                </Text>
-                              ) : null;
-                            })()}
-                          </Stack>
-                          <Tooltip label="Delete entry">
-                            <ActionIcon
-                              size="sm"
-                              variant="subtle"
-                              color="red"
-                              onClick={() => handleDeleteEntry(entry.key)}
-                            >
-                              <IconTrash size={16} />
-                            </ActionIcon>
-                          </Tooltip>
-                        </Group>
-                      </Paper>
-                    ))}
-                  </Stack>
-                </ScrollArea>
+              {hasUnsavedChanges && (
+                <Group justify="center">
+                  <SuccessButton
+                    leftSection={<IconDeviceFloppy size={16} />}
+                    onClick={handleSaveConfig}
+                    disabled={
+                      !config.enabled ||
+                      validationErrors.ttl ||
+                      validationErrors.maxEntries
+                    }
+                  >
+                    Save Configuration
+                  </SuccessButton>
+                </Group>
               )}
-            </>
-          )}
+            </Stack>
+          </PaperCard>
+
+          {/* Statistics */}
+          <PaperCard
+            title="Cache Statistics"
+            icon={<IconChartBar size={20} />}
+            actions={
+              <UtilityButton
+                size="xs"
+                leftSection={<IconRefresh size={14} />}
+                onClick={handleResetStats}
+              >
+                Reset Stats
+              </UtilityButton>
+            }
+          >
+            <Stack gap="md">
+              <SimpleGrid cols={3} spacing="sm">
+                <Card p="xs" withBorder>
+                  <Text size="xs" c="dimmed">
+                    Cache Size
+                  </Text>
+                  <Text size="lg" fw={600}>
+                    {stats?.cacheSize || 0}
+                  </Text>
+                </Card>
+                <Card p="xs" withBorder>
+                  <Text size="xs" c="dimmed">
+                    Hit Rate (this TTL)
+                  </Text>
+                  <Text size="lg" fw={600}>
+                    {stats?.hitRate || 0}%
+                  </Text>
+                </Card>
+                <Card p="xs" withBorder>
+                  <Text size="xs" c="dimmed">
+                    Hits / Misses (this TTL)
+                  </Text>
+                  <Text size="lg" fw={600}>
+                    {stats?.hits || 0} / {stats?.misses || 0}
+                  </Text>
+                </Card>
+                <Card p="xs" withBorder>
+                  <Text size="xs" c="dimmed">
+                    TTL Period Progress
+                  </Text>
+                  <Stack gap={4}>
+                    <Progress
+                      value={Math.min(
+                        parseFloat(stats?.ttlPeriodProgress || 0),
+                        100,
+                      )}
+                      size="sm"
+                      color="blue"
+                    />
+                    <Text size="sm" fw={600}>
+                      {formatTTL(stats?.ttlPeriodRemaining || 0)} left
+                    </Text>
+                  </Stack>
+                </Card>
+                <Card p="xs" withBorder>
+                  <Text size="xs" c="dimmed">
+                    Errors
+                  </Text>
+                  <Text size="lg" fw={600}>
+                    {stats?.errors || 0}
+                  </Text>
+                </Card>
+                <Card p="xs" withBorder>
+                  <Text size="xs" c="dimmed">
+                    Evictions
+                  </Text>
+                  <Text size="lg" fw={600}>
+                    {stats?.evictions || 0}
+                  </Text>
+                </Card>
+              </SimpleGrid>
+            </Stack>
+          </PaperCard>
+
+          {/* Cache Management */}
+          <PaperCard
+            title="Cache Management"
+            actions={
+              <DangerButton
+                size="xs"
+                leftSection={<IconClearAll size={14} />}
+                onClick={handleClearCache}
+              >
+                Clear Cache
+              </DangerButton>
+            }
+          >
+            <Stack gap="md">
+              <UtilityButton
+                onClick={() => {
+                  setShowEntries(!showEntries);
+                  if (!showEntries && entries.length === 0) {
+                    loadEntries();
+                  }
+                }}
+              >
+                {showEntries ? 'Hide' : 'Show'} Cache Entries (
+                {stats?.cacheSize || 0})
+              </UtilityButton>
+
+              {showEntries && (
+                <>
+                  <Divider />
+                  {loadEntriesOperation.loading ? (
+                    <LoadingState loading={true} minHeight={100} />
+                  ) : entries.length === 0 ? (
+                    <Text size="sm" c="dimmed" ta="center" py="md">
+                      No cache entries
+                    </Text>
+                  ) : (
+                    <ScrollArea h={300}>
+                      <Stack gap="xs">
+                        {entries.map((entry) => (
+                          <Paper key={entry.key} p="xs" withBorder>
+                            <Group justify="space-between">
+                              <Stack gap={4}>
+                                <Group gap="xs">
+                                  <Badge size="sm" variant="light">
+                                    {entry.key.split(':')[0]}
+                                  </Badge>
+                                  <Text size="sm" fw={500}>
+                                    {entry.key.includes(':')
+                                      ? entry.key.split(':').slice(1).join(':')
+                                      : entry.key}
+                                  </Text>
+                                </Group>
+                                <Group gap="xs">
+                                  <Text size="xs" c="dimmed">
+                                    TTL: {formatTTL(entry.remainingTTL)}
+                                  </Text>
+                                  <Text size="xs" c="dimmed">
+                                    Age: {formatTTL(entry.age)}
+                                  </Text>
+                                  {entry.expired && (
+                                    <Badge size="xs" color="red">
+                                      Expired
+                                    </Badge>
+                                  )}
+                                </Group>
+                                {(() => {
+                                  // Handle different DNS cache data structures
+                                  let addressDisplay = null;
+
+                                  if (entry.data?.address) {
+                                    if (
+                                      typeof entry.data.address === 'string'
+                                    ) {
+                                      // Single string address
+                                      addressDisplay = entry.data.address;
+                                    } else if (
+                                      Array.isArray(entry.data.address)
+                                    ) {
+                                      // Array of address objects
+                                      const addresses = entry.data.address
+                                        .map((addr) => addr.address || addr)
+                                        .filter(
+                                          (addr) => typeof addr === 'string',
+                                        );
+                                      addressDisplay = addresses.join(', ');
+                                    }
+                                  } else if (
+                                    entry.data?.addresses &&
+                                    Array.isArray(entry.data.addresses)
+                                  ) {
+                                    // Array of string addresses
+                                    addressDisplay =
+                                      entry.data.addresses.join(', ');
+                                  }
+
+                                  return addressDisplay ? (
+                                    <Text size="xs" c="dimmed">
+                                      Address: {addressDisplay}
+                                    </Text>
+                                  ) : null;
+                                })()}
+                              </Stack>
+                              <Tooltip label="Delete entry">
+                                <ActionIcon
+                                  size="sm"
+                                  variant="subtle"
+                                  color="red"
+                                  onClick={() => handleDeleteEntry(entry.key)}
+                                >
+                                  <IconTrash size={16} />
+                                </ActionIcon>
+                              </Tooltip>
+                            </Group>
+                          </Paper>
+                        ))}
+                      </Stack>
+                    </ScrollArea>
+                  )}
+                </>
+              )}
+            </Stack>
+          </PaperCard>
         </Stack>
-      </PaperCard>
-    </Stack>
+      ) : null}
+    </LoadingState>
   );
 }
 

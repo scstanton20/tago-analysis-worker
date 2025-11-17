@@ -33,9 +33,14 @@ const SettingsModalContent = () => {
 
   return (
     <Tabs value={activeTab} onChange={setActiveTab} orientation="vertical">
-      <Group align="flex-start" gap="md" style={{ minHeight: 800 }}>
+      <Group
+        align="flex-start"
+        gap="md"
+        style={{ height: 730, width: '100%' }}
+        wrap="nowrap"
+      >
         {/* Sidebar */}
-        <Box style={{ minWidth: 100 }}>
+        <Box style={{ minWidth: 100, flexShrink: 0 }}>
           <Tabs.List>
             <Tabs.Tab value="api" leftSection={<IconBook size={16} />}>
               API Docs
@@ -53,27 +58,33 @@ const SettingsModalContent = () => {
         </Box>
 
         {/* Content Area */}
-        <Box style={{ flex: 1 }}>
+        <Box style={{ flex: 1, height: '100%' }}>
           {/* API tab - no lazy loading needed */}
           <Tabs.Panel value="api">
             <Stack gap="md">
-              <Text size="lg" fw={600} mb="sm">
-                API Documentation
-              </Text>
+              <Group justify="space-between" align="center">
+                <Text size="lg" fw={600}>
+                  API Documentation
+                </Text>
+                <SecondaryButton
+                  size="sm"
+                  onClick={handleOpenApiDocs}
+                  leftSection={<IconBook size={16} />}
+                >
+                  Open in New Tab
+                </SecondaryButton>
+              </Group>
               <PaperCard>
-                <Stack gap="sm">
-                  <Text size="sm" c="dimmed">
-                    Access API documentation and developer resources.
-                  </Text>
-                  <SecondaryButton
-                    size="sm"
-                    onClick={handleOpenApiDocs}
-                    leftSection={<IconBook size={16} />}
-                    fullWidth
-                  >
-                    Open API Documentation
-                  </SecondaryButton>
-                </Stack>
+                <iframe
+                  src={`${window.location.origin}/api/docs`}
+                  title="API Documentation"
+                  style={{
+                    width: '100%',
+                    height: '650px',
+                    border: 'none',
+                    borderRadius: '4px',
+                  }}
+                />
               </PaperCard>
             </Stack>
           </Tabs.Panel>

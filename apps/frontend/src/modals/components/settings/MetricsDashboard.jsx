@@ -2,25 +2,23 @@ import { useState, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import {
   Grid,
-  Card,
   Text,
   Group,
   Badge,
   Stack,
-  Title,
   Box,
   Table,
   Progress,
-  Center,
   Tabs,
+  Card,
 } from '@mantine/core';
 import {
   FormAlert,
   LoadingState,
-  UtilityButton,
+  EmptyState,
+  PaperCard,
 } from '../../../components/global';
 import {
-  IconRefresh,
   IconAlertCircle,
   IconCheck,
   IconX,
@@ -129,9 +127,11 @@ function ProcessTable({ processes, loading = false }) {
 
   if (!processes || processes.length === 0) {
     return (
-      <Center h={200}>
-        <Text c="dimmed">No running processes</Text>
-      </Center>
+      <EmptyState
+        title="No Running Processes"
+        description="Analysis processes will appear here when running"
+        icon={<IconActivity size={48} />}
+      />
     );
   }
 
@@ -202,7 +202,7 @@ function MetricsTabContent({
   const isChildren = tabType === 'children';
 
   return (
-    <>
+    <Stack gap="lg">
       {/* Main Metrics Grid - Reorganized for better visual flow */}
       <Grid>
         {/* Status and Key Process Metrics - Top Row */}
@@ -382,20 +382,20 @@ function MetricsTabContent({
 
       {/* Process Table - Full width for detailed data */}
       {processes && processes.length > 0 && (
-        <Card shadow="sm" padding="lg" radius="md" withBorder>
-          <Group justify="space-between" mb="md">
-            <Group gap="xs">
-              <IconChartBar size={20} />
-              <Title order={4}>Analysis Processes</Title>
-            </Group>
+        <PaperCard
+          title="Analysis Processes"
+          icon={<IconChartBar size={20} />}
+          actions={
             <Badge variant="light" color="blue">
               {processes.length} processes
             </Badge>
-          </Group>
+          }
+          shadow="sm"
+        >
           <ProcessTable processes={processes} loading={loading} />
-        </Card>
+        </PaperCard>
       )}
-    </>
+    </Stack>
   );
 }
 
@@ -468,13 +468,6 @@ function MetricsDashboard() {
               Updated {lastUpdate.toLocaleTimeString()}
             </Text>
           )}
-          <UtilityButton
-            leftSection={<IconRefresh size={16} />}
-            size="sm"
-            disabled
-          >
-            Auto-Refresh
-          </UtilityButton>
         </Group>
       </Group>
 
@@ -507,39 +500,33 @@ function MetricsDashboard() {
 
         <Box mt="md">
           <Tabs.Panel value="total">
-            <Stack gap="lg">
-              <MetricsTabContent
-                data={totalData}
-                processes={processes}
-                loading={loading}
-                formatNumber={formatNumber}
-                tabType="total"
-              />
-            </Stack>
+            <MetricsTabContent
+              data={totalData}
+              processes={processes}
+              loading={loading}
+              formatNumber={formatNumber}
+              tabType="total"
+            />
           </Tabs.Panel>
 
           <Tabs.Panel value="container">
-            <Stack gap="lg">
-              <MetricsTabContent
-                data={containerData}
-                processes={[]} // Container tab doesn't show analysis processes
-                loading={loading}
-                formatNumber={formatNumber}
-                tabType="container"
-              />
-            </Stack>
+            <MetricsTabContent
+              data={containerData}
+              processes={[]} // Container tab doesn't show analysis processes
+              loading={loading}
+              formatNumber={formatNumber}
+              tabType="container"
+            />
           </Tabs.Panel>
 
           <Tabs.Panel value="children">
-            <Stack gap="lg">
-              <MetricsTabContent
-                data={childrenData}
-                processes={processes}
-                loading={loading}
-                formatNumber={formatNumber}
-                tabType="children"
-              />
-            </Stack>
+            <MetricsTabContent
+              data={childrenData}
+              processes={processes}
+              loading={loading}
+              formatNumber={formatNumber}
+              tabType="children"
+            />
           </Tabs.Panel>
         </Box>
       </Tabs>
