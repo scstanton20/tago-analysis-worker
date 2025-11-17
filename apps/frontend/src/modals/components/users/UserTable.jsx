@@ -89,21 +89,19 @@ export default function UserTable({
             </Table.Td>
             <Table.Td>
               <Stack gap="xs">
-                <Badge
-                  variant="light"
-                  color={
-                    user.role === 'admin'
-                      ? 'red'
-                      : user.role === 'analyst'
-                        ? 'orange'
-                        : user.role === 'operator'
-                          ? 'yellow'
-                          : 'blue'
-                  }
-                  style={{ textTransform: 'capitalize' }}
-                >
-                  {user.role || 'user'}
-                </Badge>
+                {user.memberRole === 'owner' ? (
+                  <Badge variant="filled" color="brand">
+                    Owner
+                  </Badge>
+                ) : (
+                  <Badge
+                    variant="light"
+                    color={user.role === 'admin' ? 'blue' : 'gray'}
+                    style={{ textTransform: 'capitalize' }}
+                  >
+                    {user.role || 'user'}
+                  </Badge>
+                )}
                 {user.banned && (
                   <Badge variant="light" color="red" size="xs">
                     Banned
@@ -131,12 +129,18 @@ export default function UserTable({
             <Table.Td>
               <ActionMenu
                 items={[
-                  {
-                    label: 'Edit User',
-                    icon: <IconEdit size={16} />,
-                    onClick: () => onEdit(user),
-                  },
-                  ...(user.id !== currentUser?.id
+                  // Only show Edit for non-owner users
+                  ...(user.memberRole !== 'owner'
+                    ? [
+                        {
+                          label: 'Edit User',
+                          icon: <IconEdit size={16} />,
+                          onClick: () => onEdit(user),
+                        },
+                      ]
+                    : []),
+                  // Only show other actions if not current user AND not owner
+                  ...(user.id !== currentUser?.id && user.memberRole !== 'owner'
                     ? [
                         { type: 'divider' },
                         {
@@ -197,6 +201,7 @@ UserTable.propTypes = {
       username: PropTypes.string,
       role: PropTypes.string,
       banned: PropTypes.bool,
+      memberRole: PropTypes.string, // Organization member role (owner/admin/member)
       requiresPasswordChange: PropTypes.oneOfType([
         PropTypes.bool,
         PropTypes.number,

@@ -50,6 +50,24 @@ try {
 
 const db = getAuthDatabase();
 
+// Helper function to get the main organization
+const getMainOrganization = () => {
+  try {
+    const mainOrg = executeQuery(
+      'SELECT id FROM organization WHERE slug = ?',
+      ['main'],
+      'finding main organization',
+    );
+    return mainOrg;
+  } catch (error) {
+    authLogger.error(
+      { error: error.message },
+      'Error fetching main organization',
+    );
+    return null;
+  }
+};
+
 export const auth = betterAuth({
   database: db,
   telemetry: { enabled: false },
@@ -103,6 +121,22 @@ export const auth = betterAuth({
             },
             '✓ User created with requiresPasswordChange=1',
           );
+        },
+      },
+    },
+    session: {
+      create: {
+        before: async (session) => {
+          const organization = getMainOrganization();
+          if (organization) {
+            return {
+              data: {
+                ...session,
+                activeOrganizationId: organization.id,
+              },
+            };
+          }
+          return { data: session };
         },
       },
     },

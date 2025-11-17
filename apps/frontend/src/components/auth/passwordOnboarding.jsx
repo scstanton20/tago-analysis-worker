@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import PropTypes from 'prop-types';
 import {
   PasswordInput,
@@ -11,7 +10,7 @@ import {
 } from '@mantine/core';
 import { IconKey } from '@tabler/icons-react';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
-import { useAsyncOperation } from '../../hooks/async/useAsyncOperation';
+import { useStandardForm } from '../../hooks/forms/useStandardForm';
 import { FormAlert, PrimaryButton } from '../global';
 import Logo from '../ui/logo.jsx';
 import { validatePassword } from '../../utils/userValidation';
@@ -22,69 +21,32 @@ export default function PasswordOnboarding({
   passwordOnboarding,
 }) {
   const notify = useNotifications();
-  const [formData, setFormData] = useState({
-    newPassword: '',
-    confirmPassword: '',
+
+  // Initialize form with useStandardForm
+  const { form, submitOperation, handleSubmit } = useStandardForm({
+    initialValues: {
+      newPassword: '',
+      confirmPassword: '',
+    },
+    validate: {
+      newPassword: (value) => {
+        if (!value) return 'Password is required';
+        return validatePassword(value);
+      },
+      confirmPassword: (value, values) => {
+        if (!value) return 'Please confirm your password';
+        if (value !== values.newPassword) return 'Passwords do not match';
+        return null;
+      },
+    },
+    resetOnSuccess: true,
   });
 
-  const passwordChangeOperation = useAsyncOperation();
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    if (!formData.newPassword || !formData.confirmPassword) {
-      passwordChangeOperation.setError('Please fill in all fields');
-      return;
-    }
-
-    if (formData.newPassword !== formData.confirmPassword) {
-      passwordChangeOperation.setError('New passwords do not match');
-      return;
-    }
-
-    // Validate password with new requirements
-    const passwordError = validatePassword(formData.newPassword);
-    if (passwordError) {
-      passwordChangeOperation.setError(passwordError);
-      return;
-    }
-
-    await passwordChangeOperation.execute(async () => {
-      await passwordOnboarding(formData.newPassword);
-      notify.success('Password changed successfully!');
-      onSuccess();
-    });
-  };
-
-  const handleInputChange = (field, value) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-    if (passwordChangeOperation.error) {
-      passwordChangeOperation.setError(null);
-    }
-  };
-
-  // Check if form is valid and button should be enabled
-  const isFormValid =
-    formData.newPassword &&
-    formData.confirmPassword &&
-    formData.newPassword === formData.confirmPassword &&
-    !validatePassword(formData.newPassword);
-
-  // Real-time validation feedback
-  const getPasswordError = () => {
-    if (!formData.newPassword) return null;
-    return validatePassword(formData.newPassword);
-  };
-
-  const getConfirmPasswordError = () => {
-    if (!formData.confirmPassword) return null;
-    if (formData.newPassword && formData.confirmPassword) {
-      if (formData.newPassword !== formData.confirmPassword) {
-        return 'Passwords do not match';
-      }
-    }
-    return null;
-  };
+  const handlePasswordChange = handleSubmit(async (values) => {
+    await passwordOnboarding(values.newPassword);
+    notify.success('Password changed successfully!');
+    onSuccess();
+  });
 
   return (
     <Box
@@ -114,7 +76,7 @@ export default function PasswordOnboarding({
             border: '1px solid var(--mantine-color-gray-3)',
           }}
         >
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handlePasswordChange}>
             <Stack gap="lg">
               <Box ta="center">
                 <Logo size={64} />
@@ -142,45 +104,45 @@ export default function PasswordOnboarding({
                 </Text>
               </Box>
 
-              <FormAlert type="error" message={passwordChangeOperation.error} />
+              <FormAlert type="error" message={submitOperation.error} />
 
               <Stack gap="md">
                 <PasswordInput
                   label="New Password"
                   placeholder="Enter your new password"
-                  value={formData.newPassword}
-                  onChange={(e) =>
-                    handleInputChange('newPassword', e.target.value)
-                  }
-                  error={getPasswordError()}
+                  {...form.getInputProps('newPassword')}
                   description="Must be at least 6 characters with one uppercase letter"
                   required
                   size="md"
                   autoComplete="new-password"
                   name="new-password"
                   id="new-password"
+                  onChange={(e) => {
+                    form.setFieldValue('newPassword', e.target.value);
+                    if (submitOperation.error) submitOperation.setError(null);
+                  }}
                 />
 
                 <PasswordInput
                   label="Confirm New Password"
                   placeholder="Confirm your new password"
-                  value={formData.confirmPassword}
-                  onChange={(e) =>
-                    handleInputChange('confirmPassword', e.target.value)
-                  }
-                  error={getConfirmPasswordError()}
+                  {...form.getInputProps('confirmPassword')}
                   required
                   size="md"
                   autoComplete="new-password"
                   name="confirm-password"
                   id="confirm-password"
+                  onChange={(e) => {
+                    form.setFieldValue('confirmPassword', e.target.value);
+                    if (submitOperation.error) submitOperation.setError(null);
+                  }}
                 />
               </Stack>
 
               <PrimaryButton
                 type="submit"
-                loading={passwordChangeOperation.loading}
-                disabled={!isFormValid}
+                loading={submitOperation.loading}
+                disabled={!form.isValid()}
                 fullWidth
                 size="md"
                 leftSection={<IconKey size="1rem" />}
@@ -189,7 +151,7 @@ export default function PasswordOnboarding({
                   fontWeight: 600,
                 }}
               >
-                {passwordChangeOperation.loading
+                {submitOperation.loading
                   ? 'Changing Password...'
                   : 'Change Password'}
               </PrimaryButton>

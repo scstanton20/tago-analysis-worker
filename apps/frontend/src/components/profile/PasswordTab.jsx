@@ -9,15 +9,17 @@ import { Stack, PasswordInput } from '@mantine/core';
 import { FormAlert, FormActionButtons } from '../global';
 
 export function PasswordTab({
-  passwordForm,
+  passwordFormState,
   passwordError,
   passwordLoading,
   passwordSuccess,
   handlePasswordSubmit,
   handleClose,
 }) {
+  const { form, isDirty } = passwordFormState;
+
   return (
-    <form onSubmit={passwordForm.onSubmit(handlePasswordSubmit)}>
+    <form onSubmit={form.onSubmit(handlePasswordSubmit)}>
       <Stack gap="md">
         <FormAlert type="error" message={passwordError} />
 
@@ -28,7 +30,7 @@ export function PasswordTab({
           autoComplete="current-password"
           name="current-password"
           id="profile-current-password"
-          {...passwordForm.getInputProps('currentPassword')}
+          {...form.getInputProps('currentPassword')}
         />
 
         <PasswordInput
@@ -38,7 +40,7 @@ export function PasswordTab({
           autoComplete="new-password"
           name="new-password"
           id="profile-new-password"
-          {...passwordForm.getInputProps('newPassword')}
+          {...form.getInputProps('newPassword')}
         />
 
         <PasswordInput
@@ -48,14 +50,14 @@ export function PasswordTab({
           autoComplete="new-password"
           name="confirm-password"
           id="profile-confirm-password"
-          {...passwordForm.getInputProps('confirmPassword')}
+          {...form.getInputProps('confirmPassword')}
         />
 
         <FormActionButtons
           onSubmit={handlePasswordSubmit}
           onCancel={handleClose}
           loading={passwordLoading}
-          disabled={passwordSuccess || !passwordForm.isDirty()}
+          disabled={passwordSuccess || !isDirty || !form.isValid()}
           submitLabel="Change Password"
         />
       </Stack>
@@ -64,7 +66,7 @@ export function PasswordTab({
 }
 
 PasswordTab.propTypes = {
-  passwordForm: PropTypes.object.isRequired,
+  passwordFormState: PropTypes.object.isRequired,
   passwordError: PropTypes.string,
   passwordLoading: PropTypes.bool,
   passwordSuccess: PropTypes.bool,

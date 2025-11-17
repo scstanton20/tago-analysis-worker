@@ -5,12 +5,12 @@
  */
 
 import { useState, useCallback } from 'react';
-import { useForm } from '@mantine/form';
 import { useAuth } from './useAuth';
 import { addPasskey, passkey } from '../lib/auth';
 import { useNotifications } from './useNotifications.jsx';
 import { useFormSync } from './useFormSync';
 import { useAsyncOperation } from './async';
+import { useStandardForm } from './forms/useStandardForm';
 import logger from '../utils/logger';
 import { validatePassword } from '../utils/userValidation';
 
@@ -69,8 +69,8 @@ export function useProfileModal({ closeModal }) {
     deletePasskeyOperation.error;
   const registeringPasskey = registerPasskeyOperation.loading;
 
-  // Forms
-  const passwordForm = useForm({
+  // Forms using useStandardForm
+  const passwordFormState = useStandardForm({
     initialValues: {
       currentPassword: '',
       newPassword: '',
@@ -83,21 +83,25 @@ export function useProfileModal({ closeModal }) {
         if (!value) return 'New password is required';
         return validatePassword(value);
       },
-      confirmPassword: (value, values) =>
-        value !== values.newPassword ? 'Passwords do not match' : null,
+      confirmPassword: (value, values) => {
+        if (!value) return 'Please confirm your password';
+        return value !== values.newPassword ? 'Passwords do not match' : null;
+      },
     },
+    resetOnSuccess: false, // Manual reset in handler
   });
 
-  const passkeyForm = useForm({
+  const passkeyFormState = useStandardForm({
     initialValues: {
       name: '',
     },
     validate: {
       name: (value) => (!value ? 'Passkey name is required' : null),
     },
+    resetOnSuccess: false, // Manual reset in handler
   });
 
-  const profileForm = useForm({
+  const profileFormState = useStandardForm({
     initialValues: {
       name: user.name || '',
       email: user.email || '',
@@ -117,11 +121,12 @@ export function useProfileModal({ closeModal }) {
             ? 'Username must be at least 3 characters'
             : null,
     },
+    resetOnSuccess: false, // Manual reset in handler
   });
 
   // Sync profile form with user data
   useFormSync(
-    profileForm,
+    profileFormState.form,
     {
       name: user.name || '',
       email: user.email || '',
@@ -168,30 +173,56 @@ export function useProfileModal({ closeModal }) {
     async (values) => {
       setPasswordSuccess(false);
 
+      // Validate that all required fields are present
+      if (!values.currentPassword || !values.newPassword) {
+        passwordOperation.setError('All password fields are required');
+        return;
+      }
+
+      if (values.newPassword !== values.confirmPassword) {
+        passwordOperation.setError('Passwords do not match');
+        return;
+      }
+
       await passwordOperation.execute(async () => {
-        await notify.passwordChange(
-          changeProfilePassword(values.currentPassword, values.newPassword),
-        );
+        try {
+          await notify.passwordChange(
+            changeProfilePassword(values.currentPassword, values.newPassword),
+          );
 
-        setPasswordSuccess(true);
-        passwordForm.reset();
+          setPasswordSuccess(true);
+          passwordFormState.form.reset();
 
-        // Auto-close after success
-        setTimeout(() => {
-          setPasswordSuccess(false);
-          if (activeTab === 'password') {
-            closeModal();
+          // Auto-close after success
+          setTimeout(() => {
+            setPasswordSuccess(false);
+            if (activeTab === 'password') {
+              closeModal();
+            }
+          }, 2000);
+        } catch (error) {
+          // Provide more context for password errors
+          const errorMessage = error.message || 'Failed to change password';
+          if (
+            errorMessage.toLowerCase().includes('invalid password') ||
+            errorMessage.toLowerCase().includes('incorrect password') ||
+            errorMessage.toLowerCase().includes('wrong password')
+          ) {
+            throw new Error(
+              'Current password is incorrect. Please check and try again.',
+            );
           }
-        }, 2000);
+          throw error;
+        }
       });
     },
     [
+      passwordOperation,
       notify,
       changeProfilePassword,
-      passwordForm,
+      passwordFormState,
       activeTab,
       closeModal,
-      passwordOperation,
     ],
   );
 
@@ -229,12 +260,12 @@ export function useProfileModal({ closeModal }) {
   const handleCancelProfileEdit = useCallback(() => {
     setIsEditingProfile(false);
     setProfileSuccess(false);
-    profileForm.setValues({
+    profileFormState.form.setValues({
       name: user.name || '',
       email: user.email || '',
       username: user.username || '',
     });
-  }, [user, profileForm]);
+  }, [user, profileFormState]);
 
   /**
    * Register a new passkey
@@ -256,7 +287,7 @@ export function useProfileModal({ closeModal }) {
 
         // Reload passkeys list
         await loadPasskeys();
-        passkeyForm.reset();
+        passkeyFormState.form.reset();
       });
 
       // Show error notification if operation failed
@@ -267,7 +298,7 @@ export function useProfileModal({ closeModal }) {
         );
       }
     },
-    [loadPasskeys, passkeyForm, notify, registerPasskeyOperation],
+    [loadPasskeys, passkeyFormState, notify, registerPasskeyOperation],
   );
 
   /**
@@ -309,12 +340,12 @@ export function useProfileModal({ closeModal }) {
    * Handle modal close with cleanup
    */
   const handleClose = useCallback(() => {
-    passwordForm.reset();
-    passkeyForm.reset();
+    passwordFormState.form.reset();
+    passkeyFormState.form.reset();
     setPasswordSuccess(false);
     setActiveTab('profile');
     closeModal();
-  }, [passwordForm, passkeyForm, closeModal]);
+  }, [passwordFormState, passkeyFormState, closeModal]);
 
   return {
     // Tab state
@@ -328,7 +359,7 @@ export function useProfileModal({ closeModal }) {
     passwordLoading,
     passwordError,
     passwordSuccess,
-    passwordForm,
+    passwordFormState,
     handlePasswordSubmit,
 
     // Profile state
@@ -337,7 +368,7 @@ export function useProfileModal({ closeModal }) {
     profileSuccess,
     isEditingProfile,
     setIsEditingProfile,
-    profileForm,
+    profileFormState,
     handleProfileSubmit,
     handleCancelProfileEdit,
 
@@ -347,7 +378,7 @@ export function useProfileModal({ closeModal }) {
     passkeysError,
     registeringPasskey,
     isWebAuthnSupported,
-    passkeyForm,
+    passkeyFormState,
     handleRegisterPasskey,
     handleDeletePasskey,
 

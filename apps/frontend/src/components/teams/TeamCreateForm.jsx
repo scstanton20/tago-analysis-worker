@@ -5,14 +5,14 @@
  */
 
 import PropTypes from 'prop-types';
-import { useForm } from '@mantine/form';
 import { Box, Stack, Group, Text, TextInput, ColorSwatch } from '@mantine/core';
-import { TeamColorPicker, PREDEFINED_COLORS } from './TeamColorPicker';
+import { TeamColorPicker } from './TeamColorPicker';
 import { FormActionButtons } from '../global';
+import { useStandardForm } from '../../hooks/forms/useStandardForm';
 
 export function TeamCreateForm({ usedNames, usedColors, isLoading, onSubmit }) {
-  // Form setup with validation
-  const form = useForm({
+  // Form setup with validation using useStandardForm
+  const { form, handleSubmit, isDirty, loading } = useStandardForm({
     initialValues: {
       name: '',
       color: '#228BE6', // default blue
@@ -27,14 +27,15 @@ export function TeamCreateForm({ usedNames, usedColors, isLoading, onSubmit }) {
       },
       color: (value) => (!value ? 'Color is required' : null),
     },
+    resetOnSuccess: false, // Manual reset based on parent's success response
   });
 
   // Handle form submission
-  const handleSubmit = form.onSubmit(async (values) => {
+  const handleFormSubmit = handleSubmit(async (values) => {
     // Call parent's onSubmit with form values
     const success = await onSubmit(values);
 
-    // Reset form on successful creation
+    // Manual reset on successful creation (parent returns success)
     if (success) {
       form.reset();
     }
@@ -50,7 +51,7 @@ export function TeamCreateForm({ usedNames, usedColors, isLoading, onSubmit }) {
       <Text size="sm" fw={600} mb="sm">
         Create New Team
       </Text>
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleFormSubmit}>
         <Stack gap="sm">
           <TextInput
             label="Team Name"
@@ -98,10 +99,10 @@ export function TeamCreateForm({ usedNames, usedColors, isLoading, onSubmit }) {
               </Text>
             )}
             <FormActionButtons
-              onSubmit={handleSubmit}
-              onCancel={form.isDirty() ? handleCancel : undefined}
-              disabled={!form.isValid() || isLoading}
-              loading={isLoading}
+              onSubmit={handleFormSubmit}
+              onCancel={isDirty ? handleCancel : undefined}
+              disabled={!form.isValid() || isLoading || loading}
+              loading={isLoading || loading}
               size="sm"
               submitLabel="Create"
             />

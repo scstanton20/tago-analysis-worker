@@ -27,7 +27,7 @@ import { FormAlert, PaperCard, FormActionButtons } from '../global';
 
 export function PasskeysTab({
   isWebAuthnSupported,
-  passkeyForm,
+  passkeyFormState,
   registeringPasskey,
   passkeysError,
   passkeysLoading,
@@ -35,6 +35,7 @@ export function PasskeysTab({
   handleRegisterPasskey,
   handleDeletePasskey,
 }) {
+  const { form, isDirty } = passkeyFormState;
   const confirmDeletePasskey = (credentialId) => {
     modals.openConfirmModal({
       title: 'Delete Passkey',
@@ -64,7 +65,7 @@ export function PasskeysTab({
             title="Register New Passkey"
             icon={<IconFingerprint size={20} />}
           >
-            <form onSubmit={passkeyForm.onSubmit(handleRegisterPasskey)}>
+            <form onSubmit={form.onSubmit(handleRegisterPasskey)}>
               <Stack gap="sm">
                 <Text size="sm" c="dimmed">
                   Add a new passkey to your account. You can use Face ID, Touch
@@ -75,12 +76,12 @@ export function PasskeysTab({
                   label="Passkey Name"
                   placeholder="e.g., iPhone Face ID, YubiKey, etc."
                   required
-                  {...passkeyForm.getInputProps('name')}
+                  {...form.getInputProps('name')}
                 />
 
                 <FormActionButtons
                   loading={registeringPasskey}
-                  disabled={!passkeyForm.isDirty()}
+                  disabled={!isDirty}
                   submitLabel="Register Passkey"
                   submitIcon={<IconPlus size={16} />}
                   singleButton
@@ -159,7 +160,7 @@ export function PasskeysTab({
 
 PasskeysTab.propTypes = {
   isWebAuthnSupported: PropTypes.bool,
-  passkeyForm: PropTypes.object.isRequired,
+  passkeyFormState: PropTypes.object.isRequired,
   registeringPasskey: PropTypes.bool,
   passkeysError: PropTypes.string,
   passkeysLoading: PropTypes.bool,

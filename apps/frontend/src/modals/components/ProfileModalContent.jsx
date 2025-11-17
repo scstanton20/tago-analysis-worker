@@ -49,14 +49,14 @@ function ProfileModalContent({ id }) {
     passwordLoading,
     passwordError,
     passwordSuccess,
-    passwordForm,
+    passwordFormState,
     handlePasswordSubmit,
     profileLoading,
     profileError,
     profileSuccess,
     isEditingProfile,
     setIsEditingProfile,
-    profileForm,
+    profileFormState,
     handleProfileSubmit,
     handleCancelProfileEdit,
     passkeys,
@@ -64,7 +64,7 @@ function ProfileModalContent({ id }) {
     passkeysError,
     registeringPasskey,
     isWebAuthnSupported,
-    passkeyForm,
+    passkeyFormState,
     handleRegisterPasskey,
     handleDeletePasskey,
     handleClose,
@@ -111,7 +111,7 @@ function ProfileModalContent({ id }) {
           <Tabs.Panel value="profile" pt="md">
             <ProfileTab
               user={user}
-              profileForm={profileForm}
+              profileFormState={profileFormState}
               profileError={profileError}
               profileSuccess={profileSuccess}
               profileLoading={profileLoading}
@@ -124,7 +124,7 @@ function ProfileModalContent({ id }) {
 
           <Tabs.Panel value="password" pt="md">
             <PasswordTab
-              passwordForm={passwordForm}
+              passwordFormState={passwordFormState}
               passwordError={passwordError}
               passwordLoading={passwordLoading}
               passwordSuccess={passwordSuccess}
@@ -136,7 +136,7 @@ function ProfileModalContent({ id }) {
           <Tabs.Panel value="passkeys" pt="md">
             <PasskeysTab
               isWebAuthnSupported={isWebAuthnSupported}
-              passkeyForm={passkeyForm}
+              passkeyFormState={passkeyFormState}
               registeringPasskey={registeringPasskey}
               passkeysError={passkeysError}
               passkeysLoading={passkeysLoading}

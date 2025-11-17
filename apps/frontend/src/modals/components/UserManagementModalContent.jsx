@@ -59,12 +59,11 @@ function UserManagementModalContent({ id }) {
     setCreatedUserInfo,
     availableTeams,
     actions,
-    form,
+    formState,
     isRootUser,
     // Functions
     loadUsers,
     loadActions,
-    isOnlyAdmin,
     // Handlers
     handleSubmit,
     handleEdit,
@@ -222,10 +221,9 @@ function UserManagementModalContent({ id }) {
         ) : (
           <ContentBox>
             <UserForm
-              form={form}
+              formState={formState}
               editingUser={editingUser}
               currentUser={currentUser}
-              isOnlyAdmin={isOnlyAdmin()}
               isRootUser={isRootUser}
               availableTeams={availableTeams}
               availableActions={actions}

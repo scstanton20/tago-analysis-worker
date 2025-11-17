@@ -1,11 +1,11 @@
 import { TextInput, Stack } from '@mantine/core';
-import { FormActionButtons } from '../../components/global';
-import { useState, useEffect } from 'react';
+import { FormActionButtons, FormAlert } from '../../components/global';
+import { useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { modals } from '@mantine/modals';
 import teamService from '../../services/teamService';
 import { useNotifications } from '../../hooks/useNotifications';
-import { useAsyncOperation } from '../../hooks/async/useAsyncOperation';
+import { useStandardForm } from '../../hooks/forms/useStandardForm';
 import { useEnterKeySubmit } from '../../hooks/forms/useEnterKeySubmit';
 
 /**
@@ -32,8 +32,17 @@ const CreateFolderModalContent = ({ id, context, innerProps }) => {
   } = innerProps;
 
   const notify = useNotifications();
-  const [name, setName] = useState('');
-  const createOperation = useAsyncOperation();
+
+  // Initialize form with useStandardForm
+  const { form, submitOperation, handleSubmit } = useStandardForm({
+    initialValues: {
+      name: '',
+    },
+    validate: {
+      name: (value) => (!value?.trim() ? 'Folder name is required' : null),
+    },
+    resetOnSuccess: true,
+  });
 
   // Update modal title dynamically based on whether it's a subfolder
   useEffect(() => {
@@ -45,55 +54,50 @@ const CreateFolderModalContent = ({ id, context, innerProps }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parentFolderId, parentFolderName]);
 
-  const handleCreate = async () => {
-    if (!name.trim()) {
-      notify.error('Folder name is required');
-      return;
-    }
-
+  const handleCreate = handleSubmit(async (values) => {
     // If in reorder mode (onCreatePending provided), handle locally
     if (onCreatePending) {
       onCreatePending({
-        name: name.trim(),
+        name: values.name.trim(),
         parentFolderId: parentFolderId || null,
       });
-      setName('');
       modals.close(id);
       return;
     }
 
-    await createOperation.execute(async () => {
-      await teamService.createFolder(teamId, {
-        name: name.trim(),
-        parentFolderId: parentFolderId || undefined,
-      });
-      notify.success(`Folder "${name}" created successfully`);
-      setName('');
-      modals.close(id);
+    // Otherwise, create folder via API
+    await teamService.createFolder(teamId, {
+      name: values.name.trim(),
+      parentFolderId: parentFolderId || undefined,
     });
-  };
+    notify.success(`Folder "${values.name}" created successfully`);
+    modals.close(id);
+  });
 
-  const handleKeyDown = useEnterKeySubmit(handleCreate);
+  const handleKeyDown = useEnterKeySubmit(() => handleCreate());
 
   return (
-    <Stack>
-      <TextInput
-        label="Folder Name"
-        placeholder="Enter folder name..."
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        onKeyDown={handleKeyDown}
-        required
-        data-autofocus
-      />
+    <form onSubmit={handleCreate}>
+      <Stack>
+        <FormAlert type="error" message={submitOperation.error} />
 
-      <FormActionButtons
-        onSubmit={handleCreate}
-        loading={createOperation.loading}
-        submitLabel="Create Folder"
-        fullWidth
-      />
-    </Stack>
+        <TextInput
+          label="Folder Name"
+          placeholder="Enter folder name..."
+          {...form.getInputProps('name')}
+          onKeyDown={handleKeyDown}
+          required
+          data-autofocus
+        />
+
+        <FormActionButtons
+          type="submit"
+          loading={submitOperation.loading}
+          submitLabel="Create Folder"
+          fullWidth
+        />
+      </Stack>
+    </form>
   );
 };
 

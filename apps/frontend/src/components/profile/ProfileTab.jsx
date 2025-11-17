@@ -15,7 +15,7 @@ import {
 
 export function ProfileTab({
   user,
-  profileForm,
+  profileFormState,
   profileError,
   profileSuccess,
   profileLoading,
@@ -24,6 +24,7 @@ export function ProfileTab({
   handleProfileSubmit,
   handleCancelProfileEdit,
 }) {
+  const { form, isDirty } = profileFormState;
   return (
     <Stack gap="md">
       <FormAlert type="error" message={profileError} />
@@ -72,14 +73,14 @@ export function ProfileTab({
           </Group>
         </ContentBox>
       ) : (
-        <form onSubmit={profileForm.onSubmit(handleProfileSubmit)}>
+        <form onSubmit={form.onSubmit(handleProfileSubmit)}>
           <Stack gap="md">
             <TextInput
               label="Name"
               placeholder="Enter your name"
               required
               autoComplete="name"
-              {...profileForm.getInputProps('name')}
+              {...form.getInputProps('name')}
             />
 
             <TextInput
@@ -87,7 +88,7 @@ export function ProfileTab({
               placeholder="Enter your username"
               required
               autoComplete="username"
-              {...profileForm.getInputProps('username')}
+              {...form.getInputProps('username')}
             />
 
             <TextInput
@@ -96,7 +97,7 @@ export function ProfileTab({
               type="email"
               required
               autoComplete="email"
-              {...profileForm.getInputProps('email')}
+              {...form.getInputProps('email')}
             />
 
             <Box
@@ -119,7 +120,7 @@ export function ProfileTab({
               onSubmit={handleProfileSubmit}
               onCancel={handleCancelProfileEdit}
               loading={profileLoading}
-              disabled={!profileForm.isDirty()}
+              disabled={!isDirty}
               submitLabel="Save Changes"
             />
           </Stack>
@@ -136,7 +137,7 @@ ProfileTab.propTypes = {
     email: PropTypes.string,
     role: PropTypes.string,
   }).isRequired,
-  profileForm: PropTypes.object.isRequired,
+  profileFormState: PropTypes.object.isRequired,
   profileError: PropTypes.string,
   profileSuccess: PropTypes.bool,
   profileLoading: PropTypes.bool,

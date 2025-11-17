@@ -5,3 +5,4 @@
  */
 
 export { useEnterKeySubmit } from './useEnterKeySubmit';
+export { useStandardForm } from './useStandardForm';

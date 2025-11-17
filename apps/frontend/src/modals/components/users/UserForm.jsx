@@ -17,10 +17,9 @@ import DepartmentPermissions from './DepartmentPermissions';
  * Handles both creating new users and editing existing users
  */
 export default function UserForm({
-  form,
+  formState,
   editingUser,
   currentUser,
-  isOnlyAdmin,
   isRootUser,
   availableTeams,
   availableActions,
@@ -30,6 +29,8 @@ export default function UserForm({
   onToggleDepartment,
   onTogglePermission,
 }) {
+  const { form, isDirty } = formState;
+
   return (
     <form onSubmit={form.onSubmit(onSubmit)}>
       <Stack gap="md">
@@ -97,25 +98,17 @@ export default function UserForm({
           onBlur={(event) => onUsernameBlur(event.currentTarget.value)}
         />
 
-        {editingUser && (
-          <PasswordInput
-            label="New Password (leave blank to keep current)"
-            placeholder="Enter password"
-            {...form.getInputProps('password')}
-          />
-        )}
-
         <Select
           label="Role"
           placeholder="Select role"
           required
           clearable={false}
           allowDeselect={false}
-          disabled={
-            isRootUser ||
-            (editingUser?.id === currentUser?.id &&
-              editingUser?.role === 'admin' &&
-              isOnlyAdmin)
+          disabled={isRootUser || editingUser?.id === currentUser?.id}
+          description={
+            editingUser?.id === currentUser?.id && !isRootUser
+              ? 'You cannot change your own role'
+              : undefined
           }
           data={
             isRootUser
@@ -146,34 +139,31 @@ export default function UserForm({
           </Alert>
         )}
 
-        {form.values.role !== 'admin' && (
-          <DepartmentPermissions
-            availableTeams={availableTeams}
-            availableActions={availableActions}
-            departmentPermissions={form.values.departmentPermissions}
-            onToggleDepartment={onToggleDepartment}
-            onTogglePermission={onTogglePermission}
-            error={form.errors.departmentPermissions}
-          />
-        )}
-
-        {editingUser &&
-          editingUser.id === currentUser?.id &&
-          editingUser.role === 'admin' &&
-          form.values.role !== 'admin' &&
-          !isRootUser &&
-          isOnlyAdmin && (
+        {form.values.role !== 'admin' &&
+          editingUser?.id === currentUser?.id && (
             <Alert color="orange" variant="light">
-              Warning: There must be at least one administrator. Since you are
-              the only admin, you cannot change your own role.
+              You cannot assign team permissions to yourself. Team assignments
+              must be managed by another administrator.
             </Alert>
+          )}
+
+        {form.values.role !== 'admin' &&
+          editingUser?.id !== currentUser?.id && (
+            <DepartmentPermissions
+              availableTeams={availableTeams}
+              availableActions={availableActions}
+              departmentPermissions={form.values.departmentPermissions}
+              onToggleDepartment={onToggleDepartment}
+              onTogglePermission={onTogglePermission}
+              error={form.errors.departmentPermissions}
+            />
           )}
 
         <FormActionButtons
           onSubmit={onSubmit}
           onCancel={onCancel}
           submitLabel={editingUser ? 'Update User' : 'Create User'}
-          disabled={!form.isDirty()}
+          disabled={!isDirty}
           submitType="submit"
           justify="flex-end"
           gap="sm"
@@ -184,20 +174,7 @@ export default function UserForm({
 }
 
 UserForm.propTypes = {
-  form: PropTypes.shape({
-    values: PropTypes.shape({
-      name: PropTypes.string,
-      email: PropTypes.string,
-      username: PropTypes.string,
-      password: PropTypes.string,
-      role: PropTypes.string,
-      departmentPermissions: PropTypes.object,
-    }).isRequired,
-    errors: PropTypes.object.isRequired,
-    getInputProps: PropTypes.func.isRequired,
-    onSubmit: PropTypes.func.isRequired,
-    isDirty: PropTypes.func.isRequired,
-  }).isRequired,
+  formState: PropTypes.object.isRequired,
   editingUser: PropTypes.shape({
     id: PropTypes.string.isRequired,
     role: PropTypes.string,
@@ -206,7 +183,6 @@ UserForm.propTypes = {
     id: PropTypes.string.isRequired,
     role: PropTypes.string,
   }),
-  isOnlyAdmin: PropTypes.bool.isRequired,
   isRootUser: PropTypes.bool.isRequired,
   availableTeams: PropTypes.arrayOf(
     PropTypes.shape({

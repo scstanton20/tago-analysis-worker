@@ -1,11 +1,10 @@
 import { TextInput, Stack } from '@mantine/core';
-import { FormActionButtons } from '../../components/global';
-import { useState } from 'react';
+import { FormActionButtons, FormAlert } from '../../components/global';
 import PropTypes from 'prop-types';
 import { modals } from '@mantine/modals';
 import teamService from '../../services/teamService';
 import { useNotifications } from '../../hooks/useNotifications';
-import { useAsyncOperation } from '../../hooks/async/useAsyncOperation';
+import { useStandardForm } from '../../hooks/forms/useStandardForm';
 import { useEnterKeySubmit } from '../../hooks/forms/useEnterKeySubmit';
 
 /**
@@ -25,50 +24,57 @@ const RenameFolderModalContent = ({ id, innerProps }) => {
   const { teamId, folderId, currentName } = innerProps;
 
   const notify = useNotifications();
-  const [name, setName] = useState(currentName || '');
-  const renameOperation = useAsyncOperation();
 
-  const handleRename = async () => {
-    if (!name.trim()) {
-      notify.error('Folder name is required');
-      return;
-    }
+  // Initialize form with useStandardForm
+  const { form, submitOperation, handleSubmit } = useStandardForm({
+    initialValues: {
+      name: currentName || '',
+    },
+    validate: {
+      name: (value) => (!value?.trim() ? 'Folder name is required' : null),
+    },
+    resetOnSuccess: false, // Don't reset on success since we close the modal
+  });
 
-    if (name.trim() === currentName) {
+  const handleRename = handleSubmit(async (values) => {
+    // If name unchanged, just close modal
+    if (values.name.trim() === currentName) {
       modals.close(id);
       return;
     }
 
-    await renameOperation.execute(async () => {
-      await teamService.updateFolder(teamId, folderId, {
-        name: name.trim(),
-      });
-      notify.success(`Folder renamed to "${name}"`);
-      modals.close(id);
+    // Update folder name
+    await teamService.updateFolder(teamId, folderId, {
+      name: values.name.trim(),
     });
-  };
+    notify.success(`Folder renamed to "${values.name}"`);
+    modals.close(id);
+  });
 
-  const handleKeyDown = useEnterKeySubmit(handleRename);
+  const handleKeyDown = useEnterKeySubmit(() => handleRename());
 
   return (
-    <Stack>
-      <TextInput
-        label="Folder Name"
-        placeholder="Enter new folder name..."
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        onKeyDown={handleKeyDown}
-        required
-        data-autofocus
-      />
+    <form onSubmit={handleRename}>
+      <Stack>
+        <FormAlert type="error" message={submitOperation.error} />
 
-      <FormActionButtons
-        onSubmit={handleRename}
-        loading={renameOperation.loading}
-        submitLabel="Rename Folder"
-        fullWidth
-      />
-    </Stack>
+        <TextInput
+          label="Folder Name"
+          placeholder="Enter new folder name..."
+          {...form.getInputProps('name')}
+          onKeyDown={handleKeyDown}
+          required
+          data-autofocus
+        />
+
+        <FormActionButtons
+          type="submit"
+          loading={submitOperation.loading}
+          submitLabel="Rename Folder"
+          fullWidth
+        />
+      </Stack>
+    </form>
   );
 };
 

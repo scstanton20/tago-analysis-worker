@@ -16,6 +16,7 @@ import { IconLogin, IconFingerprint } from '@tabler/icons-react';
 import { FormAlert, PrimaryButton, SecondaryButton } from '../global';
 import { signIn, signInPasskey } from '../../lib/auth.js';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
+import { useStandardForm } from '../../hooks/forms/useStandardForm';
 import { useAsyncOperation } from '../../hooks/async/useAsyncOperation';
 import Logo from '../ui/logo';
 import AppLoadingOverlay from '../global/indicators/AppLoadingOverlay.jsx';
@@ -25,12 +26,24 @@ const PasswordOnboarding = lazy(() => import('./passwordOnboarding'));
 
 export default function LoginPage() {
   const notify = useNotifications();
-  const [formData, setFormData] = useState({
-    username: '',
-    password: '',
+
+  // Initialize form with useStandardForm (for login form)
+  const { form, submitOperation, handleSubmit } = useStandardForm({
+    initialValues: {
+      username: '',
+      password: '',
+    },
+    validate: {
+      username: (value) => (!value ? 'Email or username is required' : null),
+      password: (value) => (!value ? 'Password is required' : null),
+    },
+    resetOnSuccess: true,
   });
-  const loginOperation = useAsyncOperation();
+
+  // Separate operation for passkey login (not part of the form)
   const passkeyOperation = useAsyncOperation();
+
+  // State for password onboarding flow
   const [showPasswordOnboarding, setShowPasswordOnboarding] = useState(false);
   const [passwordOnboardingUser, setPasswordOnboardingUser] = useState('');
 
@@ -44,19 +57,19 @@ export default function LoginPage() {
       if (
         usernameInput &&
         usernameInput.value &&
-        usernameInput.value !== formData.username
+        usernameInput.value !== form.values.username
       ) {
-        setFormData((prev) => ({ ...prev, username: usernameInput.value }));
+        form.setFieldValue('username', usernameInput.value);
       }
       if (
         passwordInput &&
         passwordInput.value &&
-        passwordInput.value !== formData.password
+        passwordInput.value !== form.values.password
       ) {
-        setFormData((prev) => ({ ...prev, password: passwordInput.value }));
+        form.setFieldValue('password', passwordInput.value);
       }
     }, 100);
-  }, [formData.username, formData.password]);
+  }, [form]);
 
   // Listen for autofill events using custom hooks
   useEventListener('DOMContentLoaded', handleAutofill, document);
@@ -67,49 +80,37 @@ export default function LoginPage() {
   useInterval(handleAutofill, stopPolling ? null : 500, false);
   useTimeout(() => setStopPolling(true), 3000);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!formData.username || !formData.password) {
-      loginOperation.setError('Please fill in all fields');
-      return;
+  const handleLogin = handleSubmit(async (values) => {
+    // Determine if input is email or username
+    const isEmail = values.username.includes('@');
+
+    let result;
+    if (isEmail) {
+      result = await signIn.email({
+        email: values.username,
+        password: values.password,
+      });
+    } else {
+      result = await signIn.username({
+        username: values.username,
+        password: values.password,
+      });
     }
 
-    await loginOperation.execute(async () => {
-      // Determine if input is email or username
-      const isEmail = formData.username.includes('@');
-
-      let result;
-      if (isEmail) {
-        result = await signIn.email({
-          email: formData.username,
-          password: formData.password,
-        });
-      } else {
-        result = await signIn.username({
-          username: formData.username,
-          password: formData.password,
-        });
+    if (result.error) {
+      if (result.error.message === 'REQUIRES_PASSWORD_CHANGE') {
+        // Handle 428 - show password onboarding
+        setShowPasswordOnboarding(true);
+        setPasswordOnboardingUser(values.username);
+        return;
       }
+      throw new Error(result.error.message);
+    }
 
-      if (result.error) {
-        if (result.error.message === 'REQUIRES_PASSWORD_CHANGE') {
-          // Handle 428 - show password onboarding
-          setShowPasswordOnboarding(true);
-          setPasswordOnboardingUser(formData.username);
-          return;
-        }
-        throw new Error(result.error.message);
-      }
-
-      // Show success notification - Better Auth will handle the redirect automatically
-      notify.success('Welcome back! You have been signed in successfully.');
-    });
-  };
-
-  const handleInputChange = (field, value) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-    if (loginOperation.error) loginOperation.setError('');
-  };
+    // Show success notification - Better Auth will handle the redirect automatically
+    notify.success('Welcome back! You have been signed in successfully.');
+    // Form reset is handled automatically by useStandardForm
+  });
 
   const handlePasswordOnboardingSuccess = () => {
     setShowPasswordOnboarding(false);
@@ -186,7 +187,7 @@ export default function LoginPage() {
             border: '1px solid var(--mantine-color-gray-3)',
           }}
         >
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleLogin}>
             <Stack gap="lg">
               <Box ta="center">
                 <Logo size={104} />
@@ -213,43 +214,45 @@ export default function LoginPage() {
 
               <FormAlert
                 type="error"
-                message={loginOperation.error || passkeyOperation.error}
+                message={submitOperation.error || passkeyOperation.error}
               />
 
               <Stack gap="md" key="login-form-fields">
                 <TextInput
                   label="Email or Username"
                   placeholder="Enter your email or username"
-                  value={formData.username}
-                  onChange={(e) =>
-                    handleInputChange('username', e.target.value)
-                  }
+                  {...form.getInputProps('username')}
                   required
                   size="md"
                   autoComplete="username"
                   name="username"
                   id="username"
                   description="You can sign in with either your email address or username"
+                  onChange={(e) => {
+                    form.setFieldValue('username', e.target.value);
+                    if (submitOperation.error) submitOperation.setError(null);
+                  }}
                 />
 
                 <PasswordInput
                   label="Password"
                   placeholder="Enter your password"
-                  value={formData.password}
-                  onChange={(e) =>
-                    handleInputChange('password', e.target.value)
-                  }
+                  {...form.getInputProps('password')}
                   required
                   size="md"
                   autoComplete="current-password"
                   name="password"
                   id="password"
+                  onChange={(e) => {
+                    form.setFieldValue('password', e.target.value);
+                    if (submitOperation.error) submitOperation.setError(null);
+                  }}
                 />
               </Stack>
 
               <PrimaryButton
                 type="submit"
-                loading={loginOperation.loading}
+                loading={submitOperation.loading}
                 fullWidth
                 size="md"
                 leftSection={<IconLogin size="1rem" />}
@@ -259,7 +262,7 @@ export default function LoginPage() {
                 }}
                 disabled={passkeyOperation.loading}
               >
-                {loginOperation.loading ? 'Signing in...' : 'Sign In'}
+                {submitOperation.loading ? 'Signing in...' : 'Sign In'}
               </PrimaryButton>
 
               {isWebAuthnSupported && (
@@ -277,7 +280,7 @@ export default function LoginPage() {
                     style={{
                       fontWeight: 600,
                     }}
-                    disabled={loginOperation.loading}
+                    disabled={submitOperation.loading}
                   >
                     {passkeyOperation.loading
                       ? 'Authenticating...'

@@ -1,8 +1,8 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
-import { useForm } from '@mantine/form';
 import { modals } from '@mantine/modals';
 import { admin, authClient } from '../lib/auth';
 import { userService } from '../services/userService';
+import { useStandardForm } from './forms/useStandardForm';
 import { modalService } from '../modals/modalService';
 import { useAsyncOperation } from './async';
 import { useEventListener } from './useEventListener';
@@ -12,7 +12,6 @@ import {
   EMAIL_REGEX,
   USERNAME_REGEX,
   MIN_USERNAME_LENGTH,
-  validatePassword,
 } from '../utils/userValidation';
 
 /**
@@ -95,13 +94,14 @@ export function useUserManagement({
     };
   }, [users]);
 
-  // Form setup
-  const form = useForm({
+  // Form setup using useStandardForm
+  // Note: Validation functions should not depend on external state like editingUser
+  // to ensure they work correctly across form states. Additional validation is done in handleSubmit.
+  const formState = useStandardForm({
     initialValues: {
       name: '',
       email: '',
       username: '',
-      password: '',
       role: 'user',
       departmentPermissions: {},
     },
@@ -111,13 +111,6 @@ export function useUserManagement({
         if (!value?.trim()) return 'Email is required';
         if (!EMAIL_REGEX.test(value)) {
           return 'Invalid email format. Must include @ and a valid domain (e.g., user@example.com)';
-        }
-        // Check uniqueness for new users only
-        if (
-          !editingUser &&
-          existingUserData.emails.includes(value.toLowerCase())
-        ) {
-          return 'This email address is already registered';
         }
         return null;
       },
@@ -131,39 +124,59 @@ export function useUserManagement({
         if (!USERNAME_REGEX.test(value)) {
           return 'Username can only contain letters, numbers, hyphens, underscores, and dots';
         }
-        // Note: Async availability check is handled separately in handleUsernameChange
         return null;
       },
       role: (value) => (!value ? 'Role is required' : null),
-      departmentPermissions: (value, values) => {
-        // Only validate team selection for 'user' role during creation
-        if (values.role === 'user' && !editingUser) {
-          const hasTeams = Object.values(value).some((dept) => dept.enabled);
-          if (!hasTeams) {
-            return 'At least one team must be selected for users with the User role';
-          }
-        }
-        return null;
-      },
+      // Dept permissions validation moved to handleSubmit to avoid stale closures
     },
+    resetOnSuccess: false, // Manual reset in handlers
   });
+
+  const { form } = formState;
 
   // Load functions
   const loadUsers = useCallback(async () => {
     await loadUsersOperation.execute(async () => {
-      const result = await admin.listUsers({
+      // Get full user data from admin.listUsers (includes username, banned, etc.)
+      const usersResult = await admin.listUsers({
         query: {
           limit: 100,
         },
       });
 
-      if (result.error) {
-        throw new Error(result.error.message);
+      if (usersResult.error) {
+        throw new Error(usersResult.error.message);
       }
 
-      setUsers(result.data.users || result.data || []);
+      const usersList = usersResult.data.users || usersResult.data || [];
+
+      // Only query for the owner member (much more efficient than getting all members)
+      const ownerResult = await authClient.organization.listMembers({
+        query: {
+          organizationId,
+          filterField: 'role',
+          filterOperator: 'eq',
+          filterValue: 'owner',
+          limit: 1,
+        },
+      });
+
+      if (ownerResult.error) {
+        logger.warn('Failed to fetch owner member:', ownerResult.error);
+      }
+
+      const ownerMember = ownerResult.data?.members?.[0];
+      const ownerUserId = ownerMember?.userId || null;
+
+      // Mark the owner user
+      const usersWithRoles = usersList.map((user) => ({
+        ...user,
+        memberRole: user.id === ownerUserId ? 'owner' : null,
+      }));
+
+      setUsers(usersWithRoles);
     });
-  }, [loadUsersOperation]);
+  }, [loadUsersOperation, organizationId]);
 
   const loadActions = useCallback(async () => {
     await loadActionsOperation.execute(async () => {
@@ -313,20 +326,35 @@ export function useUserManagement({
     [form],
   );
 
-  // Helper function to check if current user is the only admin
-  const isOnlyAdmin = useCallback(() => {
-    const adminUsers = users.filter((user) => user.role === 'admin');
-    return (
-      adminUsers.length === 1 &&
-      currentUser?.role === 'admin' &&
-      adminUsers[0]?.id === currentUser?.id
-    );
-  }, [users, currentUser]);
-
   // Event handlers
   const handleSubmit = useCallback(
     async (values) => {
-      // Validate email and username before submission
+      // Prevent users from changing their own role or team permissions
+      if (editingUser?.id === currentUser?.id) {
+        if (editingUser.role !== values.role) {
+          submitOperation.setError('You cannot change your own role');
+          return;
+        }
+        // Prevent changing own team permissions if demoting from admin to user
+        if (values.role === 'user' && editingUser.role === 'admin') {
+          submitOperation.setError(
+            'You cannot assign team permissions to yourself',
+          );
+          return;
+        }
+      }
+
+      // Validate email uniqueness (not in form validation to avoid stale closures)
+      if (
+        !editingUser &&
+        values.email &&
+        existingUserData.emails.includes(values.email.toLowerCase())
+      ) {
+        form.setFieldError('email', 'This email address is already registered');
+        return;
+      }
+
+      // Validate email format
       const emailError = validateEmail(values.email);
       if (emailError) {
         form.setFieldError('email', emailError);
@@ -337,6 +365,20 @@ export function useUserManagement({
         const usernameError = await validateUsername(values.username);
         if (usernameError) {
           form.setFieldError('username', usernameError);
+          return;
+        }
+      }
+
+      // Validate department permissions for new users with 'user' role
+      if (!editingUser && values.role === 'user') {
+        const hasTeams = Object.values(values.departmentPermissions || {}).some(
+          (dept) => dept.enabled,
+        );
+        if (!hasTeams) {
+          form.setFieldError(
+            'departmentPermissions',
+            'At least one team must be selected for users with the User role',
+          );
           return;
         }
       }
@@ -388,28 +430,6 @@ export function useUserManagement({
             }
 
             updates.role = values.role;
-            needsUpdate = true;
-          }
-
-          // Update password if provided
-          if (values.password && values.password.trim()) {
-            // Validate password before updating
-            const passwordError = validatePassword(values.password);
-            if (passwordError) {
-              form.setFieldError('password', passwordError);
-              return;
-            }
-
-            const passwordResult = await admin.setUserPassword({
-              userId: editingUser.id,
-              password: values.password,
-            });
-
-            if (passwordResult.error) {
-              throw new Error(
-                `Failed to update password: ${passwordResult.error.message}`,
-              );
-            }
             needsUpdate = true;
           }
 
@@ -603,9 +623,10 @@ export function useUserManagement({
       });
     },
     [
+      editingUser,
+      existingUserData.emails,
       validateEmail,
       validateUsername,
-      editingUser,
       currentUser,
       organizationId,
       refreshUserData,
@@ -618,6 +639,12 @@ export function useUserManagement({
 
   const handleEdit = useCallback(
     async (user) => {
+      // If user is editing themselves, redirect to profile modal instead
+      if (user.id === currentUser?.id) {
+        modalService.openProfile();
+        return;
+      }
+
       setEditingUser(user);
 
       const departmentPermissions = {};
@@ -647,14 +674,13 @@ export function useUserManagement({
         name: user.name || '',
         email: user.email || '',
         username: user.username || '',
-        password: '',
         role: user.role || 'user',
         departmentPermissions,
       });
       form.resetDirty();
       setShowCreateForm(true);
     },
-    [form],
+    [form, currentUser],
   );
 
   const handleDelete = useCallback(
@@ -801,7 +827,6 @@ export function useUserManagement({
       name: '',
       email: '',
       username: '',
-      password: '',
       role: 'user',
       departmentPermissions: {},
     });
@@ -840,11 +865,11 @@ export function useUserManagement({
     availableTeams,
     actions,
     form,
+    formState,
     isRootUser,
     // Functions
     loadUsers,
     loadActions,
-    isOnlyAdmin,
     // Handlers
     handleSubmit,
     handleEdit,

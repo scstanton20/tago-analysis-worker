@@ -4,7 +4,7 @@ import { analysisService } from '../../services/analysisService';
 import { useAnalyses } from '../../contexts/sseContext/index';
 import { useNotifications } from '../../hooks/useNotifications.jsx';
 import { usePermissions } from '../../hooks/usePermissions.js';
-import { useAsyncOperation } from '../../hooks/async/useAsyncOperation';
+import { useStandardForm } from '../../hooks/forms/useStandardForm';
 import {
   Stack,
   Group,
@@ -43,17 +43,8 @@ const CodeMirrorEditor = lazy(() =>
 const DEFAULT_EDITOR_CONTENT = '// Write your analysis code here';
 
 export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
-  // Form state
-  const [mode, setMode] = useState('upload');
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [analysisName, setAnalysisName] = useState('');
-  const [editableFileName, setEditableFileName] = useState('');
-  const [editorContent, setEditorContent] = useState(DEFAULT_EDITOR_CONTENT);
-  const [selectedTeamId, setSelectedTeamId] = useState(null);
-
-  // UI state
+  // UI state (not form data)
   const [isExpanded, setIsExpanded] = useState(false);
-  const uploadOperation = useAsyncOperation();
 
   // SSE context
   const { loadingAnalyses, analyses } = useAnalyses();
@@ -64,13 +55,49 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
   // Notifications
   const notify = useNotifications();
 
+  // Initialize form with useStandardForm
+  const { form, submitOperation, handleSubmit } = useStandardForm({
+    initialValues: {
+      mode: 'upload',
+      selectedFile: null,
+      analysisName: '',
+      editableFileName: '',
+      editorContent: DEFAULT_EDITOR_CONTENT,
+      selectedTeamId: null,
+    },
+    validate: {
+      analysisName: (value, values) => {
+        if (values.mode === 'create' && !value) {
+          return 'Analysis name is required';
+        }
+        return null;
+      },
+      editableFileName: (value, values) => {
+        if (values.mode === 'upload' && !value) {
+          return 'Filename is required';
+        }
+        return null;
+      },
+      selectedFile: (value, values) => {
+        if (values.mode === 'upload' && !value) {
+          return 'Please select a file';
+        }
+        return null;
+      },
+      selectedTeamId: (value) => (!value ? 'Please select a team' : null),
+    },
+    resetOnSuccess: false, // Custom reset logic in handleUpload
+  });
+
   // Use SSE analyses data directly
   const existingAnalyses = analyses ? Object.keys(analyses) : [];
   const currentAnalysisName =
-    mode === 'upload' ? editableFileName : analysisName;
+    form.values.mode === 'upload'
+      ? form.values.editableFileName
+      : form.values.analysisName;
   const isCurrentAnalysisLoading =
     currentAnalysisName &&
-    (loadingAnalyses.has(currentAnalysisName) || uploadOperation.loading);
+    (loadingAnalyses.has(currentAnalysisName) || submitOperation.loading);
 
   // Get teams where user can upload
   const uploadableTeams = getUploadableTeams();
@@ -93,19 +120,19 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
 
   // Set initial team selection when component mounts or permissions change (derived effect)
   useMemo(() => {
-    if (!selectedTeamId) {
+    if (!form.values.selectedTeamId) {
       const initialTeam = getInitialTeam();
       if (initialTeam) {
-        setSelectedTeamId(initialTeam);
+        form.setFieldValue('selectedTeamId', initialTeam);
       }
     }
-  }, [selectedTeamId, getInitialTeam]);
+  }, [form, getInitialTeam]);
 
   // Form validation and state checks
   const isInputDisabled = isCurrentAnalysisLoading;
 
   const handleEditorChange = (newContent) => {
-    setEditorContent(newContent);
+    form.setFieldValue('editorContent', newContent);
   };
 
   // If user has no upload permissions anywhere, don't show the component
@@ -128,16 +155,17 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
     );
   }
   const hasFormContent =
-    selectedFile ||
-    editorContent !== DEFAULT_EDITOR_CONTENT ||
-    analysisName ||
-    editableFileName;
+    form.values.selectedFile ||
+    form.values.editorContent !== DEFAULT_EDITOR_CONTENT ||
+    form.values.analysisName ||
+    form.values.editableFileName;
   const isSaveDisabled =
     isCurrentAnalysisLoading ||
-    (mode === 'create' && !analysisName) ||
-    (mode === 'upload' && (!selectedFile || !editableFileName)) ||
-    !selectedTeamId ||
-    uploadOperation.error;
+    (form.values.mode === 'create' && !form.values.analysisName) ||
+    (form.values.mode === 'upload' &&
+      (!form.values.selectedFile || !form.values.editableFileName)) ||
+    !form.values.selectedTeamId ||
+    submitOperation.error;
   const isTabDisabled = hasFormContent && !isCurrentAnalysisLoading;
 
   // Validation
@@ -187,7 +215,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
     }
 
     if (!file.name.endsWith('.js') && !file.name.endsWith('.js')) {
-      uploadOperation.setError('Please select a JavaScript file (.js)');
+      submitOperation.setError('Please select a JavaScript file (.js)');
       resetFileSelection();
       return;
     }
@@ -196,32 +224,32 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
     const validationError = await validateFilename(nameWithoutExtension);
 
     if (validationError) {
-      uploadOperation.setError(validationError);
+      submitOperation.setError(validationError);
       resetFileSelection();
       return;
     }
 
-    uploadOperation.setError(null);
-    setSelectedFile(file);
-    setEditableFileName(nameWithoutExtension);
-    setAnalysisName(nameWithoutExtension);
+    submitOperation.setError(null);
+    form.setFieldValue('selectedFile', file);
+    form.setFieldValue('editableFileName', nameWithoutExtension);
+    form.setFieldValue('analysisName', nameWithoutExtension);
   };
 
   const handleEditableFileNameChange = async (e) => {
     const value = e.target.value;
-    setEditableFileName(value);
-    uploadOperation.setError(await validateFilename(value));
+    form.setFieldValue('editableFileName', value);
+    submitOperation.setError(await validateFilename(value));
   };
 
   const handleAnalysisNameChange = async (e) => {
     const value = e.target.value;
-    setAnalysisName(value);
-    uploadOperation.setError(await validateFilename(value));
+    form.setFieldValue('analysisName', value);
+    submitOperation.setError(await validateFilename(value));
   };
 
   const handleModeChange = (newMode) => {
-    if (isTabDisabled && mode !== newMode) return;
-    setMode(newMode);
+    if (isTabDisabled && form.values.mode !== newMode) return;
+    form.setFieldValue('mode', newMode);
   };
 
   const handleToggleExpanded = () => {
@@ -234,47 +262,46 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
   };
 
   const handleTeamChange = (teamId) => {
-    setSelectedTeamId(teamId);
+    form.setFieldValue('selectedTeamId', teamId);
   };
 
-  const handleUpload = async () => {
-    if (mode === 'create' && !analysisName) {
-      uploadOperation.setError('Please provide a name for the analysis');
-      return;
+  const handleUpload = handleSubmit(async (values) => {
+    if (values.mode === 'create' && !values.analysisName) {
+      throw new Error('Please provide a name for the analysis');
     }
 
-    const finalFileName = mode === 'upload' ? editableFileName : analysisName;
+    const finalFileName =
+      values.mode === 'upload' ? values.editableFileName : values.analysisName;
     const validationError = await validateFilename(finalFileName);
 
     if (validationError) {
-      uploadOperation.setError(validationError);
-      return;
+      throw new Error(validationError);
     }
 
-    await uploadOperation.execute(async () => {
-      let file;
-      if (mode === 'upload') {
-        file = new File([selectedFile], finalFileName, {
-          type: selectedFile.type,
-        });
-      } else {
-        const blob = new Blob([editorContent], { type: 'text/javascript' });
-        file = new File([blob], finalFileName, { type: 'text/javascript' });
-      }
+    let file;
+    if (values.mode === 'upload') {
+      file = new File([values.selectedFile], finalFileName, {
+        type: values.selectedFile.type,
+      });
+    } else {
+      const blob = new Blob([values.editorContent], {
+        type: 'text/javascript',
+      });
+      file = new File([blob], finalFileName, { type: 'text/javascript' });
+    }
 
-      await notify.uploadAnalysis(
-        analysisService.uploadAnalysis(file, selectedTeamId),
-        finalFileName,
-      );
+    await notify.uploadAnalysis(
+      analysisService.uploadAnalysis(file, values.selectedTeamId),
+      finalFileName,
+    );
 
-      resetForm();
+    resetForm();
 
-      // If onClose was provided, close the component
-      if (onClose) {
-        onClose();
-      }
-    });
-  };
+    // If onClose was provided, close the component
+    if (onClose) {
+      onClose();
+    }
+  });
 
   const handleCancel = () => {
     resetForm();
@@ -286,18 +313,15 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
-    setSelectedFile(null);
-    setEditableFileName('');
-    setAnalysisName('');
-    setEditorContent(DEFAULT_EDITOR_CONTENT);
-    uploadOperation.setError(null);
+    form.reset();
+    form.setFieldValue('selectedTeamId', getInitialTeam());
+    submitOperation.setError(null);
     setIsExpanded(false);
-    setSelectedTeamId(getInitialTeam());
   };
 
   const resetFileSelection = () => {
-    setSelectedFile(null);
-    setEditableFileName('');
+    form.setFieldValue('selectedFile', null);
+    form.setFieldValue('editableFileName', '');
   };
 
   return (
@@ -354,17 +378,17 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
         >
           <Stack>
             {/* Mode Toggle */}
-            <Tabs value={mode} onChange={handleModeChange}>
+            <Tabs value={form.values.mode} onChange={handleModeChange}>
               <Tabs.List>
                 <Tabs.Tab
                   value="upload"
-                  disabled={isTabDisabled && mode !== 'upload'}
+                  disabled={isTabDisabled && form.values.mode !== 'upload'}
                 >
                   Upload Existing File
                 </Tabs.Tab>
                 <Tabs.Tab
                   value="create"
-                  disabled={isTabDisabled && mode !== 'create'}
+                  disabled={isTabDisabled && form.values.mode !== 'create'}
                 >
                   Create New Analysis
                 </Tabs.Tab>
@@ -375,7 +399,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
                 <Select
                   label="Target Team"
                   placeholder="Select a team"
-                  value={selectedTeamId}
+                  value={form.values.selectedTeamId}
                   onChange={handleTeamChange}
                   data={teamSelectData}
                   disabled={isInputDisabled}
@@ -397,7 +421,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
                       }}
                       onDrop={(files) => handleFileChange(files[0])}
                       onReject={() => {
-                        uploadOperation.setError(
+                        submitOperation.setError(
                           'Please select a JavaScript file (.js)',
                         );
                       }}
@@ -405,10 +429,10 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
                       disabled={isInputDisabled}
                       styles={{
                         root: {
-                          borderColor: selectedFile
+                          borderColor: form.values.selectedFile
                             ? 'var(--mantine-color-green-5)'
                             : undefined,
-                          backgroundColor: selectedFile
+                          backgroundColor: form.values.selectedFile
                             ? 'var(--mantine-color-green-light)'
                             : undefined,
                         },
@@ -441,7 +465,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
                           />
                         </Dropzone.Reject>
                         <Dropzone.Idle>
-                          {selectedFile ? (
+                          {form.values.selectedFile ? (
                             <IconFileCode
                               style={{
                                 width: 52,
@@ -464,8 +488,8 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
 
                         <div>
                           <Text size="xl" inline>
-                            {selectedFile
-                              ? `Selected: ${selectedFile.name}`
+                            {form.values.selectedFile
+                              ? `Selected: ${form.values.selectedFile.name}`
                               : 'Drag JavaScript files here or click to select'}
                           </Text>
                           <Text size="sm" c="dimmed" inline mt={7}>
@@ -476,16 +500,16 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
                     </Dropzone>
                   </Box>
 
-                  {selectedFile && (
+                  {form.values.selectedFile && (
                     <TextInput
                       label="Edit Filename"
-                      value={editableFileName}
+                      value={form.values.editableFileName}
                       onChange={handleEditableFileNameChange}
                       placeholder="Enter filename (no extension)"
                       disabled={isInputDisabled}
                       error={
-                        uploadOperation.error &&
-                        uploadOperation.error.includes('already exists')
+                        submitOperation.error &&
+                        submitOperation.error.includes('already exists')
                       }
                     />
                   )}
@@ -501,13 +525,13 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
                 <Stack>
                   <TextInput
                     label="Analysis Name"
-                    value={analysisName}
+                    value={form.values.analysisName}
                     onChange={handleAnalysisNameChange}
                     placeholder="Enter analysis name (no extension)"
                     disabled={isInputDisabled}
                     error={
-                      uploadOperation.error &&
-                      uploadOperation.error.includes('already exists')
+                      submitOperation.error &&
+                      submitOperation.error.includes('already exists')
                     }
                   />
 
@@ -529,14 +553,14 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
                       overflow: 'hidden',
                     }}
                   >
-                    {mode === 'create' && isExpanded && (
+                    {form.values.mode === 'create' && isExpanded && (
                       <Suspense
                         fallback={
                           <LoadingState loading={true} minHeight={400} />
                         }
                       >
                         <CodeMirrorEditor
-                          value={editorContent}
+                          value={form.values.editorContent}
                           onChange={handleEditorChange}
                           readOnly={isInputDisabled}
                           language="javascript"
@@ -550,7 +574,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
             </Tabs>
 
             {/* Error Message */}
-            <FormAlert type="error" message={uploadOperation.error} />
+            <FormAlert type="error" message={submitOperation.error} />
 
             {/* Action Buttons */}
             <FormActionButtons
