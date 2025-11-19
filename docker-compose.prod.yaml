@@ -2,7 +2,7 @@
 ---
 services:
   frontend:
-    image: ghcr.io/scstanton20/tago-analysis-worker/frontend:2.5.2
+    image: ghcr.io/scstanton20/tago-analysis-worker/frontend:latest
     container_name: tago-worker-frontend
     networks:
       - traefik-public
@@ -25,7 +25,7 @@ services:
       traefik.docker.network: 'traefik-public'
 
   backend:
-    image: ghcr.io/scstanton20/tago-analysis-worker/backend:2.4.2
+    image: ghcr.io/scstanton20/tago-analysis-worker/backend:latest
     container_name: tago-worker-backend
     restart: unless-stopped
     volumes:
