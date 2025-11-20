@@ -1,15 +1,6 @@
 import PropTypes from 'prop-types';
-import {
-  Stack,
-  Group,
-  Text,
-  // eslint-disable-next-line no-restricted-imports -- Special case: conditional informational alerts with embedded Text components
-  Alert,
-  TextInput,
-  PasswordInput,
-  Select,
-} from '@mantine/core';
-import { FormActionButtons } from '../../../components/global';
+import { Stack, Group, Text, TextInput, Select } from '@mantine/core';
+import { FormActionButtons, FormAlert } from '../../../components/global';
 import DepartmentPermissions from './DepartmentPermissions';
 
 /**
@@ -41,22 +32,22 @@ export default function UserForm({
         </Group>
 
         {editingUser && editingUser.id !== currentUser?.id && (
-          <Alert color="blue" variant="light">
+          <FormAlert color="blue" variant="light">
             <Text size="sm">
               As an admin, you can change this user's role and reset their
               password. The user must update their own name, email, and username
               through their profile settings.
             </Text>
-          </Alert>
+          </FormAlert>
         )}
 
         {isRootUser && (
-          <Alert color="orange" variant="light">
+          <FormAlert color="orange" variant="light">
             <Text size="sm">
               This is the root administrator account. The administrator role
               cannot be changed to maintain system security.
             </Text>
-          </Alert>
+          </FormAlert>
         )}
 
         <TextInput
@@ -133,18 +124,18 @@ export default function UserForm({
         />
 
         {form.values.role === 'admin' && (
-          <Alert color="blue" variant="light">
+          <FormAlert color="blue" variant="light">
             Administrators have full access to all features and can manage other
             users.
-          </Alert>
+          </FormAlert>
         )}
 
         {form.values.role !== 'admin' &&
           editingUser?.id === currentUser?.id && (
-            <Alert color="orange" variant="light">
+            <FormAlert color="orange" variant="light">
               You cannot assign team permissions to yourself. Team assignments
               must be managed by another administrator.
-            </Alert>
+            </FormAlert>
           )}
 
         {form.values.role !== 'admin' &&

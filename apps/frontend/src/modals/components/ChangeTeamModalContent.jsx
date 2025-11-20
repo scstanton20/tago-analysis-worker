@@ -6,12 +6,10 @@ import {
   UnstyledButton,
   Badge,
   ColorSwatch,
-  // eslint-disable-next-line no-restricted-imports -- Special case: dynamic informational alert with embedded Text components
-  Alert,
   ScrollArea,
   Group,
 } from '@mantine/core';
-import { FormActionButtons } from '../../components/global';
+import { FormActionButtons, FormAlert } from '../../components/global';
 import { IconFolder, IconCheck, IconInfoCircle } from '@tabler/icons-react';
 import { modals } from '@mantine/modals';
 import { useAsyncOperation } from '../../hooks/async/useAsyncOperation';
@@ -131,13 +129,17 @@ const ChangeTeamModalContent = ({ id, innerProps }) => {
       />
 
       {selectedTeam !== currentTeam && (
-        <Alert icon={<IconInfoCircle size={16} />} color="blue" variant="light">
+        <FormAlert
+          icon={<IconInfoCircle size={16} />}
+          color="blue"
+          variant="light"
+        >
           This will move the analysis to{' '}
           <Text span fw={600}>
             {[...teams].find((d) => d.id === selectedTeam)?.name}
           </Text>
           . The change will be visible to all users.
-        </Alert>
+        </FormAlert>
       )}
     </Stack>
   );

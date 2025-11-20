@@ -6,8 +6,8 @@ const filenameSchema = z
   .string()
   .min(1, 'Filename is required')
   .regex(
-    /^[a-zA-Z0-9_\-. ]+$/,
-    'Filename can only contain alphanumeric characters, spaces, hyphens, underscores, and periods',
+    /^[a-zA-Z0-9_,\-. ]+$/,
+    'Filename can only contain alphanumeric characters, spaces, hyphens, commas, underscores, and periods',
   )
   .refine((val) => val !== '.' && val !== '..', 'Invalid filename');
 

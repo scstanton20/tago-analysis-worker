@@ -10,8 +10,6 @@ import {
   Group,
   CopyButton,
   Text,
-  // eslint-disable-next-line no-restricted-imports -- Special case: complex success alert with user credentials and copy functionality
-  Alert,
   ActionIcon,
   Tooltip,
   CloseButton,
@@ -144,7 +142,7 @@ function UserManagementModalContent({ id }) {
                 User Created Successfully!
               </Text>
 
-              <Alert color="green" variant="light">
+              <FormAlert color="green" variant="light">
                 <Stack gap="xs">
                   <Text fw={500}>Name: {createdUserInfo.name}</Text>
                   <Text fw={500}>Email: {createdUserInfo.email}</Text>
@@ -183,7 +181,7 @@ function UserManagementModalContent({ id }) {
                     be required to change it on first login.
                   </Text>
                 </Stack>
-              </Alert>
+              </FormAlert>
 
               <PrimaryButton onClick={() => setCreatedUserInfo(null)}>
                 Continue

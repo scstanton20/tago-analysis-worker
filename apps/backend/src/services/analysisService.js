@@ -700,7 +700,6 @@ class AnalysisService {
         { error, analysisName, newFileName },
         'Error renaming analysis',
       );
-      throw new Error(`Failed to rename analysis: ${error.message}`);
     }
   }
 

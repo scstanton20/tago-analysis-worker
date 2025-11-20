@@ -14,8 +14,6 @@ import {
   Group,
   Text,
   TextInput,
-  // eslint-disable-next-line no-restricted-imports -- Special case: complex informational callout with title and structured content
-  Alert,
   Box,
   ActionIcon,
   Switch,
@@ -77,7 +75,6 @@ function AnalysisEditModalContent({ id, innerProps }) {
     content,
     hasChanges,
     isLoading,
-    error,
     isEditingName,
     newFileName,
     displayName,
@@ -222,10 +219,9 @@ function AnalysisEditModalContent({ id, innerProps }) {
           </Group>
         )}
       </Box>
-      <FormAlert type="error" message={error} />
 
       {isEnvMode && (
-        <Alert
+        <FormAlert
           color="blue"
           variant="light"
           title="Environment Variables Format"
@@ -242,7 +238,7 @@ function AnalysisEditModalContent({ id, innerProps }) {
             </Text>{' '}
             are preserved.
           </Text>
-        </Alert>
+        </FormAlert>
       )}
 
       <Box style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>

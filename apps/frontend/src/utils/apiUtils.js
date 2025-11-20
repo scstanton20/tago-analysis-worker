@@ -262,13 +262,40 @@ export async function handleResponse(response, originalUrl, originalOptions) {
           );
           return handleResponse(retryResponse, originalUrl, originalOptions);
         } catch {
-          // If refresh fails, throw the original error
-          throw new Error(errorData.error || response.statusText);
+          // If refresh fails, extract detailed message from original error
+          let errorMessage = errorData.error || response.statusText;
+
+          // Check for detailed validation errors
+          if (
+            errorData.details &&
+            Array.isArray(errorData.details) &&
+            errorData.details.length > 0
+          ) {
+            errorMessage = errorData.details[0].message || errorMessage;
+          } else if (errorData.message) {
+            errorMessage = errorData.message;
+          }
+
+          throw new Error(errorMessage);
         }
       }
     }
 
-    throw new Error(errorData.error || response.statusText);
+    // Extract detailed validation message if available
+    let errorMessage = errorData.error || response.statusText;
+
+    // Check for detailed validation errors
+    if (
+      errorData.details &&
+      Array.isArray(errorData.details) &&
+      errorData.details.length > 0
+    ) {
+      errorMessage = errorData.details[0].message || errorMessage;
+    } else if (errorData.message) {
+      errorMessage = errorData.message;
+    }
+
+    throw new Error(errorMessage);
   }
   return response.json();
 }
