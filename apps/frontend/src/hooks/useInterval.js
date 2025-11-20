@@ -1,48 +1,35 @@
-import { useEffect, useRef, useLayoutEffect } from 'react';
+import { useEffect, useEffectEvent } from 'react';
 
 /**
  * Custom hook for intervals that handles cleanup automatically
- * Replaces manual setInterval/clearInterval patterns
  */
 export function useInterval(callback, delay, immediate = false) {
-  const savedCallback = useRef();
-
-  // Remember the latest callback
-  useLayoutEffect(() => {
-    savedCallback.current = callback;
-  }, [callback]);
+  // useEffectEvent creates a stable function that always uses latest callback
+  const onTick = useEffectEvent(callback);
 
   useEffect(() => {
     if (delay === null) return;
 
-    function tick() {
-      savedCallback.current();
-    }
-
-    // Run immediately if requested
     if (immediate) {
-      tick();
+      onTick();
     }
 
-    const id = setInterval(tick, delay);
+    const id = setInterval(onTick, delay);
     return () => clearInterval(id);
   }, [delay, immediate]);
 }
 
 /**
- * Hook for timeout with cleanup
+ * Custom hook for timeouts with automatic cleanup
+ * React 19: Uses useEffectEvent to access latest callback
  */
 export function useTimeout(callback, delay) {
-  const savedCallback = useRef();
-
-  useLayoutEffect(() => {
-    savedCallback.current = callback;
-  }, [callback]);
+  const onTimeout = useEffectEvent(callback);
 
   useEffect(() => {
     if (delay === null) return;
 
-    const id = setTimeout(() => savedCallback.current(), delay);
+    const id = setTimeout(onTimeout, delay);
     return () => clearTimeout(id);
   }, [delay]);
 }

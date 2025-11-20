@@ -11,29 +11,30 @@ import {
 import { generateStandardPresets } from '../utils/notificationPresets.js';
 
 /**
- * Notification hook that provides notification utilities and promise-based operation helpers.
- * This is the PREFERRED way to show notifications in React components and custom hooks.
+ * Notification API that provides notification utilities and promise-based operation helpers.
+ *
+ * Note: This is NOT a React hook. It's a utility object that can be imported and used anywhere.
+ * Import and use directly:
+ * - `import { notificationAPI } from '../utils/notificationAPI';`
+ * - `notificationAPI.success('Operation completed')`
  *
  * ## Usage Patterns:
  *
  * ### 1. Fire-and-Forget Notifications (Most Common)
  * Use these when you just want to show a notification without needing the ID:
  * ```js
- * const notify = useNotifications();
- *
- * // Simple success/error - no await needed
- * notify.success('Operation completed');
- * notify.error('Something went wrong');
- * notify.info('FYI: Something happened');
- * notify.warning('Be careful!');
+ * notificationAPI.success('Operation completed');
+ * notificationAPI.error('Something went wrong');
+ * notificationAPI.info('FYI: Something happened');
+ * notificationAPI.warning('Be careful!');
  * ```
  *
  * ### 2. Async Functions with Direct Returns (Need Notification ID)
  * Use these when you need the notification ID for updates:
  * ```js
- * const id = await notify.showLoading('Processing...');
+ * const id = await notificationAPI.showLoading('Processing...');
  * // ... do work
- * await notify.updateNotification(id, {
+ * await notificationAPI.updateNotification(id, {
  *   message: 'Done!',
  *   color: 'green',
  *   loading: false
@@ -43,7 +44,7 @@ import { generateStandardPresets } from '../utils/notificationPresets.js';
  * ### 3. Promise Wrapper (Best for Operations)
  * Automatically handles loading → success/error transitions:
  * ```js
- * await notify.executeWithNotification(saveData(), {
+ * await notificationAPI.executeWithNotification(saveData(), {
  *   loading: 'Saving...',
  *   success: 'Saved successfully',
  *   error: 'Failed to save'  // optional, uses promise error message by default
@@ -53,30 +54,30 @@ import { generateStandardPresets } from '../utils/notificationPresets.js';
  * ### 4. Operation Presets (Recommended for Common Operations)
  * Pre-configured wrappers for common operations:
  * ```js
- * await notify.uploadAnalysis(uploadPromise, 'my-analysis.js');
- * await notify.login(loginPromise);
- * await notify.createTeam(createPromise, 'My Team');
+ * await notificationAPI.uploadAnalysis(uploadPromise, 'my-analysis.js');
+ * await notificationAPI.login(loginPromise);
+ * await notificationAPI.createTeam(createPromise, 'My Team');
  * ```
  *
  * ## Available Methods:
  *
  * ### Fire-and-Forget Helpers (void, no await needed):
- * - `notify.success(message, title?)` - Green checkmark notification
- * - `notify.error(message, title?)` - Red X notification
- * - `notify.info(message, title?)` - Blue info notification
- * - `notify.warning(message, title?)` - Orange warning notification
+ * - `success(message, title?)` - Green checkmark notification
+ * - `error(message, title?)` - Red X notification
+ * - `info(message, title?)` - Blue info notification
+ * - `warning(message, title?)` - Orange warning notification
  *
  * ### Async Functions (return notification ID):
- * - `notify.showSuccess(message, title?, autoClose?)` - Returns ID
- * - `notify.showError(message, title?, autoClose?)` - Returns ID
- * - `notify.showInfo(message, title?, autoClose?)` - Returns ID
- * - `notify.showWarning(message, title?, autoClose?)` - Returns ID
- * - `notify.showLoading(message, id?, title?)` - Returns ID
- * - `notify.updateNotification(id, options)` - Updates existing notification
- * - `notify.hideNotification(id)` - Hides notification
+ * - `showSuccess(message, title?, autoClose?)` - Returns ID
+ * - `showError(message, title?, autoClose?)` - Returns ID
+ * - `showInfo(message, title?, autoClose?)` - Returns ID
+ * - `showWarning(message, title?, autoClose?)` - Returns ID
+ * - `showLoading(message, id?, title?)` - Returns ID
+ * - `updateNotification(id, options)` - Updates existing notification
+ * - `hideNotification(id)` - Hides notification
  *
  * ### Promise Wrapper:
- * - `notify.executeWithNotification(promise, options)` - Wraps promise with loading/success/error
+ * - `executeWithNotification(promise, options)` - Wraps promise with loading/success/error
  *
  * ### Operation Presets:
  * Auth: login, logout, passwordChange, profileUpdate
@@ -85,22 +86,22 @@ import { generateStandardPresets } from '../utils/notificationPresets.js';
  *
  * @returns {Object} Notification utilities and helpers
  *
- * @example Simple notifications
- * const notify = useNotifications();
- * notify.success('Saved!');
- * notify.error('Failed to save');
+ * @example Using singleton instance (recommended)
+ * import { notificationAPI } from '../utils/notificationAPI';
+ * notificationAPI.success('Saved!');
+ * notificationAPI.error('Failed to save');
  *
  * @example Promise wrapper
- * await notify.executeWithNotification(updateUser(data), {
+ * await notificationAPI.executeWithNotification(updateUser(data), {
  *   loading: 'Updating user...',
  *   success: 'User updated successfully'
  * });
  *
  * @example Operation presets
- * await notify.uploadAnalysis(upload(file), 'analysis.js');
- * await notify.createTeam(createTeamAPI(data), 'Engineering');
+ * await notificationAPI.uploadAnalysis(upload(file), 'analysis.js');
+ * await notificationAPI.createTeam(createTeamAPI(data), 'Engineering');
  */
-export const useNotifications = () => {
+export const createNotificationAPI = () => {
   const executeWithNotification = async (
     promise,
     {
@@ -159,11 +160,8 @@ export const useNotifications = () => {
   };
 
   // Generate standard notification presets using factory functions
-  // This reduces code duplication and ensures consistency across operations
   const presets = generateStandardPresets(executeWithNotification);
 
-  // Fire-and-forget helper functions for simple notifications
-  // These handle async internally and don't require await
   const success = (message, title = 'Success') => {
     showSuccess(message, title).catch(console.error);
   };
@@ -181,7 +179,6 @@ export const useNotifications = () => {
   };
 
   return {
-    // Direct access to service functions (async, return IDs)
     showSuccess,
     showError,
     showInfo,
@@ -191,7 +188,6 @@ export const useNotifications = () => {
     hideNotification,
     showNotification,
 
-    // Fire-and-forget helpers (void, auto error handling)
     success,
     error,
     info,
@@ -205,4 +201,7 @@ export const useNotifications = () => {
   };
 };
 
-export default useNotifications;
+// Export a singleton instance for direct usage
+export const notificationAPI = createNotificationAPI();
+
+export default notificationAPI;

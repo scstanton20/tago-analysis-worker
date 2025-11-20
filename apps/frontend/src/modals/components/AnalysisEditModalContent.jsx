@@ -40,7 +40,6 @@ import {
   IconAlertTriangleFilled,
 } from '@tabler/icons-react';
 import { modals } from '@mantine/modals';
-import { useNotifications } from '../../hooks/useNotifications.jsx';
 import { useAnalysisEdit } from '../../hooks/useAnalysisEdit';
 import { useDiagnostics } from '../../hooks/useDiagnostics';
 const CodeMirrorEditor = lazy(() =>
@@ -68,7 +67,6 @@ function AnalysisEditModalContent({ id, innerProps }) {
     version,
     showDiffToggle,
   } = innerProps;
-  const notify = useNotifications();
 
   // Analysis edit state and operations (using initial analysis)
   const {
@@ -95,7 +93,6 @@ function AnalysisEditModalContent({ id, innerProps }) {
     analysis: initialAnalysis,
     type,
     version,
-    notify,
     readOnly,
   });
 

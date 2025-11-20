@@ -1,6 +1,7 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useAnalyses } from '../contexts/sseContext';
 import { usePermissions } from './usePermissions';
+import { getTeamAnalysisCount as countTeamAnalyses } from '../utils/filterHelpers';
 
 /**
  * Custom hook that provides visible teams for the sidebar based on business rules.
@@ -23,12 +24,8 @@ export function useVisibleTeams() {
   const { getViewableTeams } = usePermissions();
 
   // Helper function to count analyses per team
-  const getTeamAnalysisCount = useMemo(
-    () => (teamId) => {
-      return Object.values(analyses).filter(
-        (analysis) => analysis.teamId === teamId,
-      ).length;
-    },
+  const getTeamAnalysisCount = useCallback(
+    (teamId) => countTeamAnalyses(analyses, teamId),
     [analyses],
   );
 

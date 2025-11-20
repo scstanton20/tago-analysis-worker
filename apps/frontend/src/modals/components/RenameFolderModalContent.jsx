@@ -3,7 +3,7 @@ import { FormActionButtons, FormAlert } from '../../components/global';
 import PropTypes from 'prop-types';
 import { modals } from '@mantine/modals';
 import teamService from '../../services/teamService';
-import { useNotifications } from '../../hooks/useNotifications';
+import { notificationAPI } from '../../utils/notificationAPI.jsx';
 import { useStandardForm } from '../../hooks/forms/useStandardForm';
 import { useEnterKeySubmit } from '../../hooks/forms/useEnterKeySubmit';
 
@@ -22,8 +22,6 @@ import { useEnterKeySubmit } from '../../hooks/forms/useEnterKeySubmit';
  */
 const RenameFolderModalContent = ({ id, innerProps }) => {
   const { teamId, folderId, currentName } = innerProps;
-
-  const notify = useNotifications();
 
   // Initialize form with useStandardForm
   const { form, submitOperation, handleSubmit } = useStandardForm({
@@ -47,7 +45,7 @@ const RenameFolderModalContent = ({ id, innerProps }) => {
     await teamService.updateFolder(teamId, folderId, {
       name: values.name.trim(),
     });
-    notify.success(`Folder renamed to "${values.name}"`);
+    notificationAPI.success(`Folder renamed to "${values.name}"`);
     modals.close(id);
   });
 

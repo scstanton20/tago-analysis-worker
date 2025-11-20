@@ -137,7 +137,7 @@ function TeamEditMode({
               loading={isLoading}
               disabled={isLoading}
             >
-              Save
+              Save All
             </PrimaryButton>
           )}
           {hasNameChanged && (
@@ -147,7 +147,7 @@ function TeamEditMode({
               loading={isLoading}
               disabled={isLoading}
             >
-              Save Name
+              Save Name Only
             </PrimaryButton>
           )}
         </Group>

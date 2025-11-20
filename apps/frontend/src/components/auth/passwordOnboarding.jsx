@@ -9,19 +9,17 @@ import {
   Card,
 } from '@mantine/core';
 import { IconKey } from '@tabler/icons-react';
-import { useNotifications } from '../../hooks/useNotifications.jsx';
+import { notificationAPI } from '../../utils/notificationAPI.jsx';
 import { useStandardForm } from '../../hooks/forms/useStandardForm';
 import { FormAlert, PrimaryButton } from '../global';
 import Logo from '../ui/logo.jsx';
-import { validatePassword } from '../../utils/userValidation';
+import { validatePassword } from '../../validation';
 
 export default function PasswordOnboarding({
   username,
   onSuccess,
   passwordOnboarding,
 }) {
-  const notify = useNotifications();
-
   // Initialize form with useStandardForm
   const { form, submitOperation, handleSubmit } = useStandardForm({
     initialValues: {
@@ -44,7 +42,7 @@ export default function PasswordOnboarding({
 
   const handlePasswordChange = handleSubmit(async (values) => {
     await passwordOnboarding(values.newPassword);
-    notify.success('Password changed successfully!');
+    notificationAPI.success('Password changed successfully!');
     onSuccess();
   });
 

@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { useInitialValues } from '../../../hooks/useInitialState';
+import { useState, useLayoutEffect, useRef } from 'react';
 import {
   Stack,
   Paper,
@@ -24,7 +23,7 @@ import {
   DangerButton,
   LoadingState,
 } from '../../../components/global';
-import { useNotifications } from '../../../hooks/useNotifications';
+import { notificationAPI } from '../../../utils/notificationAPI.jsx';
 import { useAsyncOperation, useAsyncMount } from '../../../hooks/async';
 import {
   IconTransfer,
@@ -41,7 +40,6 @@ import { useAuth } from '../../../hooks/useAuth';
 function DNSCacheSettings() {
   const { dnsCache } = useBackend();
   const { isAuthenticated } = useAuth();
-  const notify = useNotifications();
   const loadEntriesOperation = useAsyncOperation();
   const [entries, setEntries] = useState([]);
   const [showEntries, setShowEntries] = useState(false);
@@ -55,6 +53,9 @@ function DNSCacheSettings() {
   // Local state for initial load (before SSE takes over)
   const [initialConfig, setInitialConfig] = useState(null);
   const [initialStats, setInitialStats] = useState(null);
+
+  // Track if we've initialized pending values
+  const initializedRef = useRef(false);
 
   // Use SSE data directly like other components, with local state as fallback only for initial load
   const config = dnsCache?.config || initialConfig;
@@ -74,18 +75,21 @@ function DNSCacheSettings() {
       setPendingMaxEntries(data.config.maxEntries);
       setHasUnsavedChanges(false);
       setValidationErrors({});
+      initializedRef.current = true;
     },
     { deps: [isAuthenticated] },
   );
 
-  // Initialize pending values when config is first loaded
-  useInitialValues(
-    {
-      ttl: { setter: setPendingTtl, value: config?.ttl },
-      maxEntries: { setter: setPendingMaxEntries, value: config?.maxEntries },
-    },
-    config && pendingTtl === null && pendingMaxEntries === null,
-  );
+  // Initialize pending values when config is first loaded (fallback for SSE updates)
+  // This is a valid initialization pattern - we're deriving editable state from props
+  useLayoutEffect(() => {
+    if (config && !initializedRef.current) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPendingTtl(config.ttl);
+      setPendingMaxEntries(config.maxEntries);
+      initializedRef.current = true;
+    }
+  }, [config]);
 
   // Validation functions
   const validateTtl = (value) => {
@@ -134,9 +138,9 @@ function DNSCacheSettings() {
       await dnsService.updateConfig({ enabled });
       // SSE will update the config automatically
 
-      notify.success(`DNS cache ${enabled ? 'enabled' : 'disabled'}`);
+      notificationAPI.success(`DNS cache ${enabled ? 'enabled' : 'disabled'}`);
     } catch (error) {
-      notify.error(
+      notificationAPI.error(
         error.response?.data?.error || 'Failed to update configuration',
       );
     }
@@ -150,7 +154,7 @@ function DNSCacheSettings() {
 
     if (ttlError || maxEntriesError) {
       setValidationErrors({ ttl: ttlError, maxEntries: maxEntriesError });
-      notify.error('Please fix validation errors before saving');
+      notificationAPI.error('Please fix validation errors before saving');
       return;
     }
 
@@ -164,9 +168,9 @@ function DNSCacheSettings() {
       setHasUnsavedChanges(false);
       setValidationErrors({});
 
-      notify.success('DNS cache configuration saved');
+      notificationAPI.success('DNS cache configuration saved');
     } catch (error) {
-      notify.error(
+      notificationAPI.error(
         error.response?.data?.error || 'Failed to save configuration',
       );
     }
@@ -177,9 +181,9 @@ function DNSCacheSettings() {
       const data = await dnsService.clearCache();
       // SSE will update the stats automatically
       setEntries([]);
-      notify.success(`Cleared ${data.entriesCleared} cache entries`);
+      notificationAPI.success(`Cleared ${data.entriesCleared} cache entries`);
     } catch {
-      notify.error('Failed to clear DNS cache');
+      notificationAPI.error('Failed to clear DNS cache');
     }
   };
 
@@ -187,21 +191,21 @@ function DNSCacheSettings() {
     try {
       await dnsService.resetStats();
       // SSE will update the stats automatically
-      notify.success('DNS cache statistics reset');
+      notificationAPI.success('DNS cache statistics reset');
     } catch {
-      notify.error('Failed to reset statistics');
+      notificationAPI.error('Failed to reset statistics');
     }
   };
 
   const handleDeleteEntry = async (key) => {
     try {
       await dnsService.deleteCacheEntry(key);
-      notify.success('Cache entry deleted');
+      notificationAPI.success('Cache entry deleted');
       // Reload entries to reflect the change
       loadEntries();
       // Stats will be updated via SSE
     } catch {
-      notify.error('Failed to delete cache entry');
+      notificationAPI.error('Failed to delete cache entry');
     }
   };
 

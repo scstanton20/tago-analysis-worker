@@ -237,11 +237,16 @@ export default function TreeItem({
                 icon: <IconFolderPlus size={16} />,
                 onClick: () => onFolderAction('createSubfolder', item),
               },
-              {
-                label: 'Rename',
-                icon: <IconEdit size={16} />,
-                onClick: () => onFolderAction('rename', item),
-              },
+              // Rename is disabled in reorder mode
+              ...(reorderMode
+                ? []
+                : [
+                    {
+                      label: 'Rename',
+                      icon: <IconEdit size={16} />,
+                      onClick: () => onFolderAction('rename', item),
+                    },
+                  ]),
               { type: 'divider' },
               {
                 label: 'Delete Folder',

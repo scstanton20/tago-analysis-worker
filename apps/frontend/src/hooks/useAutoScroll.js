@@ -12,15 +12,9 @@ import { useRef, useLayoutEffect, useCallback } from 'react';
  * @param {React.RefObject} params.scrollRef - Ref to the scrollable container element
  * @param {Array} params.items - Array of items to watch for changes (triggers auto-scroll)
  * @param {boolean} params.hasLoadedInitial - Flag indicating if initial data has loaded
- * @param {React.RefObject} params.isMountedRef - Ref tracking if component is mounted
  * @returns {Object} Scroll management utilities
  */
-export function useAutoScroll({
-  scrollRef,
-  items,
-  hasLoadedInitial,
-  isMountedRef,
-}) {
+export function useAutoScroll({ scrollRef, items, hasLoadedInitial }) {
   const shouldAutoScroll = useRef(false);
   const lastScrollTop = useRef(0);
 
@@ -34,21 +28,20 @@ export function useAutoScroll({
       shouldAutoScroll.current &&
       scrollRef.current &&
       items.length > 0 &&
-      hasLoadedInitial &&
-      isMountedRef.current
+      hasLoadedInitial
     ) {
       const element = scrollRef.current;
       // useLayoutEffect fires before paint, so no need for requestAnimationFrame
       element.scrollTop = element.scrollHeight;
     }
-  }, [items, scrollRef, hasLoadedInitial, isMountedRef]);
+  }, [items, scrollRef, hasLoadedInitial]);
 
   /**
    * Handle scroll position changes to detect user intent
    * Disables auto-scroll when user scrolls up, re-enables when scrolling to bottom
    */
   const handleScrollPositionChange = useCallback(() => {
-    if (!scrollRef.current || !isMountedRef.current) return;
+    if (!scrollRef.current) return;
 
     const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
 
@@ -63,7 +56,7 @@ export function useAutoScroll({
     }
 
     lastScrollTop.current = scrollTop;
-  }, [scrollRef, isMountedRef]);
+  }, [scrollRef]);
 
   /**
    * Enable auto-scroll (useful for resetting state)

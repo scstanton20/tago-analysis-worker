@@ -8,7 +8,7 @@
  * @module components/editor/CodeMirrorEditor
  */
 
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useEffectEvent, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { basicSetup } from 'codemirror';
 import { EditorView } from '@codemirror/view';
@@ -45,21 +45,15 @@ export function CodeMirrorEditor({
   const editorRef = useRef(null);
   const viewRef = useRef(null);
   const themeCompartmentRef = useRef(new Compartment());
-  const onChangeRef = useRef(onChange);
-  const readOnlyRef = useRef(readOnly);
-  const languageRef = useRef(language);
-  const onDiagnosticsChangeRef = useRef(onDiagnosticsChange);
-  const onViewReadyRef = useRef(onViewReady);
+  const currentDiffValueRef = useRef(null);
+  const currentDiffOriginalRef = useRef(null);
   const { colorScheme } = useMantineColorScheme();
 
-  // Keep refs current - useLayoutEffect ensures refs are updated before any effects run
-  useLayoutEffect(() => {
-    onChangeRef.current = onChange;
-    readOnlyRef.current = readOnly;
-    languageRef.current = language;
-    onDiagnosticsChangeRef.current = onDiagnosticsChange;
-    onViewReadyRef.current = onViewReady;
-  });
+  const handleChange = useEffectEvent(onChange || (() => {}));
+  const handleDiagnosticsChange = useEffectEvent(
+    onDiagnosticsChange || (() => {}),
+  );
+  const handleViewReady = useEffectEvent(onViewReady || (() => {}));
 
   // Create editor once on mount
   useEffect(() => {
@@ -86,7 +80,7 @@ export function CodeMirrorEditor({
       ];
 
       // Add language support
-      if (languageRef.current === 'javascript') {
+      if (language === 'javascript') {
         extensions.push(javascript());
       }
 
@@ -101,41 +95,41 @@ export function CodeMirrorEditor({
       });
 
       viewRef.current = view;
+      currentDiffValueRef.current = value;
+      currentDiffOriginalRef.current = originalContent;
 
       // Expose view to parent component
-      if (onViewReadyRef.current) {
-        onViewReadyRef.current(view);
+      if (onViewReady) {
+        handleViewReady(view);
       }
     } else {
       // Create regular editor
       const extensions = [
-        readOnlyRef.current ? readOnlySetup : basicSetup,
+        readOnly ? readOnlySetup : basicSetup,
         themeCompartmentRef.current.of(theme),
       ];
 
       // Add update listener for editable editors
-      if (!readOnlyRef.current) {
+      if (!readOnly && onChange) {
         extensions.push(
           EditorView.updateListener.of((update) => {
-            if (update.docChanged && onChangeRef.current) {
+            if (update.docChanged) {
               const newContent = update.state.doc.toString();
-              onChangeRef.current(newContent);
+              handleChange(newContent);
             }
           }),
         );
       }
 
       // Add language support
-      if (languageRef.current === 'javascript') {
+      if (language === 'javascript') {
         extensions.push(javascript());
 
         // Add editor keymap (Tab indentation + format) and linting for editable JavaScript editors
-        if (!readOnlyRef.current) {
+        if (!readOnly) {
           extensions.push(editorKeymap);
           extensions.push(lintGutter());
-          extensions.push(
-            createJavaScriptLinter(onDiagnosticsChangeRef.current),
-          );
+          extensions.push(createJavaScriptLinter(handleDiagnosticsChange));
         }
       }
 
@@ -153,18 +147,13 @@ export function CodeMirrorEditor({
     }
 
     // Expose format function to parent component
-    if (
-      onFormatReady &&
-      !readOnlyRef.current &&
-      languageRef.current === 'javascript' &&
-      !diffMode
-    ) {
+    if (onFormatReady && !readOnly && language === 'javascript' && !diffMode) {
       onFormatReady(() => formatCode(viewRef.current));
     }
 
     // Expose view to parent component
-    if (onViewReadyRef.current && viewRef.current) {
-      onViewReadyRef.current(viewRef.current);
+    if (onViewReady && viewRef.current) {
+      handleViewReady(viewRef.current);
     }
 
     return () => {
@@ -200,7 +189,12 @@ export function CodeMirrorEditor({
       // For unified diff view, content updates should recreate the view
       // since we need to update the comparison
       if (diffMode && originalContent) {
-        if (viewRef.current.state.doc.toString() !== value) {
+        // Only recreate if the actual diff values have changed
+        const valueChanged = currentDiffValueRef.current !== value;
+        const originalChanged =
+          currentDiffOriginalRef.current !== originalContent;
+
+        if (valueChanged || originalChanged) {
           // Recreate the unified diff view with new content
           const parent = viewRef.current.dom.parentNode;
           // Get appropriate theme for CodeMirror (external library needs explicit theme objects)
@@ -217,18 +211,18 @@ export function CodeMirrorEditor({
             readOnlySetup, // Use consistent read-only setup for diff views
             themeCompartmentRef.current.of(theme),
             unifiedMergeView({
-              original: value || '', // Current version as original
+              original: value || '', // Older version as original
               mergeControls: false, // Disable accept/reject controls
               collapseUnchanged: { margin: 3, minSize: 4 }, // Collapse unchanged lines
             }),
           ];
 
-          if (languageRef.current === 'javascript') {
+          if (language === 'javascript') {
             extensions.push(javascript());
           }
 
           const state = EditorState.create({
-            doc: originalContent || '', // Previous version as document
+            doc: originalContent || '', // Current version as document
             extensions,
           });
 
@@ -238,14 +232,20 @@ export function CodeMirrorEditor({
           });
 
           viewRef.current = view;
+          currentDiffValueRef.current = value;
+          currentDiffOriginalRef.current = originalContent;
 
           // Expose view to parent component
-          if (onViewReadyRef.current) {
-            onViewReadyRef.current(view);
+          if (onViewReady) {
+            handleViewReady(view);
           }
         }
       } else {
         // Regular editor - just update content
+        // Reset diff tracking refs when not in diff mode
+        currentDiffValueRef.current = null;
+        currentDiffOriginalRef.current = null;
+
         if (viewRef.current.state.doc.toString() !== value) {
           viewRef.current.dispatch({
             changes: {

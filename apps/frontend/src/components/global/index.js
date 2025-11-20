@@ -34,3 +34,6 @@ export { ActionMenu } from './menus/ActionMenu';
 
 // Modals
 export { ConfirmDialog } from './modals/ConfirmDialog';
+
+// Form Fields
+export { default as DepartmentPermissionsField } from './DepartmentPermissionsField';

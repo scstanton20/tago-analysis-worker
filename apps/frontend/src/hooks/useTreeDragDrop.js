@@ -6,7 +6,7 @@
 
 import { useState, useCallback } from 'react';
 import { closestCenter, pointerWithin, rectIntersection } from '@dnd-kit/core';
-import { useNotifications } from './useNotifications';
+import { notificationAPI } from '../utils/notificationAPI.jsx';
 import teamService from '../services/teamService';
 import logger from '../utils/logger';
 
@@ -25,7 +25,6 @@ export function useTreeDragDrop({
   reorderMode,
   onPendingReorder,
 }) {
-  const notify = useNotifications();
   const [activeId, setActiveId] = useState(null);
 
   /**
@@ -174,10 +173,10 @@ export function useTreeDragDrop({
           } else {
             try {
               await teamService.moveItem(teamId, active.id, null, items.length);
-              notify.success('Moved to root level');
+              notificationAPI.success('Moved to root level');
             } catch (error) {
               logger.error('Failed to move item:', error);
-              notify.error(error.message || 'Failed to move item');
+              notificationAPI.error(error.message || 'Failed to move item');
             }
           }
           return;
@@ -191,7 +190,9 @@ export function useTreeDragDrop({
       // Prevent dropping folder into itself or its descendants
       if (activeData.isFolder && overData?.isFolder && !isRootDrop) {
         if (active.id === over.id || isDescendant(items, active.id, over.id)) {
-          notify.error('Cannot move a folder into itself or its descendants');
+          notificationAPI.error(
+            'Cannot move a folder into itself or its descendants',
+          );
           return;
         }
       }
@@ -242,10 +243,10 @@ export function useTreeDragDrop({
             targetParentId,
             targetIndex,
           );
-          notify.success('Item moved successfully');
+          notificationAPI.success('Item moved successfully');
         } catch (error) {
           logger.error('Failed to move item:', error);
-          notify.error(error.message || 'Failed to move item');
+          notificationAPI.error(error.message || 'Failed to move item');
         }
       }
     },
@@ -256,7 +257,6 @@ export function useTreeDragDrop({
       isDescendant,
       reorderMode,
       onPendingReorder,
-      notify,
     ],
   );
 

@@ -24,8 +24,7 @@ import { IconPlus, IconUser, IconCopy, IconCheck } from '@tabler/icons-react';
 import { modals } from '@mantine/modals';
 import { useAuth } from '../../hooks/useAuth';
 import { usePermissions } from '../../hooks/usePermissions';
-import { useNotifications } from '../../hooks/useNotifications.jsx';
-import { useUserManagement } from '../../hooks/useUserManagement';
+import { useUserManagement } from '../../hooks/user-management';
 import { useTeams } from '../../contexts/sseContext/index';
 import UserTable from './users/UserTable.jsx';
 import UserForm from './users/UserForm.jsx';
@@ -43,7 +42,6 @@ function UserManagementModalContent({ id }) {
   const { user: currentUser, isAdmin, refetchSession } = useAuth();
   const { organizationId, refreshUserData } = usePermissions();
   const { teams } = useTeams();
-  const notify = useNotifications();
 
   // Use the custom hook that encapsulates all the business logic
   const {
@@ -73,14 +71,11 @@ function UserManagementModalContent({ id }) {
     handleCancel,
     handleCreate,
     handleUsernameBlur,
-    toggleDepartment,
-    toggleDepartmentPermission,
   } = useUserManagement({
     currentUser,
     organizationId,
     refreshUserData,
     refetchSession,
-    notify,
     teams,
   });
 
@@ -228,8 +223,6 @@ function UserManagementModalContent({ id }) {
               onSubmit={handleSubmit}
               onCancel={handleCancel}
               onUsernameBlur={handleUsernameBlur}
-              onToggleDepartment={toggleDepartment}
-              onTogglePermission={toggleDepartmentPermission}
             />
           </ContentBox>
         )}

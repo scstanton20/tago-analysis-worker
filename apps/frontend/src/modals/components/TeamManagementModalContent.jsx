@@ -33,7 +33,7 @@ const TeamListItem = lazy(() =>
   })),
 );
 import { teamService } from '../../services/teamService';
-import { useNotifications } from '../../hooks/useNotifications.jsx';
+import { notificationAPI } from '../../utils/notificationAPI.jsx';
 import logger from '../../utils/logger';
 
 /**
@@ -67,8 +67,6 @@ function TeamManagementModalContent() {
     isNameUsed,
   } = useTeamManagement({ teams });
 
-  const notify = useNotifications();
-
   // Handle delete with confirmation modal
   const handleDeleteTeam = (team) => {
     modals.openConfirmModal({
@@ -97,7 +95,7 @@ function TeamManagementModalContent() {
       const newOrder = arrayMove(teamsArray, oldIndex, newIndex);
 
       try {
-        await notify.executeWithNotification(
+        await notificationAPI.executeWithNotification(
           teamService.reorderTeams(newOrder.map((d) => d.id)),
           {
             loading: 'Reordering teams...',

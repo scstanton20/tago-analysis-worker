@@ -12,8 +12,6 @@ import {
   Group,
   Table,
   Badge,
-  // eslint-disable-next-line no-restricted-imports -- Special case: informational callouts with titles and structured content
-  Alert,
   ActionIcon,
   Divider,
   Box,
@@ -29,9 +27,9 @@ import {
   IconEyeCode,
 } from '@tabler/icons-react';
 import { analysisService } from '../../services/analysisService';
-import { useNotifications } from '../../hooks/useNotifications';
+import { notificationAPI } from '../../utils/notificationAPI.jsx';
 import { modalService } from '../modalService';
-import { LoadingState } from '../../components/global';
+import { LoadingState, FormAlert } from '../../components/global';
 import logger from '../../utils/logger';
 import PropTypes from 'prop-types';
 
@@ -54,7 +52,6 @@ function VersionManagementModalContent({ id, innerProps }) {
     currentVersion: 1,
   });
   const [rollbackLoading, setRollbackLoading] = useState(null);
-  const notify = useNotifications();
   const downloadOperation = useAsyncOperation();
 
   // Load versions when component mounts or analysis changes
@@ -76,7 +73,7 @@ function VersionManagementModalContent({ id, innerProps }) {
       onConfirm: async () => {
         setRollbackLoading(version);
         try {
-          await notify.executeWithNotification(
+          await notificationAPI.executeWithNotification(
             analysisService.rollbackToVersion(analysis.name, version),
             {
               loading: `Rolling back ${analysis.name} to version ${version}...`,
@@ -104,7 +101,7 @@ function VersionManagementModalContent({ id, innerProps }) {
 
   const handleDownloadVersion = async (version) => {
     await downloadOperation.execute(async () => {
-      await notify.executeWithNotification(
+      await notificationAPI.executeWithNotification(
         analysisService.downloadAnalysis(analysis.name, version),
         {
           loading: `Downloading version ${version} of ${analysis.name}...`,
@@ -155,7 +152,7 @@ function VersionManagementModalContent({ id, innerProps }) {
   return (
     <Box pos="relative">
       <Stack gap="md">
-        <Alert
+        <FormAlert
           icon={<IconInfoCircle size={16} />}
           title="Version Management"
           color="blue"
@@ -167,12 +164,12 @@ function VersionManagementModalContent({ id, innerProps }) {
             which will clear the logs and restart the analysis if running.
             Environment variables remain unchanged during rollback.
           </Text>
-        </Alert>
+        </FormAlert>
 
         {loadVersionsOperation.loading ? (
           <LoadingState loading={true} minHeight={200} />
         ) : versionData.versions.length === 0 ? (
-          <Alert
+          <FormAlert
             icon={<IconInfoCircle size={16} />}
             title="No Version History"
             color="yellow"
@@ -182,7 +179,7 @@ function VersionManagementModalContent({ id, innerProps }) {
               No previous versions found. Versions will be created automatically
               when you make changes to the analysis.
             </Text>
-          </Alert>
+          </FormAlert>
         ) : (
           <>
             <Group justify="space-between">

@@ -1,6 +1,6 @@
 /**
  * Centralized notification service using Mantine notifications.
- * For React components, prefer useNotifications hook. Use this directly in SSE contexts and auth providers.
+ * For React components, prefer notificationAPI from './notificationAPI'. Use this directly in SSE contexts and auth providers.
  */
 
 // Dynamic import to avoid circular dependencies and ensure Mantine is initialized

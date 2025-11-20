@@ -11,6 +11,10 @@ import {
   applyReorderToStructure,
   addPendingFolderToStructure,
 } from '../../utils/reorderUtils';
+import {
+  filterAnalysesByTeam,
+  countAccessibleAnalyses,
+} from '../../utils/filterHelpers';
 import AnalysisItem from './analysisItem';
 import AnalysisTree from './analysisTree';
 import { modalService } from '../../modals/modalService';
@@ -35,11 +39,7 @@ import {
   ContentBox,
 } from '../global';
 import teamService from '../../services/teamService';
-import {
-  showSuccess,
-  showError,
-  showInfo,
-} from '../../utils/notificationService.jsx';
+import { notificationAPI } from '../../utils/notificationAPI.jsx';
 
 export default function AnalysisList({
   analyses = null,
@@ -50,7 +50,7 @@ export default function AnalysisList({
   const { teamStructure, teamStructureVersion, getTeam } = useTeams();
   const { connectionStatus } = useConnection();
 
-  const { getViewableTeams, isAdmin } = usePermissions();
+  const { getViewableTeams, isAdmin, isTeamMember } = usePermissions();
 
   const [openLogIds, setOpenLogIds] = useState(new Set());
   const [reorderMode, setReorderMode] = useState(false);
@@ -91,19 +91,15 @@ export default function AnalysisList({
       }
     }
 
-    // Use SSE and apply team filtering
-    if (selectedTeam) {
-      const filtered = {};
-      Object.entries(allAnalyses).forEach(([name, analysis]) => {
-        if (analysis.teamId === selectedTeam) {
-          filtered[name] = analysis;
-        }
-      });
-      return filtered;
-    }
-
-    return allAnalyses;
-  }, [analyses, allAnalyses, selectedTeam]);
+    // Use SSE and apply team filtering with permission checks
+    // Use filterAnalysesByTeam helper for consistent filtering logic
+    return filterAnalysesByTeam(
+      allAnalyses,
+      selectedTeam,
+      isAdmin,
+      isTeamMember,
+    );
+  }, [analyses, allAnalyses, selectedTeam, isAdmin, isTeamMember]);
 
   // Convert to array for rendering (memoized)
   const analysesArray = useMemo(() => {
@@ -120,13 +116,11 @@ export default function AnalysisList({
       return Object.keys(allAnalyses).length;
     }
 
-    // Non-admin: count only analyses in viewable teams
+    // Non-admin: count only analyses in viewable teams using helper
     const viewableTeams = getViewableTeams();
     const viewableTeamIds = viewableTeams.map((team) => team.id);
 
-    return Object.values(allAnalyses).filter(
-      (analysis) => analysis && viewableTeamIds.includes(analysis.teamId),
-    ).length;
+    return countAccessibleAnalyses(allAnalyses, viewableTeamIds);
   }, [allAnalyses, isAdmin, getViewableTeams]);
 
   // Helper function to get team info
@@ -242,7 +236,7 @@ export default function AnalysisList({
                   return newStructure;
                 });
 
-                showInfo(
+                notificationAPI.info(
                   isTempFolder
                     ? `"${folder.name}" removed from preview`
                     : `"${folder.name}" will be deleted when you click Done`,
@@ -254,9 +248,11 @@ export default function AnalysisList({
                 // Not in reorder mode - delete immediately
                 try {
                   await teamService.deleteFolder(selectedTeam, folder.id);
-                  showSuccess(`Folder "${folder.name}" deleted`);
+                  notificationAPI.success(`Folder "${folder.name}" deleted`);
                 } catch (error) {
-                  showError(error.message || 'Failed to delete folder');
+                  notificationAPI.error(
+                    error.message || 'Failed to delete folder',
+                  );
                 }
               }
             },
@@ -338,7 +334,7 @@ export default function AnalysisList({
         );
       }
 
-      showSuccess('Changes applied successfully');
+      notificationAPI.success('Changes applied successfully');
 
       setPendingReorders([]);
       setPendingFolders([]);
@@ -347,7 +343,7 @@ export default function AnalysisList({
       setLocalStructure(null);
     } catch (error) {
       logger.error('Failed to apply changes:', error);
-      showError(error.message || 'Failed to apply changes');
+      notificationAPI.error(error.message || 'Failed to apply changes');
     }
   }, [pendingReorders, pendingFolders, pendingFolderDeletions, selectedTeam]);
 

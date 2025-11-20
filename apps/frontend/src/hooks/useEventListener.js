@@ -1,8 +1,7 @@
-import { useEffect, useRef, useLayoutEffect, useMemo } from 'react';
+import { useEffect, useEffectEvent, useMemo } from 'react';
 
 /**
- * Custom hook to handle event listeners without useEffect
- * Replaces manual addEventListener/removeEventListener patterns
+ * Custom hook to handle event listeners
  */
 export function useEventListener(
   eventName,
@@ -10,12 +9,8 @@ export function useEventListener(
   element = window,
   options = {},
 ) {
-  const savedHandler = useRef();
-
-  // Update ref whenever handler changes
-  useLayoutEffect(() => {
-    savedHandler.current = handler;
-  }, [handler]);
+  // useEffectEvent ensures we always call the latest handler
+  const stableHandler = useEffectEvent(handler);
 
   // Create stable reference to options object to prevent unnecessary effect re-runs
   const stableOptions = useMemo(
@@ -33,16 +28,14 @@ export function useEventListener(
       return;
     }
 
-    // Create event listener that calls current handler
-    const eventListener = (event) => savedHandler.current(event);
-
-    targetElement.addEventListener(eventName, eventListener, stableOptions);
+    // Now we can use stableHandler directly
+    targetElement.addEventListener(eventName, stableHandler, stableOptions);
 
     // Cleanup
     return () => {
       targetElement.removeEventListener(
         eventName,
-        eventListener,
+        stableHandler,
         stableOptions,
       );
     };

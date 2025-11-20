@@ -48,7 +48,7 @@ import { useAsyncOperation } from './useAsyncOperation';
  *     return response;
  *   },
  *   {
- *     onSuccess: (data) => notify.success('Data loaded'),
+ *     onSuccess: (data) => notificationAPI.success('Data loaded'),
  *     onError: (error) => console.error('Failed to load:', error)
  *   }
  * );

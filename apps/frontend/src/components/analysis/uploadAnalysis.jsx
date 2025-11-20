@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, lazy, Suspense } from 'react';
 import PropTypes from 'prop-types';
 import { analysisService } from '../../services/analysisService';
 import { useAnalyses } from '../../contexts/sseContext/index';
-import { useNotifications } from '../../hooks/useNotifications.jsx';
+import { notificationAPI } from '../../utils/notificationAPI.jsx';
 import { usePermissions } from '../../hooks/usePermissions.js';
 import { useStandardForm } from '../../hooks/forms/useStandardForm';
 import {
@@ -53,7 +53,6 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
   const { getUploadableTeams, isAdmin } = usePermissions();
 
   // Notifications
-  const notify = useNotifications();
 
   // Initialize form with useStandardForm
   const { form, submitOperation, handleSubmit } = useStandardForm({
@@ -290,7 +289,7 @@ export default function AnalysisCreator({ targetTeam = null, onClose = null }) {
       file = new File([blob], finalFileName, { type: 'text/javascript' });
     }
 
-    await notify.uploadAnalysis(
+    await notificationAPI.uploadAnalysis(
       analysisService.uploadAnalysis(file, values.selectedTeamId),
       finalFileName,
     );

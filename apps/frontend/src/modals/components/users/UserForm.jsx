@@ -1,7 +1,10 @@
 import PropTypes from 'prop-types';
 import { Stack, Group, Text, TextInput, Select } from '@mantine/core';
-import { FormActionButtons, FormAlert } from '../../../components/global';
-import DepartmentPermissions from './DepartmentPermissions';
+import {
+  FormActionButtons,
+  FormAlert,
+  DepartmentPermissionsField,
+} from '../../../components/global';
 
 /**
  * User Form Component
@@ -17,8 +20,6 @@ export default function UserForm({
   onSubmit,
   onCancel,
   onUsernameBlur,
-  onToggleDepartment,
-  onTogglePermission,
 }) {
   const { form, isDirty } = formState;
 
@@ -140,13 +141,14 @@ export default function UserForm({
 
         {form.values.role !== 'admin' &&
           editingUser?.id !== currentUser?.id && (
-            <DepartmentPermissions
-              availableTeams={availableTeams}
-              availableActions={availableActions}
-              departmentPermissions={form.values.departmentPermissions}
-              onToggleDepartment={onToggleDepartment}
-              onTogglePermission={onTogglePermission}
+            <DepartmentPermissionsField
+              value={form.values.departmentPermissions}
+              onChange={(value) =>
+                form.setFieldValue('departmentPermissions', value)
+              }
               error={form.errors.departmentPermissions}
+              departments={availableTeams}
+              permissions={availableActions}
             />
           )}
 
@@ -190,6 +192,4 @@ UserForm.propTypes = {
   onSubmit: PropTypes.func.isRequired,
   onCancel: PropTypes.func.isRequired,
   onUsernameBlur: PropTypes.func.isRequired,
-  onToggleDepartment: PropTypes.func.isRequired,
-  onTogglePermission: PropTypes.func.isRequired,
 };

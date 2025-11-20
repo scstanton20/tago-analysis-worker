@@ -22,7 +22,8 @@ import {
 } from '../global';
 import { analysisService } from '../../services/analysisService';
 import { teamService } from '../../services/teamService';
-import { useNotifications } from '../../hooks/useNotifications.jsx';
+import { notificationAPI } from '../../utils/notificationAPI.jsx';
+import { filterByPermission } from '../../utils/filterHelpers';
 import StatusBadge from './statusBadge';
 import logger from '../../utils/logger';
 
@@ -50,7 +51,6 @@ export default function AnalysisItem({
     canAccessTeam,
     isAdmin,
   } = usePermissions();
-  const notify = useNotifications();
   const isLoading = loadingAnalyses.has(analysis.name);
 
   if (!analysis || !analysis.name) {
@@ -60,10 +60,11 @@ export default function AnalysisItem({
   // Get current team info
   const allTeams = Array.isArray(teams) ? teams : Object.values(teams || {});
 
-  // Filter teams based on user permissions (admins see all, users see only accessible ones)
-  const teamsArray = isAdmin
-    ? allTeams
-    : allTeams.filter((team) => canAccessTeam(team.id));
+  // Filter teams based on user permissions using helper
+  // (admins see all, users see only accessible ones)
+  const teamsArray = filterByPermission(allTeams, isAdmin, (team) =>
+    canAccessTeam(team.id),
+  );
   const isUncategorized =
     (!analysis.teamId && !analysis.team) ||
     analysis.teamId === 'uncategorized' ||
@@ -72,7 +73,7 @@ export default function AnalysisItem({
   const handleRun = async () => {
     addLoadingAnalysis(analysis.name);
     try {
-      await notify.runAnalysis(
+      await notificationAPI.runAnalysis(
         analysisService.runAnalysis(analysis.name),
         analysis.name,
       );
@@ -85,7 +86,7 @@ export default function AnalysisItem({
   const handleStop = async () => {
     addLoadingAnalysis(analysis.name);
     try {
-      await notify.stopAnalysis(
+      await notificationAPI.stopAnalysis(
         analysisService.stopAnalysis(analysis.name),
         analysis.name,
       );
@@ -101,7 +102,7 @@ export default function AnalysisItem({
       itemName: analysis.name,
       onConfirm: async () => {
         try {
-          await notify.deleteAnalysis(
+          await notificationAPI.deleteAnalysis(
             analysisService.deleteAnalysis(analysis.name),
             analysis.name,
           );
@@ -134,7 +135,7 @@ export default function AnalysisItem({
 
   const handleDownloadLogs = async (timeRange) => {
     try {
-      await notify.downloadLogs(
+      await notificationAPI.downloadLogs(
         analysisService.downloadLogs(analysis.name, timeRange),
         analysis.name,
         timeRange,
@@ -150,7 +151,7 @@ export default function AnalysisItem({
       itemName: `all logs for "${analysis.name}"`,
       onConfirm: async () => {
         try {
-          await notify.deleteLogs(
+          await notificationAPI.deleteLogs(
             analysisService.deleteLogs(analysis.name),
             analysis.name,
           );
@@ -165,7 +166,7 @@ export default function AnalysisItem({
 
   const handleDownloadAnalysis = async () => {
     try {
-      await notify.downloadAnalysis(
+      await notificationAPI.downloadAnalysis(
         analysisService.downloadAnalysis(analysis.name),
         analysis.name,
       );
@@ -179,7 +180,7 @@ export default function AnalysisItem({
       const targetTeam = teamsArray.find((t) => t.id === teamId);
       const teamName = targetTeam?.name || 'selected team';
 
-      await notify.moveAnalysis(
+      await notificationAPI.moveAnalysis(
         teamService.moveAnalysisToTeam(analysis.name, teamId),
         analysis.name,
         teamName,

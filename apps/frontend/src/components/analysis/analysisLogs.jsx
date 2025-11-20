@@ -1,6 +1,5 @@
 import PropTypes from 'prop-types';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { useMountedRef } from '../../hooks/useMountedRef';
 import { useAutoScroll } from '../../hooks/useAutoScroll';
 import { useConnection } from '../../contexts/sseContext';
 import { analysisService } from '../../services/analysisService';
@@ -33,7 +32,6 @@ const AnalysisLogs = ({ analysis }) => {
   const scrollRef = useRef(null);
   const isLoadingMore = useRef(false);
   const hasLoadedInitial = useRef(false);
-  const isMountedRef = useMountedRef();
   // Refs to track latest log state for deduplication without deps
   const currentLogsRef = useRef({
     sseLogs: [],
@@ -51,7 +49,6 @@ const AnalysisLogs = ({ analysis }) => {
     scrollRef,
     items: sseLogs,
     hasLoadedInitial: hasLoadedInitial.current,
-    isMountedRef,
   });
   const totalLogCount = useMemo(
     () => analysis.totalLogCount || sseLogs.length,
@@ -59,7 +56,7 @@ const AnalysisLogs = ({ analysis }) => {
   );
 
   const loadInitialLogs = useCallback(async () => {
-    if (hasLoadedInitial.current || !isMountedRef.current) return;
+    if (hasLoadedInitial.current) return;
 
     setIsLoading(true);
     try {
@@ -68,22 +65,22 @@ const AnalysisLogs = ({ analysis }) => {
         limit: LOGS_PER_PAGE,
       });
 
-      if (response.logs && isMountedRef.current) {
+      if (response.logs) {
         setInitialLogs(response.logs);
         setHasMore(response.hasMore || false);
       }
       hasLoadedInitial.current = true;
     } catch (error) {
       logger.error('Failed to fetch initial logs:', error);
-      if (isMountedRef.current) {
+      {
         setHasMore(false);
       }
     } finally {
-      if (isMountedRef.current) {
+      {
         setIsLoading(false);
       }
     }
-  }, [analysis.name, isMountedRef]);
+  }, [analysis.name]);
 
   // Subscribe to analysis log channel when component mounts
   useEffect(() => {
@@ -121,7 +118,7 @@ const AnalysisLogs = ({ analysis }) => {
   }, [analysis.name]);
 
   const loadMoreLogs = useCallback(async () => {
-    if (isLoadingMore.current || !hasMore || !isMountedRef.current) return;
+    if (isLoadingMore.current || !hasMore) return;
 
     isLoadingMore.current = true;
 
@@ -131,8 +128,6 @@ const AnalysisLogs = ({ analysis }) => {
         page: nextPage,
         limit: LOGS_PER_PAGE,
       });
-
-      if (!isMountedRef.current) return;
 
       // Use refs to get current log values without including them in deps
       // This prevents unnecessary callback recreations when logs update
@@ -155,11 +150,11 @@ const AnalysisLogs = ({ analysis }) => {
         response.logs?.filter((log) => !existingSequences.has(log.sequence)) ||
         [];
 
-      if (newLogs.length > 0 && isMountedRef.current) {
+      if (newLogs.length > 0) {
         setAdditionalLogs((prev) => [...prev, ...newLogs]);
       }
 
-      if (isMountedRef.current) {
+      {
         setHasMore(response.hasMore);
         setPage(nextPage);
       }
@@ -168,22 +163,21 @@ const AnalysisLogs = ({ analysis }) => {
     } finally {
       isLoadingMore.current = false;
     }
-  }, [analysis.name, page, hasMore, isMountedRef]);
+  }, [analysis.name, page, hasMore]);
 
   const handleBottomReached = useCallback(() => {
     // Only load more if we're not already loading and there are more logs
-    if (!isLoadingMore.current && hasMore && isMountedRef.current) {
+    if (!isLoadingMore.current && hasMore) {
       logger.log('Bottom reached - triggering loadMoreLogs');
       loadMoreLogs();
     }
-  }, [hasMore, loadMoreLogs, isMountedRef]);
+  }, [hasMore, loadMoreLogs]);
 
   // Detect and handle log clearing with ref-based tracking
   // Using ref instead of state eliminates circular dependency in effect deps
   useEffect(() => {
     // Detect when logs are cleared (sse logs go to 0 or contain only a clear message)
     const logsWereCleared =
-      isMountedRef.current &&
       hasLoadedInitial.current &&
       previousLogCountRef.current > 0 &&
       (sseLogs.length === 0 ||
@@ -207,7 +201,7 @@ const AnalysisLogs = ({ analysis }) => {
     // sseLogs changes, so we omit them to prevent unnecessary reruns and potential
     // race conditions.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sseLogs, isMountedRef]);
+  }, [sseLogs]);
 
   // Memoize combined logs to prevent unnecessary recalculations
   // Using useMemo instead of useCallback since we call this every render

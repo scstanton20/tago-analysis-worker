@@ -21,7 +21,7 @@ import {
   IconRefresh,
 } from '@tabler/icons-react';
 import { admin } from '../../lib/auth';
-import { useNotifications } from '../../hooks/useNotifications.jsx';
+import { notificationAPI } from '../../utils/notificationAPI.jsx';
 import { userService } from '../../services/userService';
 import { useAsyncOperation, useAsyncMount } from '../../hooks/async';
 import logger from '../../utils/logger';
@@ -39,7 +39,6 @@ import PropTypes from 'prop-types';
 function UserSessionsModalContent({ innerProps }) {
   const { user } = innerProps;
   const [sessions, setSessions] = useState([]);
-  const notify = useNotifications();
   const revokeSessionOperation = useAsyncOperation();
   const revokeAllOperation = useAsyncOperation();
 
@@ -158,7 +157,7 @@ function UserSessionsModalContent({ innerProps }) {
         // Continue even if force logout fails
       }
 
-      notify.success('Session revoked successfully');
+      notificationAPI.success('Session revoked successfully');
 
       // Reload sessions to see if it's actually gone
       logger.log('Reloading sessions after revocation...');
@@ -216,7 +215,9 @@ function UserSessionsModalContent({ innerProps }) {
         // Continue even if force logout fails
       }
 
-      notify.success(`All sessions revoked for ${user.name || user.email}`);
+      notificationAPI.success(
+        `All sessions revoked for ${user.name || user.email}`,
+      );
 
       // Reload sessions to verify they're gone
       logger.log('Reloading sessions after revoking all...');

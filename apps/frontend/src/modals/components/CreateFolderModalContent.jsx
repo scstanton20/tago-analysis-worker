@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { modals } from '@mantine/modals';
 import teamService from '../../services/teamService';
-import { useNotifications } from '../../hooks/useNotifications';
+import { notificationAPI } from '../../utils/notificationAPI.jsx';
 import { useStandardForm } from '../../hooks/forms/useStandardForm';
 import { useEnterKeySubmit } from '../../hooks/forms/useEnterKeySubmit';
 
@@ -30,8 +30,6 @@ const CreateFolderModalContent = ({ id, context, innerProps }) => {
     parentFolderName = null,
     onCreatePending = null,
   } = innerProps;
-
-  const notify = useNotifications();
 
   // Initialize form with useStandardForm
   const { form, submitOperation, handleSubmit } = useStandardForm({
@@ -61,6 +59,10 @@ const CreateFolderModalContent = ({ id, context, innerProps }) => {
         name: values.name.trim(),
         parentFolderId: parentFolderId || null,
       });
+      notificationAPI.info(
+        `Folder "${values.name.trim()}" added to preview. Click Done to save changes.`,
+        'Folder Added',
+      );
       modals.close(id);
       return;
     }
@@ -70,7 +72,7 @@ const CreateFolderModalContent = ({ id, context, innerProps }) => {
       name: values.name.trim(),
       parentFolderId: parentFolderId || undefined,
     });
-    notify.success(`Folder "${values.name}" created successfully`);
+    notificationAPI.success(`Folder "${values.name}" created successfully`);
     modals.close(id);
   });
 

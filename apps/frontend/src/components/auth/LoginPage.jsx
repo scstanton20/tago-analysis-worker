@@ -15,7 +15,7 @@ import {
 import { IconLogin, IconFingerprint } from '@tabler/icons-react';
 import { FormAlert, PrimaryButton, SecondaryButton } from '../global';
 import { signIn, signInPasskey } from '../../lib/auth.js';
-import { useNotifications } from '../../hooks/useNotifications.jsx';
+import { notificationAPI } from '../../utils/notificationAPI.jsx';
 import { useStandardForm } from '../../hooks/forms/useStandardForm';
 import { useAsyncOperation } from '../../hooks/async/useAsyncOperation';
 import Logo from '../ui/logo';
@@ -25,8 +25,6 @@ import AppLoadingOverlay from '../global/indicators/AppLoadingOverlay.jsx';
 const PasswordOnboarding = lazy(() => import('./passwordOnboarding'));
 
 export default function LoginPage() {
-  const notify = useNotifications();
-
   // Initialize form with useStandardForm (for login form)
   const { form, submitOperation, handleSubmit } = useStandardForm({
     initialValues: {
@@ -108,14 +106,16 @@ export default function LoginPage() {
     }
 
     // Show success notification - Better Auth will handle the redirect automatically
-    notify.success('Welcome back! You have been signed in successfully.');
+    notificationAPI.success(
+      'Welcome back! You have been signed in successfully.',
+    );
     // Form reset is handled automatically by useStandardForm
   });
 
   const handlePasswordOnboardingSuccess = () => {
     setShowPasswordOnboarding(false);
     setPasswordOnboardingUser('');
-    notify.success(
+    notificationAPI.success(
       'Password changed successfully! Welcome to the application.',
     );
     // Trigger auth refresh to update session
@@ -144,7 +144,9 @@ export default function LoginPage() {
       }
 
       // Show success notification and trigger auth refresh
-      notify.success('Welcome back! You have been signed in successfully.');
+      notificationAPI.success(
+        'Welcome back! You have been signed in successfully.',
+      );
 
       // Force refresh session to update UI
       window.dispatchEvent(new Event('auth-change'));

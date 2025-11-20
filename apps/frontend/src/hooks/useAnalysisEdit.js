@@ -7,6 +7,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { analysisService } from '../services/analysisService';
 import { useAsyncOperation, useAsyncMount } from './async';
+import { notificationAPI } from '../utils/notificationAPI.jsx';
 import logger from '../utils/logger';
 
 /**
@@ -15,7 +16,6 @@ import logger from '../utils/logger';
  * @param {Object} params.analysis - Current analysis object
  * @param {string} params.type - Type: 'analysis' or 'env'
  * @param {number|null} params.version - Version number for viewing specific versions
- * @param {Function} params.notify - Notification service
  * @param {boolean} params.readOnly - Whether editor is read-only
  * @returns {Object} Analysis edit state and handlers
  */
@@ -23,7 +23,6 @@ export function useAnalysisEdit({
   analysis: currentAnalysis,
   type = 'analysis',
   version = null,
-  notify,
   readOnly = false,
 }) {
   const [content, setContent] = useState('');
@@ -148,8 +147,7 @@ export function useAnalysisEdit({
         }
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [currentAnalysis.name, currentContent],
+    [currentAnalysis.name, currentContent, loadDiffOperation],
   );
 
   /**
@@ -197,7 +195,7 @@ export function useAnalysisEdit({
           })
           .join('\n');
 
-        await notify.executeWithNotification(
+        await notificationAPI.executeWithNotification(
           analysisService.updateAnalysisENV(
             currentAnalysis.name,
             contentToSave,
@@ -223,7 +221,7 @@ export function useAnalysisEdit({
           contentToSave = content;
         }
 
-        await notify.updateAnalysis(
+        await notificationAPI.updateAnalysis(
           analysisService.updateAnalysis(displayName, contentToSave),
           displayName,
         );
@@ -253,7 +251,7 @@ export function useAnalysisEdit({
     }
 
     const result = await renameOperation.execute(async () => {
-      await notify.executeWithNotification(
+      await notificationAPI.executeWithNotification(
         analysisService.renameAnalysis(displayName, newFileName),
         {
           loading: `Renaming ${displayName} to ${newFileName}...`,

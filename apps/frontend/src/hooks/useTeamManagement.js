@@ -6,7 +6,7 @@
 
 import { useState, useMemo, useRef, useCallback } from 'react';
 import { teamService } from '../services/teamService';
-import { useNotifications } from './useNotifications.jsx';
+import { notificationAPI } from '../utils/notificationAPI.jsx';
 import { useAsyncOperation } from './async';
 import logger from '../utils/logger';
 
@@ -20,7 +20,6 @@ export function useTeamManagement({ teams }) {
   const [editingId, setEditingId] = useState(null);
   const [editingName, setEditingName] = useState('');
   const [editingColor, setEditingColor] = useState('');
-  const notify = useNotifications();
 
   // Async operations
   const createTeamOperation = useAsyncOperation({
@@ -79,14 +78,14 @@ export function useTeamManagement({ teams }) {
 
       // Check for duplicate name
       if (usedNames.has(values.name.toLowerCase().trim())) {
-        notify.error(
+        notificationAPI.error(
           'A team with this name already exists. Please choose a different name.',
         );
         return false;
       }
 
       await createTeamOperation.execute(async () => {
-        await notify.createTeam(
+        await notificationAPI.createTeam(
           teamService.createTeam(values.name.trim(), values.color),
           values.name.trim(),
         );
@@ -94,8 +93,7 @@ export function useTeamManagement({ teams }) {
 
       return true;
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isLoading, usedNames, notify],
+    [isLoading, usedNames, createTeamOperation],
   );
 
   /**
@@ -121,14 +119,14 @@ export function useTeamManagement({ teams }) {
       );
 
       if (otherNames.has(editingName.toLowerCase().trim())) {
-        notify.error(
+        notificationAPI.error(
           'A team with this name already exists. Please choose a different name.',
         );
         return;
       }
 
       await updateNameOperation.execute(async () => {
-        await notify.updateTeam(
+        await notificationAPI.updateTeam(
           teamService.updateTeam(id, {
             name: editingName.trim(),
           }),
@@ -137,8 +135,7 @@ export function useTeamManagement({ teams }) {
         setEditingId(null);
       });
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [editingName, teamsArray, isLoading, notify],
+    [editingName, teamsArray, isLoading, updateNameOperation],
   );
 
   /**
@@ -161,7 +158,7 @@ export function useTeamManagement({ teams }) {
 
       await updateColorOperation.execute(async () => {
         const currentTeam = teamsArray.find((d) => d.id === id);
-        await notify.executeWithNotification(
+        await notificationAPI.executeWithNotification(
           teamService.updateTeam(id, { color: editingColor }),
           {
             loading: `Updating ${currentTeam?.name || 'team'} color...`,
@@ -172,8 +169,7 @@ export function useTeamManagement({ teams }) {
         setEditingColor('');
       });
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [editingColor, isLoading, teamsArray, notify],
+    [editingColor, isLoading, teamsArray, updateColorOperation],
   );
 
   /**
@@ -186,14 +182,13 @@ export function useTeamManagement({ teams }) {
 
       await deleteTeamOperation.execute(async () => {
         const currentTeam = teamsArray.find((d) => d.id === id);
-        await notify.deleteTeam(
+        await notificationAPI.deleteTeam(
           teamService.deleteTeam(id, 'uncategorized'),
           currentTeam?.name || 'team',
         );
       });
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isLoading, teamsArray, notify],
+    [isLoading, teamsArray, deleteTeamOperation],
   );
 
   // Note: handleDragEnd is implemented in the component since it uses arrayMove from dnd-kit
