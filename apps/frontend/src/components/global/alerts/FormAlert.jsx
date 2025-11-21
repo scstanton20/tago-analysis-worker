@@ -53,7 +53,9 @@ export function FormAlert({
       variant="light"
       title={title}
       onClose={onClose}
+      withCloseButton={!!onClose}
       className={className}
+      role="alert"
       {...props}
     >
       {children || message}

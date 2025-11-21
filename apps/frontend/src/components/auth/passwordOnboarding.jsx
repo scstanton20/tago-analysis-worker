@@ -140,7 +140,12 @@ export default function PasswordOnboarding({
               <PrimaryButton
                 type="submit"
                 loading={submitOperation.loading}
-                disabled={!form.isValid()}
+                disabled={
+                  !form.values.newPassword ||
+                  !form.values.confirmPassword ||
+                  form.values.newPassword !== form.values.confirmPassword ||
+                  Object.keys(form.errors).length > 0
+                }
                 fullWidth
                 size="md"
                 leftSection={<IconKey size="1rem" />}
