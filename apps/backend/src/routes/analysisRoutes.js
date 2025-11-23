@@ -131,6 +131,12 @@ router.get(
   requireAnyTeamPermission('view_analyses'),
   asyncHandler(AnalysisController.getAnalyses, 'get analyses'),
 );
+
+const fileRouter = Router({ mergeParams: true });
+
+// Common middleware for all /:fileName routes
+fileRouter.use(sanitizeFilenameParam(), extractAnalysisTeam);
+
 /**
  * @swagger
  * /analyses/{fileName}/run:
@@ -181,12 +187,10 @@ router.get(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post(
-  '/:fileName/run',
+fileRouter.post(
+  '/run',
   analysisRunLimiter,
-  sanitizeFilenameParam(),
   validateRequest(analysisValidationSchemas.runAnalysis),
-  extractAnalysisTeam,
   requireTeamPermission('run_analyses'),
   asyncHandler(AnalysisController.runAnalysis, 'run analysis'),
 );
@@ -227,12 +231,10 @@ router.post(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post(
-  '/:fileName/stop',
+fileRouter.post(
+  '/stop',
   analysisRunLimiter,
-  sanitizeFilenameParam(),
   validateRequest(analysisValidationSchemas.stopAnalysis),
-  extractAnalysisTeam,
   requireTeamPermission('run_analyses'),
   asyncHandler(AnalysisController.stopAnalysis, 'stop analysis'),
 );
@@ -270,12 +272,10 @@ router.post(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.delete(
-  '/:fileName',
+fileRouter.delete(
+  '/',
   deletionLimiter,
-  sanitizeFilenameParam(),
   validateRequest(analysisValidationSchemas.deleteAnalysis),
-  extractAnalysisTeam,
   requireTeamPermission('delete_analyses'),
   asyncHandler(AnalysisController.deleteAnalysis, 'delete analysis'),
 );
@@ -314,13 +314,11 @@ router.delete(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get(
-  '/:fileName/content',
+fileRouter.get(
+  '/content',
   fileOperationLimiter,
-  sanitizeFilenameParam(),
   validateRequest(analysisValidationSchemas.getAnalysisContent),
-  extractAnalysisTeam,
-  requireTeamPermission('view_analyses'),
+  requireTeamPermission('download_analyses'), // Changed from view_analyses
   asyncHandler(AnalysisController.getAnalysisContent, 'get analysis content'),
 );
 /**
@@ -385,12 +383,10 @@ router.get(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.put(
-  '/:fileName',
+fileRouter.put(
+  '/',
   fileOperationLimiter,
-  sanitizeFilenameParam(),
   validateRequest(analysisValidationSchemas.updateAnalysis),
-  extractAnalysisTeam,
   requireTeamPermission('edit_analyses'),
   asyncHandler(AnalysisController.updateAnalysis, 'update analysis'),
 );
@@ -456,12 +452,10 @@ router.put(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.put(
-  '/:fileName/rename',
+fileRouter.put(
+  '/rename',
   fileOperationLimiter,
-  sanitizeFilenameParam(),
   validateRequest(analysisValidationSchemas.renameAnalysis),
-  extractAnalysisTeam,
   requireTeamPermission('edit_analyses'),
   asyncHandler(AnalysisController.renameAnalysis, 'rename analysis'),
 );
@@ -519,12 +513,10 @@ router.put(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get(
-  '/:fileName/download',
+fileRouter.get(
+  '/download',
   fileOperationLimiter,
-  sanitizeFilenameParam(),
   validateRequest(analysisValidationSchemas.downloadAnalysis),
-  extractAnalysisTeam,
   requireTeamPermission('download_analyses'),
   asyncHandler(AnalysisController.downloadAnalysis, 'download analysis'),
 );
@@ -564,12 +556,10 @@ router.get(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get(
-  '/:fileName/environment',
+fileRouter.get(
+  '/environment',
   fileOperationLimiter,
-  sanitizeFilenameParam(),
   validateRequest(analysisValidationSchemas.getEnvironment),
-  extractAnalysisTeam,
   requireTeamPermission('view_analyses'),
   asyncHandler(AnalysisController.getEnvironment, 'get environment'),
 );
@@ -634,12 +624,10 @@ router.get(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.put(
-  '/:fileName/environment',
+fileRouter.put(
+  '/environment',
   fileOperationLimiter,
-  sanitizeFilenameParam(),
   validateRequest(analysisValidationSchemas.updateEnvironment),
-  extractAnalysisTeam,
   requireTeamPermission('edit_analyses'),
   asyncHandler(AnalysisController.updateEnvironment, 'update environment'),
 );
@@ -694,11 +682,10 @@ router.put(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get(
-  '/:fileName/logs',
+fileRouter.get(
+  '/logs',
   sanitizeFilenameParam(),
   validateRequest(analysisValidationSchemas.getLogs),
-  extractAnalysisTeam,
   requireTeamPermission('view_analyses'),
   asyncHandler(AnalysisController.getLogs, 'get logs'),
 );
@@ -756,12 +743,10 @@ router.get(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get(
-  '/:fileName/logs/download',
+fileRouter.get(
+  '/logs/download',
   fileOperationLimiter,
-  sanitizeFilenameParam(),
   validateRequest(analysisValidationSchemas.downloadLogs),
-  extractAnalysisTeam,
   requireTeamPermission('view_analyses'),
   asyncHandler(AnalysisController.downloadLogs, 'download logs'),
 );
@@ -799,12 +784,10 @@ router.get(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.delete(
-  '/:fileName/logs',
+fileRouter.delete(
+  '/logs',
   deletionLimiter,
-  sanitizeFilenameParam(),
   validateRequest(analysisValidationSchemas.clearLogs),
-  extractAnalysisTeam,
   requireTeamPermission('edit_analyses'),
   asyncHandler(AnalysisController.clearLogs, 'clear logs'),
 );
@@ -835,18 +818,7 @@ router.delete(
  *                 versions:
  *                   type: array
  *                   items:
- *                     type: object
- *                     properties:
- *                       version:
- *                         type: integer
- *                         description: Version number
- *                       timestamp:
- *                         type: string
- *                         format: date-time
- *                         description: When this version was created
- *                       size:
- *                         type: integer
- *                         description: File size in bytes
+ *                     $ref: '#/components/schemas/Analysis'
  *                 nextVersionNumber:
  *                   type: integer
  *                   description: Next version number that will be used
@@ -863,12 +835,10 @@ router.delete(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get(
-  '/:fileName/versions',
+fileRouter.get(
+  '/versions',
   versionOperationLimiter,
-  sanitizeFilenameParam(),
   validateRequest(analysisValidationSchemas.getVersions),
-  extractAnalysisTeam,
   requireTeamPermission('view_analyses'),
   asyncHandler(AnalysisController.getVersions, 'get versions'),
 );
@@ -939,14 +909,14 @@ router.get(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post(
-  '/:fileName/rollback',
+fileRouter.post(
+  '/rollback',
   versionOperationLimiter,
-  sanitizeFilenameParam(),
   validateRequest(analysisValidationSchemas.rollbackToVersion),
-  extractAnalysisTeam,
   requireTeamPermission('edit_analyses'),
   asyncHandler(AnalysisController.rollbackToVersion, 'rollback to version'),
 );
+
+router.use('/:fileName', fileRouter);
 
 export { router as analysisRouter };

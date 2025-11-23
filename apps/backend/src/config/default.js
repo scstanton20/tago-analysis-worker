@@ -42,6 +42,24 @@ const config = {
     forceKillTimeout: ANALYSIS_PROCESS.FORCE_KILL_TIMEOUT_MS,
     autoRestartDelay: ANALYSIS_PROCESS.AUTO_RESTART_DELAY_MS,
   },
+  process: {
+    // Defines a whitelist of environment variables from the parent process (this backend)
+    // that will be passed to the forked analysis child process.
+    // This is a security measure to prevent leaking sensitive backend environment
+    // variables (like database URLs, API keys, etc.) to the analysis scripts.
+    allowedParentEnv: [
+      'PATH',
+      'NODE_ENV',
+      'TZ', // Timezone
+      'LANG', // Language/locale
+      'HTTP_PROXY',
+      'HTTPS_PROXY',
+      'NO_PROXY',
+    ],
+    // Additional environment variables to be set for the child process.
+    // These will override any colliding variables from the parent environment.
+    additionalEnv: {},
+  },
 };
 
 // Derive paths from base storage

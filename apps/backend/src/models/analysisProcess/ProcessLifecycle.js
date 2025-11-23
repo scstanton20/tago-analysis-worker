@@ -310,6 +310,16 @@ export class ProcessLifecycleManager {
           )
         : {};
 
+      // Construct a sanitized environment for the child process
+      const safeEnv = {};
+      if (config.process && config.process.allowedParentEnv) {
+        for (const key of config.process.allowedParentEnv) {
+          if (process.env[key]) {
+            safeEnv[key] = process.env[key];
+          }
+        }
+      }
+
       // Fork the wrapper script
       // stdio: ['inherit', 'pipe', 'pipe', 'ipc']
       // - inherit stdin
@@ -318,8 +328,8 @@ export class ProcessLifecycleManager {
       // - ipc for DNS cache communication
       this.analysisProcess.process = fork(WRAPPER_SCRIPT, [filePath], {
         env: {
-          ...process.env,
-          ...(config.process?.env || {}),
+          ...safeEnv,
+          ...(config.process?.additionalEnv || {}),
           ...storedEnv,
           STORAGE_BASE: config.storage.base,
         },
