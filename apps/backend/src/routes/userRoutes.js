@@ -16,36 +16,6 @@ router.use(authMiddleware);
 
 /**
  * @swagger
- * /users/{userId}/teams/edit:
- *   get:
- *     summary: Get user teams for editing (Admin only)
- *     description: Get team memberships for a user when editing. Admin-only endpoint.
- *     tags: [User Management]
- *     parameters:
- *       - in: path
- *         name: userId
- *         required: true
- *         schema:
- *           type: string
- *         description: User ID
- *     responses:
- *       200:
- *         description: Team memberships retrieved
- *       401:
- *         description: Unauthorized
- *       403:
- *         description: Forbidden - admin only
- *       404:
- *         description: User not found
- */
-router.get(
-  '/:userId/teams/edit',
-  requireAdmin,
-  asyncHandler(UserController.getUserTeamsForEdit, 'get user teams for edit'),
-);
-
-/**
- * @swagger
  * /users/set-initial-password:
  *   post:
  *     summary: Set initial password for new users
@@ -255,6 +225,105 @@ router.post(
 
 /**
  * @swagger
+ * /users/force-logout/{userId}:
+ *   post:
+ *     summary: Force logout a user
+ *     description: Force logout a user by closing all their SSE connections and sending a logout notification (admin only)
+ *     tags: [User Management - Admin]
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID of the user to force logout
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason:
+ *                 type: string
+ *                 description: Reason for forcing logout
+ *                 default: "Your session has been terminated"
+ *     responses:
+ *       200:
+ *         description: User forced logout successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     closedConnections:
+ *                       type: number
+ *                       description: Number of SSE connections closed
+ *       400:
+ *         description: Invalid request data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       401:
+ *         description: Authentication required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       403:
+ *         description: Admin access required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.post(
+  '/force-logout/:userId',
+  userOperationLimiter,
+  validateRequest(userValidationSchemas.forceLogout),
+  asyncHandler(UserController.forceLogout, 'force logout'),
+);
+
+const userIdRouter = Router({ mergeParams: true });
+
+/**
+ * @swagger
+ * /users/{userId}/teams/edit:
+ *   get:
+ *     summary: Get user teams for editing (Admin only)
+ *     description: Get team memberships for a user when editing. Admin-only endpoint.
+ *     tags: [User Management]
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: User ID
+ *     responses:
+ *       200:
+ *         description: Team memberships retrieved
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Forbidden - admin only
+ *       404:
+ *         description: User not found
+ */
+userIdRouter.get(
+  '/teams/edit',
+  asyncHandler(UserController.getUserTeamsForEdit, 'get user teams for edit'),
+);
+
+/**
+ * @swagger
  * /users/{userId}/team-assignments:
  *   put:
  *     summary: Update user team assignments
@@ -333,8 +402,8 @@ router.post(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.put(
-  '/:userId/team-assignments',
+userIdRouter.put(
+  '/team-assignments',
   userOperationLimiter,
   validateRequest(userValidationSchemas.updateUserTeamAssignments),
   asyncHandler(
@@ -407,8 +476,8 @@ router.put(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.put(
-  '/:userId/organization-role',
+userIdRouter.put(
+  '/organization-role',
   userOperationLimiter,
   validateRequest(userValidationSchemas.updateUserOrganizationRole),
   asyncHandler(
@@ -465,8 +534,8 @@ router.put(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.delete(
-  '/:userId/organization',
+userIdRouter.delete(
+  '/organization',
   userOperationLimiter,
   validateRequest(userValidationSchemas.removeUserFromOrganization),
   asyncHandler(
@@ -475,72 +544,6 @@ router.delete(
   ),
 );
 
-/**
- * @swagger
- * /users/force-logout/{userId}:
- *   post:
- *     summary: Force logout a user
- *     description: Force logout a user by closing all their SSE connections and sending a logout notification (admin only)
- *     tags: [User Management - Admin]
- *     parameters:
- *       - in: path
- *         name: userId
- *         required: true
- *         schema:
- *           type: string
- *         description: ID of the user to force logout
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               reason:
- *                 type: string
- *                 description: Reason for forcing logout
- *                 default: "Your session has been terminated"
- *     responses:
- *       200:
- *         description: User forced logout successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 data:
- *                   type: object
- *                   properties:
- *                     closedConnections:
- *                       type: number
- *                       description: Number of SSE connections closed
- *       400:
- *         description: Invalid request data
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
- *       401:
- *         description: Authentication required
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
- *       403:
- *         description: Admin access required
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
- */
-router.post(
-  '/force-logout/:userId',
-  userOperationLimiter,
-  validateRequest(userValidationSchemas.forceLogout),
-  asyncHandler(UserController.forceLogout, 'force logout'),
-);
+router.use('/:userId', userIdRouter);
 
 export { router as userRouter };

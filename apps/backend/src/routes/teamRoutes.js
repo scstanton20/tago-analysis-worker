@@ -154,6 +154,8 @@ router.put(
   asyncHandler(TeamController.reorderTeams, 'reorder teams'),
 );
 
+const teamIdRouter = Router({ mergeParams: true });
+
 /**
  * @swagger
  * /teams/{id}:
@@ -206,8 +208,8 @@ router.put(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.put(
-  '/:id',
+teamIdRouter.put(
+  '/',
   teamOperationLimiter,
   validateRequest(teamValidationSchemas.updateTeam),
   asyncHandler(TeamController.updateTeam, 'update team'),
@@ -274,8 +276,8 @@ router.put(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.delete(
-  '/:id',
+teamIdRouter.delete(
+  '/',
   teamOperationLimiter,
   validateRequest(teamValidationSchemas.deleteTeam),
   asyncHandler(TeamController.deleteTeam, 'delete team'),
@@ -325,11 +327,13 @@ router.delete(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get(
-  '/:id/count',
+teamIdRouter.get(
+  '/count',
   validateRequest(teamValidationSchemas.getTeamAnalysisCount),
   asyncHandler(TeamController.getTeamAnalysisCount, 'get team analysis count'),
 );
+
+router.use('/:id', teamIdRouter);
 
 // Analysis-team routes
 /**
@@ -410,6 +414,10 @@ router.put(
   asyncHandler(TeamController.moveAnalysisToTeam, 'move analysis to team'),
 );
 
+const teamManagementRouter = Router({ mergeParams: true });
+const folderRouter = Router({ mergeParams: true });
+const folderIdRouter = Router({ mergeParams: true });
+
 // Folder management routes
 /**
  * @swagger
@@ -473,8 +481,8 @@ router.put(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post(
-  '/:teamId/folders',
+folderRouter.post(
+  '/',
   teamOperationLimiter,
   validateRequest(teamValidationSchemas.createFolder),
   asyncHandler(TeamController.createFolder, 'create folder'),
@@ -544,8 +552,8 @@ router.post(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.put(
-  '/:teamId/folders/:folderId',
+folderIdRouter.put(
+  '/',
   teamOperationLimiter,
   validateRequest(teamValidationSchemas.updateFolder),
   asyncHandler(TeamController.updateFolder, 'update folder'),
@@ -597,12 +605,14 @@ router.put(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.delete(
-  '/:teamId/folders/:folderId',
+folderIdRouter.delete(
+  '/',
   teamOperationLimiter,
   validateRequest(teamValidationSchemas.deleteFolder),
   asyncHandler(TeamController.deleteFolder, 'delete folder'),
 );
+
+folderRouter.use('/:folderId', folderIdRouter);
 
 /**
  * @swagger
@@ -656,11 +666,14 @@ router.delete(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post(
-  '/:teamId/items/move',
+teamManagementRouter.post(
+  '/items/move',
   teamOperationLimiter,
   validateRequest(teamValidationSchemas.moveItem),
   asyncHandler(TeamController.moveItem, 'move item'),
 );
+
+teamManagementRouter.use('/folders', folderRouter);
+router.use('/:teamId', teamManagementRouter);
 
 export { router as teamRouter };

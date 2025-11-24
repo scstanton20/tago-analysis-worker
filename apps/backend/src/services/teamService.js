@@ -1,36 +1,12 @@
 /**
- * Team Service - Team and folder structure management
- * Manages teams (via Better Auth organization plugin), hierarchical folder structures,
- * and analysis-team assignments.
+ * Team Service - Manages teams via Better Auth organization plugin,
+ * hierarchical folder structures, and analysis-team assignments.
  *
- * This service handles:
- * - Team CRUD operations via Better Auth organization plugin
- * - Analysis-team assignment and migration
- * - Hierarchical folder structure within teams (nested tree)
- * - Drag-and-drop item reordering
- * - Team reordering and customization (color, order_index)
- * - System team management (Uncategorized)
- *
- * Architecture:
- * - Singleton service pattern (exported as teamService)
- * - Integrates with Better Auth's team/organization tables
- * - Custom fields: color, order_index, is_system
- * - Team structure stored in analysisService config
- * - Request-scoped logging via logger parameter
- *
- * Team Structure Format:
- * - teamStructure[teamId]:
- *   - items: [ // Flat or nested tree structure
- *       { id, type: 'analysis', analysisName },
- *       { id, type: 'folder', name, items: [...], expanded }
- *     ]
- *
- * Integration Points:
- * - Better Auth organization plugin for team CRUD
- * - analysisService for configuration persistence
- * - Custom hooks (beforeDeleteTeam) for automatic migration
- *
- * @module teamService
+ * Features:
+ * - Team CRUD with Better Auth integration (custom fields: color, order_index, is_system)
+ * - Hierarchical folder structure with drag-and-drop support
+ * - Analysis-team assignment with automatic migration on team deletion
+ * - Singleton pattern with request-scoped logging
  */
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -44,64 +20,22 @@ import {
   convertSQLiteBooleansArray,
 } from '../utils/databaseHelpers.js';
 
-// Module-level logger for background operations (initialization)
-// Public methods accept logger parameter for request-scoped logging
+// Module-level logger for initialization; public methods accept logger parameter for request-scoped logging
 const moduleLogger = createChildLogger('team-service');
 
-/**
- * Service class for managing teams and hierarchical folder structures
- * Integrates with Better Auth organization plugin for team management.
- *
- * Key Features:
- * - Team lifecycle management (create, read, update, delete)
- * - Analysis-team assignment with automatic migration
- * - Hierarchical folder structure (nested tree with drag-drop)
- * - Team reordering and customization
- * - System team support (Uncategorized, cannot be deleted)
- * - Automatic orphan analysis handling
- *
- * Better Auth Integration:
- * - Teams stored in Better Auth's team table
- * - Custom fields: color, order_index, is_system
- * - Uses Better Auth API for CRUD operations
- * - Custom hooks for automatic migration (beforeDeleteTeam)
- *
- * Folder Structure:
- * - Recursive tree structure with folders and analyses
- * - Drag-and-drop support for reordering
- * - Move operations with cycle detection
- * - Delete operations move children to parent
- *
- * Logging Strategy:
- * - Module-level logger (moduleLogger) for background operations
- * - Request-scoped logger parameter for API operations
- * - All public methods accept optional logger parameter
- *
- * @class TeamService
- */
 class TeamService {
   constructor() {
-    /** @type {Object|null} Reference to the analysis service instance */
     this.analysisService = null;
-    /** @type {boolean} Whether the service has been initialized */
     this.initialized = false;
-    /** @type {string} The main organization ID from better-auth */
     this.organizationId = null;
   }
 
-  /**
-   * Initialize the team service with analysis service integration
-   * @param {Object} analysisService - Analysis service instance for config management
-   * @returns {Promise<void>}
-   * @throws {Error} If initialization or migration fails
-   */
   async initialize(analysisService) {
     if (this.initialized) return;
 
     this.analysisService = analysisService;
 
     try {
-      // Get the main organization ID from better-auth database
       await this.loadOrganizationId();
 
       this.initialized = true;
@@ -115,10 +49,6 @@ class TeamService {
     }
   }
 
-  /**
-   * Load the main organization ID from better-auth database
-   * @returns {Promise<void>}
-   */
   async loadOrganizationId() {
     try {
       const org = executeQuery(
@@ -142,12 +72,6 @@ class TeamService {
     }
   }
 
-  /**
-   * Get all teams sorted by name
-   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
-   * @returns {Promise<Array>} Array of team objects from better-auth
-   * @throws {Error} If team retrieval fails
-   */
   async getAllTeams(logger = moduleLogger) {
     try {
       logger.info({ action: 'getAllTeams' }, 'Getting all teams');
@@ -168,7 +92,6 @@ class TeamService {
         'getting all teams',
       );
 
-      // Convert is_system from integer to boolean for frontend
       const result = convertSQLiteBooleansArray(teams, ['isSystem']);
 
       logger.info(
@@ -185,13 +108,6 @@ class TeamService {
     }
   }
 
-  /**
-   * Get a specific team by ID
-   * @param {string} id - Team ID to retrieve
-   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
-   * @returns {Promise<Object|undefined>} Team object or undefined if not found
-   * @throws {Error} If team retrieval fails
-   */
   async getTeam(id, logger = moduleLogger) {
     try {
       logger.info({ action: 'getTeam', teamId: id }, 'Getting team');
@@ -212,7 +128,6 @@ class TeamService {
       );
 
       if (team) {
-        // Convert is_system from integer to boolean for frontend
         team = convertSQLiteBooleans(team, ['isSystem']);
         logger.info(
           { action: 'getTeam', teamId: id, teamName: team.name },
@@ -232,16 +147,6 @@ class TeamService {
     }
   }
 
-  /**
-   * Create a new team
-   * @param {Object} data - Team data
-   * @param {string} data.name - Team name
-   * @param {string} [data.id] - Custom team ID (generates UUID if not provided)
-   * @param {Object} [headers] - Request headers for better-auth session context
-   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
-   * @returns {Promise<Object>} Created team object
-   * @throws {Error} If team creation fails
-   */
   async createTeam(data, headers = {}, logger = moduleLogger) {
     try {
       logger.info(
@@ -249,8 +154,6 @@ class TeamService {
         'Creating team',
       );
 
-      // Use better-auth API for normal team creation (leverages additional fields)
-      // First check if team with same name already exists
       const existing = executeQuery(
         'SELECT id FROM team WHERE name = ? AND organizationId = ?',
         [data.name, this.organizationId],
@@ -264,12 +167,10 @@ class TeamService {
       // Import auth dynamically to avoid circular dependencies
       const { auth } = await import('../lib/auth.js');
 
-      // Create team using better-auth API with additional fields
       const teamResult = await auth.api.createTeam({
         body: {
           name: data.name,
           organizationId: this.organizationId,
-          // Use additional fields defined in schema
           color: data.color || '#3B82F6',
           order_index: data.order || 0,
           is_system: data.isSystem || false,
@@ -281,7 +182,6 @@ class TeamService {
         throw new Error(`Failed to create team: ${teamResult.error.message}`);
       }
 
-      // Better-auth API returns the team object directly
       const teamData = teamResult;
 
       const team = convertSQLiteBooleans(
@@ -311,17 +211,6 @@ class TeamService {
     }
   }
 
-  /**
-   * Update an existing team
-   * @param {string} id - Team ID to update
-   * @param {Object} updates - Updates to apply
-   * @param {string} [updates.name] - New team name
-   * @param {string} [updates.color] - Team color
-   * @param {number} [updates.order] - Team order index
-   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
-   * @returns {Promise<Object>} Updated team object
-   * @throws {Error} If team not found, no valid fields provided, or update fails
-   */
   async updateTeam(id, updates, logger = moduleLogger) {
     try {
       logger.info(
@@ -401,7 +290,6 @@ class TeamService {
           )
           .get(id, this.organizationId);
 
-        // Convert is_system from integer to boolean for frontend
         const result = updatedTeam
           ? convertSQLiteBooleans(updatedTeam, ['isSystem'])
           : null;
@@ -421,19 +309,11 @@ class TeamService {
     }
   }
 
-  /**
-   * Delete a team (analysis migration handled automatically by beforeDeleteTeam hook)
-   * @param {string} id - Team ID to delete
-   * @param {Object} [headers] - Request headers for better-auth session context
-   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
-   * @returns {Promise<Object>} Deletion result
-   * @throws {Error} If team not found or deletion fails
-   */
+  // Analysis migration handled automatically by beforeDeleteTeam hook
   async deleteTeam(id, headers = {}, logger = moduleLogger) {
     try {
       logger.info({ action: 'deleteTeam', teamId: id }, 'Deleting team');
 
-      // Verify team exists and get details for better error messages
       const team = await this.getTeam(id, logger);
       if (!team) {
         throw new Error(`Team ${id} not found`);
@@ -447,7 +327,6 @@ class TeamService {
       // Import auth dynamically to avoid circular dependencies
       const { auth } = await import('../lib/auth.js');
 
-      // Use better-auth API to delete team (triggers beforeDeleteTeam hook)
       const result = await auth.api.removeTeam({
         body: {
           teamId: id,
@@ -456,7 +335,6 @@ class TeamService {
         headers,
       });
 
-      // Handle error response - null result means success for removeTeam
       if (result?.error) {
         throw new Error(
           `Failed to delete team via better-auth: ${result.error.message}`,
@@ -481,20 +359,12 @@ class TeamService {
     }
   }
 
-  /**
-   * Get all analyses belonging to a specific team
-   * @param {string} teamId - Team ID to get analyses for
-   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
-   * @returns {Promise<Array>} Array of analysis objects with name and metadata
-   * @throws {Error} If team not found or config retrieval fails
-   */
   async getAnalysesByTeam(teamId, logger = moduleLogger) {
     logger.info(
       { action: 'getAnalysesByTeam', teamId },
       'Getting analyses by team',
     );
 
-    // Verify team exists
     const team = await this.getTeam(teamId, logger);
     if (!team) {
       throw new Error(`Team ${teamId} not found`);
@@ -518,14 +388,6 @@ class TeamService {
     return analyses;
   }
 
-  /**
-   * Move an analysis to a different team
-   * @param {string} analysisName - Name of the analysis to move
-   * @param {string} teamId - Target team ID
-   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
-   * @returns {Promise<Object>} Move result with from/to team info
-   * @throws {Error} If analysis or team not found, or move fails
-   */
   async moveAnalysisToTeam(analysisName, teamId, logger = moduleLogger) {
     logger.info(
       { action: 'moveAnalysisToTeam', analysisName, teamId },
@@ -539,7 +401,6 @@ class TeamService {
       throw new Error(`Analysis ${analysisName} not found`);
     }
 
-    // Verify target team exists
     const team = await this.getTeam(teamId, logger);
     if (!team) {
       throw new Error(`Team ${teamId} not found`);
@@ -547,7 +408,6 @@ class TeamService {
 
     const previousTeam = analysis.teamId;
 
-    // Skip if moving to same team
     if (previousTeam === teamId) {
       logger.info(
         { action: 'moveAnalysisToTeam', analysisName, teamId },
@@ -560,13 +420,12 @@ class TeamService {
       };
     }
 
-    // Update analysis teamId
     analysis.teamId = teamId;
     analysis.lastModified = new Date().toISOString();
 
     await this.analysisService.updateConfig(configData);
 
-    // Update team structure: remove from old team and add to new team
+    // Remove from old team structure and add to new team
     if (previousTeam) {
       await this.removeItemFromTeamStructure(
         previousTeam,
@@ -575,7 +434,6 @@ class TeamService {
       );
     }
 
-    // Add to new team structure at root level
     const newItem = {
       id: uuidv4(),
       type: 'analysis',
@@ -600,12 +458,7 @@ class TeamService {
     };
   }
 
-  /**
-   * Ensure an analysis has a team assignment (defaults to uncategorized team)
-   * @param {string} analysisName - Name of the analysis to check
-   * @returns {Promise<void>}
-   * @throws {Error} If config update fails
-   */
+  // Ensure an analysis has a team assignment (defaults to uncategorized team)
   async ensureAnalysisHasTeam(analysisName) {
     const configData = await this.analysisService.getConfig();
 
@@ -613,7 +466,6 @@ class TeamService {
       configData.analyses?.[analysisName] &&
       !configData.analyses[analysisName].teamId
     ) {
-      // Get uncategorized team
       const teams = await this.getAllTeams();
       const uncategorizedTeam = teams.find((t) => t.name === 'Uncategorized');
 
@@ -631,13 +483,6 @@ class TeamService {
     }
   }
 
-  /**
-   * Reorder teams by updating their order_index values
-   * @param {string[]} orderedIds - Array of team IDs in desired order
-   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
-   * @returns {Promise<Array>} Updated teams in new order
-   * @throws {Error} If reordering fails
-   */
   async reorderTeams(orderedIds, logger = moduleLogger) {
     try {
       logger.info(
@@ -646,7 +491,6 @@ class TeamService {
       );
 
       return executeTransaction((db) => {
-        // Update order_index for each team
         const updateStmt = db.prepare(
           'UPDATE team SET order_index = ? WHERE id = ? AND organizationId = ?',
         );
@@ -655,7 +499,6 @@ class TeamService {
           updateStmt.run(i, orderedIds[i], this.organizationId);
         }
 
-        // Return all teams in new order
         const teams = db
           .prepare(
             `SELECT
@@ -672,7 +515,6 @@ class TeamService {
           )
           .all(this.organizationId);
 
-        // Convert is_system from integer to boolean for frontend
         const teamsWithBoolean = convertSQLiteBooleansArray(teams, [
           'isSystem',
         ]);
@@ -692,12 +534,6 @@ class TeamService {
     }
   }
 
-  /**
-   * Get the count of analyses assigned to a specific team
-   * @param {string} teamId - Team ID to count analyses for
-   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
-   * @returns {Promise<number>} Number of analyses assigned to the team
-   */
   async getAnalysisCountByTeamId(teamId, logger = moduleLogger) {
     try {
       const analyses = await this.getAnalysesByTeam(teamId, logger);
@@ -711,31 +547,9 @@ class TeamService {
     }
   }
 
-  /**
-   * Generic tree traversal utility using visitor pattern
-   * Recursively traverses a hierarchical tree structure and calls a visitor function for each item.
-   * Traversal stops early if visitor returns a non-null/non-undefined value.
-   *
-   * @param {Array} items - Tree items to traverse (array of objects with optional nested 'items' arrays)
-   * @param {Function} visitor - Callback function invoked for each item: (item, parent, index) => result | null
-   *   - item: Current item being visited
-   *   - parent: Parent item (null for root-level items)
-   *   - index: Index of item in parent's items array
-   * @param {Object|null} [parent=null] - Parent item (used internally for recursion)
-   * @returns {*} First non-null/non-undefined result from visitor, or null if no match found
-   *
-   * @example
-   * // Find item by ID
-   * const item = traverseTree(items, (item) =>
-   *   item.id === targetId ? item : null
-   * );
-   *
-   * @example
-   * // Find item with parent context
-   * const result = traverseTree(items, (item, parent, index) =>
-   *   item.id === targetId ? { item, parent, index } : null
-   * );
-   */
+  // Generic tree traversal using visitor pattern
+  // Stops early if visitor returns non-null/non-undefined value
+  // Visitor: (item, parent, index) => result | null
   traverseTree(items, visitor, parent = null) {
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
@@ -750,22 +564,10 @@ class TeamService {
     return null;
   }
 
-  /**
-   * Recursively find an item by ID in the tree structure
-   * @param {Array} items - Array of items to search
-   * @param {string} id - Item ID to find
-   * @returns {Object|null} Found item or null
-   */
   findItemById(items, id) {
     return this.traverseTree(items, (item) => (item.id === id ? item : null));
   }
 
-  /**
-   * Find an item with its parent and index for manipulation
-   * @param {Array} items - Array of items to search
-   * @param {string} id - Item ID to find
-   * @returns {Object} Object with parent, item, and index
-   */
   findItemWithParent(items, id) {
     const result = this.traverseTree(items, (item, parent, index) =>
       item.id === id ? { parent, item, index } : null,
@@ -773,14 +575,6 @@ class TeamService {
     return result || { parent: null, item: null, index: -1 };
   }
 
-  /**
-   * Add an item to team structure at specified location
-   * @param {string} teamId - Team ID
-   * @param {Object} newItem - Item to add
-   * @param {string|null} targetFolderId - Target folder ID (null = root)
-   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
-   * @returns {Promise<void>}
-   */
   async addItemToTeamStructure(
     teamId,
     newItem,
@@ -805,10 +599,8 @@ class TeamService {
     const teamItems = configData.teamStructure[teamId].items;
 
     if (!targetFolderId) {
-      // Add to root level
       teamItems.push(newItem);
     } else {
-      // Find target folder and add to its items
       const targetFolder = this.findItemById(teamItems, targetFolderId);
       if (!targetFolder || targetFolder.type !== 'folder') {
         throw new Error('Target folder not found');
@@ -826,13 +618,6 @@ class TeamService {
     );
   }
 
-  /**
-   * Remove an item from team structure by analysis name
-   * @param {string} teamId - Team ID
-   * @param {string} analysisName - Analysis name to remove
-   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
-   * @returns {Promise<void>}
-   */
   async removeItemFromTeamStructure(
     teamId,
     analysisName,
@@ -846,10 +631,9 @@ class TeamService {
     const configData = await this.analysisService.getConfig();
 
     if (!configData.teamStructure?.[teamId]) {
-      return; // Nothing to remove
+      return;
     }
 
-    // Use traverseTree to find and remove the item
     const result = this.traverseTree(
       configData.teamStructure[teamId].items,
       (item, parent, index) => {
@@ -872,14 +656,6 @@ class TeamService {
     );
   }
 
-  /**
-   * Create a folder in a team's item tree
-   * @param {string} teamId - Team ID
-   * @param {string|null} parentFolderId - Parent folder ID (null = root)
-   * @param {string} name - Folder name
-   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
-   * @returns {Promise<Object>} Created folder object
-   */
   async createFolder(teamId, parentFolderId, name, logger = moduleLogger) {
     logger.info(
       { action: 'createFolder', teamId, parentFolderId, name },
@@ -888,7 +664,6 @@ class TeamService {
 
     const configData = await this.analysisService.getConfig();
 
-    // Verify team exists
     const team = await this.getTeam(teamId, logger);
     if (!team) {
       throw new Error(`Team ${teamId} not found`);
@@ -912,10 +687,8 @@ class TeamService {
     const teamItems = configData.teamStructure[teamId].items;
 
     if (!parentFolderId) {
-      // Add to root level
       teamItems.push(newFolder);
     } else {
-      // Find parent folder and add to its items
       const parent = this.findItemById(teamItems, parentFolderId);
       if (!parent || parent.type !== 'folder') {
         throw new Error('Parent folder not found');
@@ -942,14 +715,6 @@ class TeamService {
     return newFolder;
   }
 
-  /**
-   * Update folder properties (name, expanded state)
-   * @param {string} teamId - Team ID
-   * @param {string} folderId - Folder ID to update
-   * @param {Object} updates - Updates to apply
-   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
-   * @returns {Promise<Object>} Updated folder
-   */
   async updateFolder(teamId, folderId, updates, logger = moduleLogger) {
     logger.info(
       { action: 'updateFolder', teamId, folderId, updates },
@@ -971,7 +736,6 @@ class TeamService {
       throw new Error(`Folder ${folderId} not found`);
     }
 
-    // Apply updates
     if (updates.name !== undefined) {
       folder.name = updates.name;
     }
@@ -989,13 +753,7 @@ class TeamService {
     return folder;
   }
 
-  /**
-   * Delete a folder (move children to parent or root)
-   * @param {string} teamId - Team ID
-   * @param {string} folderId - Folder ID to delete
-   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
-   * @returns {Promise<Object>} Deletion result
-   */
+  // Delete a folder (move children to parent or root)
   async deleteFolder(teamId, folderId, logger = moduleLogger) {
     logger.info(
       { action: 'deleteFolder', teamId, folderId },
@@ -1022,10 +780,8 @@ class TeamService {
     // Move children to parent
     const children = item.items || [];
     if (parent) {
-      // Remove folder and insert children in its place
       parent.items.splice(index, 1, ...children);
     } else {
-      // Folder is at root level
       teamItems.splice(index, 1, ...children);
     }
 
@@ -1044,15 +800,6 @@ class TeamService {
     return { deleted: folderId, childrenMoved: children.length };
   }
 
-  /**
-   * Move an item within the tree structure (drag-drop)
-   * @param {string} teamId - Team ID
-   * @param {string} itemId - Item ID to move
-   * @param {string|null} targetParentId - Target parent folder ID (null = root)
-   * @param {number} targetIndex - Target index in parent's items array
-   * @param {Object} [logger=moduleLogger] - Logger instance for request-scoped logging
-   * @returns {Promise<Object>} Move result
-   */
   async moveItem(
     teamId,
     itemId,
@@ -1073,7 +820,6 @@ class TeamService {
 
     const teamItems = configData.teamStructure[teamId].items;
 
-    // Find and remove from current location
     const {
       parent: sourceParent,
       item,
@@ -1103,9 +849,7 @@ class TeamService {
     const sourceArray = sourceParent ? sourceParent.items : teamItems;
     sourceArray.splice(sourceIndex, 1);
 
-    // Insert at target location
     if (!targetParentId) {
-      // Moving to root
       teamItems.splice(targetIndex, 0, item);
     } else {
       const targetParent = this.findItemById(teamItems, targetParentId);

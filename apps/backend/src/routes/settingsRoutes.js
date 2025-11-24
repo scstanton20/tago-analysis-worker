@@ -16,6 +16,8 @@ const router = Router();
 router.use(authMiddleware);
 router.use(requireAdmin);
 
+const dnsRouter = Router({ mergeParams: true });
+
 // DNS Cache Settings Routes
 /**
  * @swagger
@@ -38,8 +40,8 @@ router.use(requireAdmin);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get(
-  '/dns/config',
+dnsRouter.get(
+  '/config',
   validateRequest(settingsValidationSchemas.getDNSConfig),
   asyncHandler(SettingsController.getDNSConfig, 'get DNS config'),
 );
@@ -85,8 +87,8 @@ router.get(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.put(
-  '/dns/config',
+dnsRouter.put(
+  '/config',
   settingsOperationLimiter,
   validateRequest(settingsValidationSchemas.updateDNSConfig),
   asyncHandler(SettingsController.updateDNSConfig, 'update DNS config'),
@@ -113,8 +115,8 @@ router.put(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get(
-  '/dns/entries',
+dnsRouter.get(
+  '/entries',
   validateRequest(settingsValidationSchemas.getDNSCacheEntries),
   asyncHandler(SettingsController.getDNSCacheEntries, 'get DNS cache entries'),
 );
@@ -150,8 +152,8 @@ router.get(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.delete(
-  '/dns/cache',
+dnsRouter.delete(
+  '/cache',
   settingsOperationLimiter,
   validateRequest(settingsValidationSchemas.clearDNSCache),
   asyncHandler(SettingsController.clearDNSCache, 'clear DNS cache'),
@@ -206,8 +208,8 @@ router.delete(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.delete(
-  '/dns/cache/:key',
+dnsRouter.delete(
+  '/cache/:key',
   settingsOperationLimiter,
   validateRequest(settingsValidationSchemas.deleteDNSCacheEntry),
   asyncHandler(
@@ -243,11 +245,13 @@ router.delete(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post(
-  '/dns/stats/reset',
+dnsRouter.post(
+  '/stats/reset',
   settingsOperationLimiter,
   validateRequest(settingsValidationSchemas.resetDNSStats),
   asyncHandler(SettingsController.resetDNSStats, 'reset DNS stats'),
 );
+
+router.use('/dns', dnsRouter);
 
 export { router as settingsRouter };

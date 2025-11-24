@@ -318,7 +318,7 @@ fileRouter.get(
   '/content',
   fileOperationLimiter,
   validateRequest(analysisValidationSchemas.getAnalysisContent),
-  requireTeamPermission('download_analyses'), // Changed from view_analyses
+  requireTeamPermission('view_analyses'),
   asyncHandler(AnalysisController.getAnalysisContent, 'get analysis content'),
 );
 /**
