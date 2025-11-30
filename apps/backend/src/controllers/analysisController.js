@@ -784,7 +784,6 @@ export class AnalysisController {
     req.log.info({ action: 'clearLogs', fileName }, 'Logs cleared');
 
     // Broadcast logs cleared with the "Log file cleared" message included
-    // This avoids race conditions with separate log events
     sseManager.broadcastAnalysisUpdate(fileName, {
       type: 'logsCleared',
       data: {

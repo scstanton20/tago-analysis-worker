@@ -40,6 +40,8 @@ const AnalysisLogs = ({ analysis }) => {
   });
   // Ref to track previous log count for clearing detection
   const previousLogCountRef = useRef(0);
+  // Ref to track the last logsClearedAt timestamp we've processed
+  const lastClearedAtRef = useRef(null);
 
   // Memoize sseLogs to prevent unnecessary re-renders
   const sseLogs = useMemo(() => analysis.logs || [], [analysis.logs]);
@@ -173,35 +175,24 @@ const AnalysisLogs = ({ analysis }) => {
     }
   }, [hasMore, loadMoreLogs]);
 
-  // Detect and handle log clearing with ref-based tracking
-  // Using ref instead of state eliminates circular dependency in effect deps
+  // Handle log clearing via explicit SSE signal (logsClearedAt timestamp)
+  // This is more reliable than detecting clearing from log content
   useEffect(() => {
-    // Detect when logs are cleared (sse logs go to 0 or contain only a clear message)
-    const logsWereCleared =
-      hasLoadedInitial.current &&
-      previousLogCountRef.current > 0 &&
-      (sseLogs.length === 0 ||
-        (sseLogs.length === 1 && sseLogs[0]?.message?.includes('cleared')));
-
-    if (logsWereCleared) {
-      logger.log('Logs cleared, resetting all state and reloading');
+    const clearedAt = analysis.logsClearedAt;
+    if (clearedAt && clearedAt !== lastClearedAtRef.current) {
+      logger.log('Logs cleared via SSE, resetting local state');
       setInitialLogs([]);
       setAdditionalLogs([]);
       setPage(1);
       setHasMore(false);
       previousLogCountRef.current = 0;
       disableAutoScroll();
-      hasLoadedInitial.current = false; // Force reload of initial logs
-      loadInitialLogs();
+      lastClearedAtRef.current = clearedAt;
+      // Don't reload initial logs - the SSE already provides the clear message
+      // and there's nothing else in the log file
     }
-
-    // Update previous count via ref (no state needed)
-    previousLogCountRef.current = sseLogs.length;
-    // loadInitialLogs & disableAutoScroll are stable callbacks that change when
-    // sseLogs changes, so we omit them to prevent unnecessary reruns and potential
-    // race conditions.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sseLogs]);
+    // disableAutoScroll is a stable callback, safe to include
+  }, [analysis.logsClearedAt, disableAutoScroll]);
 
   // Memoize combined logs to prevent unnecessary recalculations
   // Using useMemo instead of useCallback since we call this every render
@@ -449,6 +440,7 @@ AnalysisLogs.propTypes = {
       }),
     ),
     totalLogCount: PropTypes.number,
+    logsClearedAt: PropTypes.number,
   }).isRequired,
 };
 

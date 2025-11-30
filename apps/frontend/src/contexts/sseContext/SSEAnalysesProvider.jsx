@@ -285,6 +285,7 @@ export function SSEAnalysesProvider({ children }) {
           ...prev[fileName],
           logs: clearedLogs,
           totalLogCount: clearedLogs.length,
+          logsClearedAt: Date.now(),
         },
       }));
     }
