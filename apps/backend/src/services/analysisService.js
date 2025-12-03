@@ -15,8 +15,8 @@ import {
   safeStat,
   safeRename,
   getAnalysisPath,
-  isAnalysisNameSafe,
 } from '../utils/safePath.js';
+import { isAnalysisNameSafe } from '../validation/shared.js';
 import { AnalysisProcess } from '../models/analysisProcess/index.js';
 import { teamService } from './teamService.js';
 import { createChildLogger, parseLogLine } from '../utils/logging/logger.js';

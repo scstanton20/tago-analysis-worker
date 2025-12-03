@@ -31,27 +31,44 @@ describe('sanitizeParams Middleware', () => {
       expect(res.status).not.toHaveBeenCalled();
     });
 
-    it('should sanitize filename with special characters', () => {
+    it('should sanitize filename with dangerous chars that result in valid name', () => {
+      // Colons and asterisks are sanitized to underscores by sanitize-filename
+      // The result 'my_analysis_.js' passes FILENAME_REGEX
       req.params.fileName = 'my:analysis*.js';
 
       const middleware = sanitizeFilenameParam('fileName');
       middleware(req, res, next);
 
-      // sanitize-filename replaces invalid chars with _
       expect(req.params.fileName).toBe('my_analysis_.js');
       expect(next).toHaveBeenCalledOnce();
     });
 
     it('should sanitize filename with path traversal attempt', () => {
+      // Path traversal results in '.._.._.._etc_passwd' which passes FILENAME_REGEX
+      // (dots and underscores are allowed)
       req.params.fileName = '../../../etc/passwd';
 
       const middleware = sanitizeFilenameParam('fileName');
       middleware(req, res, next);
 
-      // sanitize-filename converts slashes and dots to underscores
       expect(req.params.fileName).toBe('.._.._.._etc_passwd');
       expect(next).toHaveBeenCalledOnce();
-      expect(res.status).not.toHaveBeenCalled();
+    });
+
+    it('should reject filename with parentheses', () => {
+      // Parentheses are not replaced by sanitize-filename but fail FILENAME_REGEX
+      req.params.fileName = 'file(1).js';
+
+      const middleware = sanitizeFilenameParam('fileName');
+      middleware(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: 'Invalid filename',
+        }),
+      );
+      expect(next).not.toHaveBeenCalled();
     });
 
     it('should reject empty filename', () => {
@@ -177,6 +194,8 @@ describe('sanitizeParams Middleware', () => {
       const middleware = sanitizeFilenameParams('fileName', 'newFileName');
       middleware(req, res, next);
 
+      // Path traversal results in '.._invalid.js' which passes FILENAME_REGEX
+      // (dots and underscores are allowed)
       expect(req.params.fileName).toBe('valid.js');
       expect(req.params.newFileName).toBe('.._invalid.js');
       expect(next).toHaveBeenCalledOnce();
@@ -234,13 +253,13 @@ describe('sanitizeParams Middleware', () => {
   });
 
   describe('security tests', () => {
-    it('should sanitize directory traversal with dots', () => {
+    it('should sanitize directory traversal with dots to underscore', () => {
       req.params.fileName = '..';
 
       const middleware = sanitizeFilenameParam('fileName');
       middleware(req, res, next);
 
-      // sanitize-filename converts .. to _
+      // sanitize-filename converts .. to _, which passes FILENAME_REGEX
       expect(req.params.fileName).toBe('_');
       expect(next).toHaveBeenCalledOnce();
     });
@@ -251,7 +270,8 @@ describe('sanitizeParams Middleware', () => {
       const middleware = sanitizeFilenameParam('fileName');
       middleware(req, res, next);
 
-      // sanitize-filename converts path traversal to safe filename
+      // sanitize-filename converts to '.._.._passwords.txt'
+      // Dots and underscores are allowed in FILENAME_REGEX, so this passes
       expect(req.params.fileName).toBe('.._.._passwords.txt');
       expect(next).toHaveBeenCalledOnce();
     });
@@ -262,31 +282,31 @@ describe('sanitizeParams Middleware', () => {
       const middleware = sanitizeFilenameParam('fileName');
       middleware(req, res, next);
 
-      // sanitize-filename converts backslashes and path traversal
-      expect(req.params.fileName).not.toContain('\\');
+      // sanitize-filename converts backslashes to underscores
+      expect(req.params.fileName).toBe('.._.._passwords.txt');
       expect(next).toHaveBeenCalledOnce();
     });
 
-    it('should prevent null byte injection', () => {
+    it('should sanitize null bytes to underscores', () => {
       req.params.fileName = 'test\0.js';
 
       const middleware = sanitizeFilenameParam('fileName');
       middleware(req, res, next);
 
-      // sanitize-filename should handle this
-      expect(req.params.fileName).not.toContain('\0');
+      // sanitize-filename replaces null bytes with underscores
+      expect(req.params.fileName).toBe('test_.js');
       expect(next).toHaveBeenCalledOnce();
     });
 
-    it('should handle URL-encoded path traversal attempts', () => {
+    it('should reject URL-encoded path traversal attempts', () => {
       req.params.fileName = '%2e%2e%2f%2e%2e%2fpasswd';
 
       const middleware = sanitizeFilenameParam('fileName');
       middleware(req, res, next);
 
-      // After sanitization, should not contain path traversal
-      expect(req.params.fileName).not.toMatch(/\.\./);
-      expect(next).toHaveBeenCalledOnce();
+      // URL-encoded characters like % fail FILENAME_REGEX
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(next).not.toHaveBeenCalled();
     });
 
     it('should allow valid files with periods in name', () => {

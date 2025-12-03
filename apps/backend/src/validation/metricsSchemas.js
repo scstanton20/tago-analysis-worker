@@ -1,5 +1,5 @@
 // validation/metricsSchemas.js
-import { z } from 'zod';
+import { emptyStrictSchema } from './shared.js';
 
 /**
  * Validation schemas for metrics endpoints
@@ -13,6 +13,6 @@ export const metricsValidationSchemas = {
    * Authenticated endpoint for Prometheus scraping
    */
   getMetrics: {
-    query: z.object({}).strict(),
+    query: emptyStrictSchema,
   },
 };

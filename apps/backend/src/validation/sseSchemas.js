@@ -1,5 +1,6 @@
 // validation/sseSchemas.js
 import { z } from 'zod';
+import { requiredId, emptyStrictSchema } from './shared.js';
 
 /**
  * Validation schemas for SSE (Server-Sent Events) endpoints
@@ -12,7 +13,7 @@ export const sseValidationSchemas = {
    * Validates that no query parameters are provided (strict empty object)
    */
   connectSSE: {
-    query: z.object({}).strict(),
+    query: emptyStrictSchema,
   },
 
   /**
@@ -22,7 +23,7 @@ export const sseValidationSchemas = {
   subscribe: {
     body: z
       .object({
-        sessionId: z.string().min(1, 'sessionId is required'),
+        sessionId: requiredId('sessionId'),
         analyses: z
           .array(z.string().min(1, 'Analysis name cannot be empty'))
           .min(1, 'At least one analysis must be provided'),
@@ -37,7 +38,7 @@ export const sseValidationSchemas = {
   unsubscribe: {
     body: z
       .object({
-        sessionId: z.string().min(1, 'sessionId is required'),
+        sessionId: requiredId('sessionId'),
         analyses: z
           .array(z.string().min(1, 'Analysis name cannot be empty'))
           .min(1, 'At least one analysis must be provided'),

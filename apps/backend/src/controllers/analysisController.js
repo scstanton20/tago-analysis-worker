@@ -5,11 +5,12 @@ import { config } from '../config/default.js';
 import { promises as fs } from 'fs';
 import sanitize from 'sanitize-filename';
 import { FILE_SIZE } from '../constants.js';
+import { safeWriteFile, safeUnlink } from '../utils/safePath.js';
 import {
-  safeWriteFile,
-  safeUnlink,
   sanitizeAndValidateFilename,
-} from '../utils/safePath.js';
+  isValidFilename,
+  FILENAME_ERROR_MESSAGE,
+} from '../validation/shared.js';
 import { broadcastTeamStructureUpdate } from '../utils/responseHelpers.js';
 
 /**
@@ -77,6 +78,23 @@ export class AnalysisController {
           FILE_SIZE.KILOBYTES /
           FILE_SIZE.KILOBYTES
         ).toFixed(2),
+      });
+    }
+
+    // Validate filename against shared regex (consistent with other operations)
+    const analysisName = path.parse(analysis.name).name;
+    if (!isValidFilename(analysisName)) {
+      req.log.warn(
+        {
+          action: 'uploadAnalysis',
+          fileName: analysis.name,
+          analysisName,
+        },
+        'Upload failed: invalid filename',
+      );
+      return res.status(400).json({
+        error: FILENAME_ERROR_MESSAGE,
+        fileName: analysis.name,
       });
     }
 

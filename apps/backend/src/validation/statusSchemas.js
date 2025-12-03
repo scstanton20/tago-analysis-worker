@@ -1,5 +1,5 @@
 // validation/statusSchemas.js
-import { z } from 'zod';
+import { emptyStrictSchema } from './shared.js';
 
 /**
  * Validation schemas for status endpoints
@@ -13,6 +13,6 @@ export const statusValidationSchemas = {
    * Public endpoint for health checks
    */
   getSystemStatus: {
-    query: z.object({}).strict(),
+    query: emptyStrictSchema,
   },
 };

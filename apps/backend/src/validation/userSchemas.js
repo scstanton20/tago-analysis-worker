@@ -1,12 +1,13 @@
 // validation/userSchemas.js
 import { z } from 'zod';
+import { requiredId } from './shared.js';
 
 // Organization role enum
 const organizationRoleSchema = z.enum(['admin', 'owner', 'member']);
 
 // Team assignment schema matching existing validation
 const teamAssignmentSchema = z.object({
-  teamId: z.string().min(1, 'teamId is required'),
+  teamId: requiredId('teamId'),
   permissions: z.array(z.string()).optional().default([]),
 });
 
@@ -16,8 +17,8 @@ export const userValidationSchemas = {
    */
   addToOrganization: {
     body: z.object({
-      userId: z.string().min(1, 'userId is required'),
-      organizationId: z.string().min(1, 'organizationId is required'),
+      userId: requiredId('userId'),
+      organizationId: requiredId('organizationId'),
       role: organizationRoleSchema.default('member'),
     }),
   },
@@ -27,7 +28,7 @@ export const userValidationSchemas = {
    */
   assignUserToTeams: {
     body: z.object({
-      userId: z.string().min(1, 'userId is required'),
+      userId: requiredId('userId'),
       teamAssignments: z.array(teamAssignmentSchema).default([]),
     }),
   },
@@ -37,7 +38,7 @@ export const userValidationSchemas = {
    */
   updateUserTeamAssignments: {
     params: z.object({
-      userId: z.string().min(1, 'userId is required'),
+      userId: requiredId('userId'),
     }),
     body: z.object({
       teamAssignments: z.array(teamAssignmentSchema).default([]),
@@ -51,7 +52,7 @@ export const userValidationSchemas = {
    */
   updateUserOrganizationRole: {
     params: z.object({
-      userId: z.string().min(1, 'userId is required'),
+      userId: requiredId('userId'),
     }),
     body: z.object({
       organizationId: z
@@ -69,13 +70,10 @@ export const userValidationSchemas = {
    */
   removeUserFromOrganization: {
     params: z.object({
-      userId: z.string().min(1, 'userId is required'),
+      userId: requiredId('userId'),
     }),
     body: z.object({
-      organizationId: z
-        .string()
-        .min(1, 'organizationId is required')
-        .nullable(),
+      organizationId: requiredId('organizationId').nullable(),
     }),
   },
 
@@ -96,7 +94,7 @@ export const userValidationSchemas = {
    */
   forceLogout: {
     params: z.object({
-      userId: z.string().min(1, 'userId is required'),
+      userId: requiredId('userId'),
     }),
     body: z.object({
       reason: z.string().default('Your session has been terminated'),

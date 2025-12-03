@@ -41,6 +41,10 @@ vi.mock('../../src/utils/safePath.js', () => ({
   isPathSafe: vi.fn(() => true),
   safeWriteFile: vi.fn().mockResolvedValue(undefined),
   safeUnlink: vi.fn().mockResolvedValue(undefined),
+  isValidFilename: vi.fn(() => true),
+  FILENAME_REGEX: /^[a-zA-Z0-9_\-. ]+$/,
+  FILENAME_ERROR_MESSAGE:
+    'Filename can only contain alphanumeric characters, spaces, hyphens, underscores, and periods',
 }));
 
 vi.mock('../../src/utils/responseHelpers.js', () => ({

@@ -29,12 +29,14 @@ vi.mock('../../src/config/default.js', () => ({
 
 describe('safePath', () => {
   let safePath;
+  let shared;
   let fs;
 
   beforeEach(async () => {
     vi.clearAllMocks();
     fs = (await import('fs')).promises;
     safePath = await import('../../src/utils/safePath.js');
+    shared = await import('../../src/validation/shared.js');
   });
 
   describe('isPathSafe', () => {
@@ -95,76 +97,175 @@ describe('safePath', () => {
     });
   });
 
-  describe('sanitizeAndValidateFilename', () => {
+  describe('FILENAME_REGEX and isValidFilename (from shared.js)', () => {
+    it('should export FILENAME_REGEX constant', () => {
+      expect(shared.FILENAME_REGEX).toBeDefined();
+      expect(shared.FILENAME_REGEX).toBeInstanceOf(RegExp);
+    });
+
+    it('should export FILENAME_ERROR_MESSAGE constant', () => {
+      expect(shared.FILENAME_ERROR_MESSAGE).toBeDefined();
+      expect(typeof shared.FILENAME_ERROR_MESSAGE).toBe('string');
+    });
+
+    it('should allow valid filenames with isValidFilename', () => {
+      expect(shared.isValidFilename('my-analysis')).toBe(true);
+      expect(shared.isValidFilename('my_analysis')).toBe(true);
+      expect(shared.isValidFilename('my analysis')).toBe(true);
+      expect(shared.isValidFilename('analysis.js')).toBe(true);
+      expect(shared.isValidFilename('My Analysis 123')).toBe(true);
+    });
+
+    it('should reject invalid filenames with isValidFilename', () => {
+      expect(shared.isValidFilename('file(1)')).toBe(false);
+      expect(shared.isValidFilename('file[1]')).toBe(false);
+      expect(shared.isValidFilename('file@name')).toBe(false);
+      expect(shared.isValidFilename('file#name')).toBe(false);
+      expect(shared.isValidFilename('file$name')).toBe(false);
+      expect(shared.isValidFilename('path/to/file')).toBe(false);
+      expect(shared.isValidFilename('../etc/passwd')).toBe(false);
+    });
+
+    it('should reject empty or invalid inputs', () => {
+      expect(shared.isValidFilename('')).toBe(false);
+      expect(shared.isValidFilename(null)).toBe(false);
+      expect(shared.isValidFilename(undefined)).toBe(false);
+      expect(shared.isValidFilename('.')).toBe(false);
+      expect(shared.isValidFilename('..')).toBe(false);
+    });
+  });
+
+  describe('sanitizeAndValidateFilename (from shared.js)', () => {
     it('should allow valid filenames', () => {
       const filename = 'my-analysis.js';
 
-      const result = safePath.sanitizeAndValidateFilename(filename);
+      const result = shared.sanitizeAndValidateFilename(filename);
 
       expect(result).toBe('my-analysis.js');
     });
 
-    it('should reject path traversal in filename', () => {
+    it('should sanitize dangerous characters and pass validation', () => {
+      // Colons get replaced with underscores by sanitize-filename
+      // The result 'file_name.js' passes the FILENAME_REGEX
+      const filename = 'file:name.js';
+      const result = shared.sanitizeAndValidateFilename(filename);
+      expect(result).toBe('file_name.js');
+    });
+
+    it('should throw for filenames with parentheses (not allowed by regex)', () => {
+      const filename = 'file(1).js';
+
+      // Parentheses are not replaced by sanitize-filename but fail FILENAME_REGEX
+      expect(() => {
+        shared.sanitizeAndValidateFilename(filename);
+      }).toThrow('can only contain alphanumeric');
+    });
+
+    it('should throw for filenames with brackets', () => {
+      const filename = 'file[1].js';
+
+      expect(() => {
+        shared.sanitizeAndValidateFilename(filename);
+      }).toThrow('can only contain alphanumeric');
+    });
+
+    it('should throw for filenames with special characters not in allowed set', () => {
+      const filename = 'file@name.js';
+
+      expect(() => {
+        shared.sanitizeAndValidateFilename(filename);
+      }).toThrow('can only contain alphanumeric');
+    });
+
+    it('should sanitize path traversal attempts to valid filename', () => {
       const filename = '../../../etc/passwd';
 
-      // sanitizeAndValidateFilename uses sanitize-filename which REPLACES invalid chars
-      // It doesn't throw, it sanitizes. The result is '.._.._.._etc_passwd' which contains '..'
-      const result = safePath.sanitizeAndValidateFilename(filename);
-      expect(result).toBeDefined();
-      // Check that it was sanitized (not the original)
-      expect(result).not.toBe(filename);
-      // The sanitized version contains underscores
-      expect(result).toContain('_');
+      // sanitize-filename replaces slashes with underscores
+      // Result: '.._.._.._etc_passwd' - dots are allowed in FILENAME_REGEX
+      const result = shared.sanitizeAndValidateFilename(filename);
+      expect(result).toBe('.._.._.._etc_passwd');
     });
 
-    it('should reject filenames with directory separators', () => {
+    it('should sanitize filenames with directory separators', () => {
       const filename = 'subdir/analysis.js';
 
-      // sanitize-filename replaces / with underscore
-      const result = safePath.sanitizeAndValidateFilename(filename);
-      expect(result).toBeDefined();
-      expect(result).not.toContain('/');
+      // After sanitize-filename: 'subdir_analysis.js' - this should pass
+      const result = shared.sanitizeAndValidateFilename(filename);
+      expect(result).toBe('subdir_analysis.js');
     });
 
-    it('should reject null bytes', () => {
-      const filename = 'analysis\x00.js';
+    it('should sanitize null bytes to underscores', () => {
+      const filename = 'analysis\x00test.js';
 
-      // sanitize-filename removes null bytes
-      const result = safePath.sanitizeAndValidateFilename(filename);
-      expect(result).toBeDefined();
-      expect(result).not.toContain('\x00');
+      // sanitize-filename replaces null bytes with underscores
+      const result = shared.sanitizeAndValidateFilename(filename);
+      expect(result).toBe('analysis_test.js');
     });
 
     it('should reject empty filenames', () => {
       expect(() => {
-        safePath.sanitizeAndValidateFilename('');
+        shared.sanitizeAndValidateFilename('');
+      }).toThrow('Invalid filename');
+    });
+
+    it('should reject null and undefined', () => {
+      expect(() => {
+        shared.sanitizeAndValidateFilename(null);
+      }).toThrow('Invalid filename');
+
+      expect(() => {
+        shared.sanitizeAndValidateFilename(undefined);
       }).toThrow('Invalid filename');
     });
   });
 
-  describe('isAnalysisNameSafe', () => {
+  describe('isAnalysisNameSafe (from shared.js)', () => {
     it('should allow valid analysis names', () => {
-      const name = 'my-analysis';
-
-      const result = safePath.isAnalysisNameSafe(name);
-
-      expect(result).toBe(true);
+      expect(shared.isAnalysisNameSafe('my-analysis')).toBe(true);
+      expect(shared.isAnalysisNameSafe('my_analysis')).toBe(true);
+      expect(shared.isAnalysisNameSafe('my analysis')).toBe(true);
+      expect(shared.isAnalysisNameSafe('Analysis123')).toBe(true);
+      expect(shared.isAnalysisNameSafe('My.Analysis')).toBe(true);
     });
 
     it('should reject path traversal in analysis name', () => {
-      const name = '../../../etc/passwd';
-
-      const result = safePath.isAnalysisNameSafe(name);
-
-      expect(result).toBe(false);
+      expect(shared.isAnalysisNameSafe('../../../etc/passwd')).toBe(false);
+      expect(shared.isAnalysisNameSafe('..')).toBe(false);
     });
 
     it('should reject names with directory separators', () => {
-      const name = 'subdir/analysis';
+      expect(shared.isAnalysisNameSafe('subdir/analysis')).toBe(false);
+      expect(shared.isAnalysisNameSafe('path\\to\\file')).toBe(false);
+    });
 
-      const result = safePath.isAnalysisNameSafe(name);
+    it('should reject names with parentheses (consistent with FILENAME_REGEX)', () => {
+      expect(shared.isAnalysisNameSafe('file(1)')).toBe(false);
+      expect(shared.isAnalysisNameSafe('analysis (copy)')).toBe(false);
+    });
 
-      expect(result).toBe(false);
+    it('should reject names with special characters', () => {
+      expect(shared.isAnalysisNameSafe('file@name')).toBe(false);
+      expect(shared.isAnalysisNameSafe('file#name')).toBe(false);
+      expect(shared.isAnalysisNameSafe('file$name')).toBe(false);
+      expect(shared.isAnalysisNameSafe('file[1]')).toBe(false);
+    });
+
+    it('should reject empty or invalid inputs', () => {
+      expect(shared.isAnalysisNameSafe('')).toBe(false);
+      expect(shared.isAnalysisNameSafe(null)).toBe(false);
+      expect(shared.isAnalysisNameSafe(undefined)).toBe(false);
+      expect(shared.isAnalysisNameSafe('.')).toBe(false);
+    });
+
+    it('should use isValidFilename internally (same behavior)', () => {
+      // Verify that isAnalysisNameSafe behaves identically to isValidFilename
+      const testCases = ['valid-name', 'file(1)', '../etc/passwd', '', null];
+
+      testCases.forEach((name) => {
+        expect(shared.isAnalysisNameSafe(name)).toBe(
+          shared.isValidFilename(name),
+        );
+      });
     });
   });
 

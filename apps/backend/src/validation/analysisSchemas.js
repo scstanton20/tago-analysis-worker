@@ -1,15 +1,6 @@
 // validation/analysisSchemas.js
 import { z } from 'zod';
-
-// Filename validation helper
-const filenameSchema = z
-  .string()
-  .min(1, 'Filename is required')
-  .regex(
-    /^[a-zA-Z0-9_,\-. ]+$/,
-    'Filename can only contain alphanumeric characters, spaces, hyphens, commas, underscores, and periods',
-  )
-  .refine((val) => val !== '.' && val !== '..', 'Invalid filename');
+import { filenameSchema, pageSchema, limitSchema } from './shared.js';
 
 export const analysisValidationSchemas = {
   /**
@@ -18,16 +9,8 @@ export const analysisValidationSchemas = {
   getAnalyses: {
     query: z
       .object({
-        page: z
-          .string()
-          .regex(/^\d+$/, 'Page must be a valid positive integer')
-          .transform((val) => parseInt(val, 10))
-          .optional(),
-        limit: z
-          .string()
-          .regex(/^\d+$/, 'Limit must be a valid positive integer')
-          .transform((val) => parseInt(val, 10))
-          .optional(),
+        page: pageSchema,
+        limit: limitSchema,
         search: z
           .string()
           .max(255, 'Search query must not exceed 255 characters')

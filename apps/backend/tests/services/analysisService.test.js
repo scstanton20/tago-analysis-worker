@@ -40,8 +40,15 @@ vi.mock('../../src/utils/safePath.js', () => ({
   safeRename: vi.fn().mockResolvedValue(undefined),
   safeUnlink: vi.fn().mockResolvedValue(undefined),
   getAnalysisPath: vi.fn((name) => `/tmp/analyses/${name}`),
+}));
+
+vi.mock('../../src/validation/shared.js', () => ({
   isAnalysisNameSafe: vi.fn(() => true),
   sanitizeAndValidateFilename: vi.fn((filename) => filename),
+  isValidFilename: vi.fn(() => true),
+  FILENAME_REGEX: /^[a-zA-Z0-9_\-. ]+$/,
+  FILENAME_ERROR_MESSAGE:
+    'Filename can only contain alphanumeric characters, spaces, hyphens, underscores, and periods',
 }));
 
 vi.mock('../../src/utils/cryptoUtils.js', () => ({
@@ -204,7 +211,7 @@ describe('AnalysisService', () => {
       });
 
       const { isAnalysisNameSafe } = await import(
-        '../../src/utils/safePath.js'
+        '../../src/validation/shared.js'
       );
       isAnalysisNameSafe.mockReturnValue(false);
 

@@ -1,4 +1,4 @@
-import { sanitizeAndValidateFilename } from '../utils/safePath.js';
+import { sanitizeAndValidateFilename } from '../validation/shared.js';
 import { createChildLogger } from '../utils/logging/logger.js';
 
 const logger = createChildLogger('sanitize-params');

@@ -1,6 +1,7 @@
 // validation/settingsSchemas.js
 import { z } from 'zod';
 import { DNS_CACHE } from '../constants.js';
+import { pageSchema, boundedLimitSchema, emptyStrictSchema } from './shared.js';
 
 export const settingsValidationSchemas = {
   /**
@@ -50,7 +51,7 @@ export const settingsValidationSchemas = {
    * No parameters required, but validates against unexpected fields
    */
   clearDNSCache: {
-    body: z.object({}).strict(),
+    body: emptyStrictSchema,
   },
 
   /**
@@ -58,7 +59,7 @@ export const settingsValidationSchemas = {
    * No parameters required, but validates against unexpected fields
    */
   resetDNSStats: {
-    body: z.object({}).strict(),
+    body: emptyStrictSchema,
   },
 
   /**
@@ -66,7 +67,7 @@ export const settingsValidationSchemas = {
    * No query parameters expected, but validates against unexpected fields
    */
   getDNSConfig: {
-    query: z.object({}).strict(),
+    query: emptyStrictSchema,
   },
 
   /**
@@ -75,21 +76,11 @@ export const settingsValidationSchemas = {
    */
   getDNSCacheEntries: {
     query: z.object({
-      page: z
-        .string()
-        .regex(/^\d+$/, 'Page must be a valid positive integer')
-        .transform((val) => parseInt(val, 10))
-        .refine((val) => val >= 1, 'Page must be at least 1')
-        .optional(),
-      limit: z
-        .string()
-        .regex(/^\d+$/, 'Limit must be a valid positive integer')
-        .transform((val) => parseInt(val, 10))
-        .refine(
-          (val) => val >= 1 && val <= 1000,
-          'Limit must be between 1 and 1000',
-        )
-        .optional(),
+      page: pageSchema.refine(
+        (val) => val === undefined || val >= 1,
+        'Page must be at least 1',
+      ),
+      limit: boundedLimitSchema,
       filter: z
         .string()
         .max(255, 'Filter must not exceed 255 characters')

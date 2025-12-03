@@ -1,5 +1,6 @@
 // validation/teamSchemas.js
 import { z } from 'zod';
+import { requiredId, hexColorSchema, emptyStrictSchema } from './shared.js';
 
 export const teamValidationSchemas = {
   /**
@@ -7,7 +8,7 @@ export const teamValidationSchemas = {
    * Validates that no query parameters are provided (strict empty object)
    */
   getAllTeams: {
-    query: z.object({}).strict(),
+    query: emptyStrictSchema,
   },
 
   /**
@@ -23,10 +24,7 @@ export const teamValidationSchemas = {
         .string()
         .max(500, 'Description must be less than 500 characters')
         .optional(),
-      color: z
-        .string()
-        .regex(/^#[0-9A-Fa-f]{6}$/, 'Color must be a valid hex color')
-        .optional(),
+      color: hexColorSchema,
       icon: z.string().optional(),
       order: z.number().int().optional(),
     }),
@@ -37,16 +35,13 @@ export const teamValidationSchemas = {
    */
   updateTeam: {
     params: z.object({
-      id: z.string().min(1, 'Team ID is required'),
+      id: requiredId('Team ID'),
     }),
     body: z
       .object({
         name: z.string().min(1).max(100).optional(),
         description: z.string().max(500).optional(),
-        color: z
-          .string()
-          .regex(/^#[0-9A-Fa-f]{6}$/)
-          .optional(),
+        color: hexColorSchema,
         icon: z.string().optional(),
       })
       .refine(
@@ -60,7 +55,7 @@ export const teamValidationSchemas = {
    */
   deleteTeam: {
     params: z.object({
-      id: z.string().min(1, 'Team ID is required'),
+      id: requiredId('Team ID'),
     }),
   },
 
@@ -69,7 +64,7 @@ export const teamValidationSchemas = {
    */
   getTeamAnalysisCount: {
     params: z.object({
-      id: z.string().min(1, 'Team ID is required'),
+      id: requiredId('Team ID'),
     }),
   },
 
@@ -78,10 +73,10 @@ export const teamValidationSchemas = {
    */
   moveAnalysisToTeam: {
     params: z.object({
-      name: z.string().min(1, 'Analysis name is required'),
+      name: requiredId('Analysis name'),
     }),
     body: z.object({
-      teamId: z.string().min(1, 'Team ID is required'),
+      teamId: requiredId('Team ID'),
     }),
   },
 
@@ -101,11 +96,11 @@ export const teamValidationSchemas = {
    */
   addItemToStructure: {
     params: z.object({
-      teamId: z.string().min(1, 'Team ID is required'),
+      teamId: requiredId('Team ID'),
     }),
     body: z.object({
       type: z.enum(['analysis', 'folder']),
-      id: z.string().min(1, 'Item ID is required'),
+      id: requiredId('Item ID'),
       parentId: z.string().optional().nullable(),
     }),
   },
@@ -115,8 +110,8 @@ export const teamValidationSchemas = {
    */
   removeItemFromStructure: {
     params: z.object({
-      teamId: z.string().min(1, 'Team ID is required'),
-      itemId: z.string().min(1, 'Item ID is required'),
+      teamId: requiredId('Team ID'),
+      itemId: requiredId('Item ID'),
     }),
   },
 
@@ -125,7 +120,7 @@ export const teamValidationSchemas = {
    */
   createFolder: {
     params: z.object({
-      teamId: z.string().min(1, 'Team ID is required'),
+      teamId: requiredId('Team ID'),
     }),
     body: z.object({
       name: z
@@ -141,8 +136,8 @@ export const teamValidationSchemas = {
    */
   updateFolder: {
     params: z.object({
-      teamId: z.string().min(1, 'Team ID is required'),
-      folderId: z.string().min(1, 'Folder ID is required'),
+      teamId: requiredId('Team ID'),
+      folderId: requiredId('Folder ID'),
     }),
     body: z.object({
       name: z
@@ -157,8 +152,8 @@ export const teamValidationSchemas = {
    */
   deleteFolder: {
     params: z.object({
-      teamId: z.string().min(1, 'Team ID is required'),
-      folderId: z.string().min(1, 'Folder ID is required'),
+      teamId: requiredId('Team ID'),
+      folderId: requiredId('Folder ID'),
     }),
   },
 
@@ -167,10 +162,10 @@ export const teamValidationSchemas = {
    */
   moveItem: {
     params: z.object({
-      teamId: z.string().min(1, 'Team ID is required'),
+      teamId: requiredId('Team ID'),
     }),
     body: z.object({
-      itemId: z.string().min(1, 'Item ID is required'),
+      itemId: requiredId('Item ID'),
       newParentId: z.string().optional().nullable(),
       newIndex: z
         .number()
