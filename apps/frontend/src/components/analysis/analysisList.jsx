@@ -15,7 +15,16 @@ import {
 import AnalysisItem from './analysisItem';
 import AnalysisTree from './analysisTree';
 import { modalService } from '../../modals/modalService';
-import { Stack, Group, Text, Center, Loader, Box } from '@mantine/core';
+import {
+  Stack,
+  Group,
+  Text,
+  Center,
+  Loader,
+  Box,
+  ActionIcon,
+  Tooltip,
+} from '@mantine/core';
 import { ActionMenu } from '../global/menus/ActionMenu';
 import { modals } from '@mantine/modals';
 import {
@@ -25,6 +34,7 @@ import {
   IconArrowsSort,
   IconCheck,
   IconX,
+  IconPlus,
 } from '@tabler/icons-react';
 import {
   FormAlert,
@@ -48,7 +58,7 @@ export default function AnalysisList({
   const { analyses: allAnalyses } = useAnalyses();
   const { teamStructure, teamStructureVersion } = useTeams();
   const { connectionStatus } = useConnection();
-  const { isAdmin } = usePermissions();
+  const { isAdmin, canUploadAnalyses } = usePermissions();
 
   const [reorderMode, setReorderMode] = useState(false);
   const [pendingReorders, setPendingReorders] = useState([]);
@@ -371,48 +381,71 @@ export default function AnalysisList({
           </Box>
 
           {/* Action buttons */}
-          {hasAnalyses &&
-            selectedTeam &&
-            (reorderMode ? (
-              <Group gap="xs">
-                <SecondaryButton
-                  onClick={() => handleCreateFolder(null)}
-                  size="sm"
-                  leftSection={<IconFolderPlus size={16} />}
+          <Group gap="xs">
+            {/* Create Analysis Button - always visible when user has upload permissions */}
+            {canUploadAnalyses() && (
+              <Tooltip label="Create Analysis" position="bottom">
+                <ActionIcon
+                  variant="gradient"
+                  gradient={{ from: 'brand.6', to: 'accent.6' }}
+                  size="lg"
+                  radius="md"
+                  onClick={() =>
+                    modalService.openAnalysisCreator({
+                      targetTeam: selectedTeam,
+                    })
+                  }
+                  aria-label="Create Analysis"
                 >
-                  Create Folder
-                </SecondaryButton>
-                <CancelButton
-                  onClick={handleCancelReorder}
-                  size="sm"
-                  leftSection={<IconX size={16} />}
-                >
-                  Cancel
-                </CancelButton>
-                <SuccessButton
-                  onClick={handleApplyReorders}
-                  size="sm"
-                  leftSection={<IconCheck size={16} />}
-                >
-                  Done
-                </SuccessButton>
-              </Group>
-            ) : (
-              <ActionMenu
-                items={[
-                  {
-                    label: 'Reorganize List',
-                    icon: <IconArrowsSort size={16} />,
-                    onClick: () => {
-                      setLocalStructure(structuredClone(teamStructure));
-                      setReorderMode(true);
+                  <IconPlus size={20} />
+                </ActionIcon>
+              </Tooltip>
+            )}
+
+            {/* Reorganize buttons - only when viewing a team with analyses */}
+            {hasAnalyses &&
+              selectedTeam &&
+              (reorderMode ? (
+                <>
+                  <SecondaryButton
+                    onClick={() => handleCreateFolder(null)}
+                    size="sm"
+                    leftSection={<IconFolderPlus size={16} />}
+                  >
+                    Create Folder
+                  </SecondaryButton>
+                  <CancelButton
+                    onClick={handleCancelReorder}
+                    size="sm"
+                    leftSection={<IconX size={16} />}
+                  >
+                    Cancel
+                  </CancelButton>
+                  <SuccessButton
+                    onClick={handleApplyReorders}
+                    size="sm"
+                    leftSection={<IconCheck size={16} />}
+                  >
+                    Done
+                  </SuccessButton>
+                </>
+              ) : (
+                <ActionMenu
+                  items={[
+                    {
+                      label: 'Reorganize List',
+                      icon: <IconArrowsSort size={16} />,
+                      onClick: () => {
+                        setLocalStructure(structuredClone(teamStructure));
+                        setReorderMode(true);
+                      },
                     },
-                  },
-                ]}
-                triggerVariant="light"
-                triggerSize="lg"
-              />
-            ))}
+                  ]}
+                  triggerVariant="light"
+                  triggerSize="lg"
+                />
+              ))}
+          </Group>
         </Group>
 
         {/* Content */}

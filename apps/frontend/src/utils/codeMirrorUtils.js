@@ -65,9 +65,9 @@ export const editorKeymap = keymap.of([
 ]);
 
 /**
- * Initialize ESLint linter for browser
+ * Initialize ESLint linter for browser (internal use only)
  */
-export const eslintLinter = new Linter({ configType: 'flat' });
+const eslintLinter = new Linter({ configType: 'flat' });
 
 /**
  * Create CodeMirror linter using ESLint with callback for diagnostics

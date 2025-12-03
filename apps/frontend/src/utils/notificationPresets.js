@@ -68,11 +68,6 @@ export const createErrorOnlyPreset = (errorMessage) => {
 export const generateStandardPresets = (executeWithNotification) => {
   return {
     // Auth operations - simple presets with custom messages
-    login: createSimpleOperationPreset(executeWithNotification, {
-      loading: 'Signing in...',
-      success: 'Welcome back! You have been signed in successfully.',
-    }),
-
     logout: createSimpleOperationPreset(executeWithNotification, {
       loading: 'Signing out...',
       success: 'You have been signed out successfully.',
@@ -149,13 +144,6 @@ export const generateStandardPresets = (executeWithNotification) => {
       executeWithNotification(promise, {
         loading: `Moving ${analysisName} to ${teamName}...`,
         success: `${analysisName} moved to ${teamName} successfully.`,
-      }),
-
-    // Version rollback operations
-    rollbackVersion: (promise, analysisName, versionNumber) =>
-      executeWithNotification(promise, {
-        loading: `Rolling back ${analysisName} to version ${versionNumber}...`,
-        success: `${analysisName} rolled back to version ${versionNumber} successfully.`,
       }),
   };
 };

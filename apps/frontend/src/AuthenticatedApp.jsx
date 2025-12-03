@@ -4,15 +4,11 @@ import { useDisclosure } from '@mantine/hooks';
 import { ModalsProvider } from '@mantine/modals';
 import { SSEProvider, useConnection } from './contexts/sseContext';
 import { PermissionsProvider } from './contexts/PermissionsContext/index.js';
-import { usePermissions } from './hooks/usePermissions';
 import { useFilteredAnalyses } from './hooks/useFilteredAnalyses';
 // Import core components directly to avoid context timing issues
 import TeamSidebar from './components/layout/teamSidebar';
 // Lazy load heavy components that make API calls
 const AnalysisList = lazy(() => import('./components/analysis/analysisList'));
-const AnalysisCreator = lazy(
-  () => import('./components/analysis/uploadAnalysis'),
-);
 import ConnectionStatus from './components/common/connectionStatus';
 import Logo from './components/ui/logo';
 import ImpersonationBanner from './components/layout/impersonationBanner';
@@ -25,7 +21,6 @@ import modalComponents from './modals/registry.jsx';
 
 function AppContent() {
   const { connectionStatus } = useConnection();
-  const { canUploadToAnyTeam } = usePermissions();
 
   const [selectedTeam, setSelectedTeam] = useState(null);
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure();
@@ -105,22 +100,6 @@ function AppContent() {
             background: 'var(--mantine-color-body)',
           }}
         >
-          {canUploadToAnyTeam() && (
-            <ErrorBoundary variant="component" componentName="Analysis Creator">
-              <Suspense
-                fallback={
-                  <LoadingState
-                    loading={true}
-                    skeleton
-                    pattern="form"
-                    skeletonCount={3}
-                  />
-                }
-              >
-                <AnalysisCreator targetTeam={selectedTeam} />
-              </Suspense>
-            </ErrorBoundary>
-          )}
           <ErrorBoundary variant="component" componentName="Analysis List">
             <Suspense
               fallback={

@@ -29,7 +29,6 @@ import { useAuth } from './useAuth';
  * @property {Function} canUploadAnalyses - Check if user can upload analyses
  * @property {Function} canDeleteAnalyses - Check if user can delete analyses
  *
- * @property {Function} canUploadToAnyTeam - Check if user can upload to any team
  * @property {Function} hasAnyRunPermission - Check if user has run permission in any team
  * @property {Function} hasAnyViewPermission - Check if user has view permission in any team
  * @property {Function} hasAnyEditPermission - Check if user has edit permission in any team
@@ -172,17 +171,6 @@ export const usePermissions = () => {
 
   // Memoize bulk permission checking functions
   const bulkPermissionCheckers = useMemo(() => {
-    // Check if user can upload analyses to any team they have access to
-    const canUploadToAnyTeam = () => {
-      // Admin can always upload
-      if (isAdmin) return true;
-
-      // Check if user has upload permission in any of their teams
-      return userTeams.some((team) =>
-        team.permissions?.includes('upload_analyses'),
-      );
-    };
-
     // General permission checking functions for component visibility (no analysis object needed)
     const hasAnyRunPermission = () => {
       if (isAdmin) return true;
@@ -220,7 +208,6 @@ export const usePermissions = () => {
     };
 
     return {
-      canUploadToAnyTeam,
       hasAnyRunPermission,
       hasAnyViewPermission,
       hasAnyEditPermission,

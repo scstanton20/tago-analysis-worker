@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { useSession, signOut, authClient } from '../lib/auth.js';
 import { showError, showInfo } from '../utils/notificationService';
+import { notificationAPI } from '../utils/notificationAPI.jsx';
 import { useEventListener } from '../hooks/useEventListener';
 import { fetchWithHeaders, handleResponse } from '../utils/apiUtils.js';
 import logger from '../utils/logger.js';
@@ -112,160 +113,167 @@ export const AuthProvider = ({ children }) => {
 
   useEventListener('force-logout', handleForceLogout);
 
-  // Memoize auth functions to prevent recreating on every render
-  const authFunctions = useMemo(
-    () => ({
-      // Expose refetchSession for components that need to manually refresh session
-      // (e.g., after impersonation or other server-side session changes)
-      refetchSession: async () => {
-        try {
-          refetchSession();
-          logger.log('✓ Session manually refetched');
-        } catch (error) {
-          logger.error('Error manually refetching session:', error);
-          throw error;
-        }
-      },
+  // Auth functions using useCallback for side-effect functions
+  const refetchSessionFn = useCallback(async () => {
+    try {
+      refetchSession();
+      logger.log('✓ Session manually refetched');
+    } catch (error) {
+      logger.error('Error manually refetching session:', error);
+      throw error;
+    }
+  }, [refetchSession]);
 
-      logout: async () => {
-        await signOut();
-      },
+  const logout = useCallback(async () => {
+    await notificationAPI.logout(signOut());
+  }, []);
 
-      exitImpersonation: async () => {
-        try {
-          const result = await authClient.admin.stopImpersonating();
-          if (result.error) {
+  const exitImpersonation = useCallback(async () => {
+    try {
+      const result = await authClient.admin.stopImpersonating();
+      if (result.error) {
+        throw new Error(result.error.message || 'Failed to exit impersonation');
+      }
+      // Refetch session to update the auth context
+      await refetchSession();
+      logger.log('✓ Session refreshed after exiting impersonation');
+    } catch (error) {
+      logger.error('Error exiting impersonation:', error);
+      throw error;
+    }
+  }, [refetchSession]);
+
+  const updateProfile = useCallback(
+    async (profileData) => {
+      try {
+        // Update name first
+        if (profileData.name) {
+          logger.log('Updating name:', profileData.name);
+          const nameResult = await authClient.updateUser({
+            name: profileData.name,
+          });
+          logger.log('Name update result:', nameResult);
+          if (nameResult.error) {
             throw new Error(
-              result.error.message || 'Failed to exit impersonation',
+              nameResult.error.message || 'Failed to update name',
             );
           }
-          // Refetch session to update the auth context
-          await refetchSession();
-          logger.log('✓ Session refreshed after exiting impersonation');
-        } catch (error) {
-          logger.error('Error exiting impersonation:', error);
-          throw error;
         }
-      },
 
-      updateProfile: async (profileData) => {
-        try {
-          // Update name first
-          if (profileData.name) {
-            logger.log('Updating name:', profileData.name);
-            const nameResult = await authClient.updateUser({
-              name: profileData.name,
-            });
-            logger.log('Name update result:', nameResult);
-            if (nameResult.error) {
-              throw new Error(
-                nameResult.error.message || 'Failed to update name',
-              );
-            }
+        // Handle email change separately using Better Auth's changeEmail method
+        if (profileData.email && profileData.email !== authData.user?.email) {
+          logger.log('Changing email to:', profileData.email);
+          const emailResult = await authClient.changeEmail({
+            newEmail: profileData.email,
+          });
+          logger.log('Email change result:', emailResult);
+          if (emailResult.error) {
+            throw new Error(
+              emailResult.error.message || 'Failed to change email',
+            );
           }
-
-          // Handle email change separately using Better Auth's changeEmail method
-          if (profileData.email && profileData.email !== authData.user?.email) {
-            logger.log('Changing email to:', profileData.email);
-            const emailResult = await authClient.changeEmail({
-              newEmail: profileData.email,
-            });
-            logger.log('Email change result:', emailResult);
-            if (emailResult.error) {
-              throw new Error(
-                emailResult.error.message || 'Failed to change email',
-              );
-            }
+        }
+        // Handle username change separately using Better Auth's updateUser method
+        if (
+          profileData.username &&
+          profileData.username !== authData.user?.username
+        ) {
+          logger.log('Changing username to:', profileData.username);
+          const usernameResult = await authClient.updateUser({
+            username: profileData.username,
+          });
+          logger.log('Username change result:', usernameResult);
+          if (usernameResult.error) {
+            throw new Error(
+              usernameResult.error.message || 'Failed to change username',
+            );
           }
-          // Handle username change separately using Better Auth's updateUser method
-          if (
-            profileData.username &&
-            profileData.username !== authData.user?.username
-          ) {
-            logger.log('Changing username to:', profileData.username);
-            const usernameResult = await authClient.updateUser({
-              username: profileData.username,
-            });
-            logger.log('Username change result:', usernameResult);
-            if (usernameResult.error) {
-              throw new Error(
-                usernameResult.error.message || 'Failed to change username',
-              );
-            }
-          }
-          return { success: true };
-        } catch (error) {
-          logger.error('Profile update error:', error);
-          throw error;
         }
-      },
-
-      changeProfilePassword: async (currentPassword, newPassword) => {
-        const result = await authClient.changePassword({
-          currentPassword,
-          newPassword,
-          revokeOtherSessions: true,
-        });
-
-        if (result.error) {
-          throw new Error(result.error.message || 'Failed to change password');
-        }
-
-        // Show notification that user must log back in
-        await showInfo(
-          'Your password has been changed. You must log back in.',
-          'Password Changed Successfully',
-        );
-
-        await signOut();
-
-        // Automatically refresh the window after a short delay
-        setTimeout(() => {
-          window.location.reload();
-        }, 3000);
-
-        return result.data;
-      },
-
-      passwordOnboarding: async (newPassword) => {
-        try {
-          logger.log('🔐 Setting initial password via server-side API');
-
-          // Use our server-side endpoint that handles both password setting and flag clearing
-          const response = await fetchWithHeaders(
-            '/users/set-initial-password',
-            {
-              method: 'POST',
-              body: JSON.stringify({
-                newPassword: newPassword,
-              }),
-            },
-          );
-
-          const result = await handleResponse(
-            response,
-            '/users/set-initial-password',
-            { method: 'POST', body: JSON.stringify({ newPassword }) },
-          );
-
-          logger.log('🔐 Password onboarding completed successfully:', result);
-          return result;
-        } catch (error) {
-          logger.error('Password onboarding error:', error);
-          throw error;
-        }
-      },
-    }),
-    [authData.user?.email, authData.user?.username, refetchSession],
+        return { success: true };
+      } catch (error) {
+        logger.error('Profile update error:', error);
+        throw error;
+      }
+    },
+    [authData.user?.email, authData.user?.username],
   );
+
+  const changeProfilePassword = useCallback(
+    async (currentPassword, newPassword) => {
+      const result = await authClient.changePassword({
+        currentPassword,
+        newPassword,
+        revokeOtherSessions: true,
+      });
+
+      if (result.error) {
+        throw new Error(result.error.message || 'Failed to change password');
+      }
+
+      // Show notification that user must log back in
+      await showInfo(
+        'Your password has been changed. You must log back in.',
+        'Password Changed Successfully',
+      );
+
+      await signOut();
+
+      // Automatically refresh the window after a short delay
+      setTimeout(() => {
+        window.location.reload();
+      }, 3000);
+
+      return result.data;
+    },
+    [],
+  );
+
+  const passwordOnboarding = useCallback(async (newPassword) => {
+    try {
+      logger.log('🔐 Setting initial password via server-side API');
+
+      // Use our server-side endpoint that handles both password setting and flag clearing
+      const response = await fetchWithHeaders('/users/set-initial-password', {
+        method: 'POST',
+        body: JSON.stringify({
+          newPassword: newPassword,
+        }),
+      });
+
+      const result = await handleResponse(
+        response,
+        '/users/set-initial-password',
+        { method: 'POST', body: JSON.stringify({ newPassword }) },
+      );
+
+      logger.log('🔐 Password onboarding completed successfully:', result);
+      return result;
+    } catch (error) {
+      logger.error('Password onboarding error:', error);
+      throw error;
+    }
+  }, []);
 
   // Memoize the complete context value
   const contextValue = useMemo(
     () => ({
       ...authData,
-      ...authFunctions,
+      refetchSession: refetchSessionFn,
+      logout,
+      exitImpersonation,
+      updateProfile,
+      changeProfilePassword,
+      passwordOnboarding,
     }),
-    [authData, authFunctions],
+    [
+      authData,
+      refetchSessionFn,
+      logout,
+      exitImpersonation,
+      updateProfile,
+      changeProfilePassword,
+      passwordOnboarding,
+    ],
   );
 
   return (

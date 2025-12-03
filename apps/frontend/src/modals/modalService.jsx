@@ -299,6 +299,30 @@ export const modalService = {
   },
 
   /**
+   * Open Analysis Creator modal
+   * @param {Object} options - Creator options
+   * @param {string} options.targetTeam - Optional pre-selected team ID
+   * @returns {string} Modal ID
+   */
+  openAnalysisCreator: (options = {}) => {
+    const modalId = `analysis-creator-${Date.now()}`;
+
+    modals.openContextModal({
+      modal: 'analysisCreator',
+      modalId,
+      title: 'Create Analysis',
+      size: '70%',
+      closeOnEscape: false,
+      closeOnClickOutside: false,
+      innerProps: {
+        targetTeam: options.targetTeam || null,
+      },
+    });
+
+    return modalId;
+  },
+
+  /**
    * Close a specific modal by ID
    * @param {string} modalId - The ID of the modal to close
    */

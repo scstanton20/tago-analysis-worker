@@ -5,8 +5,6 @@ import {
   showWarning,
   showLoading,
   updateNotification,
-  hideNotification,
-  showNotification,
 } from '../utils/notificationService.jsx';
 import { generateStandardPresets } from '../utils/notificationPresets.js';
 
@@ -55,7 +53,7 @@ import { generateStandardPresets } from '../utils/notificationPresets.js';
  * Pre-configured wrappers for common operations:
  * ```js
  * await notificationAPI.uploadAnalysis(uploadPromise, 'my-analysis.js');
- * await notificationAPI.login(loginPromise);
+ * await notificationAPI.logout(logoutPromise);
  * await notificationAPI.createTeam(createPromise, 'My Team');
  * ```
  *
@@ -67,20 +65,11 @@ import { generateStandardPresets } from '../utils/notificationPresets.js';
  * - `info(message, title?)` - Blue info notification
  * - `warning(message, title?)` - Orange warning notification
  *
- * ### Async Functions (return notification ID):
- * - `showSuccess(message, title?, autoClose?)` - Returns ID
- * - `showError(message, title?, autoClose?)` - Returns ID
- * - `showInfo(message, title?, autoClose?)` - Returns ID
- * - `showWarning(message, title?, autoClose?)` - Returns ID
- * - `showLoading(message, id?, title?)` - Returns ID
- * - `updateNotification(id, options)` - Updates existing notification
- * - `hideNotification(id)` - Hides notification
- *
  * ### Promise Wrapper:
  * - `executeWithNotification(promise, options)` - Wraps promise with loading/success/error
  *
  * ### Operation Presets:
- * Auth: login, logout, passwordChange, profileUpdate
+ * Auth: logout, passwordChange, profileUpdate
  * Analysis: uploadAnalysis, runAnalysis, stopAnalysis, updateAnalysis, deleteAnalysis, downloadAnalysis
  * Teams: createTeam, updateTeam, deleteTeam
  *
@@ -179,15 +168,6 @@ export const createNotificationAPI = () => {
   };
 
   return {
-    showSuccess,
-    showError,
-    showInfo,
-    showWarning,
-    showLoading,
-    updateNotification,
-    hideNotification,
-    showNotification,
-
     success,
     error,
     info,

@@ -265,29 +265,24 @@ export const PermissionsProvider = ({ children }) => {
     [basePermissionHelpers, sseEnhancedHelpers],
   );
 
-  // Memoize refresh functions
-  const refreshFunctions = useMemo(
-    () => ({
-      refreshMembership: async () => {
-        await loadOrganizationData();
-      },
+  // Refresh functions using useCallback for side-effect functions
+  const refreshMembership = useCallback(async () => {
+    await loadOrganizationData();
+  }, [loadOrganizationData]);
 
-      refreshUserData: async () => {
-        try {
-          logger.log('Refreshing permissions and team data');
+  const refreshUserData = useCallback(async () => {
+    try {
+      logger.log('Refreshing permissions and team data');
 
-          // Clear and reload organization data (teams come from session automatically)
-          setOrganizationMembership(null);
+      // Clear and reload organization data (teams come from session automatically)
+      setOrganizationMembership(null);
 
-          // Reload organization data
-          await loadOrganizationData();
-        } catch (error) {
-          logger.error('Error refreshing permissions data:', error);
-        }
-      },
-    }),
-    [loadOrganizationData],
-  );
+      // Reload organization data
+      await loadOrganizationData();
+    } catch (error) {
+      logger.error('Error refreshing permissions data:', error);
+    }
+  }, [loadOrganizationData]);
 
   // Memoize the complete context value to prevent unnecessary re-renders
   const contextValue = useMemo(
@@ -305,7 +300,8 @@ export const PermissionsProvider = ({ children }) => {
       ...permissionHelpers,
 
       // Refresh functions
-      ...refreshFunctions,
+      refreshMembership,
+      refreshUserData,
     }),
     [
       organizationMembership,
@@ -314,7 +310,8 @@ export const PermissionsProvider = ({ children }) => {
       membershipLoading,
       teamHelpers,
       permissionHelpers,
-      refreshFunctions,
+      refreshMembership,
+      refreshUserData,
     ],
   );
 
