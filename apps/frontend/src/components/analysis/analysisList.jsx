@@ -6,15 +6,12 @@ import {
   useConnection,
 } from '../../contexts/sseContext';
 import { usePermissions } from '../../hooks/usePermissions';
+import { useVisibleTeams } from '../../hooks/useVisibleTeams';
 import logger from '../../utils/logger';
 import {
   applyReorderToStructure,
   addPendingFolderToStructure,
 } from '../../utils/reorderUtils';
-import {
-  filterAnalysesByTeam,
-  countAccessibleAnalyses,
-} from '../../utils/filterHelpers';
 import AnalysisItem from './analysisItem';
 import AnalysisTree from './analysisTree';
 import { modalService } from '../../modals/modalService';
@@ -46,11 +43,12 @@ export default function AnalysisList({
   showTeamLabels = false,
   selectedTeam = null,
 }) {
-  const { analyses: allAnalyses = {} } = useAnalyses();
-  const { teamStructure, teamStructureVersion, getTeam } = useTeams();
+  // useVisibleTeams provides teams, counts, and internally uses useAnalyses
+  const { teamsArray, teamsObject, getTeamAnalysisCount } = useVisibleTeams();
+  const { analyses: allAnalyses } = useAnalyses();
+  const { teamStructure, teamStructureVersion } = useTeams();
   const { connectionStatus } = useConnection();
-
-  const { getViewableTeams, isAdmin, isTeamMember } = usePermissions();
+  const { isAdmin } = usePermissions();
 
   const [openLogIds, setOpenLogIds] = useState(new Set());
   const [reorderMode, setReorderMode] = useState(false);
@@ -82,73 +80,71 @@ export default function AnalysisList({
     [selectedTeam],
   );
 
-  // Determine which analyses to show (memoized for performance)
-  const analysesToShow = useMemo(() => {
-    // If pre-filtered analyses are provided
-    if (analyses !== null) {
-      if (typeof analyses === 'object') {
-        return analyses;
-      }
-    }
+  // Use the pre-filtered analyses passed from parent (AuthenticatedApp)
+  const analysesToShow = useMemo(() => analyses || {}, [analyses]);
 
-    // Use SSE and apply team filtering with permission checks
-    // Use filterAnalysesByTeam helper for consistent filtering logic
-    return filterAnalysesByTeam(
-      allAnalyses,
-      selectedTeam,
-      isAdmin,
-      isTeamMember,
-    );
-  }, [analyses, allAnalyses, selectedTeam, isAdmin, isTeamMember]);
+  // Create a map of team ID to sidebar order index for sorting
+  const teamOrderMap = useMemo(() => {
+    const map = new Map();
+    teamsArray.forEach((team, index) => {
+      map.set(team.id, index);
+    });
+    return map;
+  }, [teamsArray]);
 
-  // Convert to array for rendering (memoized)
+  // Convert to array for rendering, sorted by sidebar team order
   const analysesArray = useMemo(() => {
     const array = Object.values(analysesToShow).filter(
-      (analysis) => analysis && analysis.name, // Ensure valid analysis objects
+      (analysis) => analysis && analysis.name,
     );
+    // Sort by team order (same order as sidebar), then by name within each team
+    array.sort((a, b) => {
+      const teamA = a.teamId || 'uncategorized';
+      const teamB = b.teamId || 'uncategorized';
+      const orderA = teamOrderMap.get(teamA) ?? Number.MAX_SAFE_INTEGER;
+      const orderB = teamOrderMap.get(teamB) ?? Number.MAX_SAFE_INTEGER;
+      if (orderA !== orderB) return orderA - orderB;
+      return (a.name || '').localeCompare(b.name || '');
+    });
     return array;
-  }, [analysesToShow]);
+  }, [analysesToShow, teamOrderMap]);
 
-  // Calculate total accessible analyses (not all analyses in system)
+  // Calculate total accessible analyses using consolidated hook
   const totalAccessibleAnalyses = useMemo(() => {
     if (isAdmin) {
-      // Admin can see all analyses
-      return Object.keys(allAnalyses).length;
+      return Object.keys(allAnalyses || {}).length;
     }
+    // Sum counts across all visible teams
+    return teamsArray.reduce(
+      (sum, team) => sum + getTeamAnalysisCount(team.id),
+      0,
+    );
+  }, [allAnalyses, isAdmin, teamsArray, getTeamAnalysisCount]);
 
-    // Non-admin: count only analyses in viewable teams using helper
-    const viewableTeams = getViewableTeams();
-    const viewableTeamIds = viewableTeams.map((team) => team.id);
-
-    return countAccessibleAnalyses(allAnalyses, viewableTeamIds);
-  }, [allAnalyses, isAdmin, getViewableTeams]);
-
-  // Helper function to get team info
-  const getTeamInfo = (teamId) => {
-    if (!teamId || teamId === 'uncategorized') {
-      return { name: 'Uncategorized', color: '#9ca3af' };
-    }
-
-    const team = getTeam(teamId);
-    if (team) {
-      return team;
-    }
-
-    // Fallback for missing teams
-    logger.warn(`Team ${teamId} not found`);
-    return { name: 'Unknown Team', color: '#ef4444' };
-  };
+  // Helper function to get team info - uses consolidated teamsObject
+  const getTeamInfo = useCallback(
+    (teamId) => {
+      if (!teamId || teamId === 'uncategorized') {
+        return { name: 'Uncategorized', color: '#9ca3af' };
+      }
+      const team = teamsObject[teamId];
+      if (team) return team;
+      logger.warn(`Team ${teamId} not found`);
+      return { name: 'Unknown Team', color: '#ef4444' };
+    },
+    [teamsObject],
+  );
 
   // Log toggle functions
-  const toggleAllLogs = () => {
+  const toggleAllLogs = useCallback(() => {
     if (openLogIds.size === analysesArray.length) {
       setOpenLogIds(new Set());
     } else {
       setOpenLogIds(new Set(analysesArray.map((analysis) => analysis.name)));
     }
-  };
+  }, [openLogIds.size, analysesArray]);
 
-  const toggleLog = (analysisName) => {
+  const toggleLog = useCallback((analysisName) => {
     setOpenLogIds((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(analysisName)) {
@@ -158,7 +154,7 @@ export default function AnalysisList({
       }
       return newSet;
     });
-  };
+  }, []);
 
   // Folder handlers
   const handleCreateFolder = useCallback(
@@ -195,32 +191,25 @@ export default function AnalysisList({
             labels: { confirm: 'Delete', cancel: 'Cancel' },
             confirmProps: { color: 'red' },
             onConfirm: async () => {
-              // If in reorder mode, defer deletion and update local structure only
               if (reorderMode) {
                 const isTempFolder = folder.id.startsWith('temp-');
 
-                // Only add to pending deletions if it's a real folder (not temp)
                 if (!isTempFolder) {
                   setPendingFolderDeletions((prev) => [...prev, folder.id]);
                 } else {
-                  // For temp folders, also remove from pending folders list
                   setPendingFolders((prev) =>
                     prev.filter((f) => f.tempId !== folder.id),
                   );
                 }
 
-                // Update local structure immediately
                 setLocalStructure((prev) => {
-                  // Deep clone the structure to avoid mutations
                   const newStructure = structuredClone(prev);
                   const items = newStructure?.[selectedTeam]?.items || [];
 
-                  // Find and remove the folder, moving its items to parent
                   const removeFolder = (itemsList) => {
                     for (let i = 0; i < itemsList.length; i++) {
                       const item = itemsList[i];
                       if (item.id === folder.id) {
-                        // Move folder's items to parent
                         const folderItems = item.items || [];
                         itemsList.splice(i, 1, ...folderItems);
                         return true;
@@ -245,7 +234,6 @@ export default function AnalysisList({
                     : 'Folder Marked for Deletion',
                 );
               } else {
-                // Not in reorder mode - delete immediately
                 try {
                   await teamService.deleteFolder(selectedTeam, folder.id);
                   notificationAPI.success(`Folder "${folder.name}" deleted`);
@@ -263,21 +251,13 @@ export default function AnalysisList({
           logger.warn('Unknown folder action:', action);
       }
     },
-    [
-      selectedTeam,
-      handleCreateFolder,
-      reorderMode,
-      setPendingFolderDeletions,
-      setPendingFolders,
-      setLocalStructure,
-    ],
+    [selectedTeam, handleCreateFolder, reorderMode],
   );
 
   // Reorder handlers
   const handlePendingReorder = useCallback(
     (reorderInfo) => {
       setPendingReorders((prev) => [...prev, reorderInfo]);
-      // Apply to local structure immediately
       setLocalStructure((prev) =>
         applyReorderToStructure(prev, reorderInfo, selectedTeam),
       );
@@ -305,13 +285,11 @@ export default function AnalysisList({
     }
 
     try {
-      // First, delete all pending folders
       for (const folderId of pendingFolderDeletions) {
         await teamService.deleteFolder(selectedTeam, folderId);
       }
 
-      // Then, create all pending folders
-      const folderIdMap = {}; // Map temp IDs to real IDs
+      const folderIdMap = {};
       for (const folder of pendingFolders) {
         const result = await teamService.createFolder(selectedTeam, {
           name: folder.name,
@@ -322,7 +300,6 @@ export default function AnalysisList({
         folderIdMap[folder.tempId] = result.id;
       }
 
-      // Finally, apply all pending reorders (replacing temp IDs with real ones)
       for (const reorder of pendingReorders) {
         await teamService.moveItem(
           selectedTeam,
@@ -347,19 +324,10 @@ export default function AnalysisList({
     }
   }, [pendingReorders, pendingFolders, pendingFolderDeletions, selectedTeam]);
 
-  // Check if user has no team access (non-admin users only)
-  // Must be before early returns to satisfy React Hooks rules
-  const hasNoTeamAccess = useMemo(() => {
-    if (isAdmin) return false;
-    const viewableTeams = getViewableTeams();
-    return !viewableTeams || viewableTeams.length === 0;
-  }, [isAdmin, getViewableTeams]);
-
-  // Calculate whether there are analyses to show
+  // Simplified: no team access if non-admin with no visible teams
+  const hasNoTeamAccess = !isAdmin && teamsArray.length === 0;
   const hasAnalyses = analysesArray.length > 0;
-
-  // Get current team info for display
-  const currentTeamInfo = selectedTeam ? getTeam?.(selectedTeam) : null;
+  const currentTeamInfo = selectedTeam ? teamsObject[selectedTeam] : null;
 
   // Handle loading state
   if (connectionStatus === 'connecting') {
@@ -417,9 +385,7 @@ export default function AnalysisList({
             {/* Count info */}
             <Text size="sm" c="dimmed" mt={4}>
               {hasAnalyses
-                ? selectedTeam
-                  ? `Showing ${analysesArray.length} of ${totalAccessibleAnalyses} analyses`
-                  : `${analysesArray.length} ${analysesArray.length === 1 ? 'analysis' : ''}${analysesArray.length !== 1 ? 'analyses' : ''} available`
+                ? `${analysesArray.length} ${analysesArray.length === 1 ? 'analysis' : 'analyses'}${selectedTeam ? '' : ' available'}`
                 : selectedTeam
                   ? 'No analyses in this team'
                   : 'No analyses available'}
@@ -470,7 +436,6 @@ export default function AnalysisList({
                       label: 'Reorganize List',
                       icon: <IconArrowsSort size={16} />,
                       onClick: () => {
-                        // Capture current structure for local editing
                         setLocalStructure(structuredClone(teamStructure));
                         setReorderMode(true);
                       },
@@ -498,7 +463,6 @@ export default function AnalysisList({
         {/* Content */}
         <Stack gap="md">
           {hasNoTeamAccess ? (
-            /* No Team Access State */
             <Center py="xl">
               <Stack align="center" gap="md">
                 <FormAlert
@@ -511,24 +475,21 @@ export default function AnalysisList({
               </Stack>
             </Center>
           ) : selectedTeam ? (
-            /* Tree View for selected team */
-            <>
-              <AnalysisTree
-                key={`tree-${selectedTeam}-${reorderMode ? 'reorder' : teamStructureVersion}`}
-                teamId={selectedTeam}
-                teamStructure={
-                  reorderMode && localStructure ? localStructure : teamStructure
-                }
-                analyses={allAnalyses}
-                onFolderAction={handleFolderAction}
-                expandedAnalyses={Object.fromEntries(
-                  Array.from(openLogIds).map((id) => [id, true]),
-                )}
-                onToggleAnalysisLogs={toggleLog}
-                reorderMode={reorderMode}
-                onPendingReorder={handlePendingReorder}
-              />
-            </>
+            <AnalysisTree
+              key={`tree-${selectedTeam}-${reorderMode ? 'reorder' : teamStructureVersion}`}
+              teamId={selectedTeam}
+              teamStructure={
+                reorderMode && localStructure ? localStructure : teamStructure
+              }
+              analyses={allAnalyses}
+              onFolderAction={handleFolderAction}
+              expandedAnalyses={Object.fromEntries(
+                Array.from(openLogIds).map((id) => [id, true]),
+              )}
+              onToggleAnalysisLogs={toggleLog}
+              reorderMode={reorderMode}
+              onPendingReorder={handlePendingReorder}
+            />
           ) : hasAnalyses ? (
             analysesArray.map((analysis) => {
               const teamInfo = getTeamInfo(analysis.teamId);
@@ -536,7 +497,7 @@ export default function AnalysisList({
               return (
                 <Stack key={`analysis-${analysis.name}`} gap="xs">
                   {/* Team Label (when showing all analyses) */}
-                  {showTeamLabels && !selectedTeam && (
+                  {showTeamLabels && (
                     <Group gap="xs">
                       <Box
                         w={12}
@@ -563,7 +524,6 @@ export default function AnalysisList({
               );
             })
           ) : (
-            /* Empty State */
             <EmptyState
               icon={<IconFileText size={48} />}
               title={

@@ -44,7 +44,13 @@ import logger from '../../utils/logger';
 import { modalService } from '../../modals/modalService';
 
 // Sortable Team Item
-const SortableTeamItem = ({ team, isSelected, onClick, analysisCount }) => {
+const SortableTeamItem = ({
+  team,
+  isSelected,
+  onClick,
+  analysisCount,
+  canReorder = false,
+}) => {
   const {
     attributes,
     listeners,
@@ -54,7 +60,7 @@ const SortableTeamItem = ({ team, isSelected, onClick, analysisCount }) => {
     isDragging,
   } = useSortable({
     id: team.id,
-    disabled: team.isSystem,
+    disabled: team.isSystem || !canReorder,
   });
 
   const style = {
@@ -68,12 +74,14 @@ const SortableTeamItem = ({ team, isSelected, onClick, analysisCount }) => {
       ref={setNodeRef}
       style={style}
       onMouseEnter={(e) => {
+        if (!canReorder) return;
         const handle = e.currentTarget.querySelector('.team-drag-handle');
         const badge = e.currentTarget.querySelector('.team-analysis-count');
         if (handle) handle.style.opacity = '1';
         if (badge && !team.isSystem) badge.style.marginRight = '28px';
       }}
       onMouseLeave={(e) => {
+        if (!canReorder) return;
         const handle = e.currentTarget.querySelector('.team-drag-handle');
         const badge = e.currentTarget.querySelector('.team-analysis-count');
         if (handle) handle.style.opacity = '0';
@@ -121,7 +129,7 @@ const SortableTeamItem = ({ team, isSelected, onClick, analysisCount }) => {
             >
               {analysisCount}
             </Badge>
-            {!team.isSystem && (
+            {!team.isSystem && canReorder && (
               <Box
                 {...attributes}
                 {...listeners}
@@ -188,6 +196,7 @@ SortableTeamItem.propTypes = {
   isSelected: PropTypes.bool.isRequired,
   onClick: PropTypes.func.isRequired,
   analysisCount: PropTypes.number.isRequired,
+  canReorder: PropTypes.bool,
 };
 
 // Main Team Sidebar Component
@@ -344,6 +353,7 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
                       isSelected={selectedTeam === team.id}
                       onClick={() => handleTeamClick(team.id)}
                       analysisCount={getAnalysisCount(team.id)}
+                      canReorder={isAdmin}
                     />
                   </div>
                 ))}
@@ -356,6 +366,7 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
                       isSelected={false}
                       onClick={() => {}}
                       analysisCount={getAnalysisCount(activeTeamId)}
+                      canReorder={isAdmin}
                     />
                   </Box>
                 ) : null}

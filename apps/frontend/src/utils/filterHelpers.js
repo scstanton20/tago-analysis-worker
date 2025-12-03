@@ -82,16 +82,3 @@ export const getTeamAnalysisCount = (analyses, teamId) => {
     (analysis) => analysis.teamId === teamId,
   ).length;
 };
-
-/**
- * Count accessible analyses for non-admin users
- * Filters analyses by viewable team IDs
- * @param {Object} analyses - Analyses object
- * @param {Array<string>} viewableTeamIds - Array of team IDs the user can access
- * @returns {number} Count of accessible analyses
- */
-export const countAccessibleAnalyses = (analyses, viewableTeamIds) => {
-  return Object.values(analyses).filter(
-    (analysis) => analysis && viewableTeamIds.includes(analysis.teamId),
-  ).length;
-};
