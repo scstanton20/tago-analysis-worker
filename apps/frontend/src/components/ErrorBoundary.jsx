@@ -43,7 +43,6 @@ function ComponentErrorFallback({ error, reset, componentName }) {
       radius="md"
       style={{
         borderLeft: '3px solid var(--mantine-color-red-6)',
-        backgroundColor: 'var(--mantine-color-red-0)',
       }}
     >
       <Stack gap="md">
@@ -64,7 +63,12 @@ function ComponentErrorFallback({ error, reset, componentName }) {
         </Text>
 
         {error && (
-          <Text size="xs" c="dimmed" ff="monospace">
+          <Text
+            size="xs"
+            c="dimmed"
+            ff="monospace"
+            backgroundColor="var(--mantine-color-red-0)"
+          >
             {error.toString()}
           </Text>
         )}
