@@ -1,6 +1,6 @@
 import { createAuthClient } from 'better-auth/react';
 import { usernameClient } from 'better-auth/client/plugins';
-import { passkeyClient } from 'better-auth/client/plugins';
+import { passkeyClient } from '@better-auth/passkey/client';
 import { adminClient } from 'better-auth/client/plugins';
 import { organizationClient } from 'better-auth/client/plugins';
 

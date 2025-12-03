@@ -1,6 +1,6 @@
 import { betterAuth } from 'better-auth';
 import { admin } from 'better-auth/plugins/admin';
-import { passkey } from 'better-auth/plugins/passkey';
+import { passkey } from '@better-auth/passkey';
 import { username } from 'better-auth/plugins/username';
 import { organization } from 'better-auth/plugins/organization';
 import { customSession } from 'better-auth/plugins';
@@ -70,6 +70,9 @@ const getMainOrganization = () => {
 
 export const auth = betterAuth({
   database: db,
+  experimental: {
+    joins: true,
+  },
   telemetry: { enabled: false },
   disabledPaths: ['/organization/list-teams'],
   rateLimit: {
