@@ -46,8 +46,6 @@ export default function TreeItem({
   expandedFolders,
   allAnalyses,
   onFolderAction,
-  expandedAnalyses,
-  onToggleAnalysisLogs,
   reorderMode = false,
 }) {
   const isFolder = item.type === 'folder';
@@ -289,8 +287,6 @@ export default function TreeItem({
                       expandedFolders={expandedFolders}
                       allAnalyses={allAnalyses}
                       onFolderAction={onFolderAction}
-                      expandedAnalyses={expandedAnalyses}
-                      onToggleAnalysisLogs={onToggleAnalysisLogs}
                       reorderMode={reorderMode}
                     />
                   ))}
@@ -346,8 +342,6 @@ export default function TreeItem({
         <Box style={{ flex: 1, minWidth: 0 }}>
           <AnalysisItem
             analysis={{ ...analysis, name: item.analysisName }}
-            showLogs={expandedAnalyses[item.analysisName] || false}
-            onToggleLogs={() => onToggleAnalysisLogs(item.analysisName)}
             reorderMode={reorderMode}
           />
         </Box>
@@ -370,7 +364,5 @@ TreeItem.propTypes = {
   expandedFolders: PropTypes.object.isRequired,
   allAnalyses: PropTypes.object.isRequired,
   onFolderAction: PropTypes.func.isRequired,
-  expandedAnalyses: PropTypes.object.isRequired,
-  onToggleAnalysisLogs: PropTypes.func.isRequired,
   reorderMode: PropTypes.bool,
 };

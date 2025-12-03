@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import PropTypes from 'prop-types';
 import { Paper, Group, Text, Stack, Box } from '@mantine/core';
 import {
@@ -33,12 +33,8 @@ import { useAnalyses, useTeams } from '../../contexts/sseContext';
 import { usePermissions } from '../../hooks/usePermissions';
 import { modalService } from '../../modals/modalService';
 
-export default function AnalysisItem({
-  analysis,
-  showLogs,
-  onToggleLogs,
-  reorderMode = false,
-}) {
+export default function AnalysisItem({ analysis, reorderMode = false }) {
+  const [showLogs, setShowLogs] = useState(false);
   const { loadingAnalyses, addLoadingAnalysis, removeLoadingAnalysis } =
     useAnalyses();
   const { teams } = useTeams();
@@ -214,7 +210,7 @@ export default function AnalysisItem({
               ) {
                 return;
               }
-              onToggleLogs();
+              setShowLogs((prev) => !prev);
             }
           : undefined
       }
@@ -268,7 +264,7 @@ export default function AnalysisItem({
 
             {/* Log Actions */}
             <SecondaryButton
-              onClick={onToggleLogs}
+              onClick={() => setShowLogs((prev) => !prev)}
               size="xs"
               leftSection={<IconFileText size={16} />}
             >
@@ -425,7 +421,5 @@ AnalysisItem.propTypes = {
       }),
     ),
   }).isRequired,
-  showLogs: PropTypes.bool.isRequired,
-  onToggleLogs: PropTypes.func.isRequired,
   reorderMode: PropTypes.bool,
 };

@@ -50,7 +50,6 @@ export default function AnalysisList({
   const { connectionStatus } = useConnection();
   const { isAdmin } = usePermissions();
 
-  const [openLogIds, setOpenLogIds] = useState(new Set());
   const [reorderMode, setReorderMode] = useState(false);
   const [pendingReorders, setPendingReorders] = useState([]);
   const [localStructure, setLocalStructure] = useState(null);
@@ -134,27 +133,6 @@ export default function AnalysisList({
     },
     [teamsObject],
   );
-
-  // Log toggle functions
-  const toggleAllLogs = useCallback(() => {
-    if (openLogIds.size === analysesArray.length) {
-      setOpenLogIds(new Set());
-    } else {
-      setOpenLogIds(new Set(analysesArray.map((analysis) => analysis.name)));
-    }
-  }, [openLogIds.size, analysesArray]);
-
-  const toggleLog = useCallback((analysisName) => {
-    setOpenLogIds((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(analysisName)) {
-        newSet.delete(analysisName);
-      } else {
-        newSet.add(analysisName);
-      }
-      return newSet;
-    });
-  }, []);
 
   // Folder handlers
   const handleCreateFolder = useCallback(
@@ -420,44 +398,21 @@ export default function AnalysisList({
                 </SuccessButton>
               </Group>
             ) : (
-              <Group gap="xs">
-                <SecondaryButton
-                  onClick={toggleAllLogs}
-                  size="sm"
-                  leftSection={<IconFileText size={16} />}
-                >
-                  {openLogIds.size === analysesArray.length
-                    ? 'Close All Logs'
-                    : 'Open All Logs'}
-                </SecondaryButton>
-                <ActionMenu
-                  items={[
-                    {
-                      label: 'Reorganize List',
-                      icon: <IconArrowsSort size={16} />,
-                      onClick: () => {
-                        setLocalStructure(structuredClone(teamStructure));
-                        setReorderMode(true);
-                      },
+              <ActionMenu
+                items={[
+                  {
+                    label: 'Reorganize List',
+                    icon: <IconArrowsSort size={16} />,
+                    onClick: () => {
+                      setLocalStructure(structuredClone(teamStructure));
+                      setReorderMode(true);
                     },
-                  ]}
-                  triggerVariant="light"
-                  triggerSize="lg"
-                />
-              </Group>
+                  },
+                ]}
+                triggerVariant="light"
+                triggerSize="lg"
+              />
             ))}
-          {/* Log toggle button for non-team views */}
-          {hasAnalyses && !selectedTeam && (
-            <SecondaryButton
-              onClick={toggleAllLogs}
-              size="sm"
-              leftSection={<IconFileText size={16} />}
-            >
-              {openLogIds.size === analysesArray.length
-                ? 'Close All Logs'
-                : 'Open All Logs'}
-            </SecondaryButton>
-          )}
         </Group>
 
         {/* Content */}
@@ -483,10 +438,6 @@ export default function AnalysisList({
               }
               analyses={allAnalyses}
               onFolderAction={handleFolderAction}
-              expandedAnalyses={Object.fromEntries(
-                Array.from(openLogIds).map((id) => [id, true]),
-              )}
-              onToggleAnalysisLogs={toggleLog}
               reorderMode={reorderMode}
               onPendingReorder={handlePendingReorder}
             />
@@ -516,8 +467,6 @@ export default function AnalysisList({
                   {/* Analysis Item */}
                   <AnalysisItem
                     analysis={analysis}
-                    showLogs={openLogIds.has(analysis.name)}
-                    onToggleLogs={() => toggleLog(analysis.name)}
                     teamInfo={showTeamLabels ? teamInfo : null}
                   />
                 </Stack>

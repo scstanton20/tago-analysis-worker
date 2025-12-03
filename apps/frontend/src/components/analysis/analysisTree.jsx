@@ -33,8 +33,6 @@ export default function AnalysisTree({
   teamStructure,
   analyses,
   onFolderAction,
-  expandedAnalyses = {},
-  onToggleAnalysisLogs,
   reorderMode = false,
   onPendingReorder = null,
 }) {
@@ -145,8 +143,6 @@ export default function AnalysisTree({
                   expandedFolders={expandedFolders}
                   allAnalyses={analyses}
                   onFolderAction={onFolderAction}
-                  expandedAnalyses={expandedAnalyses}
-                  onToggleAnalysisLogs={onToggleAnalysisLogs}
                   reorderMode={reorderMode}
                 />
               ))}
@@ -199,8 +195,6 @@ export default function AnalysisTree({
                       ...analyses[activeItem.analysisName],
                       name: activeItem.analysisName,
                     }}
-                    showLogs={false}
-                    onToggleLogs={() => {}}
                   />
                 </Box>
               )}
@@ -217,13 +211,10 @@ AnalysisTree.propTypes = {
   teamStructure: PropTypes.object,
   analyses: PropTypes.object.isRequired,
   onFolderAction: PropTypes.func.isRequired,
-  expandedAnalyses: PropTypes.object,
-  onToggleAnalysisLogs: PropTypes.func.isRequired,
   reorderMode: PropTypes.bool,
   onPendingReorder: PropTypes.func,
 };
 
 AnalysisTree.defaultProps = {
   teamStructure: {},
-  expandedAnalyses: {},
 };
