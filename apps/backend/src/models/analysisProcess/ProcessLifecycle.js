@@ -445,8 +445,12 @@ export class ProcessLifecycleManager {
   /**
    * Update process status and intended state
    *
-   * Preserves intendedState during connection errors
-   * so process will auto-restart when connection recovers.
+   * intendedState is only modified when:
+   * - Starting: set to 'running'
+   * - Manual stop: set to 'stopped' (done explicitly in stop())
+   *
+   * For unexpected exits, intendedState is preserved to allow auto-restart.
+   * Connection errors also preserve intendedState.
    *
    * @param {string} status - Current status (running|stopped)
    * @param {boolean} enabled - User intent to run
@@ -456,15 +460,12 @@ export class ProcessLifecycleManager {
     this.analysisProcess.status = status;
     this.analysisProcess.enabled = enabled;
 
-    // Update intended state
+    // Update intended state only when starting
+    // For stops, intendedState is managed explicitly in stop() for manual stops
+    // and preserved for unexpected exits to allow auto-restart
     if (status === 'running') {
       this.analysisProcess.intendedState = 'running';
       this.analysisProcess.lastStartTime = new Date().toString();
-    } else if (status === 'stopped' && !enabled) {
-      // Only set to stopped if not a connection error
-      if (!this.analysisProcess.connectionErrorDetected) {
-        this.analysisProcess.intendedState = 'stopped';
-      }
     }
 
     this.analysisProcess.logger.debug(

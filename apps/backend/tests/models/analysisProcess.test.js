@@ -14,6 +14,7 @@ vi.mock('../../src/utils/safePath.js', () => ({
   }),
   safeUnlink: vi.fn().mockResolvedValue(undefined),
   safeReadFile: vi.fn().mockResolvedValue(''),
+  safeWriteFile: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../../src/utils/sse/index.js', () => ({
@@ -107,7 +108,7 @@ vi.mock('pino', () => ({
 
 const { fork } = await import('child_process');
 const { sseManager } = await import('../../src/utils/sse/index.js');
-const { safeStat, safeReadFile, safeUnlink } = await import(
+const { safeStat, safeReadFile, safeUnlink, safeWriteFile } = await import(
   '../../src/utils/safePath.js'
 );
 
@@ -282,6 +283,137 @@ describe('AnalysisProcess', () => {
 
       expect(safeUnlink).toHaveBeenCalled();
       expect(analysis.totalLogCount).toBe(1); // After adding "cleared" message
+    });
+
+    it('should not restart directly after log rotation (verifyIntendedState handles it)', async () => {
+      // Log rotation happens during initializeLogState(), which is called:
+      // 1. At the start of start() - process will continue starting after
+      // 2. During config loading - verifyIntendedState() will handle restart
+      // So no direct restart logic is needed in handleOversizedLogFile()
+
+      const analysis = new AnalysisProcess('test-analysis', mockService);
+      analysis.intendedState = 'running';
+
+      safeStat.mockResolvedValue({
+        size: 60 * 1024 * 1024, // 60MB - oversized
+        isFile: () => true,
+      });
+
+      const startSpy = vi.spyOn(analysis, 'start').mockResolvedValue(undefined);
+
+      await analysis.initializeLogState();
+
+      expect(safeUnlink).toHaveBeenCalled();
+      // Log should show cleared message but NOT restart message
+      expect(analysis.logs.some((l) => l.message.includes('cleared'))).toBe(
+        true,
+      );
+      expect(analysis.logs.some((l) => l.message.includes('Restarting'))).toBe(
+        false,
+      );
+
+      // start() should not be called - verifyIntendedState() handles this separately
+      expect(startSpy).not.toHaveBeenCalled();
+    });
+
+    it('should initialize estimatedFileSize when loading existing logs', async () => {
+      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const fileSize = 10 * 1024 * 1024; // 10MB
+
+      safeStat.mockResolvedValue({
+        size: fileSize,
+        isFile: () => true,
+      });
+
+      safeReadFile.mockResolvedValue(
+        '{"time":"2025-01-01T00:00:00.000Z","msg":"test1"}\n{"time":"2025-01-01T00:00:01.000Z","msg":"test2"}',
+      );
+
+      await analysis.initializeLogState();
+
+      // Should track estimated file size for runtime rotation
+      expect(analysis.logManager.estimatedFileSize).toBe(fileSize);
+    });
+
+    it('should track estimated file size when adding logs', async () => {
+      const analysis = new AnalysisProcess('test-analysis', mockService);
+      analysis.logManager.estimatedFileSize = 0;
+
+      // Mock the fileLogger to simulate writing (pino isn't mocked in tests)
+      analysis.fileLogger = { info: vi.fn() };
+
+      await analysis.addLog('test message');
+
+      // Should add ~50 bytes overhead + message length
+      expect(analysis.logManager.estimatedFileSize).toBeGreaterThan(50);
+    });
+
+    it('should trigger runtime rotation when file exceeds max size', async () => {
+      const analysis = new AnalysisProcess('test-analysis', mockService);
+
+      // Mock the fileLogger to simulate writing
+      analysis.fileLogger = { info: vi.fn() };
+
+      // Set estimated size ABOVE threshold to trigger rotation check
+      const maxSize = 50 * 1024 * 1024; // 50MB
+      analysis.logManager.estimatedFileSize = maxSize + 1000;
+      analysis.logManager.logsSinceLastCheck = 99; // Will trigger check on next log
+
+      // Mock safeStat to confirm actual file is also over threshold
+      safeStat.mockResolvedValue({
+        size: maxSize + 1000,
+        isFile: () => true,
+      });
+
+      // Mock safeReadFile to return some log content (last 100 lines preserved)
+      const preservedLog =
+        '{"time":"2025-01-01T00:00:00.000Z","msg":"preserved message"}';
+      safeReadFile.mockResolvedValue(preservedLog);
+
+      safeWriteFile.mockClear();
+
+      await analysis.addLog('test message');
+
+      // Should have triggered rotation (write preserved content, not empty)
+      expect(safeWriteFile).toHaveBeenCalledWith(
+        expect.stringContaining('analysis.log'),
+        preservedLog + '\n', // Preserved lines are written back with newline
+        expect.any(String),
+        'utf8',
+      );
+
+      // Should have reset state after rotation (preserved logs + rotation message)
+      expect(analysis.logManager.estimatedFileSize).toBeLessThan(maxSize);
+      expect(analysis.totalLogCount).toBe(2); // Preserved log + rotation message
+    });
+
+    it('should not trigger rotation if file size is below threshold', async () => {
+      const analysis = new AnalysisProcess('test-analysis', mockService);
+
+      // Mock the fileLogger to simulate writing
+      analysis.fileLogger = { info: vi.fn() };
+
+      // Set size below threshold
+      analysis.logManager.estimatedFileSize = 10 * 1024 * 1024; // 10MB
+      analysis.logManager.logsSinceLastCheck = 99;
+
+      // Mock safeStat to return size below threshold
+      safeStat.mockResolvedValue({
+        size: 10 * 1024 * 1024,
+        isFile: () => true,
+      });
+
+      safeWriteFile.mockClear();
+
+      await analysis.addLog('test message');
+
+      // Should NOT have triggered rotation (no truncation write)
+      expect(safeWriteFile).not.toHaveBeenCalledWith(
+        expect.stringContaining('analysis.log'),
+        '',
+        expect.any(String),
+        'utf8',
+      );
     });
   });
 
@@ -464,6 +596,9 @@ describe('AnalysisProcess', () => {
       analysis.status = 'running';
       analysis.intendedState = 'running';
 
+      // Mock start to prevent actual fork
+      const startSpy = vi.spyOn(analysis, 'start').mockResolvedValue(undefined);
+
       vi.useFakeTimers();
 
       await analysis.handleExit(1); // Non-zero exit code
@@ -472,6 +607,11 @@ describe('AnalysisProcess', () => {
 
       // Should schedule restart
       vi.advanceTimersByTime(5000);
+
+      // Allow async operations to settle
+      await vi.runAllTimersAsync();
+
+      expect(startSpy).toHaveBeenCalled();
 
       vi.useRealTimers();
     });
@@ -483,6 +623,9 @@ describe('AnalysisProcess', () => {
       analysis.intendedState = 'running';
       analysis.connectionErrorDetected = true;
 
+      // Mock start to prevent actual fork
+      const startSpy = vi.spyOn(analysis, 'start').mockResolvedValue(undefined);
+
       vi.useFakeTimers();
 
       await analysis.handleExit(0);
@@ -491,6 +634,11 @@ describe('AnalysisProcess', () => {
 
       // Should schedule restart with backoff
       vi.advanceTimersByTime(5000);
+
+      // Allow async operations to settle
+      await vi.runAllTimersAsync();
+
+      expect(startSpy).toHaveBeenCalled();
 
       vi.useRealTimers();
     });
@@ -556,8 +704,9 @@ describe('AnalysisProcess', () => {
       const analysis = new AnalysisProcess('test-analysis', mockService);
       analysis.process = createMockChildProcess();
       analysis.status = 'running';
-      analysis.intendedState = 'running';
+      // Simulate what stop() does: set both isManualStop AND intendedState
       analysis.isManualStop = true;
+      analysis.intendedState = 'stopped'; // stop() explicitly sets this
 
       vi.useFakeTimers();
       const startSpy = vi.spyOn(analysis, 'start');
@@ -931,14 +1080,18 @@ describe('AnalysisProcess', () => {
       expect(analysis.lastStartTime).toBeDefined();
     });
 
-    it('should set intended state to stopped when manually stopped', () => {
+    it('should preserve intended state when stopping (not change to stopped)', () => {
       const analysis = new AnalysisProcess('test-analysis', mockService);
       analysis.status = 'running';
+      analysis.intendedState = 'running';
 
+      // updateStatus no longer changes intendedState when stopping
+      // intendedState is only changed explicitly in stop() for manual stops
       analysis.updateStatus('stopped', false);
 
       expect(analysis.status).toBe('stopped');
-      expect(analysis.intendedState).toBe('stopped');
+      // intendedState should remain 'running' to allow auto-restart
+      expect(analysis.intendedState).toBe('running');
     });
 
     it('should preserve intended state on connection error', () => {
@@ -948,6 +1101,17 @@ describe('AnalysisProcess', () => {
 
       analysis.updateStatus('stopped', false);
 
+      expect(analysis.intendedState).toBe('running');
+    });
+
+    it('should preserve intended state on unexpected exit to allow auto-restart', () => {
+      const analysis = new AnalysisProcess('test-analysis', mockService);
+      analysis.intendedState = 'running';
+
+      // Simulate unexpected exit - updateStatus should NOT change intendedState
+      analysis.updateStatus('stopped', false);
+
+      // intendedState stays 'running' so shouldRestart() can return true
       expect(analysis.intendedState).toBe('running');
     });
   });

@@ -17,8 +17,15 @@ import {
   safeStat,
   safeUnlink,
   safeReadFile,
+  safeWriteFile,
 } from '../../utils/safePath.js';
 import { ANALYSIS_PROCESS } from '../../constants.js';
+
+// Check file size every N log entries for runtime rotation
+const LOG_SIZE_CHECK_INTERVAL = 100;
+
+// Number of recent log lines to preserve during automatic rotation (for context)
+const ROTATION_PRESERVE_LINES = 100;
 
 // Lazy-load SSE manager to avoid circular dependency
 let _sseManager = null;
@@ -56,7 +63,12 @@ export class LogManager {
 
     // Log file configuration
     this.fileLogger = null;
-    this.fileLoggerStream = null; // NEW: Track stream separately for proper cleanup
+    this.fileLoggerStream = null; // Track stream separately for proper cleanup
+
+    // Runtime log rotation tracking
+    this.estimatedFileSize = 0; // Approximate bytes written to file
+    this.logsSinceLastCheck = 0; // Counter for periodic size verification
+    this.isRotating = false; // Prevent concurrent rotation
   }
 
   /**
@@ -123,7 +135,8 @@ export class LogManager {
    * 2. Add to in-memory FIFO buffer (evict oldest if full)
    * 3. Increment total count
    * 4. Write to file via Pino
-   * 5. Broadcast via SSE for real-time frontend updates
+   * 5. Track file size and rotate if needed
+   * 6. Broadcast via SSE for real-time frontend updates
    *
    * @param {string} message - Log message
    */
@@ -149,6 +162,15 @@ export class LogManager {
     // fileLogger outputs NDJSON format
     if (this.analysisProcess.fileLogger) {
       this.analysisProcess.fileLogger.info(message);
+
+      // Estimate bytes written: {"time":"...","msg":"..."}\n
+      // ~50 bytes overhead + message length
+      const estimatedBytes = 50 + Buffer.byteLength(message, 'utf8');
+      this.estimatedFileSize += estimatedBytes;
+      this.logsSinceLastCheck++;
+
+      // Check for runtime rotation periodically
+      await this.checkRuntimeRotation();
     } else {
       // Fallback if file logger failed to initialize
       this.analysisProcess.logger.warn(
@@ -165,6 +187,207 @@ export class LogManager {
       log: logEntry,
       totalCount: this.analysisProcess.totalLogCount,
     });
+  }
+
+  /**
+   * Check if runtime log rotation is needed
+   *
+   * Triggered periodically during logging to prevent unbounded file growth
+   * while the analysis is running. Similar to manual clear but automatic.
+   *
+   * @private
+   */
+  async checkRuntimeRotation() {
+    const maxFileSize = ANALYSIS_PROCESS.MAX_LOG_FILE_SIZE_BYTES;
+
+    // Only check periodically to avoid performance impact
+    if (this.logsSinceLastCheck < LOG_SIZE_CHECK_INTERVAL) {
+      return;
+    }
+
+    this.logsSinceLastCheck = 0;
+
+    // Check if estimated size exceeds threshold
+    if (this.estimatedFileSize < maxFileSize) {
+      return;
+    }
+
+    // Prevent concurrent rotation
+    if (this.isRotating) {
+      return;
+    }
+
+    // Verify actual file size before rotating
+    try {
+      const stats = await safeStat(
+        this.analysisProcess.logFile,
+        this.config.paths.analysis,
+      );
+
+      // Update estimated size with actual size
+      this.estimatedFileSize = stats.size;
+
+      if (stats.size >= maxFileSize) {
+        await this.rotateLogFile();
+      }
+    } catch (error) {
+      // File doesn't exist or can't be accessed - reset estimate
+      if (error.code === 'ENOENT') {
+        this.estimatedFileSize = 0;
+      }
+    }
+  }
+
+  /**
+   * Rotate log file while analysis is running
+   *
+   * Unlike manual clear, automatic rotation preserves recent logs for context:
+   * 1. Read last N lines from file (for context)
+   * 2. Flush and close current stream
+   * 3. Write preserved lines back to file
+   * 4. Update in-memory state with preserved logs
+   * 5. Reinitialize logger
+   * 6. Log rotation event
+   *
+   * Analysis continues running with preserved context.
+   *
+   * @private
+   */
+  async rotateLogFile() {
+    if (this.isRotating) {
+      return;
+    }
+
+    this.isRotating = true;
+
+    try {
+      const sizeMB = Math.round(this.estimatedFileSize / 1024 / 1024);
+      this.analysisProcess.logger.info({
+        analysisName: this.analysisProcess.analysisName,
+        sizeMB,
+        msg: `Rotating log file at runtime (${sizeMB}MB)`,
+      });
+
+      // Read last N lines before closing the stream (for context preservation)
+      let preservedLines = [];
+      let preservedLogs = [];
+      try {
+        const content = await safeReadFile(
+          this.analysisProcess.logFile,
+          this.config.paths.analysis,
+          'utf8',
+        );
+        const allLines = content
+          .trim()
+          .split('\n')
+          .filter((line) => line.length > 0);
+
+        // Keep last N lines for context
+        preservedLines = allLines.slice(-ROTATION_PRESERVE_LINES);
+
+        // Parse preserved lines into log entries
+        preservedLogs = preservedLines
+          .map((line, index) => {
+            try {
+              const logEntry = JSON.parse(line);
+              if (!logEntry.time || !logEntry.msg) {
+                return null;
+              }
+              return {
+                sequence: index + 1,
+                timestamp: new Date(logEntry.time).toLocaleString(),
+                message: logEntry.msg,
+                createdAt: new Date(logEntry.time).getTime(),
+              };
+            } catch {
+              return null;
+            }
+          })
+          .filter(Boolean);
+      } catch (error) {
+        // If we can't read the file, just proceed without preserved logs
+        this.analysisProcess.logger.warn(
+          { err: error },
+          'Could not read logs for preservation during rotation',
+        );
+      }
+
+      // Flush the current stream
+      if (this.fileLoggerStream) {
+        await new Promise((resolve) => {
+          this.fileLoggerStream.flush();
+          // Give a small delay for flush to complete
+          setTimeout(resolve, 100);
+        });
+
+        // Close the stream
+        this.fileLoggerStream.end();
+        this.fileLoggerStream = null;
+        this.analysisProcess.fileLogger = null;
+        this.analysisProcess.fileLoggerStream = null;
+      }
+
+      // Write preserved lines back to file (or empty if none)
+      const preservedContent =
+        preservedLines.length > 0 ? preservedLines.join('\n') + '\n' : '';
+      await safeWriteFile(
+        this.analysisProcess.logFile,
+        preservedContent,
+        this.config.paths.analysis,
+        'utf8',
+      );
+
+      // Update in-memory state with preserved logs (newest first)
+      this.analysisProcess.logs = preservedLogs.reverse();
+      this.analysisProcess.logSequence = preservedLogs.length;
+      this.analysisProcess.totalLogCount = preservedLogs.length;
+      this.estimatedFileSize = Buffer.byteLength(preservedContent, 'utf8');
+
+      // Reinitialize the file logger
+      this.initializeFileLogger();
+
+      // Log that rotation occurred
+      // Don't use addLog here to avoid recursion - write directly
+      const rotationMessage = `Log file rotated automatically (was ${sizeMB}MB, preserved last ${preservedLogs.length} entries). Analysis continues.`;
+      if (this.analysisProcess.fileLogger) {
+        this.analysisProcess.fileLogger.info(rotationMessage);
+        this.estimatedFileSize +=
+          50 + Buffer.byteLength(rotationMessage, 'utf8');
+      }
+
+      // Add rotation message to in-memory logs
+      const rotationEntry = {
+        sequence: ++this.analysisProcess.logSequence,
+        timestamp: new Date().toLocaleString(),
+        message: rotationMessage,
+        createdAt: Date.now(),
+      };
+      this.analysisProcess.logs.unshift(rotationEntry);
+      this.analysisProcess.totalLogCount++;
+
+      // Broadcast rotation event
+      const sseManager = await getSseManager();
+      sseManager.broadcastUpdate('logsCleared', {
+        fileName: this.analysisProcess.analysisName,
+        analysis: this.analysisProcess.analysisName,
+        reason: 'rotation',
+        previousSizeMB: sizeMB,
+        preservedCount: preservedLogs.length,
+      });
+      sseManager.broadcastUpdate('log', {
+        fileName: this.analysisProcess.analysisName,
+        analysis: this.analysisProcess.analysisName,
+        log: rotationEntry,
+        totalCount: this.analysisProcess.totalLogCount,
+      });
+    } catch (error) {
+      this.analysisProcess.logger.error(
+        { err: error },
+        'Failed to rotate log file',
+      );
+    } finally {
+      this.isRotating = false;
+    }
   }
 
   /**
@@ -194,11 +417,16 @@ export class LogManager {
    *
    * Parses NDJSON format and loads recent logs into memory.
    * Handles missing files gracefully.
+   * Also initializes estimated file size for runtime rotation tracking.
    *
    * @private
+   * @param {number} fileSize - Current file size in bytes (from stat)
    * @returns {Promise<void>}
    */
-  async loadExistingLogs() {
+  async loadExistingLogs(fileSize = 0) {
+    // Initialize estimated size for runtime rotation tracking
+    this.estimatedFileSize = fileSize;
+
     try {
       const content = await safeReadFile(
         this.analysisProcess.logFile,
@@ -251,14 +479,15 @@ export class LogManager {
   }
 
   /**
-   * Handle oversized log files
+   * Handle oversized log files at startup
+   *
+   * Called only during initialization (not while running).
+   * For runtime rotation while analysis runs, see checkRuntimeRotation().
    *
    * If log file exceeds 50MB:
    * 1. Delete the file
    * 2. Start fresh with empty logs
    * 3. Log a message about the rotation
-   *
-   * This prevents unbounded log file growth.
    *
    * @private
    * @returns {Promise<void>}
@@ -286,6 +515,7 @@ export class LogManager {
       this.analysisProcess.totalLogCount = 0;
       this.analysisProcess.logSequence = 0;
       this.analysisProcess.logs = [];
+      this.estimatedFileSize = 0;
 
       // Reinitialize file logger after deleting the file
       this.initializeFileLogger();
@@ -323,7 +553,7 @@ export class LogManager {
 
       // For normal-sized files, load as usual
       if (stats.size <= ANALYSIS_PROCESS.MAX_LOG_FILE_SIZE_BYTES) {
-        await this.loadExistingLogs();
+        await this.loadExistingLogs(stats.size);
       }
     } catch (error) {
       if (error.code !== 'ENOENT') {
