@@ -4,6 +4,8 @@
  * @module config/eslintConfig
  */
 
+import globals from 'globals';
+
 /**
  * ESLint flat config for analysis scripts
  * Includes Tago SDK globals and common rules
@@ -18,8 +20,8 @@ export const eslintConfig = {
       },
     },
     globals: {
-      console: 'readonly',
-      process: 'readonly',
+      // Node.js built-in globals
+      ...globals.node,
       // Tago SDK globals available in analysis context
       context: 'readonly',
       account: 'readonly',
