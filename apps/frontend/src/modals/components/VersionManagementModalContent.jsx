@@ -397,6 +397,7 @@ function VersionManagementModalContent({ innerProps }) {
                   total={versionData.totalPages}
                   disabled={isLoading}
                   withEdges
+                  color="brand"
                 />
               </Center>
             )}
