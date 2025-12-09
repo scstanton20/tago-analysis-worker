@@ -6,6 +6,7 @@
  * @module utils/apiUtils
  */
 import logger from './logger';
+import sanitize from 'sanitize-filename';
 
 // Get environment variables directly from Vite (no env.js dependency)
 const isDevelopment = import.meta.env.DEV;
@@ -307,9 +308,6 @@ export async function handleResponse(response, originalUrl, originalOptions) {
  * @param {string} extension - File extension (e.g., '.js', '.log')
  */
 export async function downloadBlob(fileName, blob, extension = '') {
-  // Dynamically import sanitize-filename only when needed
-  const { default: sanitize } = await import('sanitize-filename');
-
   // Ensure extension is safe (alphanumeric + dot only)
   const safeExtension = extension.match(/^\.?[a-zA-Z0-9]+$/) ? extension : '';
 

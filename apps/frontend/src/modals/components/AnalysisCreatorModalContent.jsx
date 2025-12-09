@@ -1,5 +1,6 @@
 import { useMemo, lazy, Suspense } from 'react';
 import PropTypes from 'prop-types';
+import sanitize from 'sanitize-filename';
 import { analysisService } from '../../services/analysisService';
 import { useAnalyses } from '../../contexts/sseContext/index';
 import { notificationAPI } from '../../utils/notificationAPI.jsx';
@@ -174,8 +175,6 @@ const AnalysisCreatorModalContent = ({ id, innerProps }) => {
       return 'Filename cannot contain periods. Extension will be added automatically.';
     }
 
-    // Dynamically import sanitize-filename only when needed
-    const { default: sanitize } = await import('sanitize-filename');
     const sanitized = sanitize(filename, { replacement: '_' });
     if (filename !== sanitized) {
       return 'Filename contains invalid characters. Please remove: < > : " / \\ | ? * and control characters';
