@@ -10,6 +10,7 @@ vi.mock('../../src/services/analysisService.js', () => ({
   analysisService: {
     uploadAnalysis: vi.fn(),
     getAllAnalyses: vi.fn(),
+    getAnalysisById: vi.fn(),
     runAnalysis: vi.fn(),
     stopAnalysis: vi.fn(),
     deleteAnalysis: vi.fn(),
@@ -209,8 +210,9 @@ describe('AnalysisController', () => {
 
   describe('runAnalysis', () => {
     it('should start analysis successfully', async () => {
+      const analysisId = 'test-analysis-uuid-123';
       const req = createMockRequest({
-        params: { fileName: 'test-analysis' },
+        params: { analysisId },
       });
       const res = createMockResponse();
 
@@ -218,7 +220,7 @@ describe('AnalysisController', () => {
 
       await AnalysisController.runAnalysis(req, res);
 
-      expect(analysisService.runAnalysis).toHaveBeenCalledWith('test-analysis');
+      expect(analysisService.runAnalysis).toHaveBeenCalledWith(analysisId);
       expect(res.json).toHaveBeenCalledWith({ success: true });
       // No SSE broadcast expected here - the actual process lifecycle event
       // (analysisUpdate) will be sent from analysisProcess.js when the child process starts
@@ -227,8 +229,9 @@ describe('AnalysisController', () => {
 
   describe('stopAnalysis', () => {
     it('should stop analysis successfully', async () => {
+      const analysisId = 'test-analysis-uuid-123';
       const req = createMockRequest({
-        params: { fileName: 'test-analysis' },
+        params: { analysisId },
       });
       const res = createMockResponse();
 
@@ -236,9 +239,7 @@ describe('AnalysisController', () => {
 
       await AnalysisController.stopAnalysis(req, res);
 
-      expect(analysisService.stopAnalysis).toHaveBeenCalledWith(
-        'test-analysis',
-      );
+      expect(analysisService.stopAnalysis).toHaveBeenCalledWith(analysisId);
       expect(res.json).toHaveBeenCalledWith({ success: true });
       // No SSE broadcast expected here - the actual process lifecycle event
       // (analysisUpdate) will be sent from analysisProcess.js when the child process exits
@@ -247,15 +248,16 @@ describe('AnalysisController', () => {
 
   describe('deleteAnalysis', () => {
     it('should delete analysis successfully', async () => {
+      const analysisId = 'test-analysis-uuid-123';
       const req = createMockRequest({
-        params: { fileName: 'test-analysis' },
+        params: { analysisId },
       });
       const res = createMockResponse();
 
-      analysisService.getAllAnalyses.mockResolvedValue({
-        'test-analysis': {
-          teamId: 'team-123',
-        },
+      analysisService.getAnalysisById.mockReturnValue({
+        analysisId,
+        analysisName: 'test-analysis',
+        teamId: 'team-123',
       });
 
       analysisService.deleteAnalysis.mockResolvedValue({
@@ -272,9 +274,7 @@ describe('AnalysisController', () => {
 
       await AnalysisController.deleteAnalysis(req, res);
 
-      expect(analysisService.deleteAnalysis).toHaveBeenCalledWith(
-        'test-analysis',
-      );
+      expect(analysisService.deleteAnalysis).toHaveBeenCalledWith(analysisId);
       expect(res.json).toHaveBeenCalledWith({ success: true });
       expect(sseManager.broadcastAnalysisUpdate).toHaveBeenCalled();
     });
@@ -282,8 +282,9 @@ describe('AnalysisController', () => {
 
   describe('getAnalysisContent', () => {
     it('should get analysis content successfully', async () => {
+      const analysisId = 'test-analysis-uuid-123';
       const req = createMockRequest({
-        params: { fileName: 'test-analysis' },
+        params: { analysisId },
         query: {},
       });
       const res = createMockResponse();
@@ -295,15 +296,16 @@ describe('AnalysisController', () => {
       await AnalysisController.getAnalysisContent(req, res);
 
       expect(analysisService.getAnalysisContent).toHaveBeenCalledWith(
-        'test-analysis',
+        analysisId,
       );
       expect(res.set).toHaveBeenCalledWith('Content-Type', 'text/plain');
       expect(res.send).toHaveBeenCalledWith('console.log("test");');
     });
 
     it('should get version content when version is specified', async () => {
+      const analysisId = 'test-analysis-uuid-123';
       const req = createMockRequest({
-        params: { fileName: 'test-analysis' },
+        params: { analysisId },
         query: { version: '1' },
       });
       const res = createMockResponse();
@@ -315,15 +317,16 @@ describe('AnalysisController', () => {
       await AnalysisController.getAnalysisContent(req, res);
 
       expect(analysisService.getVersionContent).toHaveBeenCalledWith(
-        'test-analysis',
+        analysisId,
         1,
       );
       expect(res.send).toHaveBeenCalledWith('console.log("version 1");');
     });
 
     it('should return 400 for invalid version number', async () => {
+      const analysisId = 'test-analysis-uuid-123';
       const req = createMockRequest({
-        params: { fileName: 'test-analysis' },
+        params: { analysisId },
         query: { version: 'invalid' },
       });
       const res = createMockResponse();
@@ -339,8 +342,9 @@ describe('AnalysisController', () => {
 
   describe('updateAnalysis', () => {
     it('should update analysis successfully', async () => {
+      const analysisId = 'test-analysis-uuid-123';
       const req = createMockRequest({
-        params: { fileName: 'test-analysis' },
+        params: { analysisId },
         body: { content: 'console.log("updated");' },
       });
       const res = createMockResponse();
@@ -350,18 +354,17 @@ describe('AnalysisController', () => {
         restarted: false,
       });
 
-      analysisService.getAllAnalyses.mockResolvedValue({
-        'test-analysis': {
-          status: 'stopped',
-        },
+      analysisService.getAnalysisById.mockReturnValue({
+        analysisId,
+        analysisName: 'test-analysis',
+        status: 'stopped',
       });
 
       await AnalysisController.updateAnalysis(req, res);
 
-      expect(analysisService.updateAnalysis).toHaveBeenCalledWith(
-        'test-analysis',
-        { content: 'console.log("updated");' },
-      );
+      expect(analysisService.updateAnalysis).toHaveBeenCalledWith(analysisId, {
+        content: 'console.log("updated");',
+      });
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
           success: true,
@@ -374,9 +377,10 @@ describe('AnalysisController', () => {
 
   describe('renameAnalysis', () => {
     it('should rename analysis successfully', async () => {
+      const analysisId = 'test-analysis-uuid-123';
       const req = createMockRequest({
-        params: { fileName: 'old-name' },
-        body: { newFileName: 'new-name' },
+        params: { analysisId },
+        body: { newName: 'new-name' },
       });
       const res = createMockResponse();
 
@@ -385,16 +389,16 @@ describe('AnalysisController', () => {
         restarted: false,
       });
 
-      analysisService.getAllAnalyses.mockResolvedValue({
-        'new-name': {
-          status: 'stopped',
-        },
+      analysisService.getAnalysisById.mockReturnValue({
+        analysisId,
+        analysisName: 'new-name',
+        status: 'stopped',
       });
 
       await AnalysisController.renameAnalysis(req, res);
 
       expect(analysisService.renameAnalysis).toHaveBeenCalledWith(
-        'old-name',
+        analysisId,
         'new-name',
       );
       expect(res.json).toHaveBeenCalledWith(
@@ -408,8 +412,9 @@ describe('AnalysisController', () => {
 
   describe('getLogs', () => {
     it('should get logs successfully', async () => {
+      const analysisId = 'test-analysis-uuid-123';
       const req = createMockRequest({
-        params: { fileName: 'test-analysis' },
+        params: { analysisId },
         query: { page: '1', limit: '100' },
       });
       const res = createMockResponse();
@@ -424,17 +429,14 @@ describe('AnalysisController', () => {
 
       await AnalysisController.getLogs(req, res);
 
-      expect(analysisService.getLogs).toHaveBeenCalledWith(
-        'test-analysis',
-        1,
-        100,
-      );
+      expect(analysisService.getLogs).toHaveBeenCalledWith(analysisId, 1, 100);
       expect(res.json).toHaveBeenCalledWith(mockLogs);
     });
 
     it('should use default pagination values', async () => {
+      const analysisId = 'test-analysis-uuid-123';
       const req = createMockRequest({
-        params: { fileName: 'test-analysis' },
+        params: { analysisId },
         query: {},
       });
       const res = createMockResponse();
@@ -447,18 +449,15 @@ describe('AnalysisController', () => {
 
       await AnalysisController.getLogs(req, res);
 
-      expect(analysisService.getLogs).toHaveBeenCalledWith(
-        'test-analysis',
-        1,
-        100,
-      );
+      expect(analysisService.getLogs).toHaveBeenCalledWith(analysisId, 1, 100);
     });
   });
 
   describe('clearLogs', () => {
     it('should clear logs successfully', async () => {
+      const analysisId = 'test-analysis-uuid-123';
       const req = createMockRequest({
-        params: { fileName: 'test-analysis' },
+        params: { analysisId },
       });
       const res = createMockResponse();
 
@@ -469,7 +468,7 @@ describe('AnalysisController', () => {
 
       await AnalysisController.clearLogs(req, res);
 
-      expect(analysisService.clearLogs).toHaveBeenCalledWith('test-analysis');
+      expect(analysisService.clearLogs).toHaveBeenCalledWith(analysisId);
       expect(res.json).toHaveBeenCalledWith({
         success: true,
         message: 'Logs cleared',
@@ -480,8 +479,9 @@ describe('AnalysisController', () => {
 
   describe('getVersions', () => {
     it('should get versions successfully with pagination', async () => {
+      const analysisId = 'test-analysis-uuid-123';
       const req = createMockRequest({
-        params: { fileName: 'test-analysis' },
+        params: { analysisId },
         query: { page: 1, limit: 10 },
       });
       const res = createMockResponse();
@@ -506,20 +506,18 @@ describe('AnalysisController', () => {
 
       await AnalysisController.getVersions(req, res);
 
-      expect(analysisService.getVersions).toHaveBeenCalledWith(
-        'test-analysis',
-        {
-          page: 1,
-          limit: 10,
-          logger: req.log,
-        },
-      );
+      expect(analysisService.getVersions).toHaveBeenCalledWith(analysisId, {
+        page: 1,
+        limit: 10,
+        logger: req.log,
+      });
       expect(res.json).toHaveBeenCalledWith(mockResult);
     });
 
     it('should pass pagination parameters to service', async () => {
+      const analysisId = 'test-analysis-uuid-123';
       const req = createMockRequest({
-        params: { fileName: 'test-analysis' },
+        params: { analysisId },
         query: { page: 2, limit: 5 },
       });
       const res = createMockResponse();
@@ -537,21 +535,19 @@ describe('AnalysisController', () => {
 
       await AnalysisController.getVersions(req, res);
 
-      expect(analysisService.getVersions).toHaveBeenCalledWith(
-        'test-analysis',
-        {
-          page: 2,
-          limit: 5,
-          logger: req.log,
-        },
-      );
+      expect(analysisService.getVersions).toHaveBeenCalledWith(analysisId, {
+        page: 2,
+        limit: 5,
+        logger: req.log,
+      });
     });
   });
 
   describe('rollbackToVersion', () => {
     it('should rollback to version successfully', async () => {
+      const analysisId = 'test-analysis-uuid-123';
       const req = createMockRequest({
-        params: { fileName: 'test-analysis' },
+        params: { analysisId },
         body: { version: 1 },
       });
       const res = createMockResponse();
@@ -562,16 +558,16 @@ describe('AnalysisController', () => {
         version: 1,
       });
 
-      analysisService.getAllAnalyses.mockResolvedValue({
-        'test-analysis': {
-          status: 'stopped',
-        },
+      analysisService.getAnalysisById.mockReturnValue({
+        analysisId,
+        analysisName: 'test-analysis',
+        status: 'stopped',
       });
 
       await AnalysisController.rollbackToVersion(req, res);
 
       expect(analysisService.rollbackToVersion).toHaveBeenCalledWith(
-        'test-analysis',
+        analysisId,
         1,
       );
       expect(res.json).toHaveBeenCalledWith(
@@ -586,8 +582,9 @@ describe('AnalysisController', () => {
 
   describe('updateEnvironment', () => {
     it('should update environment successfully', async () => {
+      const analysisId = 'test-analysis-uuid-123';
       const req = createMockRequest({
-        params: { fileName: 'test-analysis' },
+        params: { analysisId },
         body: { env: { KEY: 'value' } },
       });
       const res = createMockResponse();
@@ -597,16 +594,16 @@ describe('AnalysisController', () => {
         restarted: false,
       });
 
-      analysisService.getAllAnalyses.mockResolvedValue({
-        'test-analysis': {
-          status: 'stopped',
-        },
+      analysisService.getAnalysisById.mockReturnValue({
+        analysisId,
+        analysisName: 'test-analysis',
+        status: 'stopped',
       });
 
       await AnalysisController.updateEnvironment(req, res);
 
       expect(analysisService.updateEnvironment).toHaveBeenCalledWith(
-        'test-analysis',
+        analysisId,
         { KEY: 'value' },
       );
       expect(res.json).toHaveBeenCalledWith(
@@ -621,8 +618,9 @@ describe('AnalysisController', () => {
 
   describe('getEnvironment', () => {
     it('should get environment successfully', async () => {
+      const analysisId = 'test-analysis-uuid-123';
       const req = createMockRequest({
-        params: { fileName: 'test-analysis' },
+        params: { analysisId },
       });
       const res = createMockResponse();
 
@@ -632,9 +630,7 @@ describe('AnalysisController', () => {
 
       await AnalysisController.getEnvironment(req, res);
 
-      expect(analysisService.getEnvironment).toHaveBeenCalledWith(
-        'test-analysis',
-      );
+      expect(analysisService.getEnvironment).toHaveBeenCalledWith(analysisId);
       expect(res.json).toHaveBeenCalledWith(mockEnv);
     });
   });

@@ -62,7 +62,7 @@ const AnalysisLogs = ({ analysis }) => {
 
     setIsLoading(true);
     try {
-      const response = await analysisService.getLogs(analysis.name, {
+      const response = await analysisService.getLogs(analysis.id, {
         page: 1,
         limit: LOGS_PER_PAGE,
       });
@@ -82,20 +82,20 @@ const AnalysisLogs = ({ analysis }) => {
         setIsLoading(false);
       }
     }
-  }, [analysis.name]);
+  }, [analysis.id]);
 
   // Subscribe to analysis log channel when component mounts
   useEffect(() => {
-    if (!sessionId || !analysis.name) {
+    if (!sessionId || !analysis.id) {
       return;
     }
 
-    subscribeToAnalysis([analysis.name]);
+    subscribeToAnalysis([analysis.id]);
 
     return () => {
-      unsubscribeFromAnalysis([analysis.name]);
+      unsubscribeFromAnalysis([analysis.id]);
     };
-  }, [analysis.name, sessionId, subscribeToAnalysis, unsubscribeFromAnalysis]);
+  }, [analysis.id, sessionId, subscribeToAnalysis, unsubscribeFromAnalysis]);
 
   // Keep currentLogsRef in sync with latest log state
   // This allows loadMoreLogs to access current values without including them in deps
@@ -114,10 +114,10 @@ const AnalysisLogs = ({ analysis }) => {
     disableAutoScroll(); // Start with auto-scroll disabled
     loadInitialLogs();
     // loadInitialLogs & disableAutoScroll are stable callbacks that depend on
-    // analysis.name, so they'll naturally update when analysis.name changes.
+    // analysis.id, so they'll naturally update when analysis.id changes.
     // Including them in deps would cause unnecessary reruns.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [analysis.name]);
+  }, [analysis.id]);
 
   const loadMoreLogs = useCallback(async () => {
     if (isLoadingMore.current || !hasMore) return;
@@ -126,7 +126,7 @@ const AnalysisLogs = ({ analysis }) => {
 
     try {
       const nextPage = page + 1;
-      const response = await analysisService.getLogs(analysis.name, {
+      const response = await analysisService.getLogs(analysis.id, {
         page: nextPage,
         limit: LOGS_PER_PAGE,
       });
@@ -165,7 +165,7 @@ const AnalysisLogs = ({ analysis }) => {
     } finally {
       isLoadingMore.current = false;
     }
-  }, [analysis.name, page, hasMore]);
+  }, [analysis.id, page, hasMore]);
 
   const handleBottomReached = useCallback(() => {
     // Only load more if we're not already loading and there are more logs
@@ -261,7 +261,7 @@ const AnalysisLogs = ({ analysis }) => {
     [height],
   );
 
-  if (!analysis || !analysis.name) {
+  if (!analysis || !analysis.id) {
     return null;
   }
 
@@ -430,7 +430,8 @@ const AnalysisLogs = ({ analysis }) => {
 
 AnalysisLogs.propTypes = {
   analysis: PropTypes.shape({
-    name: PropTypes.string.isRequired,
+    id: PropTypes.string.isRequired,
+    name: PropTypes.string,
     status: PropTypes.string,
     logs: PropTypes.arrayOf(
       PropTypes.shape({

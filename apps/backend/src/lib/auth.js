@@ -1,4 +1,5 @@
 import { betterAuth } from 'better-auth';
+import { createAuthMiddleware } from 'better-auth/api';
 import { admin } from 'better-auth/plugins/admin';
 import { passkey } from '@better-auth/passkey';
 import { username } from 'better-auth/plugins/username';
@@ -148,6 +149,25 @@ export const auth = betterAuth({
     crossSubDomainCookies: {
       enabled: false, // Enable if using subdomains
     },
+  },
+  hooks: {
+    after: createAuthMiddleware(async (ctx) => {
+      // Clear requiresPasswordChange flag after successful password change
+      if (ctx.path === '/change-password') {
+        const userId = ctx.context.session?.user.id;
+        if (userId) {
+          executeUpdate(
+            'UPDATE user SET requiresPasswordChange = 0 WHERE id = ?',
+            [userId],
+            'clearing password change flag after password change',
+          );
+          authLogger.info(
+            { userId },
+            '✓ Cleared requiresPasswordChange flag after password change',
+          );
+        }
+      }
+    }),
   },
   plugins: [
     customSession(async ({ user, session }) => {

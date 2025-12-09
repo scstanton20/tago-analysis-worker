@@ -1,24 +1,9 @@
-import {
-  createContext,
-  useState,
-  useCallback,
-  useMemo,
-  useEffect,
-  lazy,
-  Suspense,
-} from 'react';
+import { createContext, useCallback, useMemo } from 'react';
 import { useSession, signOut, authClient } from '../lib/auth.js';
 import { showError, showInfo } from '../utils/notificationService';
 import { notificationAPI } from '../utils/notificationAPI.jsx';
 import { useEventListener } from '../hooks/useEventListener';
-import { fetchWithHeaders, handleResponse } from '../utils/apiUtils.js';
 import logger from '../utils/logger.js';
-import AppLoadingOverlay from '../components/global/indicators/AppLoadingOverlay';
-
-// Lazy load PasswordOnboarding component
-const PasswordOnboarding = lazy(
-  () => import('../components/auth/passwordOnboarding.jsx'),
-);
 
 const AuthContext = createContext();
 
@@ -30,9 +15,6 @@ export const AuthProvider = ({ children }) => {
     isPending: sessionLoading,
     refetch: refetchSession,
   } = useSession();
-
-  const [showPasswordOnboarding, setShowPasswordOnboarding] = useState(false);
-  const [passwordOnboardingUser, setPasswordOnboardingUser] = useState('');
 
   // Memoize user and session data extraction
   const authData = useMemo(() => {
@@ -53,28 +35,6 @@ export const AuthProvider = ({ children }) => {
       impersonatedBy: sessionData?.impersonatedBy || null,
     };
   }, [session, sessionLoading]);
-
-  // Check if user requires password change (derived state)
-  const shouldShowPasswordOnboarding =
-    authData.isAuthenticated && authData.user?.requiresPasswordChange;
-
-  // Update password onboarding state when derived state changes
-  // Moved to useEffect to prevent state updates during render phase
-  useEffect(() => {
-    if (shouldShowPasswordOnboarding && !showPasswordOnboarding) {
-      logger.log(
-        'AuthContext: User requires password change:',
-        authData.user?.email || authData.user?.username,
-      );
-      setShowPasswordOnboarding(true);
-      setPasswordOnboardingUser(
-        authData.user?.username || authData.user?.email || '',
-      );
-    } else if (!shouldShowPasswordOnboarding && showPasswordOnboarding) {
-      setShowPasswordOnboarding(false);
-      setPasswordOnboardingUser('');
-    }
-  }, [shouldShowPasswordOnboarding, showPasswordOnboarding, authData.user]);
 
   // Listen for auth changes and refetch session
   const handleAuthChange = useCallback(async () => {
@@ -228,32 +188,6 @@ export const AuthProvider = ({ children }) => {
     [],
   );
 
-  const passwordOnboarding = useCallback(async (newPassword) => {
-    try {
-      logger.log('🔐 Setting initial password via server-side API');
-
-      // Use our server-side endpoint that handles both password setting and flag clearing
-      const response = await fetchWithHeaders('/users/set-initial-password', {
-        method: 'POST',
-        body: JSON.stringify({
-          newPassword: newPassword,
-        }),
-      });
-
-      const result = await handleResponse(
-        response,
-        '/users/set-initial-password',
-        { method: 'POST', body: JSON.stringify({ newPassword }) },
-      );
-
-      logger.log('🔐 Password onboarding completed successfully:', result);
-      return result;
-    } catch (error) {
-      logger.error('Password onboarding error:', error);
-      throw error;
-    }
-  }, []);
-
   // Memoize the complete context value
   const contextValue = useMemo(
     () => ({
@@ -263,7 +197,6 @@ export const AuthProvider = ({ children }) => {
       exitImpersonation,
       updateProfile,
       changeProfilePassword,
-      passwordOnboarding,
     }),
     [
       authData,
@@ -272,39 +205,10 @@ export const AuthProvider = ({ children }) => {
       exitImpersonation,
       updateProfile,
       changeProfilePassword,
-      passwordOnboarding,
     ],
   );
 
   return (
-    <AuthContext.Provider value={contextValue}>
-      {children}
-      {showPasswordOnboarding && (
-        <Suspense
-          fallback={<AppLoadingOverlay message="Loading password setup..." />}
-        >
-          <PasswordOnboarding
-            username={passwordOnboardingUser}
-            passwordOnboarding={contextValue.passwordOnboarding}
-            onSuccess={async () => {
-              logger.log('🚨 AuthContext: PasswordOnboarding completed');
-              setShowPasswordOnboarding(false);
-              setPasswordOnboardingUser('');
-
-              // Refresh session to remove requiresPasswordChange flag
-              try {
-                refetchSession();
-                logger.log('✓ Session refreshed after password change');
-              } catch (error) {
-                logger.error(
-                  'Error refreshing session after password change:',
-                  error,
-                );
-              }
-            }}
-          />
-        </Suspense>
-      )}
-    </AuthContext.Provider>
+    <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>
   );
 };

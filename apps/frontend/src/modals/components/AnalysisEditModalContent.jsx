@@ -70,6 +70,7 @@ function AnalysisEditModalContent({ id, innerProps }) {
 
   // Analysis edit state and operations (using initial analysis)
   const {
+    analysisId,
     content,
     hasChanges,
     isLoading,
@@ -99,8 +100,8 @@ function AnalysisEditModalContent({ id, innerProps }) {
   // Get analyses from SSE context
   const { getAnalysis } = useAnalyses();
 
-  // Get live analysis using displayName (which updates after renames)
-  const liveAnalysis = getAnalysis(displayName);
+  // Get live analysis using analysisId (stable identifier)
+  const liveAnalysis = getAnalysis(analysisId);
 
   // Use live analysis for display if available
   const currentAnalysis = liveAnalysis || initialAnalysis;

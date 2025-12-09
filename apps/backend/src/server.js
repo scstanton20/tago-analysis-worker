@@ -410,16 +410,13 @@ async function gracefulShutdown(signal) {
   // 3. Stop all running analyses
   serverLogger.info('Stopping all running analyses');
   const shutdownPromises = [];
-  for (const [name, analysis] of analysisService.analyses) {
+  for (const [analysisId, analysis] of analysisService.analyses) {
     if (analysis.status === 'running') {
-      serverLogger.info(
-        { analysisName: name },
-        'Stopping analysis for shutdown',
-      );
+      serverLogger.info({ analysisId }, 'Stopping analysis for shutdown');
       shutdownPromises.push(
         analysis.stop().catch((error) => {
           serverLogger.error(
-            { err: error, analysisName: name },
+            { err: error, analysisId },
             'Failed to stop analysis during shutdown',
           );
         }),
@@ -448,14 +445,14 @@ async function gracefulShutdown(signal) {
 
   // 5. Flush file loggers
   let flushedCount = 0;
-  for (const [name, analysis] of analysisService.analyses) {
+  for (const [analysisId, analysis] of analysisService.analyses) {
     if (analysis.fileLogger && analysis.fileLogger.flush) {
       try {
         analysis.fileLogger.flush();
         flushedCount++;
       } catch (error) {
         serverLogger.error(
-          { err: error, analysisName: name },
+          { err: error, analysisId },
           'Failed to flush file logger',
         );
       }

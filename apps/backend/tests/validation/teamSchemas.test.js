@@ -475,7 +475,7 @@ describe('teamSchemas', () => {
   describe('moveAnalysisToTeam', () => {
     it('should validate with valid data', () => {
       const validData = {
-        params: { name: 'my-analysis' },
+        params: { analysisId: '123e4567-e89b-12d3-a456-426614174000' },
         body: { teamId: 'team-123' },
       };
 
@@ -490,13 +490,13 @@ describe('teamSchemas', () => {
       expect(bodyResult.success).toBe(true);
     });
 
-    it('should require analysis name in params', () => {
+    it('should require analysisId in params', () => {
       const invalidData = {};
 
       const result = schemas.moveAnalysisToTeam.params.safeParse(invalidData);
 
       expect(result.success).toBe(false);
-      expect(result.error?.issues[0].path).toContain('name');
+      expect(result.error?.issues[0].path).toContain('analysisId');
     });
 
     it('should require teamId in body', () => {
@@ -508,12 +508,22 @@ describe('teamSchemas', () => {
       expect(result.error?.issues[0].path).toContain('teamId');
     });
 
-    it('should reject empty analysis name', () => {
-      const invalidData = { name: '' };
+    it('should reject empty analysisId', () => {
+      const invalidData = { analysisId: '' };
 
       const result = schemas.moveAnalysisToTeam.params.safeParse(invalidData);
 
       expect(result.success).toBe(false);
+      expect(result.error?.issues[0].message).toContain('UUID');
+    });
+
+    it('should reject invalid UUID format for analysisId', () => {
+      const invalidData = { analysisId: 'not-a-valid-uuid' };
+
+      const result = schemas.moveAnalysisToTeam.params.safeParse(invalidData);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0].message).toContain('UUID');
     });
 
     it('should reject empty teamId', () => {

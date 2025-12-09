@@ -71,9 +71,9 @@ export class InitDataService {
 
         // Filter analyses to only include those from accessible teams
         const filteredAnalyses = {};
-        for (const [analysisName, analysis] of Object.entries(allAnalyses)) {
+        for (const [analysisId, analysis] of Object.entries(allAnalyses)) {
           if (allowedTeamIds.includes(analysis.teamId || 'uncategorized')) {
-            filteredAnalyses[analysisName] = analysis;
+            filteredAnalyses[analysisId] = analysis;
           }
         }
 

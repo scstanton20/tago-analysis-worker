@@ -2,7 +2,6 @@
  * Analysis Service - Core business logic for analysis management
  * @module analysisService
  */
-import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import { promises as fs } from 'fs';
 import { config } from '../config/default.js';
@@ -13,16 +12,18 @@ import {
   safeReadFile,
   safeReaddir,
   safeStat,
-  safeRename,
-  getAnalysisPath,
 } from '../utils/safePath.js';
-import { isAnalysisNameSafe } from '../validation/shared.js';
 import { LOG_TIME_RANGE_VALUES } from '../validation/analysisSchemas.js';
 import { AnalysisProcess } from '../models/analysisProcess/index.js';
 import { teamService } from './teamService.js';
 import { createChildLogger, parseLogLine } from '../utils/logging/logger.js';
 import { collectChildProcessMetrics } from '../utils/metrics-enhanced.js';
 import { FILE_SIZE, ANALYSIS_SERVICE } from '../constants.js';
+import {
+  runAnalysisConfigMigrations,
+  getCurrentConfigVersion,
+} from '../migrations/analysisConfigMigrations.js';
+import { generateId } from '../utils/generateId.js';
 
 const moduleLogger = createChildLogger('analysis-service');
 
@@ -59,38 +60,54 @@ class AnalysisService {
   }
 
   // Update config while preserving in-memory AnalysisProcess instances
-  async updateConfig(config) {
-    this.configCache = { ...config };
-    if (config.analyses) {
-      this.analyses.forEach((analysis, name) => {
-        if (config.analyses[name] && analysis instanceof AnalysisProcess) {
-          analysis.enabled = config.analyses[name].enabled;
-          analysis.intendedState =
-            config.analyses[name].intendedState || 'stopped';
-          analysis.lastStartTime = config.analyses[name].lastStartTime;
-          analysis.teamId = config.analyses[name].teamId;
+  async updateConfig(newConfig) {
+    this.configCache = { ...newConfig };
+    if (newConfig.analyses) {
+      // Update existing analyses (keyed by analysisId in v5.0)
+      this.analyses.forEach((analysis, analysisId) => {
+        if (
+          newConfig.analyses[analysisId] &&
+          analysis instanceof AnalysisProcess
+        ) {
+          const configEntry = newConfig.analyses[analysisId];
+          analysis.enabled = configEntry.enabled;
+          analysis.intendedState = configEntry.intendedState || 'stopped';
+          analysis.lastStartTime = configEntry.lastStartTime;
+          analysis.teamId = configEntry.teamId;
+          // Update name if changed (for rename operations)
+          if (configEntry.name && configEntry.name !== analysis.analysisName) {
+            analysis.analysisName = configEntry.name;
+          }
         }
       });
 
-      for (const [name] of this.analyses) {
-        if (!config.analyses[name]) {
-          this.analyses.delete(name);
+      // Remove analyses that no longer exist in config
+      for (const [analysisId] of this.analyses) {
+        if (!newConfig.analyses[analysisId]) {
+          this.analyses.delete(analysisId);
         }
       }
 
-      Object.entries(config.analyses).forEach(([name, analysisConfig]) => {
-        if (!this.analyses.has(name)) {
-          const analysis = new AnalysisProcess(name, this);
-          Object.assign(analysis, {
-            enabled: analysisConfig.enabled,
-            status: 'stopped',
-            intendedState: analysisConfig.intendedState || 'stopped',
-            lastStartTime: analysisConfig.lastStartTime,
-            teamId: analysisConfig.teamId,
-          });
-          this.analyses.set(name, analysis);
-        }
-      });
+      // Add new analyses from config
+      Object.entries(newConfig.analyses).forEach(
+        ([analysisId, analysisConfig]) => {
+          if (!this.analyses.has(analysisId)) {
+            const analysis = new AnalysisProcess(
+              analysisId,
+              analysisConfig.name,
+              this,
+            );
+            Object.assign(analysis, {
+              enabled: analysisConfig.enabled,
+              status: 'stopped',
+              intendedState: analysisConfig.intendedState || 'stopped',
+              lastStartTime: analysisConfig.lastStartTime,
+              teamId: analysisConfig.teamId,
+            });
+            this.analyses.set(analysisId, analysis);
+          }
+        },
+      );
     }
 
     await this.saveConfig();
@@ -98,13 +115,16 @@ class AnalysisService {
 
   async saveConfig() {
     const configuration = {
-      version: this.configCache?.version || '4.1',
+      version: this.configCache?.version || getCurrentConfigVersion(),
       analyses: {},
       teamStructure: this.configCache?.teamStructure || {},
     };
 
-    this.analyses.forEach((analysis, analysisName) => {
-      configuration.analyses[analysisName] = {
+    // In v5.0, analyses are keyed by analysisId and include id/name properties
+    this.analyses.forEach((analysis, analysisId) => {
+      configuration.analyses[analysisId] = {
+        id: analysisId,
+        name: analysis.analysisName,
         enabled: analysis.enabled,
         intendedState: analysis.intendedState || 'stopped',
         lastStartTime: analysis.lastStartTime,
@@ -121,99 +141,26 @@ class AnalysisService {
     this.configCache = configuration;
   }
 
-  // Migrate configuration from pre-v4.0 to v4.0 (nested folder structure)
-  async migrateConfigToV4_0(configData) {
-    const currentVersion = parseFloat(configData.version) || 1.0;
-    const needsMigration =
-      currentVersion < 4.0 ||
-      !configData.teamStructure ||
-      Object.keys(configData.teamStructure).length === 0;
-
-    if (
-      !needsMigration ||
-      !configData.analyses ||
-      Object.keys(configData.analyses).length === 0
-    ) {
-      return false;
-    }
-
-    moduleLogger.info(
-      `Migrating config from v${configData.version} to v4.0 (nested folder structure)`,
-    );
-    configData.version = '4.0';
-    configData.teamStructure = {};
-
-    // Group analyses by team
-    const teamGroups = {};
-    for (const [analysisName, analysis] of Object.entries(
-      configData.analyses || {},
-    )) {
-      const teamId = analysis.teamId || 'uncategorized';
-      if (!teamGroups[teamId]) teamGroups[teamId] = [];
-      teamGroups[teamId].push(analysisName);
-    }
-
-    // Create flat items structure for each team (no folders initially)
-    for (const [teamId, analysisNames] of Object.entries(teamGroups)) {
-      configData.teamStructure[teamId] = {
-        items: analysisNames.map((name) => ({
-          id: uuidv4(),
-          type: 'analysis',
-          analysisName: name,
-        })),
-      };
-    }
-
-    // Save migrated config
-    await safeWriteFile(
-      this.configPath,
-      JSON.stringify(configData, null, 2),
-      config.paths.config,
-    );
-    moduleLogger.info(
-      {
-        teamsCount: Object.keys(configData.teamStructure).length,
-        analysisCount: Object.keys(configData.analyses || {}).length,
-      },
-      'Successfully migrated config to v4.0',
-    );
-
-    return true;
+  // Helper: Get analysis by ID (primary lookup)
+  getAnalysisById(analysisId) {
+    return this.configCache?.analyses?.[analysisId];
   }
 
-  // Migrate configuration from v4.0 to v4.1 (remove deprecated type field)
-  async migrateConfigToV4_1(configData) {
-    if (configData.version !== '4.0') {
-      return false;
-    }
+  // Helper: Get analysis by name (for display/search)
+  getAnalysisByName(name) {
+    const analyses = this.configCache?.analyses || {};
+    return Object.values(analyses).find((a) => a.name === name);
+  }
 
-    moduleLogger.info('Migrating config from v4.0 to v4.1 (remove type field)');
+  // Helper: Get analysis ID by name
+  getAnalysisIdByName(name) {
+    const analysis = this.getAnalysisByName(name);
+    return analysis?.id;
+  }
 
-    let removedCount = 0;
-    for (const analysis of Object.values(configData.analyses || {})) {
-      if ('type' in analysis) {
-        delete analysis.type;
-        removedCount++;
-      }
-    }
-
-    configData.version = '4.1';
-
-    // Save migrated config
-    await safeWriteFile(
-      this.configPath,
-      JSON.stringify(configData, null, 2),
-      config.paths.config,
-    );
-    moduleLogger.info(
-      {
-        analysisCount: Object.keys(configData.analyses || {}).length,
-        removedTypeFields: removedCount,
-      },
-      'Successfully migrated config to v4.1',
-    );
-
-    return true;
+  // Helper: Get AnalysisProcess instance by ID
+  getAnalysisProcess(analysisId) {
+    return this.analyses.get(analysisId);
   }
 
   async loadConfig() {
@@ -225,11 +172,10 @@ class AnalysisService {
       );
       const configData = JSON.parse(data);
 
-      // Run migrations in sequence
-      await this.migrateConfigToV4_0(configData);
-      await this.migrateConfigToV4_1(configData);
+      // Run migrations (handles v4.0 -> v4.1 -> v5.0)
+      await runAnalysisConfigMigrations(configData, this.configPath);
 
-      // Store the full config including departments
+      // Store the full config
       this.configCache = configData;
 
       // Don't load analyses here - they will be properly initialized
@@ -247,7 +193,7 @@ class AnalysisService {
       if (error.code === 'ENOENT') {
         moduleLogger.info('No existing config file, creating new one');
         this.configCache = {
-          version: '4.1',
+          version: getCurrentConfigVersion(),
           analyses: {},
           teamStructure: {},
         };
@@ -259,11 +205,10 @@ class AnalysisService {
     }
   }
 
-  async createAnalysisDirectories(analysisName) {
-    if (!isAnalysisNameSafe(analysisName)) {
-      throw new Error('Invalid analysis name');
-    }
-    const basePath = getAnalysisPath(analysisName);
+  // Create analysis directories using analysisId (UUID)
+  async createAnalysisDirectories(analysisId) {
+    // UUIDs are inherently safe (alphanumeric + hyphens)
+    const basePath = path.join(config.paths.analysis, analysisId);
     await Promise.all([
       safeMkdir(basePath, config.paths.analysis, { recursive: true }),
       safeMkdir(path.join(basePath, 'env'), config.paths.analysis, {
@@ -286,11 +231,14 @@ class AnalysisService {
     logger = moduleLogger,
   ) {
     const analysisName = path.parse(file.name).name;
-    const basePath = await this.createAnalysisDirectories(analysisName);
+    const analysisId = generateId();
+
+    // Create directories using analysisId
+    const basePath = await this.createAnalysisDirectories(analysisId);
     const filePath = path.join(basePath, 'index.js');
 
     await file.mv(filePath);
-    const analysis = new AnalysisProcess(analysisName, this);
+    const analysis = new AnalysisProcess(analysisId, analysisName, this);
 
     // Set team ID from parameter, or get Uncategorized team ID if not provided
     let teamId = targetDepartment;
@@ -301,7 +249,8 @@ class AnalysisService {
     }
     analysis.teamId = teamId;
 
-    this.analyses.set(analysisName, analysis);
+    // Store by analysisId
+    this.analyses.set(analysisId, analysis);
 
     const envFile = path.join(basePath, 'env', '.env');
     await safeWriteFile(envFile, '', config.paths.analysis, 'utf8');
@@ -316,19 +265,20 @@ class AnalysisService {
       this.configCache.teamStructure[teamId] = { items: [] };
     }
 
+    // In v5.0, team structure items use analysisId as the id (no analysisName)
     const newItem = {
-      id: uuidv4(),
+      id: analysisId,
       type: 'analysis',
-      analysisName: analysisName,
     };
 
     await teamService.addItemToTeamStructure(teamId, newItem, targetFolderId);
 
-    // Initialize version management
-    await this.initializeVersionManagement(analysisName);
+    // Initialize version management using analysisId
+    await this.initializeVersionManagement(analysisId);
 
     logger.info(
       {
+        analysisId,
         analysisName,
         teamId,
         targetFolderId,
@@ -336,19 +286,20 @@ class AnalysisService {
       'Analysis uploaded successfully',
     );
 
-    return { analysisName };
+    return { analysisId, analysisName };
   }
 
-  async initializeVersionManagement(analysisName) {
+  // Initialize version management using analysisId (for paths)
+  async initializeVersionManagement(analysisId) {
     const versionsDir = path.join(
       config.paths.analysis,
-      analysisName,
+      analysisId,
       'versions',
     );
     const metadataPath = path.join(versionsDir, 'metadata.json');
     const currentFilePath = path.join(
       config.paths.analysis,
-      analysisName,
+      analysisId,
       'index.js',
     );
 
@@ -385,14 +336,19 @@ class AnalysisService {
     );
   }
 
+  // Get all analyses - in v5.0 directories are named by analysisId (UUID)
   async getAllAnalyses(allowedTeamIds = null) {
     const analysisDirectories = await safeReaddir(config.paths.analysis);
 
     const results = await Promise.all(
-      analysisDirectories.map(async (dirName) => {
-        const indexPath = path.join(config.paths.analysis, dirName, 'index.js');
+      analysisDirectories.map(async (analysisId) => {
+        const indexPath = path.join(
+          config.paths.analysis,
+          analysisId,
+          'index.js',
+        );
         try {
-          const analysis = this.analyses.get(dirName);
+          const analysis = this.analyses.get(analysisId);
 
           // Early filtering: Skip analyses not in allowed teams (if filter is provided)
           if (
@@ -404,12 +360,9 @@ class AnalysisService {
 
           const stats = await safeStat(indexPath, config.paths.analysis);
 
-          if (!this.analyses.has(dirName)) {
-            this.analyses.set(dirName, analysis);
-          }
-
           return {
-            name: dirName,
+            id: analysisId,
+            name: analysis?.analysisName || analysisId,
             size: formatFileSize(stats.size),
             created: stats.birthtime,
             status: analysis?.status || 'stopped',
@@ -424,105 +377,51 @@ class AnalysisService {
       }),
     );
 
-    // Return as object to match SSE expectations
+    // Return as object keyed by analysisId to match SSE expectations
     const analysesObj = {};
     results.filter(Boolean).forEach((analysis) => {
-      analysesObj[analysis.name] = analysis;
+      analysesObj[analysis.id] = analysis;
     });
     return analysesObj;
   }
 
-  async renameAnalysis(analysisName, newFileName, logger = moduleLogger) {
+  // Rename analysis - in v5.0, only changes the name property, NOT the directory
+  // The directory stays as the analysisId (UUID)
+  async renameAnalysis(analysisId, newName, logger = moduleLogger) {
     try {
-      const analysis = this.analyses.get(analysisName);
+      const analysis = this.analyses.get(analysisId);
 
       if (!analysis) {
-        throw new Error(`Analysis '${analysisName}' not found`);
+        throw new Error(`Analysis '${analysisId}' not found`);
       }
 
+      const oldName = analysis.analysisName;
       const wasRunning = analysis && analysis.status === 'running';
 
       // If running, stop the analysis first
       if (wasRunning) {
-        await this.stopAnalysis(analysisName);
-        await this.addLog(
-          analysisName,
-          'Stopping analysis for rename operation',
-        );
+        await this.stopAnalysis(analysisId);
+        await this.addLog(analysisId, 'Stopping analysis for rename operation');
       }
 
-      // Rename the directory
-      const oldFilePath = path.join(config.paths.analysis, analysisName);
-      const newFilePath = path.join(config.paths.analysis, newFileName);
-
-      // Make sure the target directory doesn't already exist
-      try {
-        await fs.access(newFilePath);
-        throw new Error(
-          `Cannot rename: target '${newFileName}' already exists`,
-        );
-      } catch (err) {
-        if (err.code !== 'ENOENT') throw err;
-      }
-
-      // Perform the rename
-      await safeRename(oldFilePath, newFilePath, config.paths.analysis);
-
-      // Update the analysis object and maps
-      this.analyses.delete(analysisName);
-
-      // Use the setter to update the name (which updates the logFile path)
-      analysis.analysisName = newFileName;
-
-      // Add the analysis with the new name
-      this.analyses.set(newFileName, analysis);
-
-      // Update teamStructure to reference new analysis name
-      // This ensures both the analyses object key AND all teamStructure references are updated
-      const configData = await this.getConfig();
-      if (configData.teamStructure) {
-        const updateAnalysisNameInItems = (items) => {
-          for (const item of items) {
-            if (
-              item.type === 'analysis' &&
-              item.analysisName === analysisName
-            ) {
-              item.analysisName = newFileName;
-            }
-            if (item.type === 'folder' && item.items) {
-              updateAnalysisNameInItems(item.items);
-            }
-          }
-        };
-
-        // Update all team structures
-        for (const teamStructure of Object.values(configData.teamStructure)) {
-          if (teamStructure.items) {
-            updateAnalysisNameInItems(teamStructure.items);
-          }
-        }
-
-        // Update configCache with modified teamStructure
-        this.configCache = configData;
-      }
+      // In v5.0, rename only changes the name property - directory stays as analysisId
+      // Use the setter to update the name (logger is updated, paths stay the same)
+      analysis.analysisName = newName;
 
       // Log the rename operation
       await this.addLog(
-        newFileName,
-        `Analysis renamed from '${analysisName}' to '${newFileName}'`,
+        analysisId,
+        `Analysis renamed from '${oldName}' to '${newName}'`,
       );
 
       // Save updated config to analyses-config.json
       await this.saveConfig();
 
-      // Update department tracking properly through the department service
-      await teamService.ensureAnalysisHasTeam(newFileName);
-
       // If it was running before, restart it
       if (wasRunning) {
-        await this.runAnalysis(newFileName);
+        await this.runAnalysis(analysisId);
         await this.addLog(
-          newFileName,
+          analysisId,
           'Analysis restarted after rename operation',
         );
       }
@@ -530,28 +429,27 @@ class AnalysisService {
       return {
         success: true,
         restarted: wasRunning,
+        oldName,
+        newName,
       };
     } catch (error) {
-      logger.error(
-        { error, analysisName, newFileName },
-        'Error renaming analysis',
-      );
+      logger.error({ error, analysisId, newName }, 'Error renaming analysis');
       throw error;
     }
   }
 
-  async addLog(analysisName, message) {
-    const analysis = this.analyses.get(analysisName);
+  async addLog(analysisId, message) {
+    const analysis = this.analyses.get(analysisId);
     if (analysis) {
       await analysis.addLog(message);
     }
   }
 
   async getInitialLogs(
-    analysisName,
+    analysisId,
     limit = ANALYSIS_SERVICE.DEFAULT_LOGS_LIMIT,
   ) {
-    const analysis = this.analyses.get(analysisName);
+    const analysis = this.analyses.get(analysisId);
     if (!analysis) {
       return { logs: [], totalCount: 0 };
     }
@@ -563,16 +461,17 @@ class AnalysisService {
     };
   }
 
-  async clearLogs(analysisName, logger = moduleLogger) {
+  async clearLogs(analysisId, logger = moduleLogger) {
     try {
-      const analysis = this.analyses.get(analysisName);
+      const analysis = this.analyses.get(analysisId);
       if (!analysis) {
         throw new Error('Analysis not found');
       }
 
+      // In v5.0, paths use analysisId
       const logFilePath = path.join(
         config.paths.analysis,
-        analysisName,
+        analysisId,
         'logs',
         'analysis.log',
       );
@@ -589,19 +488,19 @@ class AnalysisService {
 
       return { success: true, message: 'Logs cleared successfully' };
     } catch (error) {
-      logger.error({ error, analysisName }, 'Error clearing logs');
+      logger.error({ error, analysisId }, 'Error clearing logs');
       throw new Error(`Failed to clear logs: ${error.message}`);
     }
   }
 
-  getProcessStatus(analysisName) {
-    const analysis = this.analyses.get(analysisName);
+  getProcessStatus(analysisId) {
+    const analysis = this.analyses.get(analysisId);
     return analysis ? analysis.status : 'stopped';
   }
 
   // Check if a start operation is currently in progress for an analysis
-  isStartInProgress(analysisName) {
-    return this.startLocks.has(analysisName);
+  isStartInProgress(analysisId) {
+    return this.startLocks.has(analysisId);
   }
 
   getStartOperationsInProgress() {
@@ -609,34 +508,34 @@ class AnalysisService {
   }
 
   // Start analysis with lock protection to prevent race conditions
-  async runAnalysis(analysisName, logger = moduleLogger) {
-    logger.info({ action: 'runAnalysis', analysisName }, 'Running analysis');
+  async runAnalysis(analysisId, logger = moduleLogger) {
+    logger.info({ action: 'runAnalysis', analysisId }, 'Running analysis');
 
     // Check if analysis exists
-    const analysis = this.analyses.get(analysisName);
+    const analysis = this.analyses.get(analysisId);
     if (!analysis) {
-      throw new Error(`Analysis ${analysisName} not found`);
+      throw new Error(`Analysis ${analysisId} not found`);
     }
 
     // Check if a start operation is already in progress for this analysis
-    if (this.startLocks.has(analysisName)) {
+    if (this.startLocks.has(analysisId)) {
       logger.info(
-        { action: 'runAnalysis', analysisName },
+        { action: 'runAnalysis', analysisId },
         'Start operation already in progress, waiting for completion',
       );
 
       // Wait for the ongoing operation to complete and return its result
       try {
-        const result = await this.startLocks.get(analysisName);
+        const result = await this.startLocks.get(analysisId);
         logger.info(
-          { action: 'runAnalysis', analysisName },
+          { action: 'runAnalysis', analysisId },
           'Concurrent start operation completed',
         );
         return result;
       } catch (error) {
         // If the concurrent operation failed, throw the error
         logger.error(
-          { action: 'runAnalysis', analysisName, error },
+          { action: 'runAnalysis', analysisId, error },
           'Concurrent start operation failed',
         );
         throw error;
@@ -646,7 +545,7 @@ class AnalysisService {
     // Check if analysis is already running (additional safety check)
     if (analysis.status === 'running' && analysis.process) {
       logger.info(
-        { action: 'runAnalysis', analysisName },
+        { action: 'runAnalysis', analysisId },
         'Analysis is already running',
       );
       return {
@@ -664,34 +563,34 @@ class AnalysisService {
         await this.saveConfig();
 
         logger.info(
-          { action: 'runAnalysis', analysisName, status: analysis.status },
+          { action: 'runAnalysis', analysisId, status: analysis.status },
           'Analysis started successfully',
         );
 
         return { success: true, status: analysis.status, logs: analysis.logs };
       } catch (error) {
         logger.error(
-          { action: 'runAnalysis', analysisName, error },
+          { action: 'runAnalysis', analysisId, error },
           'Failed to start analysis',
         );
         throw error;
       } finally {
         // Always remove the lock when the operation completes (success or failure)
-        this.startLocks.delete(analysisName);
+        this.startLocks.delete(analysisId);
       }
     })();
 
     // Store the promise as a lock before starting the operation
-    this.startLocks.set(analysisName, startPromise);
+    this.startLocks.set(analysisId, startPromise);
 
     // Return the promise result
     return startPromise;
   }
 
-  async stopAnalysis(analysisName, logger = moduleLogger) {
-    logger.info({ action: 'stopAnalysis', analysisName }, 'Stopping analysis');
+  async stopAnalysis(analysisId, logger = moduleLogger) {
+    logger.info({ action: 'stopAnalysis', analysisId }, 'Stopping analysis');
 
-    const analysis = this.analyses.get(analysisName);
+    const analysis = this.analyses.get(analysisId);
     if (!analysis) {
       throw new Error('Analysis not found');
     }
@@ -701,22 +600,19 @@ class AnalysisService {
     await analysis.stop();
     await this.saveConfig();
 
-    logger.info({ action: 'stopAnalysis', analysisName }, 'Analysis stopped');
+    logger.info({ action: 'stopAnalysis', analysisId }, 'Analysis stopped');
     return { success: true };
   }
 
   async getLogs(
-    analysisName,
+    analysisId,
     page = 1,
     limit = ANALYSIS_SERVICE.DEFAULT_PAGINATION_LIMIT,
     logger = moduleLogger,
   ) {
-    logger.info(
-      { action: 'getLogs', analysisName, page, limit },
-      'Getting logs',
-    );
+    logger.info({ action: 'getLogs', analysisId, page, limit }, 'Getting logs');
 
-    const analysis = this.analyses.get(analysisName);
+    const analysis = this.analyses.get(analysisId);
 
     if (!analysis) {
       throw new Error('Analysis not found');
@@ -736,18 +632,19 @@ class AnalysisService {
     }
 
     // For page 2+ or if no memory logs, always use file reading
-    return this.getLogsFromFile(analysisName, page, limit);
+    return this.getLogsFromFile(analysisId, page, limit);
   }
 
   async getLogsFromFile(
-    analysisName,
+    analysisId,
     page = 1,
     limit = ANALYSIS_SERVICE.DEFAULT_PAGINATION_LIMIT,
   ) {
     try {
+      // In v5.0, paths use analysisId
       const logFile = path.join(
         config.paths.analysis,
-        analysisName,
+        analysisId,
         'logs',
         'analysis.log',
       );
@@ -839,9 +736,10 @@ class AnalysisService {
     });
   }
 
-  async deleteAnalysis(analysisName, logger = moduleLogger) {
-    const analysis = this.analyses.get(analysisName);
+  async deleteAnalysis(analysisId, logger = moduleLogger) {
+    const analysis = this.analyses.get(analysisId);
     const teamId = analysis?.teamId;
+    const analysisName = analysis?.analysisName;
 
     if (analysis) {
       await analysis.stop();
@@ -849,7 +747,8 @@ class AnalysisService {
       await analysis.cleanup();
     }
 
-    const analysisPath = path.join(config.paths.analysis, analysisName);
+    // In v5.0, directory is named by analysisId
+    const analysisPath = path.join(config.paths.analysis, analysisId);
     try {
       // This will delete the entire analysis directory including versions folder
       await fs.rm(analysisPath, { recursive: true, force: true });
@@ -860,10 +759,10 @@ class AnalysisService {
     }
 
     // Remove from in-memory map
-    this.analyses.delete(analysisName);
+    this.analyses.delete(analysisId);
 
     // Remove from team structure BEFORE saving config
-    // This ensures the teamStructure is updated but doesn't call updateConfig
+    // In v5.0, team structure items use analysisId as the id
     if (teamId) {
       const configData = await this.getConfig();
 
@@ -871,10 +770,8 @@ class AnalysisService {
         const removeFromArray = (items) => {
           for (let i = items.length - 1; i >= 0; i--) {
             const item = items[i];
-            if (
-              item.type === 'analysis' &&
-              item.analysisName === analysisName
-            ) {
+            // In v5.0, analysis items have id === analysisId
+            if (item.type === 'analysis' && item.id === analysisId) {
               items.splice(i, 1);
               return true;
             }
@@ -898,6 +795,7 @@ class AnalysisService {
 
     logger.info(
       {
+        analysisId,
         analysisName,
         teamId,
       },
@@ -913,27 +811,24 @@ class AnalysisService {
     // Initialize department service after config is loaded
     await teamService.initialize(this);
 
+    // In v5.0, directories are named by analysisId (UUID)
     const analysisDirectories = await safeReaddir(config.paths.analysis);
     await Promise.all(
-      analysisDirectories.map(async (dirName) => {
+      analysisDirectories.map(async (analysisId) => {
         try {
           const indexPath = path.join(
             config.paths.analysis,
-            dirName,
+            analysisId,
             'index.js',
           );
           const stats = await safeStat(indexPath, config.paths.analysis);
           if (stats.isFile()) {
-            await this.initializeAnalysis(
-              dirName,
-              configuration.analyses?.[dirName],
-            );
+            // Get config entry by analysisId
+            const analysisConfig = configuration.analyses?.[analysisId];
+            await this.initializeAnalysis(analysisId, analysisConfig);
           }
         } catch (error) {
-          moduleLogger.error(
-            { error, analysisName: dirName },
-            'Error loading analysis',
-          );
+          moduleLogger.error({ error, analysisId }, 'Error loading analysis');
         }
       }),
     );
@@ -945,13 +840,10 @@ class AnalysisService {
     this.startHealthCheck();
   }
 
-  async getAnalysisContent(analysisName, logger = moduleLogger) {
+  async getAnalysisContent(analysisId, logger = moduleLogger) {
     try {
-      const filePath = path.join(
-        config.paths.analysis,
-        analysisName,
-        'index.js',
-      );
+      // In v5.0, paths use analysisId
+      const filePath = path.join(config.paths.analysis, analysisId, 'index.js');
       const content = await safeReadFile(
         filePath,
         config.paths.analysis,
@@ -959,22 +851,23 @@ class AnalysisService {
       );
       return content;
     } catch (error) {
-      logger.error({ error, analysisName }, 'Error reading analysis content');
+      logger.error({ error, analysisId }, 'Error reading analysis content');
       throw new Error(`Failed to get analysis content: ${error.message}`);
     }
   }
 
   // Save a version of the analysis before updating (only if content is truly new)
-  async saveVersion(analysisName) {
+  async saveVersion(analysisId) {
+    // In v5.0, paths use analysisId
     const versionsDir = path.join(
       config.paths.analysis,
-      analysisName,
+      analysisId,
       'versions',
     );
     const metadataPath = path.join(versionsDir, 'metadata.json');
     const currentFilePath = path.join(
       config.paths.analysis,
-      analysisName,
+      analysisId,
       'index.js',
     );
 
@@ -1074,23 +967,24 @@ class AnalysisService {
     return newVersionNumber;
   }
 
-  async getVersions(analysisName, options = {}) {
+  async getVersions(analysisId, options = {}) {
     const { page = 1, limit = 10, logger = moduleLogger } = options;
 
     logger.info(
-      { action: 'getVersions', analysisName, page, limit },
+      { action: 'getVersions', analysisId, page, limit },
       'Getting versions',
     );
 
+    // In v5.0, paths use analysisId
     const metadataPath = path.join(
       config.paths.analysis,
-      analysisName,
+      analysisId,
       'versions',
       'metadata.json',
     );
     const currentFilePath = path.join(
       config.paths.analysis,
-      analysisName,
+      analysisId,
       'index.js',
     );
 
@@ -1120,7 +1014,7 @@ class AnalysisService {
           try {
             const versionFilePath = path.join(
               config.paths.analysis,
-              analysisName,
+              analysisId,
               'versions',
               `v${version.version}.js`,
             );
@@ -1189,26 +1083,27 @@ class AnalysisService {
     }
   }
 
-  async rollbackToVersion(analysisName, version, logger = moduleLogger) {
+  async rollbackToVersion(analysisId, version, logger = moduleLogger) {
     logger.info(
-      { action: 'rollbackToVersion', analysisName, version },
+      { action: 'rollbackToVersion', analysisId, version },
       'Rolling back to version',
     );
 
-    const analysis = this.analyses.get(analysisName);
+    const analysis = this.analyses.get(analysisId);
     if (!analysis) {
-      throw new Error(`Analysis ${analysisName} not found`);
+      throw new Error(`Analysis ${analysisId} not found`);
     }
 
+    // In v5.0, paths use analysisId
     const versionsDir = path.join(
       config.paths.analysis,
-      analysisName,
+      analysisId,
       'versions',
     );
     const versionFilePath = path.join(versionsDir, `v${version}.js`);
     const currentFilePath = path.join(
       config.paths.analysis,
-      analysisName,
+      analysisId,
       'index.js',
     );
     const metadataPath = path.join(versionsDir, 'metadata.json');
@@ -1224,15 +1119,15 @@ class AnalysisService {
 
     // Stop analysis if running
     if (wasRunning) {
-      await this.stopAnalysis(analysisName);
+      await this.stopAnalysis(analysisId);
       await this.addLog(
-        analysisName,
+        analysisId,
         `Analysis stopped to rollback to version ${version}`,
       );
     }
 
     // Save current content before rollback if it's different from all existing versions
-    await this.saveVersion(analysisName);
+    await this.saveVersion(analysisId);
 
     // Replace current file with the target version content
     const versionContent = await safeReadFile(
@@ -1248,7 +1143,7 @@ class AnalysisService {
     );
 
     // Update metadata to track current version after rollback
-    const metadata = await this.getVersions(analysisName);
+    const metadata = await this.getVersions(analysisId);
     metadata.currentVersion = version;
     await safeWriteFile(
       metadataPath,
@@ -1258,23 +1153,23 @@ class AnalysisService {
     );
 
     // Clear logs
-    await this.clearLogs(analysisName);
-    await this.addLog(analysisName, `Rolled back to version ${version}`);
+    await this.clearLogs(analysisId);
+    await this.addLog(analysisId, `Rolled back to version ${version}`);
 
     // Restart if it was running
     if (wasRunning) {
-      await this.runAnalysis(analysisName);
+      await this.runAnalysis(analysisId);
       // Small delay to ensure the restart log is visible
       await new Promise((resolve) =>
         setTimeout(resolve, ANALYSIS_SERVICE.SMALL_DELAY_MS),
       );
-      await this.addLog(analysisName, 'Analysis restarted after rollback');
+      await this.addLog(analysisId, 'Analysis restarted after rollback');
     }
 
     logger.info(
       {
         action: 'rollbackToVersion',
-        analysisName,
+        analysisId,
         version,
         restarted: wasRunning,
       },
@@ -1287,17 +1182,18 @@ class AnalysisService {
     };
   }
 
-  async getVersionContent(analysisName, version, logger = moduleLogger) {
+  async getVersionContent(analysisId, version, logger = moduleLogger) {
     logger.info(
-      { action: 'getVersionContent', analysisName, version },
+      { action: 'getVersionContent', analysisId, version },
       'Getting version content',
     );
 
+    // In v5.0, paths use analysisId
     if (version === 0) {
       // Return current version
       const currentFilePath = path.join(
         config.paths.analysis,
-        analysisName,
+        analysisId,
         'index.js',
       );
       return safeReadFile(currentFilePath, config.paths.analysis, 'utf8');
@@ -1305,7 +1201,7 @@ class AnalysisService {
 
     const versionFilePath = path.join(
       config.paths.analysis,
-      analysisName,
+      analysisId,
       'versions',
       `v${version}.js`,
     );
@@ -1319,12 +1215,12 @@ class AnalysisService {
     }
   }
 
-  async updateAnalysis(analysisName, updates, logger = moduleLogger) {
+  async updateAnalysis(analysisId, updates, logger = moduleLogger) {
     try {
-      const analysis = this.analyses.get(analysisName);
+      const analysis = this.analyses.get(analysisId);
 
       if (!analysis) {
-        throw new Error(`Analysis ${analysisName} not found`);
+        throw new Error(`Analysis ${analysisId} not found`);
       }
 
       // If team is being updated, validate it exists
@@ -1340,16 +1236,17 @@ class AnalysisService {
 
       // If running and content is being updated, stop the analysis first
       if (wasRunning && updates.content) {
-        await this.stopAnalysis(analysisName);
-        await this.addLog(analysisName, 'Analysis stopped to update content');
+        await this.stopAnalysis(analysisId);
+        await this.addLog(analysisId, 'Analysis stopped to update content');
       }
 
       // Save current version before updating content (only if current content is truly new)
       if (updates.content) {
-        savedVersion = await this.saveVersion(analysisName);
+        savedVersion = await this.saveVersion(analysisId);
+        // In v5.0, paths use analysisId
         const filePath = path.join(
           config.paths.analysis,
-          analysisName,
+          analysisId,
           'index.js',
         );
         await safeWriteFile(
@@ -1364,12 +1261,12 @@ class AnalysisService {
           // We saved a new version, currentVersion is already updated by saveVersion
         } else {
           // No new version was saved, check if the new content matches any existing version
-          const metadata = await this.getVersions(analysisName);
+          const metadata = await this.getVersions(analysisId);
           for (const version of metadata.versions) {
             try {
               const versionFilePath = path.join(
                 config.paths.analysis,
-                analysisName,
+                analysisId,
                 'versions',
                 `v${version.version}.js`,
               );
@@ -1383,7 +1280,7 @@ class AnalysisService {
                 metadata.currentVersion = version.version;
                 const metadataPath = path.join(
                   config.paths.analysis,
-                  analysisName,
+                  analysisId,
                   'versions',
                   'metadata.json',
                 );
@@ -1404,17 +1301,16 @@ class AnalysisService {
 
       // Update analysis properties
       Object.assign(analysis, updates);
-      this.analyses.set(analysisName, analysis);
       await this.saveConfig();
 
       // If it was running before and content was updated, restart it
       if (wasRunning && updates.content) {
-        await this.runAnalysis(analysisName);
+        await this.runAnalysis(analysisId);
         const logMessage =
           savedVersion !== null
             ? `Analysis updated successfully (previous version saved as v${savedVersion})`
             : 'Analysis updated successfully (no version saved - content unchanged)';
-        await this.addLog(analysisName, logMessage);
+        await this.addLog(analysisId, logMessage);
       }
 
       return {
@@ -1423,23 +1319,24 @@ class AnalysisService {
         savedVersion: savedVersion,
       };
     } catch (error) {
-      logger.error({ error, analysisName, updates }, 'Error updating analysis');
+      logger.error({ error, analysisId, updates }, 'Error updating analysis');
       throw new Error(`Failed to update analysis: ${error.message}`);
     }
   }
 
   // Get filtered logs for download based on time range
   // Logs are stored in NDJSON format and converted to human-readable format: [timestamp] message
-  async getLogsForDownload(analysisName, timeRange, logger = moduleLogger) {
+  async getLogsForDownload(analysisId, timeRange, logger = moduleLogger) {
     logger.info(
-      { action: 'getLogsForDownload', analysisName, timeRange },
+      { action: 'getLogsForDownload', analysisId, timeRange },
       'Getting logs for download',
     );
 
     try {
+      // In v5.0, paths use analysisId
       const logFile = path.join(
         config.paths.analysis,
-        analysisName,
+        analysisId,
         'logs',
         'analysis.log',
       );
@@ -1499,24 +1396,20 @@ class AnalysisService {
       return { logFile, content: filteredLogs.join('\n') };
     } catch (error) {
       if (error.code === 'ENOENT') {
-        throw new Error(`Log file not found for analysis: ${analysisName}`);
+        throw new Error(`Log file not found for analysis: ${analysisId}`);
       }
       throw error;
     }
   }
 
-  async getEnvironment(analysisName, logger = moduleLogger) {
+  async getEnvironment(analysisId, logger = moduleLogger) {
     logger.info(
-      { action: 'getEnvironment', analysisName },
+      { action: 'getEnvironment', analysisId },
       'Getting environment variables',
     );
 
-    const envFile = path.join(
-      config.paths.analysis,
-      analysisName,
-      'env',
-      '.env',
-    );
+    // In v5.0, paths use analysisId
+    const envFile = path.join(config.paths.analysis, analysisId, 'env', '.env');
 
     try {
       const envContent = await safeReadFile(
@@ -1540,24 +1433,17 @@ class AnalysisService {
     }
   }
 
-  async updateEnvironment(analysisName, env, logger = moduleLogger) {
-    const envFile = path.join(
-      config.paths.analysis,
-      analysisName,
-      'env',
-      '.env',
-    );
-    const analysis = this.analyses.get(analysisName);
+  async updateEnvironment(analysisId, env, logger = moduleLogger) {
+    // In v5.0, paths use analysisId
+    const envFile = path.join(config.paths.analysis, analysisId, 'env', '.env');
+    const analysis = this.analyses.get(analysisId);
     const wasRunning = analysis && analysis.status === 'running';
 
     try {
       // If running, stop the analysis first
       if (wasRunning) {
-        await this.stopAnalysis(analysisName);
-        await this.addLog(
-          analysisName,
-          'Analysis stopped to update environment',
-        );
+        await this.stopAnalysis(analysisId);
+        await this.addLog(analysisId, 'Analysis stopped to update environment');
       }
 
       const envContent = Object.entries(env)
@@ -1568,8 +1454,8 @@ class AnalysisService {
 
       // If it was running before, restart it
       if (wasRunning) {
-        await this.runAnalysis(analysisName);
-        await this.addLog(analysisName, 'Analysis updated successfully');
+        await this.runAnalysis(analysisId);
+        await this.addLog(analysisId, 'Analysis updated successfully');
       }
 
       return {
@@ -1577,12 +1463,14 @@ class AnalysisService {
         restarted: wasRunning,
       };
     } catch (error) {
-      logger.error({ error, analysisName }, 'Error updating environment');
+      logger.error({ error, analysisId }, 'Error updating environment');
       throw new Error(`Failed to update environment: ${error.message}`);
     }
   }
 
-  async initializeAnalysis(analysisName, analysisConfig = {}) {
+  // Initialize an analysis from config
+  // In v5.0, analysisId is the directory name (UUID), analysisConfig contains the name property
+  async initializeAnalysis(analysisId, analysisConfig = {}) {
     const defaultConfig = {
       enabled: false,
       status: 'stopped',
@@ -1592,7 +1480,10 @@ class AnalysisService {
     };
 
     const fullConfig = { ...defaultConfig, ...analysisConfig };
-    const analysis = new AnalysisProcess(analysisName, this);
+    // Get the display name from config, fallback to analysisId if not found
+    const analysisName = fullConfig.name || analysisId;
+    // AnalysisProcess constructor: (analysisId, analysisName, service)
+    const analysis = new AnalysisProcess(analysisId, analysisName, this);
 
     Object.assign(analysis, {
       enabled: fullConfig.enabled,
@@ -1606,14 +1497,15 @@ class AnalysisService {
     // Initialize log state (this replaces the old log loading logic)
     await analysis.initializeLogState();
 
-    this.analyses.set(analysisName, analysis);
+    // Store by analysisId
+    this.analyses.set(analysisId, analysis);
   }
 
   getAnalysesThatShouldBeRunning() {
     const shouldBeRunning = [];
-    this.analyses.forEach((analysis, name) => {
+    this.analyses.forEach((analysis, analysisId) => {
       if (analysis.intendedState === 'running') {
-        shouldBeRunning.push(name);
+        shouldBeRunning.push(analysisId);
       }
     });
     return shouldBeRunning;
@@ -1711,18 +1603,18 @@ class AnalysisService {
   collectAnalysesToStart(shouldBeRunning, results) {
     const toStart = [];
 
-    for (const analysisName of shouldBeRunning) {
-      const analysis = this.analyses.get(analysisName);
+    for (const analysisId of shouldBeRunning) {
+      const analysis = this.analyses.get(analysisId);
       if (!analysis) continue;
 
-      results.attempted.push(analysisName);
+      results.attempted.push(analysisId);
       const hasLiveProcess =
         analysis.process && !analysis.process.killed && analysis.process.pid;
 
       if (analysis.status === 'running' && hasLiveProcess) {
-        results.alreadyRunning.push(analysisName);
+        results.alreadyRunning.push(analysisId);
         moduleLogger.debug(
-          `${analysisName} is already running with PID ${analysis.process.pid}`,
+          `${analysisId} is already running with PID ${analysis.process.pid}`,
         );
         continue;
       }
@@ -1730,13 +1622,13 @@ class AnalysisService {
       // Reset status if process is dead but marked as running
       if (analysis.status === 'running' && !hasLiveProcess) {
         moduleLogger.info(
-          `${analysisName} status shows running but no live process found - resetting status and restarting`,
+          `${analysisId} status shows running but no live process found - resetting status and restarting`,
         );
         analysis.status = 'stopped';
         analysis.process = null;
       }
 
-      toStart.push({ name: analysisName, analysis });
+      toStart.push({ analysisId, analysis });
     }
 
     return toStart;
@@ -1773,8 +1665,8 @@ class AnalysisService {
 
   async processBatch(batch, results) {
     // Start all analyses in batch concurrently
-    const startPromises = batch.map(({ name, analysis }) =>
-      this.startAnalysisWithLogging(name, analysis, results),
+    const startPromises = batch.map(({ analysisId, analysis }) =>
+      this.startAnalysisWithLogging(analysisId, analysis, results),
     );
 
     const startResults = await Promise.all(startPromises);
@@ -1782,42 +1674,45 @@ class AnalysisService {
     // Wait for connections
     const connectionPromises = startResults
       .filter((r) => r.started)
-      .map(({ name, analysis }) =>
-        this.verifyAnalysisConnection(name, analysis, results),
+      .map(({ analysisId, analysis }) =>
+        this.verifyAnalysisConnection(analysisId, analysis, results),
       );
 
     await Promise.all(connectionPromises);
   }
 
-  async startAnalysisWithLogging(name, analysis, results) {
+  async startAnalysisWithLogging(analysisId, analysis, results) {
     try {
-      moduleLogger.info(`Starting ${name}`);
+      moduleLogger.info(`Starting ${analysisId}`);
       await analysis.start();
-      results.succeeded.push(name);
-      await this.addLog(name, 'Restarted during intended state verification');
-      return { name, analysis, started: true };
+      results.succeeded.push(analysisId);
+      await this.addLog(
+        analysisId,
+        'Restarted during intended state verification',
+      );
+      return { analysisId, analysis, started: true };
     } catch (error) {
       moduleLogger.error(
-        { err: error, analysisName: name },
+        { err: error, analysisId },
         'Failed to start analysis',
       );
-      results.failed.push({ name, error: error.message });
-      return { name, analysis, started: false, error };
+      results.failed.push({ analysisId, error: error.message });
+      return { analysisId, analysis, started: false, error };
     }
   }
 
-  async verifyAnalysisConnection(name, analysis, results) {
+  async verifyAnalysisConnection(analysisId, analysis, results) {
     const connected = await this.waitForAnalysisConnection(
       analysis,
       ANALYSIS_SERVICE.CONNECTION_TIMEOUT_MS,
     );
 
     if (connected) {
-      moduleLogger.info(`${name} connected successfully`);
-      results.connected.push(name);
+      moduleLogger.info(`${analysisId} connected successfully`);
+      results.connected.push(analysisId);
     } else {
-      moduleLogger.warn(`${name} connection timeout (proceeding anyway)`);
-      results.connectionTimeouts.push(name);
+      moduleLogger.warn(`${analysisId} connection timeout (proceeding anyway)`);
+      results.connectionTimeouts.push(analysisId);
     }
   }
 
@@ -1837,23 +1732,23 @@ class AnalysisService {
 
       try {
         // Check each analysis that should be running
-        for (const [analysisName, analysis] of this.analyses) {
+        for (const [analysisId, analysis] of this.analyses) {
           if (
             analysis.intendedState === 'running' &&
             analysis.status !== 'running'
           ) {
             moduleLogger.warn(
-              `Health check: ${analysisName} should be running but is ${analysis.status}. Attempting restart.`,
+              `Health check: ${analysisId} should be running but is ${analysis.status}. Attempting restart.`,
             );
 
             try {
               await analysis.start();
               await this.addLog(
-                analysisName,
+                analysisId,
                 'Restarted by periodic health check',
               );
               moduleLogger.info(
-                `Health check: Successfully restarted ${analysisName}`,
+                `Health check: Successfully restarted ${analysisId}`,
               );
 
               // Reset restart attempts on successful health check restart
@@ -1863,7 +1758,7 @@ class AnalysisService {
               }
             } catch (error) {
               moduleLogger.error(
-                { err: error, analysisName },
+                { err: error, analysisId },
                 'Health check: Failed to restart analysis',
               );
             }

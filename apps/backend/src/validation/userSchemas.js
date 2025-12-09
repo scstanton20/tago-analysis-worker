@@ -78,18 +78,6 @@ export const userValidationSchemas = {
   },
 
   /**
-   * POST /api/users/set-initial-password - Set initial password for first-time users
-   */
-  setInitialPassword: {
-    body: z.object({
-      newPassword: z
-        .string()
-        .min(6, 'Password must be at least 6 characters long')
-        .regex(/[A-Z]/, 'Password must contain at least one uppercase letter'),
-    }),
-  },
-
-  /**
    * POST /api/users/force-logout/:userId - Force logout a user
    */
   forceLogout: {

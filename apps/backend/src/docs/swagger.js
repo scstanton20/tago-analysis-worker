@@ -338,18 +338,15 @@ This API provides real-time updates via **Server-Sent Events (SSE)** for:
           properties: {
             id: {
               type: 'string',
-              description: 'Unique item identifier (UUID)',
+              description: 'Analysis ID - references an analysis in the system',
             },
             type: {
               type: 'string',
               enum: ['analysis'],
               description: 'Item type',
             },
-            analysisName: {
-              type: 'string',
-              description: 'Name of the analysis file',
-            },
           },
+          required: ['id', 'type'],
         },
         TeamStructure: {
           type: 'object',

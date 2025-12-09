@@ -19,7 +19,6 @@ import {
   Center,
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
-import { SecondaryButton } from '../../components/global/buttons';
 import {
   IconDownload,
   IconPlayerPlay,
@@ -48,7 +47,7 @@ const VERSIONS_PER_PAGE = 10;
  * @param {Function} props.innerProps.onVersionRollback - Callback after version rollback
  * @returns {JSX.Element} Modal content
  */
-function VersionManagementModalContent({ id, innerProps }) {
+function VersionManagementModalContent({ innerProps }) {
   const { analysis, onVersionRollback } = innerProps;
   const [versionData, setVersionData] = useState({
     versions: [],
@@ -74,7 +73,7 @@ function VersionManagementModalContent({ id, innerProps }) {
   // Load versions for a specific page (with caching)
   const loadVersions = useCallback(
     async (page = 1, skipCache = false) => {
-      if (!analysis?.name) return;
+      if (!analysis?.id) return;
 
       // Check cache first
       if (!skipCache && pageCache.current.has(page)) {
@@ -85,7 +84,7 @@ function VersionManagementModalContent({ id, innerProps }) {
       }
 
       // Fetch from API
-      const data = await analysisService.getVersions(analysis.name, {
+      const data = await analysisService.getVersions(analysis.id, {
         page,
         limit: VERSIONS_PER_PAGE,
       });
@@ -96,7 +95,7 @@ function VersionManagementModalContent({ id, innerProps }) {
       setVersionData(data);
       setCurrentPage(page);
     },
-    [analysis?.name],
+    [analysis?.id],
   );
 
   // Load initial versions when component mounts or analysis changes
@@ -106,7 +105,7 @@ function VersionManagementModalContent({ id, innerProps }) {
       clearCache();
       await loadVersions(1);
     },
-    { deps: [analysis?.name], onCleanup: clearCache },
+    { deps: [analysis?.id], onCleanup: clearCache },
   );
 
   // Handle page change
@@ -138,7 +137,7 @@ function VersionManagementModalContent({ id, innerProps }) {
         setRollbackLoading(version);
         try {
           await notificationAPI.executeWithNotification(
-            analysisService.rollbackToVersion(analysis.name, version),
+            analysisService.rollbackToVersion(analysis.id, version),
             {
               loading: `Rolling back ${analysis.name} to version ${version}...`,
               success: `Successfully rolled back to version ${version}`,
@@ -164,7 +163,7 @@ function VersionManagementModalContent({ id, innerProps }) {
   const handleDownloadVersion = async (version) => {
     await downloadOperation.execute(async () => {
       await notificationAPI.executeWithNotification(
-        analysisService.downloadAnalysis(analysis.name, version),
+        analysisService.downloadAnalysis(analysis.id, analysis.name, version),
         {
           loading: `Downloading version ${version} of ${analysis.name}...`,
           success: 'Version downloaded successfully',
@@ -231,7 +230,12 @@ function VersionManagementModalContent({ id, innerProps }) {
         </FormAlert>
 
         {loadVersionsOperation.loading ? (
-          <LoadingState loading={true} minHeight={200} />
+          <LoadingState
+            loading={true}
+            skeleton
+            pattern="table"
+            skeletonCount={5}
+          />
         ) : versionData.totalCount === 0 ? (
           <FormAlert
             icon={<IconInfoCircle size={16} />}
@@ -262,12 +266,16 @@ function VersionManagementModalContent({ id, innerProps }) {
 
             <Divider />
 
-            <LoadingState
-              loading={isPageLoading}
-              minHeight={480}
-              style={{ overflow: 'hidden' }}
-            >
-              <Box style={{ height: 480 }}>
+            {isPageLoading ? (
+              <LoadingState
+                loading={true}
+                skeleton
+                pattern="table"
+                skeletonCount={VERSIONS_PER_PAGE}
+                style={{ minHeight: 480 }}
+              />
+            ) : (
+              <Box style={{ minHeight: 480 }}>
                 <Table highlightOnHover verticalSpacing="sm" layout="fixed">
                   <Table.Thead>
                     <Table.Tr>
@@ -379,7 +387,7 @@ function VersionManagementModalContent({ id, innerProps }) {
                   </Table.Tbody>
                 </Table>
               </Box>
-            </LoadingState>
+            )}
 
             {versionData.totalPages > 1 && (
               <Center mt="md">
@@ -394,12 +402,6 @@ function VersionManagementModalContent({ id, innerProps }) {
             )}
           </>
         )}
-
-        <Group justify="flex-end" mt="md">
-          <SecondaryButton onClick={() => modals.close(id)}>
-            Close
-          </SecondaryButton>
-        </Group>
       </Stack>
     </Box>
   );

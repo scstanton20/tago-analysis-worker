@@ -476,28 +476,32 @@ describe('TeamService', () => {
     });
 
     it('should move analysis to different team', async () => {
+      const analysisId = 'test-analysis-uuid-123';
+
       executeQuery.mockReturnValue({ id: 'team-2', name: 'Team 2' });
 
       mockAnalysisService.getConfig.mockResolvedValue({
+        version: '5.0',
         analyses: {
-          'test-analysis': { teamId: 'team-1', enabled: true },
+          [analysisId]: {
+            id: analysisId,
+            name: 'test-analysis',
+            teamId: 'team-1',
+            enabled: true,
+          },
         },
         teamStructure: {
           'team-1': {
-            items: [
-              { id: '1', type: 'analysis', analysisName: 'test-analysis' },
-            ],
+            items: [{ id: analysisId, type: 'analysis' }],
           },
           'team-2': { items: [] },
         },
       });
 
-      const result = await teamService.moveAnalysisToTeam(
-        'test-analysis',
-        'team-2',
-      );
+      const result = await teamService.moveAnalysisToTeam(analysisId, 'team-2');
 
-      expect(result.analysis).toBe('test-analysis');
+      expect(result.analysisId).toBe(analysisId);
+      expect(result.analysisName).toBe('test-analysis');
       expect(result.from).toBe('team-1');
       expect(result.to).toBe('team-2');
       expect(mockAnalysisService.updateConfig).toHaveBeenCalled();
@@ -507,38 +511,51 @@ describe('TeamService', () => {
       mockAnalysisService.getConfig.mockResolvedValue({ analyses: {} });
 
       await expect(
-        teamService.moveAnalysisToTeam('nonexistent', 'team-1'),
-      ).rejects.toThrow('Analysis nonexistent not found');
+        teamService.moveAnalysisToTeam('nonexistent-uuid', 'team-1'),
+      ).rejects.toThrow('Analysis nonexistent-uuid not found');
     });
 
     it('should throw error if target team not found', async () => {
+      const analysisId = 'test-analysis-uuid-123';
+
       executeQuery.mockReturnValue(null);
 
       mockAnalysisService.getConfig.mockResolvedValue({
+        version: '5.0',
         analyses: {
-          'test-analysis': { teamId: 'team-1' },
+          [analysisId]: {
+            id: analysisId,
+            name: 'test-analysis',
+            teamId: 'team-1',
+          },
         },
       });
 
       await expect(
-        teamService.moveAnalysisToTeam('test-analysis', 'nonexistent'),
+        teamService.moveAnalysisToTeam(analysisId, 'nonexistent'),
       ).rejects.toThrow('Team nonexistent not found');
     });
 
     it('should skip move if already in target team', async () => {
+      const analysisId = 'test-analysis-uuid-123';
+
       executeQuery.mockReturnValue({ id: 'team-1', name: 'Team 1' });
 
       mockAnalysisService.getConfig.mockResolvedValue({
+        version: '5.0',
         analyses: {
-          'test-analysis': { teamId: 'team-1' },
+          [analysisId]: {
+            id: analysisId,
+            name: 'test-analysis',
+            teamId: 'team-1',
+          },
         },
       });
 
-      const result = await teamService.moveAnalysisToTeam(
-        'test-analysis',
-        'team-1',
-      );
+      const result = await teamService.moveAnalysisToTeam(analysisId, 'team-1');
 
+      expect(result.analysisId).toBe(analysisId);
+      expect(result.analysisName).toBe('test-analysis');
       expect(result.from).toBe('team-1');
       expect(result.to).toBe('team-1');
     });
@@ -651,8 +668,8 @@ describe('TeamService', () => {
     describe('traverseTree', () => {
       it('should traverse items and call visitor for each', () => {
         const items = [
-          { id: 'item-1', type: 'analysis', analysisName: 'a1' },
-          { id: 'item-2', type: 'analysis', analysisName: 'a2' },
+          { id: 'item-1', type: 'analysis' },
+          { id: 'item-2', type: 'analysis' },
         ];
 
         const visited = [];
@@ -666,9 +683,9 @@ describe('TeamService', () => {
 
       it('should stop traversal when visitor returns non-null value', () => {
         const items = [
-          { id: 'item-1', type: 'analysis', analysisName: 'a1' },
-          { id: 'item-2', type: 'analysis', analysisName: 'a2' },
-          { id: 'item-3', type: 'analysis', analysisName: 'a3' },
+          { id: 'item-1', type: 'analysis' },
+          { id: 'item-2', type: 'analysis' },
+          { id: 'item-3', type: 'analysis' },
         ];
 
         const result = teamService.traverseTree(items, (item) => {
@@ -685,13 +702,11 @@ describe('TeamService', () => {
             id: 'folder-1',
             type: 'folder',
             items: [
-              { id: 'nested-1', type: 'analysis', analysisName: 'a1' },
+              { id: 'nested-1', type: 'analysis' },
               {
                 id: 'folder-2',
                 type: 'folder',
-                items: [
-                  { id: 'deeply-nested', type: 'analysis', analysisName: 'a2' },
-                ],
+                items: [{ id: 'deeply-nested', type: 'analysis' }],
               },
             ],
           },
@@ -716,7 +731,7 @@ describe('TeamService', () => {
           {
             id: 'folder-1',
             type: 'folder',
-            items: [{ id: 'child-1', type: 'analysis', analysisName: 'a1' }],
+            items: [{ id: 'child-1', type: 'analysis' }],
           },
         ];
 
@@ -732,7 +747,7 @@ describe('TeamService', () => {
       });
 
       it('should provide null parent for root items', () => {
-        const items = [{ id: 'item-1', type: 'analysis', analysisName: 'a1' }];
+        const items = [{ id: 'item-1', type: 'analysis' }];
 
         let capturedParent = undefined;
         teamService.traverseTree(items, (item, parent) => {
@@ -745,9 +760,9 @@ describe('TeamService', () => {
 
       it('should provide index in visitor callback', () => {
         const items = [
-          { id: 'item-1', type: 'analysis', analysisName: 'a1' },
-          { id: 'item-2', type: 'analysis', analysisName: 'a2' },
-          { id: 'item-3', type: 'analysis', analysisName: 'a3' },
+          { id: 'item-1', type: 'analysis' },
+          { id: 'item-2', type: 'analysis' },
+          { id: 'item-3', type: 'analysis' },
         ];
 
         const indices = [];
@@ -761,8 +776,8 @@ describe('TeamService', () => {
 
       it('should return null if no visitor returns value', () => {
         const items = [
-          { id: 'item-1', type: 'analysis', analysisName: 'a1' },
-          { id: 'item-2', type: 'analysis', analysisName: 'a2' },
+          { id: 'item-1', type: 'analysis' },
+          { id: 'item-2', type: 'analysis' },
         ];
 
         const result = teamService.traverseTree(items, () => null);
@@ -780,8 +795,8 @@ describe('TeamService', () => {
 
       it('should not confuse undefined return with null', () => {
         const items = [
-          { id: 'item-1', type: 'analysis', analysisName: 'a1' },
-          { id: 'item-2', type: 'analysis', analysisName: 'a2' },
+          { id: 'item-1', type: 'analysis' },
+          { id: 'item-2', type: 'analysis' },
         ];
 
         const result = teamService.traverseTree(items, (item) => {
@@ -797,7 +812,7 @@ describe('TeamService', () => {
     describe('findItemById', () => {
       it('should find item at root level', () => {
         const items = [
-          { id: 'item-1', type: 'analysis', analysisName: 'a1' },
+          { id: 'item-1', type: 'analysis' },
           { id: 'item-2', type: 'folder', name: 'Folder 1', items: [] },
         ];
 
@@ -811,7 +826,7 @@ describe('TeamService', () => {
           {
             id: 'folder-1',
             type: 'folder',
-            items: [{ id: 'nested-1', type: 'analysis', analysisName: 'a1' }],
+            items: [{ id: 'nested-1', type: 'analysis' }],
           },
         ];
 
@@ -821,7 +836,7 @@ describe('TeamService', () => {
       });
 
       it('should return null if not found', () => {
-        const items = [{ id: 'item-1', type: 'analysis', analysisName: 'a1' }];
+        const items = [{ id: 'item-1', type: 'analysis' }];
 
         const item = teamService.findItemById(items, 'nonexistent');
 
@@ -835,7 +850,7 @@ describe('TeamService', () => {
           {
             id: 'folder-1',
             type: 'folder',
-            items: [{ id: 'child-1', type: 'analysis', analysisName: 'a1' }],
+            items: [{ id: 'child-1', type: 'analysis' }],
           },
         ];
 
@@ -850,7 +865,7 @@ describe('TeamService', () => {
       });
 
       it('should return null parent for root items', () => {
-        const items = [{ id: 'item-1', type: 'analysis', analysisName: 'a1' }];
+        const items = [{ id: 'item-1', type: 'analysis' }];
 
         const { parent, item, index } = teamService.findItemWithParent(
           items,
@@ -975,8 +990,8 @@ describe('TeamService', () => {
                   id: 'folder-1',
                   type: 'folder',
                   items: [
-                    { id: 'child-1', type: 'analysis', analysisName: 'a1' },
-                    { id: 'child-2', type: 'analysis', analysisName: 'a2' },
+                    { id: 'child-1', type: 'analysis' },
+                    { id: 'child-2', type: 'analysis' },
                   ],
                 },
               ],
@@ -1010,7 +1025,7 @@ describe('TeamService', () => {
           teamStructure: {
             'team-1': {
               items: [
-                { id: 'item-1', type: 'analysis', analysisName: 'a1' },
+                { id: 'item-1', type: 'analysis' },
                 { id: 'folder-1', type: 'folder', items: [] },
               ],
             },
@@ -1037,9 +1052,7 @@ describe('TeamService', () => {
                 {
                   id: 'folder-1',
                   type: 'folder',
-                  items: [
-                    { id: 'item-1', type: 'analysis', analysisName: 'a1' },
-                  ],
+                  items: [{ id: 'item-1', type: 'analysis' }],
                 },
               ],
             },
@@ -1099,7 +1112,6 @@ describe('TeamService', () => {
         const newItem = {
           id: 'item-1',
           type: 'analysis',
-          analysisName: 'test',
         };
 
         await teamService.addItemToTeamStructure('team-1', newItem, null);
@@ -1119,7 +1131,6 @@ describe('TeamService', () => {
         const newItem = {
           id: 'item-1',
           type: 'analysis',
-          analysisName: 'test',
         };
 
         await teamService.addItemToTeamStructure('team-1', newItem, 'folder-1');
@@ -1133,7 +1144,6 @@ describe('TeamService', () => {
         const newItem = {
           id: 'item-1',
           type: 'analysis',
-          analysisName: 'test',
         };
 
         await teamService.addItemToTeamStructure('team-1', newItem, null);
@@ -1147,7 +1157,7 @@ describe('TeamService', () => {
         mockAnalysisService.getConfig.mockResolvedValue({
           teamStructure: {
             'team-1': {
-              items: [{ id: 'item-1', type: 'analysis', analysisName: 'test' }],
+              items: [{ id: 'item-1', type: 'analysis' }],
             },
           },
         });
@@ -1165,9 +1175,7 @@ describe('TeamService', () => {
                 {
                   id: 'folder-1',
                   type: 'folder',
-                  items: [
-                    { id: 'item-1', type: 'analysis', analysisName: 'test' },
-                  ],
+                  items: [{ id: 'item-1', type: 'analysis' }],
                 },
               ],
             },

@@ -338,18 +338,19 @@ router.use('/:id', teamIdRouter);
 // Analysis-team routes
 /**
  * @swagger
- * /teams/analyses/{name}/team:
+ * /teams/analyses/{analysisId}/team:
  *   put:
  *     summary: Move analysis to different team
  *     description: Move an analysis from one team to another
  *     tags: [Team Management]
  *     parameters:
  *       - in: path
- *         name: name
+ *         name: analysisId
  *         required: true
  *         schema:
  *           type: string
- *         description: Name of the analysis file to move
+ *           format: uuid
+ *         description: UUID of the analysis to move
  *     requestBody:
  *       required: true
  *       content:
@@ -408,7 +409,7 @@ router.use('/:id', teamIdRouter);
  *               $ref: '#/components/schemas/Error'
  */
 router.put(
-  '/analyses/:name/team',
+  '/analyses/:analysisId/team',
   teamOperationLimiter,
   validateRequest(teamValidationSchemas.moveAnalysisToTeam),
   asyncHandler(TeamController.moveAnalysisToTeam, 'move analysis to team'),

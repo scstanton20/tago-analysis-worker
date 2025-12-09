@@ -472,11 +472,13 @@ describe('Team Routes - WITH REAL AUTH', () => {
   });
 
   describe('Analysis Team Assignment (Admin-Only)', () => {
+    const testAnalysisId = 'aaaaaaaa-1111-4000-8000-000000000001';
+
     it('should allow admin to move analysis to team', async () => {
       const adminCookie = await getSessionCookie('admin');
 
       const response = await request(app)
-        .put('/api/teams/analyses/test-analysis/team')
+        .put(`/api/teams/analyses/${testAnalysisId}/team`)
         .set('Cookie', adminCookie)
         .send({ teamId: 'new-team' })
         .expect(200);
@@ -489,7 +491,7 @@ describe('Team Routes - WITH REAL AUTH', () => {
       const userCookie = await getSessionCookie('teamOwner');
 
       await request(app)
-        .put('/api/teams/analyses/test-analysis/team')
+        .put(`/api/teams/analyses/${testAnalysisId}/team`)
         .set('Cookie', userCookie)
         .send({ teamId: 'hacked-team' })
         .expect(403);

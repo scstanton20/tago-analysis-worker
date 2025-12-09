@@ -104,7 +104,7 @@ export default function AnalysisList({
   // Convert to array for rendering, sorted by sidebar team order
   const analysesArray = useMemo(() => {
     const array = Object.values(analysesToShow).filter(
-      (analysis) => analysis && analysis.name,
+      (analysis) => analysis && analysis.id,
     );
     // Sort by team order (same order as sidebar), then by name within each team
     array.sort((a, b) => {
@@ -479,7 +479,7 @@ export default function AnalysisList({
               const teamInfo = getTeamInfo(analysis.teamId);
 
               return (
-                <Stack key={`analysis-${analysis.name}`} gap="xs">
+                <Stack key={`analysis-${analysis.id}`} gap="xs">
                   {/* Team Label (when showing all analyses) */}
                   {showTeamLabels && (
                     <Group gap="xs">

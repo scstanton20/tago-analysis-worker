@@ -9,31 +9,33 @@ import {
 } from '../../utils/notificationService.jsx';
 
 export function SSEAnalysesProvider({ children }) {
+  // Analyses keyed by analysisId (UUID)
   const [analyses, setAnalyses] = useState({});
   const [loadingAnalyses, setLoadingAnalyses] = useState(new Set());
 
+  // Log sequences keyed by analysisId
   const logSequences = useRef(new Map());
 
-  const addLoadingAnalysis = useCallback((analysisName) => {
-    setLoadingAnalyses((prev) => new Set([...prev, analysisName]));
+  const addLoadingAnalysis = useCallback((analysisId) => {
+    setLoadingAnalyses((prev) => new Set([...prev, analysisId]));
   }, []);
 
-  const removeLoadingAnalysis = useCallback((analysisName) => {
+  const removeLoadingAnalysis = useCallback((analysisId) => {
     setLoadingAnalyses((prev) => {
       const newSet = new Set(prev);
-      newSet.delete(analysisName);
+      newSet.delete(analysisId);
       return newSet;
     });
   }, []);
 
   const getAnalysis = useCallback(
-    (name) => {
-      return analyses[name] || null;
+    (analysisId) => {
+      return analyses[analysisId] || null;
     },
     [analyses],
   );
 
-  const getAnalysisNames = useCallback(() => {
+  const getAnalysisIds = useCallback(() => {
     return Object.keys(analyses);
   }, [analyses]);
 
@@ -41,8 +43,8 @@ export function SSEAnalysesProvider({ children }) {
     (predicate) => {
       return Object.entries(analyses)
         .filter(([, analysis]) => predicate(analysis))
-        .reduce((acc, [name, analysis]) => {
-          acc[name] = analysis;
+        .reduce((acc, [analysisId, analysis]) => {
+          acc[analysisId] = analysis;
           return acc;
         }, {});
     },
@@ -51,33 +53,35 @@ export function SSEAnalysesProvider({ children }) {
 
   // Event Handlers
   const handleInit = useCallback((data) => {
-    // Handle analyses - always store as object
+    // Handle analyses - keyed by analysisId (UUID)
     let analysesObj = {};
     if (data.analyses) {
       if (Array.isArray(data.analyses)) {
+        // Convert array to object keyed by id
         data.analyses.forEach((analysis) => {
-          analysesObj[analysis.name] = analysis;
+          analysesObj[analysis.id] = analysis;
         });
       } else {
+        // Already keyed by analysisId
         analysesObj = data.analyses;
       }
     }
 
     setAnalyses(analysesObj);
 
-    // Initialize log sequences tracking
-    Object.keys(analysesObj).forEach((analysisName) => {
-      if (!logSequences.current.has(analysisName)) {
-        logSequences.current.set(analysisName, new Set());
+    // Initialize log sequences tracking by analysisId
+    Object.keys(analysesObj).forEach((analysisId) => {
+      if (!logSequences.current.has(analysisId)) {
+        logSequences.current.set(analysisId, new Set());
       }
     });
 
-    const analysisNames = new Set(Object.keys(analysesObj));
+    const analysisIds = new Set(Object.keys(analysesObj));
     setLoadingAnalyses((prev) => {
       const updatedLoadingSet = new Set();
-      prev.forEach((loadingName) => {
-        if (!analysisNames.has(loadingName)) {
-          updatedLoadingSet.add(loadingName);
+      prev.forEach((loadingId) => {
+        if (!analysisIds.has(loadingId)) {
+          updatedLoadingSet.add(loadingId);
         }
       });
       return updatedLoadingSet;
@@ -86,21 +90,24 @@ export function SSEAnalysesProvider({ children }) {
 
   const handleAnalysisUpdate = useCallback(
     (data) => {
-      if (data.analysisName && data.update) {
+      if (data.analysisId && data.update) {
+        const analysisId = data.analysisId;
+        const analysisName = data.analysisName || data.update.name;
+
         setAnalyses((prev) => ({
           ...prev,
-          [data.analysisName]: {
-            ...prev[data.analysisName],
+          [analysisId]: {
+            ...prev[analysisId],
             ...data.update,
           },
         }));
 
         // Always remove loading state when we get a status update
-        removeLoadingAnalysis(data.analysisName);
+        removeLoadingAnalysis(analysisId);
 
         // Show notifications for status changes
         if (data.update.status === 'running') {
-          showSuccess(`${data.analysisName} is now running`, 'Started', 3000);
+          showSuccess(`${analysisName} is now running`, 'Started', 3000);
         } else if (
           data.update.status === 'stopped' &&
           data.update.exitCode !== undefined
@@ -108,11 +115,11 @@ export function SSEAnalysesProvider({ children }) {
           // Analysis stopped
           if (data.update.exitCode === 0) {
             // Normal exit - use info notification with X icon for stopped
-            showInfo(`${data.analysisName} stopped`, 'Stopped', 3000);
+            showInfo(`${analysisName} stopped`, 'Stopped', 3000);
           } else {
             // Error exit
             showError(
-              `${data.analysisName} exited with code ${data.update.exitCode}`,
+              `${analysisName} exited with code ${data.update.exitCode}`,
               'Failed',
               5000,
             );
@@ -124,19 +131,21 @@ export function SSEAnalysesProvider({ children }) {
   );
 
   const handleAnalysisCreated = useCallback((data) => {
-    if (data.data?.analysis) {
-      logSequences.current.set(data.data.analysis, new Set());
+    if (data.data?.analysisId) {
+      const { analysisId, analysisName, teamId, analysisData } = data.data;
+      logSequences.current.set(analysisId, new Set());
 
-      if (data.data.analysisData) {
+      if (analysisData) {
         const newAnalysis = {
-          ...data.data.analysisData,
-          name: data.data.analysis,
-          teamId: data.data.teamId || data.data.department || 'uncategorized',
+          ...analysisData,
+          id: analysisId,
+          name: analysisName,
+          teamId: teamId || 'uncategorized',
         };
 
         setAnalyses((prev) => ({
           ...prev,
-          [data.data.analysis]: newAnalysis,
+          [analysisId]: newAnalysis,
         }));
       } else {
         logger.error(
@@ -148,73 +157,63 @@ export function SSEAnalysesProvider({ children }) {
   }, []);
 
   const handleAnalysisDeleted = useCallback((data) => {
-    if (data.data?.fileName) {
-      const fileName = data.data.fileName;
+    if (data.data?.analysisId) {
+      const { analysisId } = data.data;
       setLoadingAnalyses((prev) => {
         const newSet = new Set(prev);
-        newSet.delete(fileName);
+        newSet.delete(analysisId);
         return newSet;
       });
-      logSequences.current.delete(fileName);
+      logSequences.current.delete(analysisId);
       setAnalyses((prev) => {
         const newAnalyses = { ...prev };
-        delete newAnalyses[fileName];
+        delete newAnalyses[analysisId];
         return newAnalyses;
       });
     }
   }, []);
 
   const handleAnalysisRenamed = useCallback((data) => {
-    if (data.data?.oldFileName && data.data?.newFileName) {
-      const oldSequences = logSequences.current.get(data.data.oldFileName);
-      if (oldSequences) {
-        logSequences.current.set(data.data.newFileName, oldSequences);
-        logSequences.current.delete(data.data.oldFileName);
-      }
+    // In v5.0, renaming only changes the name property - analysisId stays the same
+    if (data.data?.analysisId && data.data?.newName) {
+      const { analysisId, newName, restarted, teamId } = data.data;
 
       setAnalyses((prev) => {
-        const newAnalyses = { ...prev };
-        const analysis = newAnalyses[data.data.oldFileName];
-        if (analysis) {
-          newAnalyses[data.data.newFileName] = {
-            ...analysis,
-            name: data.data.newFileName,
-            status: data.data.restarted ? 'running' : analysis.status,
-            enabled: data.data.restarted ? true : analysis.enabled,
-            teamId:
-              data.data.teamId ||
-              data.data.department ||
-              analysis.teamId ||
-              analysis.department,
-          };
-          delete newAnalyses[data.data.oldFileName];
-        }
-        return newAnalyses;
+        if (!prev[analysisId]) return prev;
+        return {
+          ...prev,
+          [analysisId]: {
+            ...prev[analysisId],
+            name: newName,
+            status: restarted ? 'running' : prev[analysisId].status,
+            enabled: restarted ? true : prev[analysisId].enabled,
+            teamId: teamId || prev[analysisId].teamId,
+          },
+        };
       });
     }
   }, []);
 
   const handleAnalysisUpdated = useCallback((data) => {
-    if (data.data?.fileName) {
-      const fileName = data.data.fileName;
-      setAnalyses((prev) => ({
-        ...prev,
-        [fileName]: {
-          ...prev[fileName],
-          status: data.data.status || prev[fileName]?.status,
-          teamId:
-            data.data.teamId ||
-            data.data.department ||
-            prev[fileName]?.teamId ||
-            prev[fileName]?.department,
-          lastRun: data.data.lastRun || prev[fileName]?.lastRun,
-          startTime: data.data.startTime || prev[fileName]?.startTime,
-        },
-      }));
-      if (data.data.status !== 'running') {
+    if (data.data?.analysisId) {
+      const { analysisId, status, teamId, lastRun, startTime } = data.data;
+      setAnalyses((prev) => {
+        if (!prev[analysisId]) return prev;
+        return {
+          ...prev,
+          [analysisId]: {
+            ...prev[analysisId],
+            status: status || prev[analysisId].status,
+            teamId: teamId || prev[analysisId].teamId,
+            lastRun: lastRun || prev[analysisId].lastRun,
+            startTime: startTime || prev[analysisId].startTime,
+          },
+        };
+      });
+      if (status !== 'running') {
         setLoadingAnalyses((prev) => {
           const newSet = new Set(prev);
-          newSet.delete(fileName);
+          newSet.delete(analysisId);
           return newSet;
         });
       }
@@ -222,30 +221,30 @@ export function SSEAnalysesProvider({ children }) {
   }, []);
 
   const handleAnalysisEnvironmentUpdated = useCallback((data) => {
-    if (data.data?.fileName) {
-      setAnalyses((prev) => ({
-        ...prev,
-        [data.data.fileName]: {
-          ...prev[data.data.fileName],
-          status: data.data.status || prev[data.data.fileName]?.status,
-          teamId:
-            data.data.teamId ||
-            data.data.department ||
-            prev[data.data.fileName]?.teamId ||
-            prev[data.data.fileName]?.department,
-          lastRun: data.data.lastRun || prev[data.data.fileName]?.lastRun,
-          startTime: data.data.startTime || prev[data.data.fileName]?.startTime,
-        },
-      }));
+    if (data.data?.analysisId) {
+      const { analysisId, status, teamId, lastRun, startTime } = data.data;
+      setAnalyses((prev) => {
+        if (!prev[analysisId]) return prev;
+        return {
+          ...prev,
+          [analysisId]: {
+            ...prev[analysisId],
+            status: status || prev[analysisId].status,
+            teamId: teamId || prev[analysisId].teamId,
+            lastRun: lastRun || prev[analysisId].lastRun,
+            startTime: startTime || prev[analysisId].startTime,
+          },
+        };
+      });
     }
   }, []);
 
   const handleLog = useCallback((data) => {
-    if (data.data?.fileName && data.data?.log) {
-      const { fileName, log, totalCount } = data.data;
+    if (data.data?.analysisId && data.data?.log) {
+      const { analysisId, log, totalCount } = data.data;
 
       // Check for duplicate using sequence number
-      const sequences = logSequences.current.get(fileName) || new Set();
+      const sequences = logSequences.current.get(analysisId) || new Set();
       if (log.sequence && sequences.has(log.sequence)) {
         return;
       }
@@ -253,78 +252,89 @@ export function SSEAnalysesProvider({ children }) {
       // Add sequence to tracking
       if (log.sequence) {
         sequences.add(log.sequence);
-        logSequences.current.set(fileName, sequences);
+        logSequences.current.set(analysisId, sequences);
       }
 
-      setAnalyses((prev) => ({
-        ...prev,
-        [fileName]: {
-          ...prev[fileName],
-          logs: [log, ...(prev[fileName]?.logs || [])].slice(0, 1000),
-          totalLogCount: totalCount,
-        },
-      }));
+      setAnalyses((prev) => {
+        if (!prev[analysisId]) return prev;
+        return {
+          ...prev,
+          [analysisId]: {
+            ...prev[analysisId],
+            logs: [log, ...(prev[analysisId]?.logs || [])].slice(0, 1000),
+            totalLogCount: totalCount,
+          },
+        };
+      });
     }
   }, []);
 
   const handleLogsCleared = useCallback((data) => {
-    if (data.data?.fileName) {
-      const fileName = data.data.fileName;
-      logger.log(`Clearing logs for ${fileName}`);
+    if (data.data?.analysisId) {
+      const { analysisId, analysisName, clearMessage } = data.data;
+      logger.log(`Clearing logs for ${analysisName || analysisId}`);
 
-      logSequences.current.set(fileName, new Set());
+      logSequences.current.set(analysisId, new Set());
 
       // If clearMessage is provided, show it as the only log entry
-      const clearedLogs = data.data.clearMessage
-        ? [data.data.clearMessage]
-        : [];
+      const clearedLogs = clearMessage ? [clearMessage] : [];
 
-      setAnalyses((prev) => ({
-        ...prev,
-        [fileName]: {
-          ...prev[fileName],
-          logs: clearedLogs,
-          totalLogCount: clearedLogs.length,
-          logsClearedAt: Date.now(),
-        },
-      }));
+      setAnalyses((prev) => {
+        if (!prev[analysisId]) return prev;
+        return {
+          ...prev,
+          [analysisId]: {
+            ...prev[analysisId],
+            logs: clearedLogs,
+            totalLogCount: clearedLogs.length,
+            logsClearedAt: Date.now(),
+          },
+        };
+      });
     }
   }, []);
 
   const handleAnalysisRolledBack = useCallback((data) => {
-    if (data.data?.fileName) {
-      const { fileName, version, restarted, ...analysisData } = data.data;
+    if (data.data?.analysisId) {
+      const { analysisId, analysisName, version, restarted, ...analysisData } =
+        data.data;
 
       // Clear log sequences for fresh start
-      logSequences.current.set(fileName, new Set());
+      logSequences.current.set(analysisId, new Set());
 
       // Update analysis with rollback information
-      setAnalyses((prev) => ({
-        ...prev,
-        [fileName]: {
-          ...prev[fileName],
-          ...analysisData,
-          logs: [], // Clear logs since they were cleared during rollback
-          totalLogCount: 0,
-          currentVersion: version,
-        },
-      }));
+      setAnalyses((prev) => {
+        if (!prev[analysisId]) return prev;
+        return {
+          ...prev,
+          [analysisId]: {
+            ...prev[analysisId],
+            ...analysisData,
+            logs: [], // Clear logs since they were cleared during rollback
+            totalLogCount: 0,
+            currentVersion: version,
+          },
+        };
+      });
 
       logger.log(
-        `Analysis ${fileName} rolled back to version ${version}${restarted ? ' and restarted' : ''}`,
+        `Analysis ${analysisName || analysisId} rolled back to version ${version}${restarted ? ' and restarted' : ''}`,
       );
     }
   }, []);
 
   const handleAnalysisMovedToTeam = useCallback((data) => {
-    if (data.analysis && data.to) {
-      setAnalyses((prev) => ({
-        ...prev,
-        [data.analysis]: {
-          ...prev[data.analysis],
-          teamId: data.to,
-        },
-      }));
+    if (data.analysisId && data.to) {
+      setAnalyses((prev) => {
+        if (!prev[data.analysisId]) return prev;
+        return {
+          ...prev,
+          [data.analysisId]: {
+            ...prev[data.analysisId],
+            teamId: data.to,
+          },
+        };
+      });
     }
   }, []);
 
@@ -333,16 +343,16 @@ export function SSEAnalysesProvider({ children }) {
       // Update analyses when a team is deleted
       setAnalyses((prev) => {
         const newAnalyses = {};
-        Object.entries(prev).forEach(([name, analysis]) => {
+        Object.entries(prev).forEach(([analysisId, analysis]) => {
           if (analysis.teamId === data.deleted) {
             // Move analyses from deleted team to target team
             const targetTeamId = data.analysesMovedTo || 'uncategorized';
             logger.log(
-              `SSE: Moving analysis ${name} from deleted team ${data.deleted} to ${targetTeamId}`,
+              `SSE: Moving analysis ${analysis.name || analysisId} from deleted team ${data.deleted} to ${targetTeamId}`,
             );
-            newAnalyses[name] = { ...analysis, teamId: targetTeamId };
+            newAnalyses[analysisId] = { ...analysis, teamId: targetTeamId };
           } else {
-            newAnalyses[name] = analysis;
+            newAnalyses[analysisId] = analysis;
           }
         });
         return newAnalyses;
@@ -417,7 +427,7 @@ export function SSEAnalysesProvider({ children }) {
       addLoadingAnalysis,
       removeLoadingAnalysis,
       getAnalysis,
-      getAnalysisNames,
+      getAnalysisIds,
       filterAnalyses,
       handleMessage,
     }),
@@ -427,7 +437,7 @@ export function SSEAnalysesProvider({ children }) {
       addLoadingAnalysis,
       removeLoadingAnalysis,
       getAnalysis,
-      getAnalysisNames,
+      getAnalysisIds,
       filterAnalyses,
       handleMessage,
     ],

@@ -49,46 +49,46 @@ export const analysisService = {
   runAnalysis: createPostMethod(
     logger,
     'start analysis',
-    (fileName) => `/analyses/${fileName}/run`,
+    (analysisId) => `/analyses/${analysisId}/run`,
     () => null,
     {
       debugMessage: 'Starting analysis',
       successMessage: 'Analysis started successfully',
-      getDebugParams: (fileName) => ({ fileName }),
-      getSuccessParams: (_result, fileName) => ({ fileName }),
+      getDebugParams: (analysisId) => ({ analysisId }),
+      getSuccessParams: (_result, analysisId) => ({ analysisId }),
     },
   ),
 
   stopAnalysis: createPostMethod(
     logger,
     'stop analysis',
-    (fileName) => `/analyses/${fileName}/stop`,
+    (analysisId) => `/analyses/${analysisId}/stop`,
     () => null,
     {
       debugMessage: 'Stopping analysis',
       successMessage: 'Analysis stopped successfully',
-      getDebugParams: (fileName) => ({ fileName }),
-      getSuccessParams: (_result, fileName) => ({ fileName }),
+      getDebugParams: (analysisId) => ({ analysisId }),
+      getSuccessParams: (_result, analysisId) => ({ analysisId }),
     },
   ),
 
   deleteAnalysis: createDeleteMethod(
     logger,
     'delete analysis',
-    (fileName) => `/analyses/${fileName}`,
+    (analysisId) => `/analyses/${analysisId}`,
     null,
     {
       debugMessage: 'Deleting analysis',
       successMessage: 'Analysis deleted successfully',
-      getDebugParams: (fileName) => ({ fileName }),
-      getSuccessParams: (_result, fileName) => ({ fileName }),
+      getDebugParams: (analysisId) => ({ analysisId }),
+      getSuccessParams: (_result, analysisId) => ({ analysisId }),
     },
   ),
 
-  async getAnalysisContent(fileName, version = null) {
+  async getAnalysisContent(analysisId, version = null) {
     const versionParam = version !== null ? `?version=${version}` : '';
     const response = await fetchWithHeaders(
-      `/analyses/${fileName}/content${versionParam}`,
+      `/analyses/${analysisId}/content${versionParam}`,
       {
         method: 'GET',
       },
@@ -106,23 +106,23 @@ export const analysisService = {
     return await response.text();
   },
 
-  updateAnalysis: withErrorHandling(async (fileName, content) => {
+  updateAnalysis: withErrorHandling(async (analysisId, content) => {
     logger.debug('Updating analysis content', {
-      fileName,
+      analysisId,
       contentLength: content?.length,
     });
 
     if (typeof content !== 'string') {
-      logger.error('Invalid content type for analysis update', { fileName });
+      logger.error('Invalid content type for analysis update', { analysisId });
       throw new Error('Content must be a string');
     }
 
     if (!content.trim()) {
-      logger.error('Empty content for analysis update', { fileName });
+      logger.error('Empty content for analysis update', { analysisId });
       throw new Error('Content cannot be empty');
     }
 
-    const response = await fetchWithHeaders(`/analyses/${fileName}`, {
+    const response = await fetchWithHeaders(`/analyses/${analysisId}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -130,80 +130,83 @@ export const analysisService = {
       body: JSON.stringify({ content }),
     });
     const result = await handleResponse(response);
-    logger.info('Analysis content updated successfully', { fileName });
+    logger.info('Analysis content updated successfully', { analysisId });
     return result;
   }, 'update analysis content'),
 
-  renameAnalysis: withErrorHandling(async (fileName, newFileName) => {
-    logger.debug('Renaming analysis', { fileName, newFileName });
+  renameAnalysis: withErrorHandling(async (analysisId, newName) => {
+    logger.debug('Renaming analysis', { analysisId, newName });
 
-    if (typeof newFileName !== 'string') {
-      logger.error('Invalid new filename type', { fileName, newFileName });
-      throw new Error('New Filename must be a string');
+    if (typeof newName !== 'string') {
+      logger.error('Invalid new name type', { analysisId, newName });
+      throw new Error('New name must be a string');
     }
 
-    if (!newFileName.trim()) {
-      logger.error('Empty new filename', { fileName });
-      throw new Error('New Filename cannot be empty');
+    if (!newName.trim()) {
+      logger.error('Empty new name', { analysisId });
+      throw new Error('New name cannot be empty');
     }
 
-    const response = await fetchWithHeaders(`/analyses/${fileName}/rename`, {
+    const response = await fetchWithHeaders(`/analyses/${analysisId}/rename`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ newFileName }),
+      body: JSON.stringify({ newName }),
     });
     const result = await handleResponse(response);
-    logger.info('Analysis renamed successfully', { fileName, newFileName });
+    logger.info('Analysis renamed successfully', { analysisId, newName });
     return result;
   }, 'rename analysis'),
 
-  getLogs: withErrorHandling(async (fileName, params = {}) => {
+  getLogs: withErrorHandling(async (analysisId, params = {}) => {
     const { page = 1, limit = 100 } = params;
-    logger.debug('Fetching analysis logs', { fileName, page, limit });
+    logger.debug('Fetching analysis logs', { analysisId, page, limit });
     const queryParams = new URLSearchParams({ page, limit }).toString();
     const response = await fetchWithHeaders(
-      `/analyses/${fileName}/logs?${queryParams}`,
+      `/analyses/${analysisId}/logs?${queryParams}`,
     );
     const result = await handleResponse(response);
     logger.info('Analysis logs fetched successfully', {
-      fileName,
+      analysisId,
       page,
       logsCount: result?.logs?.length,
     });
     return result;
   }, 'fetch analysis logs'),
 
-  downloadLogs: withErrorHandling(async (fileName, timeRange) => {
-    logger.debug('Downloading analysis logs', { fileName, timeRange });
+  downloadLogs: withErrorHandling(
+    async (analysisId, analysisName, timeRange) => {
+      logger.debug('Downloading analysis logs', { analysisId, timeRange });
 
-    const response = await fetchWithHeaders(
-      `/analyses/${fileName}/logs/download?timeRange=${timeRange}`,
-      { method: 'GET' },
-    );
-
-    if (!response.ok) {
-      const errorData = await parseErrorResponse(
-        response,
-        'Failed to download logs',
+      const response = await fetchWithHeaders(
+        `/analyses/${analysisId}/logs/download?timeRange=${timeRange}`,
+        { method: 'GET' },
       );
-      throw new Error(errorData.error);
-    }
 
-    const blob = await response.blob();
-    await downloadBlob(sanitize(fileName), blob, '.log');
-    logger.info('Analysis logs downloaded successfully', {
-      fileName,
-      timeRange,
-    });
-  }, 'download analysis logs'),
+      if (!response.ok) {
+        const errorData = await parseErrorResponse(
+          response,
+          'Failed to download logs',
+        );
+        throw new Error(errorData.error);
+      }
 
-  getLogDownloadOptions: withErrorHandling(async (fileName) => {
-    logger.debug('Fetching log download options', { fileName });
+      const blob = await response.blob();
+      await downloadBlob(sanitize(analysisName), blob, '.log');
+      logger.info('Analysis logs downloaded successfully', {
+        analysisId,
+        timeRange,
+      });
+    },
+    'download analysis logs',
+  ),
+
+  getLogDownloadOptions: withErrorHandling(async (analysisId) => {
+    logger.debug('Fetching log download options', { analysisId });
 
     const response = await fetchWithHeaders(
-      `/analyses/${fileName}/logs/options`,
+      `/analyses/${analysisId}/logs/options`,
       { method: 'GET' },
     );
 
@@ -217,7 +220,7 @@ export const analysisService = {
 
     const result = await response.json();
     logger.debug('Log download options fetched', {
-      fileName,
+      analysisId,
       optionsCount: result?.timeRangeOptions?.length,
     });
     return result;
@@ -226,28 +229,28 @@ export const analysisService = {
   deleteLogs: createDeleteMethod(
     logger,
     'delete analysis logs',
-    (fileName) => `/analyses/${fileName}/logs`,
+    (analysisId) => `/analyses/${analysisId}/logs`,
     null,
     {
       debugMessage: 'Deleting analysis logs',
       successMessage: 'Analysis logs deleted successfully',
-      getDebugParams: (fileName) => ({ fileName }),
-      getSuccessParams: (_result, fileName) => ({ fileName }),
+      getDebugParams: (analysisId) => ({ analysisId }),
+      getSuccessParams: (_result, analysisId) => ({ analysisId }),
     },
   ),
 
-  async getEnvFile(fileName) {
+  async getEnvFile(analysisId) {
     const response = await fetchWithHeaders(
-      `/analyses/${fileName}/environment`,
+      `/analyses/${analysisId}/environment`,
       { method: 'GET' },
     );
 
     return handleResponse(response);
   },
 
-  async getAnalysisENVContent(fileName) {
+  async getAnalysisENVContent(analysisId) {
     try {
-      const envData = await this.getEnvFile(fileName);
+      const envData = await this.getEnvFile(analysisId);
       if (!envData || typeof envData !== 'object') {
         return '';
       }
@@ -262,14 +265,14 @@ export const analysisService = {
     }
   },
 
-  updateAnalysisENV: withErrorHandling(async (fileName, envContent) => {
+  updateAnalysisENV: withErrorHandling(async (analysisId, envContent) => {
     logger.debug('Updating analysis environment variables', {
-      fileName,
+      analysisId,
       contentLength: envContent?.length,
     });
 
     if (typeof envContent !== 'string') {
-      logger.error('Invalid env content type', { fileName });
+      logger.error('Invalid env content type', { analysisId });
       throw new Error('Invalid .env content format');
     }
 
@@ -284,7 +287,7 @@ export const analysisService = {
       }, {});
 
     const response = await fetchWithHeaders(
-      `/analyses/${fileName}/environment`,
+      `/analyses/${analysisId}/environment`,
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -293,16 +296,16 @@ export const analysisService = {
     );
     const result = await handleResponse(response);
     logger.info('Analysis environment variables updated successfully', {
-      fileName,
+      analysisId,
       varsCount: Object.keys(envObject).length,
     });
     return result;
   }, 'update analysis environment variables'),
 
-  async downloadAnalysis(fileName, version = null) {
+  async downloadAnalysis(analysisId, analysisName, version = null) {
     const versionParam = version ? `?version=${version}` : '';
     const response = await fetchWithHeaders(
-      `/analyses/${fileName}/download${versionParam}`,
+      `/analyses/${analysisId}/download${versionParam}`,
       { method: 'GET' },
     );
 
@@ -318,16 +321,20 @@ export const analysisService = {
     // Sanitize version to prevent XSS - only allow numbers
     const safeVersion = version ? String(version).replace(/[^0-9]/g, '') : '';
     const versionSuffix = safeVersion ? `_v${safeVersion}` : '';
-    await downloadBlob(sanitize(`${fileName}${versionSuffix}`), blob, '.js');
+    await downloadBlob(
+      sanitize(`${analysisName}${versionSuffix}`),
+      blob,
+      '.js',
+    );
   },
 
-  async getVersions(fileName, { page = 1, limit = 10 } = {}) {
+  async getVersions(analysisId, { page = 1, limit = 10 } = {}) {
     const params = new URLSearchParams({
       page: String(page),
       limit: String(limit),
     });
     const response = await fetchWithHeaders(
-      `/analyses/${fileName}/versions?${params}`,
+      `/analyses/${analysisId}/versions?${params}`,
       {
         method: 'GET',
       },
@@ -338,13 +345,16 @@ export const analysisService = {
   rollbackToVersion: createPostMethod(
     logger,
     'rollback analysis to version',
-    (fileName) => `/analyses/${fileName}/rollback`,
-    (fileName, version) => ({ version }),
+    (analysisId) => `/analyses/${analysisId}/rollback`,
+    (_analysisId, version) => ({ version }),
     {
       debugMessage: 'Rolling back analysis to version',
       successMessage: 'Analysis rolled back successfully',
-      getDebugParams: (fileName, version) => ({ fileName, version }),
-      getSuccessParams: (_result, fileName, version) => ({ fileName, version }),
+      getDebugParams: (analysisId, version) => ({ analysisId, version }),
+      getSuccessParams: (_result, analysisId, version) => ({
+        analysisId,
+        version,
+      }),
     },
   ),
 };

@@ -36,6 +36,8 @@ export function useAnalysisEdit({
   const [formatCodeFn, setFormatCodeFn] = useState(null);
   const [hasFormatChanges, setHasFormatChanges] = useState(false);
 
+  // Store analysisId for API calls (stable identifier)
+  const analysisId = currentAnalysis.id;
   const isEnvMode = type === 'env';
 
   // Async operations
@@ -134,7 +136,7 @@ export function useAnalysisEdit({
         await loadDiffOperation.execute(async () => {
           // Fetch current version content for comparison
           const current = await analysisService.getAnalysisContent(
-            currentAnalysis.name,
+            analysisId,
             0,
           );
           setCurrentContent(current);
@@ -147,7 +149,7 @@ export function useAnalysisEdit({
         }
       }
     },
-    [currentAnalysis.name, currentContent, loadDiffOperation],
+    [analysisId, currentContent, loadDiffOperation],
   );
 
   /**
@@ -155,18 +157,17 @@ export function useAnalysisEdit({
    */
   useAsyncMount(
     async () => {
-      const nameToUse = isEnvMode ? currentAnalysis.name : displayName;
-      if (!nameToUse) return;
+      if (!analysisId) return;
 
       const fileContent = isEnvMode
-        ? await analysisService.getAnalysisENVContent(nameToUse)
-        : await analysisService.getAnalysisContent(nameToUse, version);
+        ? await analysisService.getAnalysisENVContent(analysisId)
+        : await analysisService.getAnalysisContent(analysisId, version);
 
       setContent(fileContent);
       setOriginalContent(fileContent);
       setHasChanges(false);
     },
-    { deps: [currentAnalysis.name, displayName, isEnvMode, type, version] },
+    { deps: [analysisId, isEnvMode, type, version] },
   );
 
   /**
@@ -196,12 +197,9 @@ export function useAnalysisEdit({
           .join('\n');
 
         await notificationAPI.executeWithNotification(
-          analysisService.updateAnalysisENV(
-            currentAnalysis.name,
-            contentToSave,
-          ),
+          analysisService.updateAnalysisENV(analysisId, contentToSave),
           {
-            loading: `Updating environment for ${currentAnalysis.name}...`,
+            loading: `Updating environment for ${displayName}...`,
             success: 'Environment variables updated successfully.',
           },
         );
@@ -222,7 +220,7 @@ export function useAnalysisEdit({
         }
 
         await notificationAPI.updateAnalysis(
-          analysisService.updateAnalysis(displayName, contentToSave),
+          analysisService.updateAnalysis(analysisId, contentToSave),
           displayName,
         );
       }
@@ -252,7 +250,7 @@ export function useAnalysisEdit({
 
     const result = await renameOperation.execute(async () => {
       await notificationAPI.executeWithNotification(
-        analysisService.renameAnalysis(displayName, newFileName),
+        analysisService.renameAnalysis(analysisId, newFileName),
         {
           loading: `Renaming ${displayName} to ${newFileName}...`,
           success: `Analysis renamed to ${newFileName} successfully.`,
@@ -276,6 +274,7 @@ export function useAnalysisEdit({
 
   return {
     // State
+    analysisId,
     content,
     hasChanges,
     isLoading,

@@ -64,10 +64,32 @@ vi.mock('../../src/utils/sse/index.js', () => ({
   },
 }));
 
+const TEST_ANALYSIS_IDS = {
+  team1Analysis: 'aaaaaaaa-1111-4000-8000-000000000001',
+  team2Analysis: 'aaaaaaaa-2222-4000-8000-000000000002',
+};
+
 // Mock analysis service (we're testing routes, not service logic)
 const mockAnalysisService = {
   getAllAnalyses: vi.fn().mockResolvedValue({}),
   getConfig: vi.fn().mockResolvedValue({ analyses: {} }),
+  getAnalysisById: vi.fn((analysisId) => {
+    if (analysisId === TEST_ANALYSIS_IDS.team1Analysis) {
+      return {
+        analysisId: TEST_ANALYSIS_IDS.team1Analysis,
+        analysisName: 'team1-analysis',
+        teamId: 'team-1',
+      };
+    }
+    if (analysisId === TEST_ANALYSIS_IDS.team2Analysis) {
+      return {
+        analysisId: TEST_ANALYSIS_IDS.team2Analysis,
+        analysisName: 'team2-analysis',
+        teamId: 'team-2',
+      };
+    }
+    return null;
+  }),
 };
 
 vi.mock('../../src/services/analysisService.js', () => ({
@@ -194,11 +216,17 @@ describe('Analysis Routes - WITH REAL AUTH', () => {
 
   describe('Permission Boundaries - Team-Based Access', () => {
     beforeEach(() => {
-      // Mock analysis data with team associations
-      // IMPORTANT: Keys must match the fileName param used in requests
       mockAnalysisService.getAllAnalyses.mockResolvedValue({
-        'team1-analysis': { name: 'team1-analysis', teamId: 'team-1' },
-        'team2-analysis': { name: 'team2-analysis', teamId: 'team-2' },
+        [TEST_ANALYSIS_IDS.team1Analysis]: {
+          analysisId: TEST_ANALYSIS_IDS.team1Analysis,
+          analysisName: 'team1-analysis',
+          teamId: 'team-1',
+        },
+        [TEST_ANALYSIS_IDS.team2Analysis]: {
+          analysisId: TEST_ANALYSIS_IDS.team2Analysis,
+          analysisName: 'team2-analysis',
+          teamId: 'team-2',
+        },
       });
     });
 
@@ -216,7 +244,7 @@ describe('Analysis Routes - WITH REAL AUTH', () => {
         const viewerCookie = await getSessionCookie('teamViewer');
 
         await request(app)
-          .get('/api/analyses/team1-analysis/content')
+          .get(`/api/analyses/${TEST_ANALYSIS_IDS.team1Analysis}/content`)
           .set('Cookie', viewerCookie)
           .expect(200);
       });
@@ -225,7 +253,7 @@ describe('Analysis Routes - WITH REAL AUTH', () => {
         const noAccessCookie = await getSessionCookie('noAccess');
 
         await request(app)
-          .get('/api/analyses/team1-analysis/content')
+          .get(`/api/analyses/${TEST_ANALYSIS_IDS.team1Analysis}/content`)
           .set('Cookie', noAccessCookie)
           .expect(403);
       });
@@ -235,7 +263,7 @@ describe('Analysis Routes - WITH REAL AUTH', () => {
 
         // team2User has access to team-2 but NOT team-1
         await request(app)
-          .get('/api/analyses/team1-analysis/content')
+          .get(`/api/analyses/${TEST_ANALYSIS_IDS.team1Analysis}/content`)
           .set('Cookie', team2Cookie)
           .expect(403);
       });
@@ -246,7 +274,7 @@ describe('Analysis Routes - WITH REAL AUTH', () => {
         const ownerCookie = await getSessionCookie('teamOwner');
 
         await request(app)
-          .post('/api/analyses/team1-analysis/run')
+          .post(`/api/analyses/${TEST_ANALYSIS_IDS.team1Analysis}/run`)
           .set('Cookie', ownerCookie)
           .send({ type: 'listener' })
           .expect(200);
@@ -256,7 +284,7 @@ describe('Analysis Routes - WITH REAL AUTH', () => {
         const runnerCookie = await getSessionCookie('teamRunner');
 
         await request(app)
-          .post('/api/analyses/team1-analysis/run')
+          .post(`/api/analyses/${TEST_ANALYSIS_IDS.team1Analysis}/run`)
           .set('Cookie', runnerCookie)
           .send({ type: 'listener' })
           .expect(200);
@@ -266,7 +294,7 @@ describe('Analysis Routes - WITH REAL AUTH', () => {
         const viewerCookie = await getSessionCookie('teamViewer');
 
         await request(app)
-          .post('/api/analyses/team1-analysis/run')
+          .post(`/api/analyses/${TEST_ANALYSIS_IDS.team1Analysis}/run`)
           .set('Cookie', viewerCookie)
           .send({ type: 'listener' })
           .expect(403);
@@ -276,7 +304,7 @@ describe('Analysis Routes - WITH REAL AUTH', () => {
         const noAccessCookie = await getSessionCookie('noAccess');
 
         await request(app)
-          .post('/api/analyses/team1-analysis/run')
+          .post(`/api/analyses/${TEST_ANALYSIS_IDS.team1Analysis}/run`)
           .set('Cookie', noAccessCookie)
           .send({ type: 'listener' })
           .expect(403);
@@ -288,7 +316,7 @@ describe('Analysis Routes - WITH REAL AUTH', () => {
         const editorCookie = await getSessionCookie('teamEditor');
 
         await request(app)
-          .put('/api/analyses/team1-analysis')
+          .put(`/api/analyses/${TEST_ANALYSIS_IDS.team1Analysis}`)
           .set('Cookie', editorCookie)
           .send({ content: 'console.log("updated");' })
           .expect(200);
@@ -298,7 +326,7 @@ describe('Analysis Routes - WITH REAL AUTH', () => {
         const ownerCookie = await getSessionCookie('teamOwner');
 
         await request(app)
-          .put('/api/analyses/team1-analysis')
+          .put(`/api/analyses/${TEST_ANALYSIS_IDS.team1Analysis}`)
           .set('Cookie', ownerCookie)
           .send({ content: 'console.log("updated");' })
           .expect(200);
@@ -308,7 +336,7 @@ describe('Analysis Routes - WITH REAL AUTH', () => {
         const viewerCookie = await getSessionCookie('teamViewer');
 
         await request(app)
-          .put('/api/analyses/team1-analysis')
+          .put(`/api/analyses/${TEST_ANALYSIS_IDS.team1Analysis}`)
           .set('Cookie', viewerCookie)
           .send({ content: 'console.log("hacked");' })
           .expect(403);
@@ -318,7 +346,7 @@ describe('Analysis Routes - WITH REAL AUTH', () => {
         const runnerCookie = await getSessionCookie('teamRunner');
 
         await request(app)
-          .put('/api/analyses/team1-analysis')
+          .put(`/api/analyses/${TEST_ANALYSIS_IDS.team1Analysis}`)
           .set('Cookie', runnerCookie)
           .send({ content: 'console.log("hacked");' })
           .expect(403);
@@ -330,7 +358,7 @@ describe('Analysis Routes - WITH REAL AUTH', () => {
         const ownerCookie = await getSessionCookie('teamOwner');
 
         await request(app)
-          .delete('/api/analyses/team1-analysis')
+          .delete(`/api/analyses/${TEST_ANALYSIS_IDS.team1Analysis}`)
           .set('Cookie', ownerCookie)
           .expect(200);
       });
@@ -339,7 +367,7 @@ describe('Analysis Routes - WITH REAL AUTH', () => {
         const editorCookie = await getSessionCookie('teamEditor');
 
         await request(app)
-          .delete('/api/analyses/team1-analysis')
+          .delete(`/api/analyses/${TEST_ANALYSIS_IDS.team1Analysis}`)
           .set('Cookie', editorCookie)
           .expect(403);
       });
@@ -348,7 +376,7 @@ describe('Analysis Routes - WITH REAL AUTH', () => {
         const viewerCookie = await getSessionCookie('teamViewer');
 
         await request(app)
-          .delete('/api/analyses/team1-analysis')
+          .delete(`/api/analyses/${TEST_ANALYSIS_IDS.team1Analysis}`)
           .set('Cookie', viewerCookie)
           .expect(403);
       });
@@ -357,7 +385,7 @@ describe('Analysis Routes - WITH REAL AUTH', () => {
         const runnerCookie = await getSessionCookie('teamRunner');
 
         await request(app)
-          .delete('/api/analyses/team1-analysis')
+          .delete(`/api/analyses/${TEST_ANALYSIS_IDS.team1Analysis}`)
           .set('Cookie', runnerCookie)
           .expect(403);
       });
@@ -366,10 +394,17 @@ describe('Analysis Routes - WITH REAL AUTH', () => {
 
   describe('Multi-Team User Scenarios', () => {
     beforeEach(() => {
-      // IMPORTANT: Keys must match the fileName param used in requests
       mockAnalysisService.getAllAnalyses.mockResolvedValue({
-        'team1-analysis': { name: 'team1-analysis', teamId: 'team-1' },
-        'team2-analysis': { name: 'team2-analysis', teamId: 'team-2' },
+        [TEST_ANALYSIS_IDS.team1Analysis]: {
+          analysisId: TEST_ANALYSIS_IDS.team1Analysis,
+          analysisName: 'team1-analysis',
+          teamId: 'team-1',
+        },
+        [TEST_ANALYSIS_IDS.team2Analysis]: {
+          analysisId: TEST_ANALYSIS_IDS.team2Analysis,
+          analysisName: 'team2-analysis',
+          teamId: 'team-2',
+        },
       });
     });
 
@@ -378,13 +413,13 @@ describe('Analysis Routes - WITH REAL AUTH', () => {
 
       // Has view+edit on team-1
       await request(app)
-        .get('/api/analyses/team1-analysis/content')
+        .get(`/api/analyses/${TEST_ANALYSIS_IDS.team1Analysis}/content`)
         .set('Cookie', multiTeamCookie)
         .expect(200);
 
       // Has view+run on team-2
       await request(app)
-        .get('/api/analyses/team2-analysis/content')
+        .get(`/api/analyses/${TEST_ANALYSIS_IDS.team2Analysis}/content`)
         .set('Cookie', multiTeamCookie)
         .expect(200);
     });
@@ -394,14 +429,14 @@ describe('Analysis Routes - WITH REAL AUTH', () => {
 
       // Can edit team-1 analyses
       await request(app)
-        .put('/api/analyses/team1-analysis')
+        .put(`/api/analyses/${TEST_ANALYSIS_IDS.team1Analysis}`)
         .set('Cookie', multiTeamCookie)
         .send({ content: 'console.log("updated");' })
         .expect(200);
 
       // Cannot edit team-2 analyses (only has view+run)
       await request(app)
-        .put('/api/analyses/team2-analysis')
+        .put(`/api/analyses/${TEST_ANALYSIS_IDS.team2Analysis}`)
         .set('Cookie', multiTeamCookie)
         .send({ content: 'console.log("updated");' })
         .expect(403);
@@ -410,10 +445,17 @@ describe('Analysis Routes - WITH REAL AUTH', () => {
 
   describe('Admin Bypass', () => {
     beforeEach(() => {
-      // IMPORTANT: Keys must match the fileName param used in requests
       mockAnalysisService.getAllAnalyses.mockResolvedValue({
-        'team1-analysis': { name: 'team1-analysis', teamId: 'team-1' },
-        'team2-analysis': { name: 'team2-analysis', teamId: 'team-2' },
+        [TEST_ANALYSIS_IDS.team1Analysis]: {
+          analysisId: TEST_ANALYSIS_IDS.team1Analysis,
+          analysisName: 'team1-analysis',
+          teamId: 'team-1',
+        },
+        [TEST_ANALYSIS_IDS.team2Analysis]: {
+          analysisId: TEST_ANALYSIS_IDS.team2Analysis,
+          analysisName: 'team2-analysis',
+          teamId: 'team-2',
+        },
       });
     });
 
@@ -421,12 +463,12 @@ describe('Analysis Routes - WITH REAL AUTH', () => {
       const adminCookie = await getSessionCookie('admin');
 
       await request(app)
-        .get('/api/analyses/team1-analysis/content')
+        .get(`/api/analyses/${TEST_ANALYSIS_IDS.team1Analysis}/content`)
         .set('Cookie', adminCookie)
         .expect(200);
 
       await request(app)
-        .get('/api/analyses/team2-analysis/content')
+        .get(`/api/analyses/${TEST_ANALYSIS_IDS.team2Analysis}/content`)
         .set('Cookie', adminCookie)
         .expect(200);
     });
@@ -436,36 +478,52 @@ describe('Analysis Routes - WITH REAL AUTH', () => {
 
       // View
       await request(app)
-        .get('/api/analyses/team1-analysis/content')
+        .get(`/api/analyses/${TEST_ANALYSIS_IDS.team1Analysis}/content`)
         .set('Cookie', adminCookie)
         .expect(200);
 
       // Edit
       await request(app)
-        .put('/api/analyses/team1-analysis')
+        .put(`/api/analyses/${TEST_ANALYSIS_IDS.team1Analysis}`)
         .set('Cookie', adminCookie)
         .send({ content: 'console.log("admin");' })
         .expect(200);
 
       // Delete
       await request(app)
-        .delete('/api/analyses/team1-analysis')
+        .delete(`/api/analyses/${TEST_ANALYSIS_IDS.team1Analysis}`)
         .set('Cookie', adminCookie)
         .expect(200);
     });
   });
 
   describe('Edge Cases and Security', () => {
+    const orphanAnalysisId = 'aaaaaaaa-3333-4000-8000-000000000003';
+
     it('should handle missing teamId in analysis metadata', async () => {
-      mockAnalysisService.getAllAnalyses.mockResolvedValue({
-        'orphan-analysis.js': { name: 'orphan-analysis.js' }, // No teamId
+      mockAnalysisService.getAnalysisById.mockImplementation((id) => {
+        if (id === orphanAnalysisId) {
+          return {
+            analysisId: orphanAnalysisId,
+            analysisName: 'orphan-analysis',
+            // No teamId
+          };
+        }
+        if (id === TEST_ANALYSIS_IDS.team1Analysis) {
+          return {
+            analysisId: TEST_ANALYSIS_IDS.team1Analysis,
+            analysisName: 'team1-analysis',
+            teamId: 'team-1',
+          };
+        }
+        return null;
       });
 
       const viewerCookie = await getSessionCookie('teamViewer');
 
       // Should default to 'uncategorized' team
       await request(app)
-        .get('/api/analyses/orphan-analysis/content')
+        .get(`/api/analyses/${orphanAnalysisId}/content`)
         .set('Cookie', viewerCookie)
         .expect(403); // viewer doesn't have access to uncategorized
     });
@@ -479,7 +537,7 @@ describe('Analysis Routes - WITH REAL AUTH', () => {
 
       // Should fail auth (401) or permissions (403) depending on how badly the cookie is broken
       const response = await request(app)
-        .delete('/api/analyses/team1-analysis')
+        .delete(`/api/analyses/${TEST_ANALYSIS_IDS.team1Analysis}`)
         .set('Cookie', tamperedCookie);
 
       expect([401, 403]).toContain(response.status);
@@ -489,19 +547,34 @@ describe('Analysis Routes - WITH REAL AUTH', () => {
       const adminCookie = await getSessionCookie('admin');
       const viewerCookie = await getSessionCookie('teamViewer');
 
-      // IMPORTANT: Key must match the fileName param in requests
-      mockAnalysisService.getAllAnalyses.mockResolvedValue({
-        test: { name: 'test', teamId: 'team-1' },
+      const testAnalysisId = 'aaaaaaaa-4444-4000-8000-000000000004';
+
+      mockAnalysisService.getAnalysisById.mockImplementation((id) => {
+        if (id === testAnalysisId) {
+          return {
+            analysisId: testAnalysisId,
+            analysisName: 'test',
+            teamId: 'team-1',
+          };
+        }
+        if (id === TEST_ANALYSIS_IDS.team1Analysis) {
+          return {
+            analysisId: TEST_ANALYSIS_IDS.team1Analysis,
+            analysisName: 'team1-analysis',
+            teamId: 'team-1',
+          };
+        }
+        return null;
       });
 
       // Admin can delete
       const adminRequest = request(app)
-        .delete('/api/analyses/test')
+        .delete(`/api/analyses/${testAnalysisId}`)
         .set('Cookie', adminCookie);
 
       // Viewer cannot delete
       const viewerRequest = request(app)
-        .delete('/api/analyses/test')
+        .delete(`/api/analyses/${testAnalysisId}`)
         .set('Cookie', viewerCookie);
 
       const [adminResult, viewerResult] = await Promise.all([

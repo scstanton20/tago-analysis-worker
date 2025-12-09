@@ -14,60 +14,6 @@ const router = Router();
 // Apply authentication to all user routes
 router.use(authMiddleware);
 
-/**
- * @swagger
- * /users/set-initial-password:
- *   post:
- *     summary: Set initial password for new users
- *     description: Set password for users who need to change their password on first login (password onboarding)
- *     tags: [User Management]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               newPassword:
- *                 type: string
- *                 description: New password for the user
- *                 minLength: 6
- *             required:
- *               - newPassword
- *     responses:
- *       200:
- *         description: Password set successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 message:
- *                   type: string
- *                   example: "Password set successfully"
- *       400:
- *         description: Invalid password or missing newPassword
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
- *       401:
- *         description: Authentication required
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
- */
-router.post(
-  '/set-initial-password',
-  userOperationLimiter,
-  validateRequest(userValidationSchemas.setInitialPassword),
-  asyncHandler(UserController.setInitialPassword, 'set initial password'),
-);
-
 // Admin-only routes
 router.use(requireAdmin);
 

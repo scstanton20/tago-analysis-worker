@@ -131,7 +131,7 @@ describe('analysisSchemas', () => {
   describe('renameAnalysisSchema', () => {
     it('should validate valid rename data', () => {
       const validData = {
-        newFileName: 'new-analysis-name',
+        newName: 'new-analysis-name',
       };
 
       const result = schemas.renameAnalysis.body.safeParse(validData);
@@ -139,18 +139,18 @@ describe('analysisSchemas', () => {
       expect(result.success).toBe(true);
     });
 
-    it('should require newFileName', () => {
+    it('should require newName', () => {
       const invalidData = {};
 
       const result = schemas.renameAnalysis.body.safeParse(invalidData);
 
       expect(result.success).toBe(false);
-      expect(result.error?.issues[0].path).toContain('newFileName');
+      expect(result.error?.issues[0].path).toContain('newName');
     });
 
-    it('should reject empty newFileName', () => {
+    it('should reject empty newName', () => {
       const invalidData = {
-        newFileName: '',
+        newName: '',
       };
 
       const result = schemas.renameAnalysis.body.safeParse(invalidData);
@@ -158,9 +158,9 @@ describe('analysisSchemas', () => {
       expect(result.success).toBe(false);
     });
 
-    it('should reject newFileName with path separators', () => {
+    it('should reject newName with path separators', () => {
       const invalidData = {
-        newFileName: 'path/to/analysis',
+        newName: 'path/to/analysis',
       };
 
       const result = schemas.renameAnalysis.body.safeParse(invalidData);
@@ -168,9 +168,9 @@ describe('analysisSchemas', () => {
       expect(result.success).toBe(false);
     });
 
-    it('should reject newFileName with dots', () => {
+    it('should reject newName with dots', () => {
       const invalidData = {
-        newFileName: '../analysis',
+        newName: '../analysis',
       };
 
       const result = schemas.renameAnalysis.body.safeParse(invalidData);
@@ -321,9 +321,9 @@ describe('analysisSchemas', () => {
     });
 
     describe('params validation', () => {
-      it('should validate valid fileName', () => {
+      it('should validate valid analysisId (UUID)', () => {
         const validData = {
-          fileName: 'my-analysis.js',
+          analysisId: '123e4567-e89b-12d3-a456-426614174000',
         };
 
         const result = schemas.downloadLogs.params.safeParse(validData);
@@ -331,51 +331,55 @@ describe('analysisSchemas', () => {
         expect(result.success).toBe(true);
       });
 
-      it('should accept fileName with spaces', () => {
-        const validData = {
-          fileName: 'my analysis file.js',
-        };
+      it('should accept various valid UUID formats', () => {
+        const validUUIDs = [
+          '123e4567-e89b-12d3-a456-426614174000',
+          'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+          '00000000-0000-0000-0000-000000000000',
+        ];
 
-        const result = schemas.downloadLogs.params.safeParse(validData);
-
-        expect(result.success).toBe(true);
+        validUUIDs.forEach((uuid) => {
+          const result = schemas.downloadLogs.params.safeParse({
+            analysisId: uuid,
+          });
+          expect(result.success).toBe(true);
+        });
       });
 
-      it('should accept fileName with underscores and hyphens', () => {
-        const validData = {
-          fileName: 'my_analysis-file.js',
-        };
-
-        const result = schemas.downloadLogs.params.safeParse(validData);
-
-        expect(result.success).toBe(true);
-      });
-
-      it('should reject empty fileName', () => {
+      it('should reject empty analysisId', () => {
         const invalidData = {
-          fileName: '',
+          analysisId: '',
         };
 
         const result = schemas.downloadLogs.params.safeParse(invalidData);
 
         expect(result.success).toBe(false);
-        expect(result.error?.issues[0].message).toContain(
-          'Filename is required',
-        );
+        expect(result.error?.issues[0].message).toContain('UUID');
       });
 
-      it('should require fileName field', () => {
+      it('should require analysisId field', () => {
         const invalidData = {};
 
         const result = schemas.downloadLogs.params.safeParse(invalidData);
 
         expect(result.success).toBe(false);
-        expect(result.error?.issues[0].path).toContain('fileName');
+        expect(result.error?.issues[0].path).toContain('analysisId');
       });
 
-      it('should reject fileName with path separators', () => {
+      it('should reject non-UUID string', () => {
         const invalidData = {
-          fileName: 'path/to/analysis.js',
+          analysisId: 'not-a-valid-uuid',
+        };
+
+        const result = schemas.downloadLogs.params.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0].message).toContain('UUID');
+      });
+
+      it('should reject malformed UUID (wrong format)', () => {
+        const invalidData = {
+          analysisId: '123e4567e89b12d3a456426614174000', // Missing hyphens
         };
 
         const result = schemas.downloadLogs.params.safeParse(invalidData);
@@ -383,9 +387,9 @@ describe('analysisSchemas', () => {
         expect(result.success).toBe(false);
       });
 
-      it('should reject fileName with backslashes', () => {
+      it('should reject UUID with invalid characters', () => {
         const invalidData = {
-          fileName: 'path\\to\\analysis.js',
+          analysisId: '123e4567-e89b-12d3-a456-42661417zzzz', // Invalid hex chars
         };
 
         const result = schemas.downloadLogs.params.safeParse(invalidData);
@@ -393,44 +397,9 @@ describe('analysisSchemas', () => {
         expect(result.success).toBe(false);
       });
 
-      it('should reject fileName with only dots', () => {
+      it('should reject partial UUID', () => {
         const invalidData = {
-          fileName: '.',
-        };
-
-        const result = schemas.downloadLogs.params.safeParse(invalidData);
-
-        expect(result.success).toBe(false);
-        expect(result.error?.issues[0].message).toContain('Invalid filename');
-      });
-
-      it('should reject fileName with double dots', () => {
-        const invalidData = {
-          fileName: '..',
-        };
-
-        const result = schemas.downloadLogs.params.safeParse(invalidData);
-
-        expect(result.success).toBe(false);
-        expect(result.error?.issues[0].message).toContain('Invalid filename');
-      });
-
-      it('should reject fileName with special characters', () => {
-        const invalidData = {
-          fileName: 'analysis@#$.js',
-        };
-
-        const result = schemas.downloadLogs.params.safeParse(invalidData);
-
-        expect(result.success).toBe(false);
-        expect(result.error?.issues[0].message).toContain(
-          'can only contain alphanumeric',
-        );
-      });
-
-      it('should reject fileName with null bytes', () => {
-        const invalidData = {
-          fileName: 'analysis\0.js',
+          analysisId: '123e4567-e89b',
         };
 
         const result = schemas.downloadLogs.params.safeParse(invalidData);

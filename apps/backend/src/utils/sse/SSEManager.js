@@ -26,7 +26,7 @@ export class SSEManager {
   constructor() {
     // Infrastructure (owned by SSEManager)
     this.sessions = new Map(); // sessionId -> Session
-    this.analysisChannels = new Map(); // analysisName -> Channel
+    this.analysisChannels = new Map(); // analysisId -> Channel
     this.globalChannel = createChannel(); // Global channel for non-log broadcasts
 
     this.containerState = {
@@ -205,23 +205,20 @@ export class SSEManager {
   // Channel Management (delegates to ChannelManager)
   // ========================================================================
 
-  getOrCreateAnalysisChannel(analysisName) {
-    return this.channelManager.getOrCreateAnalysisChannel(analysisName);
+  getOrCreateAnalysisChannel(analysisId) {
+    return this.channelManager.getOrCreateAnalysisChannel(analysisId);
   }
 
-  async subscribeToAnalysis(sessionId, analysisNames, userId) {
+  async subscribeToAnalysis(sessionId, analysisIds, userId) {
     return this.channelManager.subscribeToAnalysis(
       sessionId,
-      analysisNames,
+      analysisIds,
       userId,
     );
   }
 
-  async unsubscribeFromAnalysis(sessionId, analysisNames) {
-    return this.channelManager.unsubscribeFromAnalysis(
-      sessionId,
-      analysisNames,
-    );
+  async unsubscribeFromAnalysis(sessionId, analysisIds) {
+    return this.channelManager.unsubscribeFromAnalysis(sessionId, analysisIds);
   }
 
   async handleSubscribeRequest(req, res) {
@@ -244,8 +241,8 @@ export class SSEManager {
     return this.broadcastService.broadcastToClients(sessions, data, filterFn);
   }
 
-  broadcastAnalysisLog(analysisName, logData) {
-    return this.broadcastService.broadcastAnalysisLog(analysisName, logData);
+  broadcastAnalysisLog(analysisId, logData) {
+    return this.broadcastService.broadcastAnalysisLog(analysisId, logData);
   }
 
   async broadcastUpdate(type, data) {
@@ -264,17 +261,18 @@ export class SSEManager {
     return this.broadcastService.broadcastTeamUpdate(team, action);
   }
 
-  async broadcastAnalysisMove(analysisName, fromTeam, toTeam) {
+  async broadcastAnalysisMove(analysisId, analysisName, fromTeam, toTeam) {
     return this.broadcastService.broadcastAnalysisMove(
+      analysisId,
       analysisName,
       fromTeam,
       toTeam,
     );
   }
 
-  async broadcastAnalysisUpdate(analysisName, updateData, teamId) {
+  async broadcastAnalysisUpdate(analysisId, updateData, teamId) {
     return this.broadcastService.broadcastAnalysisUpdate(
-      analysisName,
+      analysisId,
       updateData,
       teamId,
     );

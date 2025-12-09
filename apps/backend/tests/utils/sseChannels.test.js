@@ -53,6 +53,15 @@ vi.mock('../../src/services/analysisService.js', () => ({
   analysisService: {
     getAllAnalyses: vi.fn(() => Promise.resolve({})),
     getConfig: vi.fn(() => Promise.resolve({ teamStructure: {} })),
+    getAnalysisById: vi.fn((analysisId) => {
+      // Return appropriate teamId based on analysis name for permission tests
+      const teamId = analysisId.includes('team2') ? 'team-2' : 'team-1';
+      return {
+        id: analysisId,
+        name: analysisId,
+        teamId,
+      };
+    }),
     analyses: new Map(),
   },
 }));
@@ -208,32 +217,30 @@ describe('SSE Channel-Based Subscription Management', () => {
   describe('Channel Creation & Management', () => {
     describe('getOrCreateAnalysisChannel', () => {
       it('should create new analysis channel on first request', () => {
-        const analysisName = 'test-analysis';
-        const channel = sse.sseManager.getOrCreateAnalysisChannel(analysisName);
+        const analysisId = 'test-analysis';
+        const channel = sse.sseManager.getOrCreateAnalysisChannel(analysisId);
 
         expect(channel).toBeDefined();
         expect(betterSSE.createChannel).toHaveBeenCalledTimes(1);
       });
 
       it('should reuse existing channel for subsequent requests', () => {
-        const analysisName = 'test-analysis';
+        const analysisId = 'test-analysis';
 
-        const channel1 =
-          sse.sseManager.getOrCreateAnalysisChannel(analysisName);
-        const channel2 =
-          sse.sseManager.getOrCreateAnalysisChannel(analysisName);
+        const channel1 = sse.sseManager.getOrCreateAnalysisChannel(analysisId);
+        const channel2 = sse.sseManager.getOrCreateAnalysisChannel(analysisId);
 
         expect(channel1).toBe(channel2);
         expect(betterSSE.createChannel).toHaveBeenCalledTimes(1);
       });
 
       it('should track channels in internal registry', () => {
-        const analysisName = 'test-analysis';
+        const analysisId = 'test-analysis';
 
-        sse.sseManager.getOrCreateAnalysisChannel(analysisName);
+        sse.sseManager.getOrCreateAnalysisChannel(analysisId);
 
         expect(sse.sseManager.analysisChannels).toBeDefined();
-        expect(sse.sseManager.analysisChannels.has(analysisName)).toBe(true);
+        expect(sse.sseManager.analysisChannels.has(analysisId)).toBe(true);
       });
 
       it('should create separate channels for different analyses', () => {
@@ -247,8 +254,8 @@ describe('SSE Channel-Based Subscription Management', () => {
       });
 
       it('should initialize channel with session tracking', () => {
-        const analysisName = 'test-analysis';
-        const channel = sse.sseManager.getOrCreateAnalysisChannel(analysisName);
+        const analysisId = 'test-analysis';
+        const channel = sse.sseManager.getOrCreateAnalysisChannel(analysisId);
 
         expect(channel.sessionCount).toBeDefined();
         expect(channel.activeSessions).toBeDefined();
@@ -261,7 +268,7 @@ describe('SSE Channel-Based Subscription Management', () => {
         sse.sseManager.startMetricsBroadcasting = vi.fn();
         sse.sseManager.startHeartbeat = vi.fn();
 
-        const analysisName = 'test-analysis';
+        const analysisId = 'test-analysis';
         const session = await sse.sseManager.addClient(
           'user-123',
           mockRes,
@@ -271,19 +278,17 @@ describe('SSE Channel-Based Subscription Management', () => {
         // Subscribe and then unsubscribe
         await sse.sseManager.subscribeToAnalysis(
           session.id,
-          [analysisName],
+          [analysisId],
           'user-123',
         );
-        await sse.sseManager.unsubscribeFromAnalysis(session.id, [
-          analysisName,
-        ]);
+        await sse.sseManager.unsubscribeFromAnalysis(session.id, [analysisId]);
 
         // Channel should be removed
-        expect(sse.sseManager.analysisChannels.has(analysisName)).toBe(false);
+        expect(sse.sseManager.analysisChannels.has(analysisId)).toBe(false);
       });
 
       it('should keep channel alive while sessions remain', async () => {
-        const analysisName = 'test-analysis';
+        const analysisId = 'test-analysis';
 
         const session1 = await sse.sseManager.addClient('user-1', mockRes, {
           ...mockReq,
@@ -296,24 +301,22 @@ describe('SSE Channel-Based Subscription Management', () => {
 
         await sse.sseManager.subscribeToAnalysis(
           session1.id,
-          [analysisName],
+          [analysisId],
           'user-1',
         );
         await sse.sseManager.subscribeToAnalysis(
           session2.id,
-          [analysisName],
+          [analysisId],
           'user-2',
         );
-        await sse.sseManager.unsubscribeFromAnalysis(session1.id, [
-          analysisName,
-        ]);
+        await sse.sseManager.unsubscribeFromAnalysis(session1.id, [analysisId]);
 
         // Channel should still exist (session-2 still subscribed)
-        expect(sse.sseManager.analysisChannels.has(analysisName)).toBe(true);
+        expect(sse.sseManager.analysisChannels.has(analysisId)).toBe(true);
       });
 
       it('should track session count per channel accurately', async () => {
-        const analysisName = 'test-analysis';
+        const analysisId = 'test-analysis';
 
         const session1 = await sse.sseManager.addClient('user-1', mockRes, {
           ...mockReq,
@@ -326,27 +329,23 @@ describe('SSE Channel-Based Subscription Management', () => {
 
         await sse.sseManager.subscribeToAnalysis(
           session1.id,
-          [analysisName],
+          [analysisId],
           'user-1',
         );
-        const channel = sse.sseManager.analysisChannels.get(analysisName);
+        const channel = sse.sseManager.analysisChannels.get(analysisId);
         expect(channel.sessionCount).toBe(1);
 
         await sse.sseManager.subscribeToAnalysis(
           session2.id,
-          [analysisName],
+          [analysisId],
           'user-2',
         );
         expect(channel.sessionCount).toBe(2);
 
-        await sse.sseManager.unsubscribeFromAnalysis(session1.id, [
-          analysisName,
-        ]);
+        await sse.sseManager.unsubscribeFromAnalysis(session1.id, [analysisId]);
         expect(channel.sessionCount).toBe(1);
 
-        await sse.sseManager.unsubscribeFromAnalysis(session2.id, [
-          analysisName,
-        ]);
+        await sse.sseManager.unsubscribeFromAnalysis(session2.id, [analysisId]);
         expect(channel.sessionCount).toBe(0);
       });
 
@@ -355,7 +354,7 @@ describe('SSE Channel-Based Subscription Management', () => {
         sse.sseManager.startMetricsBroadcasting = vi.fn();
         sse.sseManager.startHeartbeat = vi.fn();
 
-        const analysisName = 'test-analysis';
+        const analysisId = 'test-analysis';
 
         const session = await sse.sseManager.addClient('user-1', mockRes, {
           ...mockReq,
@@ -364,17 +363,15 @@ describe('SSE Channel-Based Subscription Management', () => {
 
         await sse.sseManager.subscribeToAnalysis(
           session.id,
-          [analysisName],
+          [analysisId],
           'user-1',
         );
-        expect(sse.sseManager.analysisChannels.has(analysisName)).toBe(true);
+        expect(sse.sseManager.analysisChannels.has(analysisId)).toBe(true);
 
-        await sse.sseManager.unsubscribeFromAnalysis(session.id, [
-          analysisName,
-        ]);
+        await sse.sseManager.unsubscribeFromAnalysis(session.id, [analysisId]);
 
         // Should be cleaned up immediately, not deferred
-        expect(sse.sseManager.analysisChannels.has(analysisName)).toBe(false);
+        expect(sse.sseManager.analysisChannels.has(analysisId)).toBe(false);
       });
     });
 
@@ -1091,7 +1088,7 @@ describe('SSE Channel-Based Subscription Management', () => {
         );
 
         sse.sseManager.broadcastUpdate('log', {
-          analysis: 'test-analysis',
+          analysisId: 'test-analysis',
           message: 'log message',
         });
 
@@ -1621,8 +1618,18 @@ describe('SSE Channel-Based Subscription Management', () => {
           container: { cpu: 25, memory: 100 },
           children: { processCount: 2 },
           processes: [
-            { name: 'analysis-1', cpu: 10, memory: 50 },
-            { name: 'analysis-2', cpu: 15, memory: 75 },
+            {
+              analysis_id: 'analysis-1',
+              name: 'analysis-1',
+              cpu: 10,
+              memory: 50,
+            },
+            {
+              analysis_id: 'analysis-2',
+              name: 'analysis-2',
+              cpu: 15,
+              memory: 75,
+            },
           ],
         });
 

@@ -190,12 +190,7 @@ export default function AnalysisTree({
                 </Group>
               ) : (
                 <Box style={{ pointerEvents: 'none' }}>
-                  <AnalysisItem
-                    analysis={{
-                      ...analyses[activeItem.analysisName],
-                      name: activeItem.analysisName,
-                    }}
-                  />
+                  <AnalysisItem analysis={analyses[activeItem.id]} />
                 </Box>
               )}
             </Box>

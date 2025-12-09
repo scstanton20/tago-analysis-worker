@@ -14,7 +14,6 @@ import {
   versionOperationLimiter,
 } from '../middleware/rateLimiter.js';
 import { validateRequest } from '../middleware/validateRequest.js';
-import { sanitizeFilenameParam } from '../middleware/sanitizeParams.js';
 import {
   analysisValidationSchemas,
   LOG_TIME_RANGE_OPTIONS,
@@ -135,25 +134,27 @@ router.get(
   asyncHandler(AnalysisController.getAnalyses, 'get analyses'),
 );
 
-const fileRouter = Router({ mergeParams: true });
+const analysisIdRouter = Router({ mergeParams: true });
 
-// Common middleware for all /:fileName routes
-fileRouter.use(sanitizeFilenameParam(), extractAnalysisTeam);
+// Common middleware for all /:analysisId routes
+// Note: No sanitization needed for UUIDs - they're inherently safe
+analysisIdRouter.use(extractAnalysisTeam);
 
 /**
  * @swagger
- * /analyses/{fileName}/run:
+ * /analyses/{analysisId}/run:
  *   post:
  *     summary: Run analysis
  *     description: Start execution of a specific analysis
  *     tags: [Analysis Execution]
  *     parameters:
  *       - in: path
- *         name: fileName
+ *         name: analysisId
  *         required: true
  *         schema:
  *           type: string
- *         description: Name of the analysis file to run
+ *           format: uuid
+ *         description: UUID of the analysis to run
  *     requestBody:
  *       content:
  *         application/json:
@@ -190,7 +191,7 @@ fileRouter.use(sanitizeFilenameParam(), extractAnalysisTeam);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-fileRouter.post(
+analysisIdRouter.post(
   '/run',
   analysisRunLimiter,
   validateRequest(analysisValidationSchemas.runAnalysis),
@@ -199,18 +200,19 @@ fileRouter.post(
 );
 /**
  * @swagger
- * /analyses/{fileName}/stop:
+ * /analyses/{analysisId}/stop:
  *   post:
  *     summary: Stop analysis
  *     description: Stop execution of a running analysis
  *     tags: [Analysis Execution]
  *     parameters:
  *       - in: path
- *         name: fileName
+ *         name: analysisId
  *         required: true
  *         schema:
  *           type: string
- *         description: Name of the analysis file to stop
+ *           format: uuid
+ *         description: UUID of the analysis to stop
  *     responses:
  *       200:
  *         description: Analysis stopped successfully
@@ -234,7 +236,7 @@ fileRouter.post(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-fileRouter.post(
+analysisIdRouter.post(
   '/stop',
   analysisRunLimiter,
   validateRequest(analysisValidationSchemas.stopAnalysis),
@@ -243,18 +245,19 @@ fileRouter.post(
 );
 /**
  * @swagger
- * /analyses/{fileName}:
+ * /analyses/{analysisId}:
  *   delete:
  *     summary: Delete analysis
- *     description: Delete an analysis file and all its associated data
+ *     description: Delete an analysis and all its associated data
  *     tags: [Analysis Management]
  *     parameters:
  *       - in: path
- *         name: fileName
+ *         name: analysisId
  *         required: true
  *         schema:
  *           type: string
- *         description: Name of the analysis file to delete
+ *           format: uuid
+ *         description: UUID of the analysis to delete
  *     responses:
  *       200:
  *         description: Analysis deleted successfully
@@ -275,7 +278,7 @@ fileRouter.post(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-fileRouter.delete(
+analysisIdRouter.delete(
   '/',
   deletionLimiter,
   validateRequest(analysisValidationSchemas.deleteAnalysis),
@@ -284,18 +287,19 @@ fileRouter.delete(
 );
 /**
  * @swagger
- * /analyses/{fileName}/content:
+ * /analyses/{analysisId}/content:
  *   get:
  *     summary: Get analysis file content
- *     description: Retrieve the source code content of an analysis file
+ *     description: Retrieve the source code content of an analysis
  *     tags: [Analysis Management]
  *     parameters:
  *       - in: path
- *         name: fileName
+ *         name: analysisId
  *         required: true
  *         schema:
  *           type: string
- *         description: Name of the analysis file
+ *           format: uuid
+ *         description: UUID of the analysis
  *     responses:
  *       200:
  *         description: Analysis content retrieved successfully
@@ -317,7 +321,7 @@ fileRouter.delete(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-fileRouter.get(
+analysisIdRouter.get(
   '/content',
   fileOperationLimiter,
   validateRequest(analysisValidationSchemas.getAnalysisContent),
@@ -326,18 +330,19 @@ fileRouter.get(
 );
 /**
  * @swagger
- * /analyses/{fileName}:
+ * /analyses/{analysisId}:
  *   put:
  *     summary: Update analysis content
- *     description: Update the source code content of an analysis file
+ *     description: Update the source code content of an analysis
  *     tags: [Analysis Management]
  *     parameters:
  *       - in: path
- *         name: fileName
+ *         name: analysisId
  *         required: true
  *         schema:
  *           type: string
- *         description: Name of the analysis file to update
+ *           format: uuid
+ *         description: UUID of the analysis to update
  *     requestBody:
  *       required: true
  *       content:
@@ -386,7 +391,7 @@ fileRouter.get(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-fileRouter.put(
+analysisIdRouter.put(
   '/',
   fileOperationLimiter,
   validateRequest(analysisValidationSchemas.updateAnalysis),
@@ -395,18 +400,19 @@ fileRouter.put(
 );
 /**
  * @swagger
- * /analyses/{fileName}/rename:
+ * /analyses/{analysisId}/rename:
  *   put:
- *     summary: Rename analysis file
- *     description: Rename an analysis file to a new name
+ *     summary: Rename analysis
+ *     description: Rename an analysis to a new display name
  *     tags: [Analysis Management]
  *     parameters:
  *       - in: path
- *         name: fileName
+ *         name: analysisId
  *         required: true
  *         schema:
  *           type: string
- *         description: Current name of the analysis file
+ *           format: uuid
+ *         description: UUID of the analysis to rename
  *     requestBody:
  *       required: true
  *       content:
@@ -414,11 +420,11 @@ fileRouter.put(
  *           schema:
  *             type: object
  *             properties:
- *               newFileName:
+ *               newName:
  *                 type: string
- *                 description: New name for the analysis file
+ *                 description: New display name for the analysis
  *             required:
- *               - newFileName
+ *               - newName
  *     responses:
  *       200:
  *         description: Analysis renamed successfully
@@ -455,7 +461,7 @@ fileRouter.put(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-fileRouter.put(
+analysisIdRouter.put(
   '/rename',
   fileOperationLimiter,
   validateRequest(analysisValidationSchemas.renameAnalysis),
@@ -464,18 +470,19 @@ fileRouter.put(
 );
 /**
  * @swagger
- * /analyses/{fileName}/download:
+ * /analyses/{analysisId}/download:
  *   get:
  *     summary: Download analysis file
  *     description: Download the current analysis file or a specific version
  *     tags: [Analysis Management]
  *     parameters:
  *       - in: path
- *         name: fileName
+ *         name: analysisId
  *         required: true
  *         schema:
  *           type: string
- *         description: Name of the analysis file
+ *           format: uuid
+ *         description: UUID of the analysis
  *       - in: query
  *         name: version
  *         required: false
@@ -516,7 +523,7 @@ fileRouter.put(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-fileRouter.get(
+analysisIdRouter.get(
   '/download',
   fileOperationLimiter,
   validateRequest(analysisValidationSchemas.downloadAnalysis),
@@ -527,18 +534,19 @@ fileRouter.get(
 // Environment management routes
 /**
  * @swagger
- * /analyses/{fileName}/environment:
+ * /analyses/{analysisId}/environment:
  *   get:
  *     summary: Get analysis environment variables
  *     description: Retrieve environment variables for an analysis
  *     tags: [Analysis Management]
  *     parameters:
  *       - in: path
- *         name: fileName
+ *         name: analysisId
  *         required: true
  *         schema:
  *           type: string
- *         description: Name of the analysis file
+ *           format: uuid
+ *         description: UUID of the analysis
  *     responses:
  *       200:
  *         description: Environment variables retrieved successfully
@@ -559,7 +567,7 @@ fileRouter.get(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-fileRouter.get(
+analysisIdRouter.get(
   '/environment',
   fileOperationLimiter,
   validateRequest(analysisValidationSchemas.getEnvironment),
@@ -568,18 +576,19 @@ fileRouter.get(
 );
 /**
  * @swagger
- * /analyses/{fileName}/environment:
+ * /analyses/{analysisId}/environment:
  *   put:
  *     summary: Update analysis environment variables
  *     description: Update environment variables for an analysis
  *     tags: [Analysis Management]
  *     parameters:
  *       - in: path
- *         name: fileName
+ *         name: analysisId
  *         required: true
  *         schema:
  *           type: string
- *         description: Name of the analysis file
+ *           format: uuid
+ *         description: UUID of the analysis
  *     requestBody:
  *       required: true
  *       content:
@@ -627,7 +636,7 @@ fileRouter.get(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-fileRouter.put(
+analysisIdRouter.put(
   '/environment',
   fileOperationLimiter,
   validateRequest(analysisValidationSchemas.updateEnvironment),
@@ -638,18 +647,19 @@ fileRouter.put(
 // Logs management routes
 /**
  * @swagger
- * /analyses/{fileName}/logs:
+ * /analyses/{analysisId}/logs:
  *   get:
  *     summary: Get analysis logs
  *     description: Retrieve paginated logs for an analysis
  *     tags: [Analysis Logs]
  *     parameters:
  *       - in: path
- *         name: fileName
+ *         name: analysisId
  *         required: true
  *         schema:
  *           type: string
- *         description: Name of the analysis file
+ *           format: uuid
+ *         description: UUID of the analysis
  *       - in: query
  *         name: page
  *         schema:
@@ -685,27 +695,27 @@ fileRouter.put(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-fileRouter.get(
+analysisIdRouter.get(
   '/logs',
-  sanitizeFilenameParam(),
   validateRequest(analysisValidationSchemas.getLogs),
   requireTeamPermission('view_analyses'),
   asyncHandler(AnalysisController.getLogs, 'get logs'),
 );
 /**
  * @swagger
- * /analyses/{fileName}/logs/download:
+ * /analyses/{analysisId}/logs/download:
  *   get:
  *     summary: Download analysis logs
  *     description: Download logs for a specific time range as a file
  *     tags: [Analysis Logs]
  *     parameters:
  *       - in: path
- *         name: fileName
+ *         name: analysisId
  *         required: true
  *         schema:
  *           type: string
- *         description: Name of the analysis file
+ *           format: uuid
+ *         description: UUID of the analysis
  *       - in: query
  *         name: timeRange
  *         required: true
@@ -746,7 +756,7 @@ fileRouter.get(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-fileRouter.get(
+analysisIdRouter.get(
   '/logs/download',
   fileOperationLimiter,
   validateRequest(analysisValidationSchemas.downloadLogs),
@@ -756,18 +766,19 @@ fileRouter.get(
 
 /**
  * @swagger
- * /analyses/{fileName}/logs/options:
+ * /analyses/{analysisId}/logs/options:
  *   get:
  *     summary: Get log download options
  *     description: Returns available time range options for log downloads
  *     tags: [Analysis Logs]
  *     parameters:
  *       - in: path
- *         name: fileName
+ *         name: analysisId
  *         required: true
  *         schema:
  *           type: string
- *         description: Name of the analysis file
+ *           format: uuid
+ *         description: UUID of the analysis
  *     responses:
  *       200:
  *         description: Available time range options
@@ -788,7 +799,7 @@ fileRouter.get(
  *                         type: string
  *                         description: Human-readable label for display
  */
-fileRouter.get(
+analysisIdRouter.get(
   '/logs/options',
   requireTeamPermission('view_analyses'),
   (_req, res) => {
@@ -798,18 +809,19 @@ fileRouter.get(
 
 /**
  * @swagger
- * /analyses/{fileName}/logs:
+ * /analyses/{analysisId}/logs:
  *   delete:
  *     summary: Clear analysis logs
  *     description: Clear all log entries for an analysis
  *     tags: [Analysis Logs]
  *     parameters:
  *       - in: path
- *         name: fileName
+ *         name: analysisId
  *         required: true
  *         schema:
  *           type: string
- *         description: Name of the analysis file
+ *           format: uuid
+ *         description: UUID of the analysis
  *     responses:
  *       200:
  *         description: Logs cleared successfully
@@ -830,7 +842,7 @@ fileRouter.get(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-fileRouter.delete(
+analysisIdRouter.delete(
   '/logs',
   deletionLimiter,
   validateRequest(analysisValidationSchemas.clearLogs),
@@ -841,18 +853,19 @@ fileRouter.delete(
 // Version management routes
 /**
  * @swagger
- * /analyses/{fileName}/versions:
+ * /analyses/{analysisId}/versions:
  *   get:
  *     summary: Get version history
  *     description: Retrieve all saved versions of an analysis with metadata including timestamps and file sizes
  *     tags: [Analysis Management]
  *     parameters:
  *       - in: path
- *         name: fileName
+ *         name: analysisId
  *         required: true
  *         schema:
  *           type: string
- *         description: Name of the analysis file
+ *           format: uuid
+ *         description: UUID of the analysis
  *     responses:
  *       200:
  *         description: Version history retrieved successfully
@@ -881,7 +894,7 @@ fileRouter.delete(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-fileRouter.get(
+analysisIdRouter.get(
   '/versions',
   versionOperationLimiter,
   validateRequest(analysisValidationSchemas.getVersions),
@@ -891,18 +904,19 @@ fileRouter.get(
 
 /**
  * @swagger
- * /analyses/{fileName}/rollback:
+ * /analyses/{analysisId}/rollback:
  *   post:
  *     summary: Rollback to previous version
  *     description: Rollback analysis to a specific version. Current version is automatically saved if content differs from target version.
  *     tags: [Analysis Management]
  *     parameters:
  *       - in: path
- *         name: fileName
+ *         name: analysisId
  *         required: true
  *         schema:
  *           type: string
- *         description: Name of the analysis file
+ *           format: uuid
+ *         description: UUID of the analysis
  *     requestBody:
  *       required: true
  *       content:
@@ -955,7 +969,7 @@ fileRouter.get(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-fileRouter.post(
+analysisIdRouter.post(
   '/rollback',
   versionOperationLimiter,
   validateRequest(analysisValidationSchemas.rollbackToVersion),
@@ -963,6 +977,6 @@ fileRouter.post(
   asyncHandler(AnalysisController.rollbackToVersion, 'rollback to version'),
 );
 
-router.use('/:fileName', fileRouter);
+router.use('/:analysisId', analysisIdRouter);
 
 export { router as analysisRouter };

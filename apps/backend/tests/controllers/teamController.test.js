@@ -245,14 +245,16 @@ describe('TeamController', () => {
 
   describe('moveAnalysisToTeam', () => {
     it('should move analysis to team successfully', async () => {
+      const analysisId = 'test-analysis-uuid-123';
       const req = createMockRequest({
-        params: { name: 'test-analysis' },
+        params: { analysisId },
         body: { teamId: 'team-2' },
       });
       const res = createMockResponse();
 
       const mockResult = {
-        analysis: 'test-analysis',
+        analysisId,
+        analysisName: 'test-analysis',
         from: 'team-1',
         to: 'team-2',
       };
@@ -262,12 +264,13 @@ describe('TeamController', () => {
       await TeamController.moveAnalysisToTeam(req, res);
 
       expect(teamService.moveAnalysisToTeam).toHaveBeenCalledWith(
-        'test-analysis',
+        analysisId,
         'team-2',
         req.log,
       );
       expect(res.json).toHaveBeenCalledWith(mockResult);
       expect(sseManager.broadcastAnalysisMove).toHaveBeenCalledWith(
+        analysisId,
         'test-analysis',
         'team-1',
         'team-2',
@@ -276,14 +279,16 @@ describe('TeamController', () => {
     });
 
     it('should move analysis to "No Team" (null teamId)', async () => {
+      const analysisId = 'test-analysis-uuid-123';
       const req = createMockRequest({
-        params: { name: 'test-analysis' },
+        params: { analysisId },
         body: { teamId: null },
       });
       const res = createMockResponse();
 
       const mockResult = {
-        analysis: 'test-analysis',
+        analysisId,
+        analysisName: 'test-analysis',
         from: 'team-1',
         to: null,
       };
@@ -293,7 +298,7 @@ describe('TeamController', () => {
       await TeamController.moveAnalysisToTeam(req, res);
 
       expect(teamService.moveAnalysisToTeam).toHaveBeenCalledWith(
-        'test-analysis',
+        analysisId,
         null,
         req.log,
       );

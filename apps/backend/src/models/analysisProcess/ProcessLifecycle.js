@@ -295,7 +295,7 @@ export class ProcessLifecycleManager {
 
       const filePath = path.join(
         config.paths.analysis,
-        this.analysisProcess.analysisName,
+        this.analysisProcess.analysisId,
         'index.js',
       );
 
@@ -306,7 +306,7 @@ export class ProcessLifecycleManager {
       // Load custom environment variables for this analysis
       const storedEnv = this.analysisProcess.service
         ? await this.analysisProcess.service.getEnvironment(
-            this.analysisProcess.analysisName,
+            this.analysisProcess.analysisId,
           )
         : {};
 
@@ -350,8 +350,9 @@ export class ProcessLifecycleManager {
 
       // Notify frontend
       const sseManager = await getSseManager();
-      sseManager.broadcastAnalysisUpdate(this.analysisProcess.analysisName, {
+      sseManager.broadcastAnalysisUpdate(this.analysisProcess.analysisId, {
         type: 'analysisUpdate',
+        analysisId: this.analysisProcess.analysisId,
         analysisName: this.analysisProcess.analysisName,
         update: {
           status: 'running',
@@ -533,8 +534,9 @@ export class ProcessLifecycleManager {
 
     // Notify frontend
     const sseManager = await getSseManager();
-    sseManager.broadcastAnalysisUpdate(this.analysisProcess.analysisName, {
+    sseManager.broadcastAnalysisUpdate(this.analysisProcess.analysisId, {
       type: 'analysisUpdate',
+      analysisId: this.analysisProcess.analysisId,
       analysisName: this.analysisProcess.analysisName,
       update: {
         status: 'stopped',

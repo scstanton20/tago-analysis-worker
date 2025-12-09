@@ -30,9 +30,10 @@ vi.mock('../../src/utils/authDatabase.js', () => ({
   executeQueryAll: mockExecuteQueryAll,
 }));
 
-// Mock the analysisService
+// Mock the analysisService - v5.0 uses getAnalysisById
 const mockAnalysisService = {
   getAllAnalyses: vi.fn(),
+  getAnalysisById: vi.fn(),
 };
 
 vi.mock('../../src/services/analysisService.js', () => ({
@@ -148,6 +149,45 @@ describe('betterAuthMiddleware', () => {
       const mockSession = {
         session: { id: 'session-123' },
         user: { id: 'user-123', role: 'admin' },
+      };
+
+      mockAuth.api.getSession.mockResolvedValue(mockSession);
+
+      await middleware.authMiddleware(req, res, next);
+
+      expect(next).toHaveBeenCalled();
+      expect(req.user).toEqual(mockSession.user);
+    });
+
+    it('should block users with requiresPasswordChange flag', async () => {
+      const mockSession = {
+        session: { id: 'session-123' },
+        user: { id: 'user-123', role: 'user', requiresPasswordChange: true },
+      };
+
+      mockAuth.api.getSession.mockResolvedValue(mockSession);
+
+      await middleware.authMiddleware(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Password change required',
+        code: 'PASSWORD_CHANGE_REQUIRED',
+      });
+      expect(next).not.toHaveBeenCalled();
+      expect(req.log.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'authenticate',
+          userId: 'user-123',
+        }),
+        'Access blocked: password change required',
+      );
+    });
+
+    it('should allow users with requiresPasswordChange=false', async () => {
+      const mockSession = {
+        session: { id: 'session-123' },
+        user: { id: 'user-123', role: 'user', requiresPasswordChange: false },
       };
 
       mockAuth.api.getSession.mockResolvedValue(mockSession);
@@ -586,13 +626,13 @@ describe('betterAuthMiddleware', () => {
 
   describe('extractAnalysisTeam', () => {
     it('should extract teamId from analysis successfully', async () => {
-      req.params = { fileName: 'test-analysis.js' };
+      const analysisId = 'test-analysis-uuid-123';
+      req.params = { analysisId };
 
-      mockAnalysisService.getAllAnalyses.mockResolvedValue({
-        'test-analysis.js': {
-          name: 'test-analysis.js',
-          teamId: 'team-123',
-        },
+      mockAnalysisService.getAnalysisById.mockReturnValue({
+        analysisId,
+        analysisName: 'test-analysis',
+        teamId: 'team-123',
       });
 
       await middleware.extractAnalysisTeam(req, res, next);
@@ -602,7 +642,7 @@ describe('betterAuthMiddleware', () => {
       expect(req.log.info).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'extractTeam',
-          fileName: 'test-analysis.js',
+          analysisId,
           teamId: 'team-123',
         }),
         'Analysis team extracted',
@@ -610,12 +650,13 @@ describe('betterAuthMiddleware', () => {
     });
 
     it('should use uncategorized when teamId is missing', async () => {
-      req.params = { fileName: 'test-analysis.js' };
+      const analysisId = 'test-analysis-uuid-123';
+      req.params = { analysisId };
 
-      mockAnalysisService.getAllAnalyses.mockResolvedValue({
-        'test-analysis.js': {
-          name: 'test-analysis.js',
-        },
+      mockAnalysisService.getAnalysisById.mockReturnValue({
+        analysisId,
+        analysisName: 'test-analysis',
+        // teamId missing
       });
 
       await middleware.extractAnalysisTeam(req, res, next);
@@ -625,9 +666,9 @@ describe('betterAuthMiddleware', () => {
     });
 
     it('should continue when analysis not found', async () => {
-      req.params = { fileName: 'non-existent.js' };
+      req.params = { analysisId: 'non-existent-uuid' };
 
-      mockAnalysisService.getAllAnalyses.mockResolvedValue({});
+      mockAnalysisService.getAnalysisById.mockReturnValue(undefined);
 
       await middleware.extractAnalysisTeam(req, res, next);
 
@@ -635,22 +676,23 @@ describe('betterAuthMiddleware', () => {
       expect(next).toHaveBeenCalled();
     });
 
-    it('should continue when no fileName in params', async () => {
+    it('should continue when no analysisId in params', async () => {
       req.params = {};
 
       await middleware.extractAnalysisTeam(req, res, next);
 
       expect(req.analysisTeamId).toBeUndefined();
       expect(next).toHaveBeenCalled();
-      expect(mockAnalysisService.getAllAnalyses).not.toHaveBeenCalled();
+      expect(mockAnalysisService.getAnalysisById).not.toHaveBeenCalled();
     });
 
     it('should continue on service error', async () => {
-      req.params = { fileName: 'test-analysis.js' };
+      const analysisId = 'test-analysis-uuid-123';
+      req.params = { analysisId };
 
-      mockAnalysisService.getAllAnalyses.mockRejectedValue(
-        new Error('Service error'),
-      );
+      mockAnalysisService.getAnalysisById.mockImplementation(() => {
+        throw new Error('Service error');
+      });
 
       await middleware.extractAnalysisTeam(req, res, next);
 
@@ -660,16 +702,17 @@ describe('betterAuthMiddleware', () => {
         expect.objectContaining({
           action: 'extractTeam',
           err: expect.any(Error),
-          fileName: 'test-analysis.js',
+          analysisId,
         }),
         'Error extracting analysis team',
       );
     });
 
     it('should handle unexpected errors gracefully', async () => {
-      req.params = { fileName: 'test-analysis.js' };
+      const analysisId = 'test-analysis-uuid-123';
+      req.params = { analysisId };
 
-      mockAnalysisService.getAllAnalyses.mockImplementation(() => {
+      mockAnalysisService.getAnalysisById.mockImplementation(() => {
         throw new Error('Unexpected error');
       });
 
@@ -689,10 +732,12 @@ describe('betterAuthMiddleware', () => {
       // Clear the mock and re-import to get clean state
       vi.clearAllMocks();
       req.log = null;
-      req.params = { fileName: 'test-analysis.js' };
+      const analysisId = 'test-analysis-uuid-123';
+      req.params = { analysisId };
 
-      mockAnalysisService.getAllAnalyses.mockResolvedValue({
-        'test-analysis.js': { teamId: 'team-123' },
+      mockAnalysisService.getAnalysisById.mockReturnValue({
+        analysisId,
+        teamId: 'team-123',
       });
 
       await middleware.extractAnalysisTeam(req, res, next);

@@ -21,6 +21,19 @@ export const authMiddleware = async (req, res, next) => {
       );
       return res.status(401).json({ error: 'Unauthorized' });
     }
+
+    // Block users who need to change their password from accessing protected resources
+    if (session.user.requiresPasswordChange) {
+      logger.warn(
+        { action: 'authenticate', userId: session.user.id },
+        'Access blocked: password change required',
+      );
+      return res.status(403).json({
+        error: 'Password change required',
+        code: 'PASSWORD_CHANGE_REQUIRED',
+      });
+    }
+
     // Attach user and session to request
     // eslint-disable-next-line require-atomic-updates
     req.user = session.user;
@@ -217,29 +230,28 @@ export const extractAnalysisTeam = async (req, _res, next) => {
     req.log?.child({ middleware: 'extractAnalysisTeam' }) || console;
 
   try {
-    const fileName = req.params?.fileName;
+    const analysisId = req.params?.analysisId;
 
-    if (fileName) {
+    if (analysisId) {
       // Import analysis service to get analysis metadata
       const { analysisService } = await import(
         '../services/analysisService.js'
       );
 
       try {
-        const analyses = await analysisService.getAllAnalyses();
-        const analysis = analyses[fileName];
+        const analysis = analysisService.getAnalysisById(analysisId);
 
         if (analysis) {
           // eslint-disable-next-line require-atomic-updates
           req.analysisTeamId = analysis.teamId || 'uncategorized';
           logger.info(
-            { action: 'extractTeam', fileName, teamId: req.analysisTeamId },
+            { action: 'extractTeam', analysisId, teamId: req.analysisTeamId },
             'Analysis team extracted',
           );
         }
       } catch (error) {
         logger.warn(
-          { action: 'extractTeam', err: error, fileName },
+          { action: 'extractTeam', err: error, analysisId },
           'Error extracting analysis team',
         );
         // Continue without team info - let permission middleware handle it

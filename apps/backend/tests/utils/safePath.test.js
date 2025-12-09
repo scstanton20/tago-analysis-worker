@@ -454,17 +454,17 @@ describe('safePath', () => {
 
   describe('getAnalysisPath', () => {
     it('should return correct analysis path', () => {
-      const analysisName = 'my-analysis';
+      const analysisId = 'my-analysis';
 
-      const result = safePath.getAnalysisPath(analysisName);
+      const result = safePath.getAnalysisPath(analysisId);
 
       expect(result).toBe('/tmp/test-analyses-storage/analyses/my-analysis');
     });
 
-    it('should handle analysis names with hyphens', () => {
-      const analysisName = 'my-cool-analysis';
+    it('should handle analysis IDs with hyphens', () => {
+      const analysisId = 'my-cool-analysis';
 
-      const result = safePath.getAnalysisPath(analysisName);
+      const result = safePath.getAnalysisPath(analysisId);
 
       expect(result).toContain('my-cool-analysis');
     });

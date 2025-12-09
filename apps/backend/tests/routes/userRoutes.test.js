@@ -37,7 +37,6 @@ vi.mock('../../src/middleware/validateRequest.js', () => ({
 
 vi.mock('../../src/validation/userSchemas.js', () => ({
   userValidationSchemas: {
-    setInitialPassword: {},
     addToOrganization: {},
     assignUserToTeams: {},
     updateUserTeamAssignments: {},
@@ -68,12 +67,6 @@ vi.mock('../../src/controllers/userController.js', () => ({
         },
       });
     }),
-    setInitialPassword: vi.fn((req, res) =>
-      res.json({
-        success: true,
-        message: 'Password set successfully',
-      }),
-    ),
     addToOrganization: vi.fn((req, res) =>
       res.json({
         success: true,
@@ -203,15 +196,6 @@ describe('User Routes - WITH REAL AUTH', () => {
   });
 
   describe('Authentication Requirements', () => {
-    it('should reject unauthenticated requests to set initial password', async () => {
-      await request(app)
-        .post('/api/users/set-initial-password')
-        .send({ newPassword: 'securePassword123!' })
-        .expect(401);
-
-      expect(UserController.setInitialPassword).not.toHaveBeenCalled();
-    });
-
     it('should reject unauthenticated requests to admin routes', async () => {
       await request(app)
         .post('/api/users/add-to-organization')
@@ -281,48 +265,6 @@ describe('User Routes - WITH REAL AUTH', () => {
         .expect(404);
 
       expect(response.body.error).toContain('User not found');
-    });
-  });
-
-  describe('POST /api/users/set-initial-password', () => {
-    it('should allow any authenticated user to set initial password', async () => {
-      const cookie = await getSessionCookie('teamViewer');
-
-      const response = await request(app)
-        .post('/api/users/set-initial-password')
-        .set('Cookie', cookie)
-        .send({ newPassword: 'securePassword123!' })
-        .expect(200);
-
-      expect(response.body).toEqual({
-        success: true,
-        message: 'Password set successfully',
-      });
-      expect(UserController.setInitialPassword).toHaveBeenCalled();
-    });
-
-    it('should allow admin to set initial password', async () => {
-      const adminCookie = await getSessionCookie('admin');
-
-      await request(app)
-        .post('/api/users/set-initial-password')
-        .set('Cookie', adminCookie)
-        .send({ newPassword: 'newPass123!' })
-        .expect(200);
-
-      expect(UserController.setInitialPassword).toHaveBeenCalled();
-    });
-
-    it('should allow team owner to set initial password', async () => {
-      const ownerCookie = await getSessionCookie('teamOwner');
-
-      await request(app)
-        .post('/api/users/set-initial-password')
-        .set('Cookie', ownerCookie)
-        .send({ newPassword: 'anotherPass123!' })
-        .expect(200);
-
-      expect(UserController.setInitialPassword).toHaveBeenCalled();
     });
   });
 
@@ -844,11 +786,6 @@ describe('User Routes - WITH REAL AUTH', () => {
 
     it('should handle 404 for invalid HTTP methods', async () => {
       const adminCookie = await getSessionCookie('admin');
-
-      await request(app)
-        .get('/api/users/set-initial-password')
-        .set('Cookie', adminCookie)
-        .expect(404);
 
       await request(app)
         .post('/api/users/u1/organization')

@@ -303,13 +303,13 @@ export default function TreeItem({
     );
   }
 
-  // Analysis item
-  const analysis = allAnalyses[item.analysisName];
+  // Analysis item - look up by analysis ID (item.id contains the analysis UUID in v5.0)
+  const analysis = allAnalyses[item.id];
   if (!analysis) {
     return (
       <div ref={setNodeRef} style={style}>
         <Text size="sm" c="dimmed">
-          Analysis "{item.analysisName}" not found
+          Analysis "{item.id}" not found
         </Text>
       </div>
     );
@@ -340,10 +340,7 @@ export default function TreeItem({
         )}
 
         <Box style={{ flex: 1, minWidth: 0 }}>
-          <AnalysisItem
-            analysis={{ ...analysis, name: item.analysisName }}
-            reorderMode={reorderMode}
-          />
+          <AnalysisItem analysis={analysis} reorderMode={reorderMode} />
         </Box>
       </Group>
     </div>
@@ -354,10 +351,9 @@ TreeItem.propTypes = {
   item: PropTypes.shape({
     id: PropTypes.string.isRequired,
     type: PropTypes.oneOf(['folder', 'analysis']).isRequired,
-    name: PropTypes.string,
-    analysisName: PropTypes.string,
+    name: PropTypes.string, // Only for folders
     expanded: PropTypes.bool,
-    items: PropTypes.array,
+    items: PropTypes.array, // Only for folders
   }).isRequired,
   depth: PropTypes.number,
   onToggle: PropTypes.func.isRequired,

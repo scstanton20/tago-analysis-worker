@@ -1,6 +1,7 @@
 // validation/teamSchemas.js
 import { z } from 'zod';
 import { requiredId, hexColorSchema, emptyStrictSchema } from './shared.js';
+import { analysisIdSchema } from './analysisSchemas.js';
 
 export const teamValidationSchemas = {
   /**
@@ -69,11 +70,11 @@ export const teamValidationSchemas = {
   },
 
   /**
-   * PUT /api/teams/analyses/:name/team - Move analysis to team
+   * PUT /api/teams/analyses/:analysisId/team - Move analysis to team
    */
   moveAnalysisToTeam: {
     params: z.object({
-      name: requiredId('Analysis name'),
+      analysisId: analysisIdSchema,
     }),
     body: z.object({
       teamId: requiredId('Team ID'),

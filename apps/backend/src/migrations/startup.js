@@ -1,9 +1,9 @@
-import { v4 as uuidv4 } from 'uuid';
 import { execSync } from 'child_process';
 import Database from 'better-sqlite3';
 import path from 'path';
 import crypto from 'crypto';
 import { config } from '../config/default.js';
+import { generateId } from '../utils/generateId.js';
 import { sseManager } from '../utils/sse/index.js';
 import { auth } from '../lib/auth.js';
 import {
@@ -265,7 +265,7 @@ function setupOrganization(db) {
     return existingOrg.id;
   }
 
-  const orgUuid = uuidv4();
+  const orgUuid = generateId();
   db.prepare(
     'INSERT INTO organization (id, name, slug, createdAt) VALUES (?, ?, ?, ?)',
   ).run(orgUuid, 'Tago Analysis Worker', 'main', new Date().toISOString());
@@ -295,7 +295,7 @@ function setupUncategorizedTeam(db, organizationId) {
   }
 
   logger.info('Creating missing uncategorized team...');
-  const teamUuid = uuidv4();
+  const teamUuid = generateId();
   db.prepare(
     'INSERT INTO team (id, name, organizationId, createdAt, color, order_index, is_system) VALUES (?, ?, ?, ?, ?, ?, ?)',
   ).run(

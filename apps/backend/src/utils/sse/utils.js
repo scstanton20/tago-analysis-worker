@@ -59,12 +59,12 @@ export function isValidTeamId(teamId) {
 }
 
 /**
- * Extract analysis name from various log data formats
+ * Extract analysis ID from various log data formats
  * @param {Object} logData - Log data object
- * @returns {string|null} Analysis name or null
+ * @returns {string|null} Analysis ID or null
  */
-export function extractAnalysisName(logData) {
-  return logData?.analysis || logData?.fileName || null;
+export function extractAnalysisId(logData) {
+  return logData?.analysisId || null;
 }
 
 /**
@@ -103,7 +103,7 @@ export function isIterable(value) {
  * @property {Object} state.user - User object
  * @property {string} state.user.id - User ID
  * @property {string} state.user.role - User role
- * @property {Set<string>} state.subscribedChannels - Subscribed analysis names
+ * @property {Set<string>} state.subscribedChannels - Subscribed analysis IDs
  * @property {boolean} isConnected - Connection status
  * @property {Date} [lastPushAt] - Last push timestamp
  */

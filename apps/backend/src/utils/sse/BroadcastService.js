@@ -5,7 +5,7 @@
 
 import { createChildLogger } from '../logging/logger.js';
 import { metricsService } from '../../services/metricsService.js';
-import { extractAnalysisName } from './utils.js';
+import { extractAnalysisId } from './utils.js';
 
 const logger = createChildLogger('sse:broadcast');
 
@@ -79,12 +79,12 @@ export class BroadcastService {
   /**
    * Broadcast analysis log to subscribed sessions
    * Delegates to ChannelManager
-   * @param {string} analysisName - Analysis name
+   * @param {string} analysisId - Analysis ID (UUID)
    * @param {Object} logData - Log data
    * @returns {void}
    */
-  broadcastAnalysisLog(analysisName, logData) {
-    this.manager.channelManager.broadcastAnalysisLog(analysisName, logData);
+  broadcastAnalysisLog(analysisId, logData) {
+    this.manager.channelManager.broadcastAnalysisLog(analysisId, logData);
   }
 
   /**
@@ -97,9 +97,9 @@ export class BroadcastService {
   async broadcastUpdate(type, data) {
     if (type === 'log') {
       // Log broadcasts go to analysis channels (subscribed sessions only)
-      const analysisName = extractAnalysisName(data);
-      if (analysisName) {
-        this.broadcastAnalysisLog(analysisName, {
+      const analysisId = extractAnalysisId(data);
+      if (analysisId) {
+        this.broadcastAnalysisLog(analysisId, {
           type: 'log',
           data: data,
         });
@@ -114,7 +114,7 @@ export class BroadcastService {
       // Non-log updates go to global channel (all sessions)
       await this.broadcastAnalysisUpdate(type, {
         type: 'analysisUpdate',
-        analysisName: type,
+        analysisId: type,
         update: data,
       });
     }
@@ -196,15 +196,17 @@ export class BroadcastService {
   /**
    * Broadcast analysis move between teams
    * Extracted from sse.js lines 1239-1257
-   * @param {string} analysisName - Analysis name
+   * @param {string} analysisId - Analysis ID (UUID)
+   * @param {string} analysisName - Analysis name (for display)
    * @param {string} fromTeam - Source team
    * @param {string} toTeam - Destination team
    * @returns {Promise<void>}
    */
-  async broadcastAnalysisMove(analysisName, fromTeam, toTeam) {
+  async broadcastAnalysisMove(analysisId, analysisName, fromTeam, toTeam) {
     const data = {
       type: 'analysisMovedToTeam',
-      analysis: analysisName,
+      analysisId,
+      analysisName,
       from: fromTeam,
       to: toTeam,
     };
@@ -223,12 +225,12 @@ export class BroadcastService {
   /**
    * Broadcast analysis update
    * Extracted from sse.js lines 1283-1304
-   * @param {string} analysisName - Analysis name
+   * @param {string} analysisId - Analysis ID (UUID)
    * @param {Object} updateData - Update data
    * @param {string} teamId - Team ID (optional)
    * @returns {Promise<number>} Count sent
    */
-  async broadcastAnalysisUpdate(analysisName, updateData, teamId = null) {
+  async broadcastAnalysisUpdate(analysisId, updateData, teamId = null) {
     try {
       // If teamId not provided, try to get it from the analysis
       let analysisTeamId = teamId;
@@ -236,17 +238,13 @@ export class BroadcastService {
         const { analysisService } = await import(
           '../../services/analysisService.js'
         );
-        const analyses = await analysisService.getAllAnalyses();
-        const analysis = analyses[analysisName];
+        const analysis = analysisService.getAnalysisById(analysisId);
         analysisTeamId = analysis?.teamId || 'uncategorized';
       }
 
       return await this.broadcastToTeamUsers(analysisTeamId, updateData);
     } catch (error) {
-      logger.error(
-        { error, analysisName },
-        'Error broadcasting analysis update',
-      );
+      logger.error({ error, analysisId }, 'Error broadcasting analysis update');
       return 0;
     }
   }
@@ -431,7 +429,7 @@ export class BroadcastService {
    *
    * @param {Object} user - User object
    * @param {Object} metrics - Raw metrics
-   * @param {Object} allAnalyses - All analyses keyed by name
+   * @param {Object} allAnalyses - All analyses keyed by analysisId
    * @param {Function} getUserTeamIds - Function to get allowed team IDs
    * @returns {Object} Filtered metrics
    */
@@ -446,7 +444,7 @@ export class BroadcastService {
     const allowedTeamIds = getUserTeamIds(user.id, 'view_analyses');
 
     filteredMetrics.processes = metrics.processes.filter((process) => {
-      const analysis = allAnalyses[process.name];
+      const analysis = allAnalyses[process.analysis_id];
       const teamId = analysis?.teamId || 'uncategorized';
       return allowedTeamIds.includes(teamId);
     });

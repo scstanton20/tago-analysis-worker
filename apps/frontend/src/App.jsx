@@ -20,14 +20,15 @@ export default function App() {
 
 // Router component to conditionally load authenticated vs login components
 function AppRouter() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
 
   // Show loading overlay during initial auth check
   if (isLoading) {
     return <AppLoadingOverlay message="Verifying authentication..." />;
   }
 
-  if (!isAuthenticated) {
+  // Show login page if not authenticated OR if user needs to change password
+  if (!isAuthenticated || user?.requiresPasswordChange) {
     return (
       <ErrorBoundary variant="component" componentName="Login Page">
         <LoginPage />

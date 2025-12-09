@@ -8,12 +8,12 @@
  * - Analysis-team assignment with automatic migration on team deletion
  * - Singleton pattern with request-scoped logging
  */
-import { v4 as uuidv4 } from 'uuid';
 import {
   executeQuery,
   executeQueryAll,
   executeTransaction,
 } from '../utils/authDatabase.js';
+import { generateId } from '../utils/generateId.js';
 import { createChildLogger } from '../utils/logging/logger.js';
 import {
   convertSQLiteBooleans,
@@ -388,17 +388,17 @@ class TeamService {
     return analyses;
   }
 
-  async moveAnalysisToTeam(analysisName, teamId, logger = moduleLogger) {
+  async moveAnalysisToTeam(analysisId, teamId, logger = moduleLogger) {
     logger.info(
-      { action: 'moveAnalysisToTeam', analysisName, teamId },
+      { action: 'moveAnalysisToTeam', analysisId, teamId },
       'Moving analysis to team',
     );
 
     const configData = await this.analysisService.getConfig();
 
-    const analysis = configData.analyses?.[analysisName];
+    const analysis = configData.analyses?.[analysisId];
     if (!analysis) {
-      throw new Error(`Analysis ${analysisName} not found`);
+      throw new Error(`Analysis ${analysisId} not found`);
     }
 
     const team = await this.getTeam(teamId, logger);
@@ -410,11 +410,12 @@ class TeamService {
 
     if (previousTeam === teamId) {
       logger.info(
-        { action: 'moveAnalysisToTeam', analysisName, teamId },
+        { action: 'moveAnalysisToTeam', analysisId, teamId },
         'Analysis already in target team, no move needed',
       );
       return {
-        analysis: analysisName,
+        analysisId,
+        analysisName: analysis.name,
         from: previousTeam,
         to: teamId,
       };
@@ -427,24 +428,20 @@ class TeamService {
 
     // Remove from old team structure and add to new team
     if (previousTeam) {
-      await this.removeItemFromTeamStructure(
-        previousTeam,
-        analysisName,
-        logger,
-      );
+      await this.removeItemFromTeamStructure(previousTeam, analysisId, logger);
     }
 
     const newItem = {
-      id: uuidv4(),
+      id: analysisId,
       type: 'analysis',
-      analysisName: analysisName,
     };
     await this.addItemToTeamStructure(teamId, newItem, null, logger);
 
     logger.info(
       {
         action: 'moveAnalysisToTeam',
-        analysisName,
+        analysisId,
+        analysisName: analysis.name,
         fromTeamId: previousTeam,
         toTeamId: teamId,
       },
@@ -452,29 +449,30 @@ class TeamService {
     );
 
     return {
-      analysis: analysisName,
+      analysisId,
+      analysisName: analysis.name,
       from: previousTeam,
       to: teamId,
     };
   }
 
   // Ensure an analysis has a team assignment (defaults to uncategorized team)
-  async ensureAnalysisHasTeam(analysisName) {
+  async ensureAnalysisHasTeam(analysisId) {
     const configData = await this.analysisService.getConfig();
 
     if (
-      configData.analyses?.[analysisName] &&
-      !configData.analyses[analysisName].teamId
+      configData.analyses?.[analysisId] &&
+      !configData.analyses[analysisId].teamId
     ) {
       const teams = await this.getAllTeams();
       const uncategorizedTeam = teams.find((t) => t.name === 'Uncategorized');
 
       if (uncategorizedTeam) {
-        configData.analyses[analysisName].teamId = uncategorizedTeam.id;
+        configData.analyses[analysisId].teamId = uncategorizedTeam.id;
         await this.analysisService.updateConfig(configData);
         moduleLogger.info(
           {
-            analysisName,
+            analysisId,
             teamId: uncategorizedTeam.id,
           },
           'Assigned analysis to uncategorized team',
@@ -618,13 +616,9 @@ class TeamService {
     );
   }
 
-  async removeItemFromTeamStructure(
-    teamId,
-    analysisName,
-    logger = moduleLogger,
-  ) {
+  async removeItemFromTeamStructure(teamId, analysisId, logger = moduleLogger) {
     logger.info(
-      { action: 'removeItemFromTeamStructure', teamId, analysisName },
+      { action: 'removeItemFromTeamStructure', teamId, analysisId },
       'Removing item from team structure',
     );
 
@@ -637,7 +631,7 @@ class TeamService {
     const result = this.traverseTree(
       configData.teamStructure[teamId].items,
       (item, parent, index) => {
-        if (item.type === 'analysis' && item.analysisName === analysisName) {
+        if (item.type === 'analysis' && item.id === analysisId) {
           const itemsArray = parent
             ? parent.items
             : configData.teamStructure[teamId].items;
@@ -651,7 +645,7 @@ class TeamService {
     const removed = result === true;
     await this.analysisService.updateConfig(configData);
     logger.info(
-      { action: 'removeItemFromTeamStructure', teamId, analysisName, removed },
+      { action: 'removeItemFromTeamStructure', teamId, analysisId, removed },
       'Item removed from team structure',
     );
   }
@@ -678,7 +672,7 @@ class TeamService {
     }
 
     const newFolder = {
-      id: uuidv4(),
+      id: generateId(),
       type: 'folder',
       name: name,
       items: [],

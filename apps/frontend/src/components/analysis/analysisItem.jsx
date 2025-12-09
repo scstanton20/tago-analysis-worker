@@ -47,9 +47,9 @@ export default function AnalysisItem({ analysis, reorderMode = false }) {
     canAccessTeam,
     isAdmin,
   } = usePermissions();
-  const isLoading = loadingAnalyses.has(analysis.name);
+  const isLoading = loadingAnalyses.has(analysis.id);
 
-  if (!analysis || !analysis.name) {
+  if (!analysis || !analysis.id) {
     return null;
   }
 
@@ -67,28 +67,28 @@ export default function AnalysisItem({ analysis, reorderMode = false }) {
     analysis.team === 'uncategorized';
 
   const handleRun = async () => {
-    addLoadingAnalysis(analysis.name);
+    addLoadingAnalysis(analysis.id);
     try {
       await notificationAPI.runAnalysis(
-        analysisService.runAnalysis(analysis.name),
+        analysisService.runAnalysis(analysis.id),
         analysis.name,
       );
     } catch (error) {
       logger.error('Failed to run analysis:', error);
-      removeLoadingAnalysis(analysis.name);
+      removeLoadingAnalysis(analysis.id);
     }
   };
 
   const handleStop = async () => {
-    addLoadingAnalysis(analysis.name);
+    addLoadingAnalysis(analysis.id);
     try {
       await notificationAPI.stopAnalysis(
-        analysisService.stopAnalysis(analysis.name),
+        analysisService.stopAnalysis(analysis.id),
         analysis.name,
       );
     } catch (error) {
       logger.error('Failed to stop analysis:', error);
-      removeLoadingAnalysis(analysis.name);
+      removeLoadingAnalysis(analysis.id);
     }
   };
 
@@ -99,7 +99,7 @@ export default function AnalysisItem({ analysis, reorderMode = false }) {
       onConfirm: async () => {
         try {
           await notificationAPI.deleteAnalysis(
-            analysisService.deleteAnalysis(analysis.name),
+            analysisService.deleteAnalysis(analysis.id),
             analysis.name,
           );
         } catch (error) {
@@ -132,7 +132,7 @@ export default function AnalysisItem({ analysis, reorderMode = false }) {
   const handleDownloadLogs = async (timeRange) => {
     try {
       await notificationAPI.downloadLogs(
-        analysisService.downloadLogs(analysis.name, timeRange),
+        analysisService.downloadLogs(analysis.id, analysis.name, timeRange),
         analysis.name,
         timeRange,
       );
@@ -148,7 +148,7 @@ export default function AnalysisItem({ analysis, reorderMode = false }) {
       onConfirm: async () => {
         try {
           await notificationAPI.deleteLogs(
-            analysisService.deleteLogs(analysis.name),
+            analysisService.deleteLogs(analysis.id),
             analysis.name,
           );
 
@@ -163,7 +163,7 @@ export default function AnalysisItem({ analysis, reorderMode = false }) {
   const handleDownloadAnalysis = async () => {
     try {
       await notificationAPI.downloadAnalysis(
-        analysisService.downloadAnalysis(analysis.name),
+        analysisService.downloadAnalysis(analysis.id, analysis.name),
         analysis.name,
       );
     } catch (error) {
@@ -177,7 +177,7 @@ export default function AnalysisItem({ analysis, reorderMode = false }) {
       const teamName = targetTeam?.name || 'selected team';
 
       await notificationAPI.moveAnalysis(
-        teamService.moveAnalysisToTeam(analysis.name, teamId),
+        teamService.moveAnalysisToTeam(analysis.id, teamId),
         analysis.name,
         teamName,
       );
@@ -296,7 +296,7 @@ export default function AnalysisItem({ analysis, reorderMode = false }) {
                               handleTeamChange,
                               teamsArray,
                               analysis.teamId || analysis.team,
-                              analysis.name,
+                              analysis,
                             ),
                         },
                         { type: 'divider' },
@@ -411,9 +411,10 @@ export default function AnalysisItem({ analysis, reorderMode = false }) {
 
 AnalysisItem.propTypes = {
   analysis: PropTypes.shape({
+    id: PropTypes.string.isRequired,
     name: PropTypes.string.isRequired,
     status: PropTypes.string,
-    team: PropTypes.string,
+    teamId: PropTypes.string,
     logs: PropTypes.arrayOf(
       PropTypes.shape({
         timestamp: PropTypes.string,

@@ -147,24 +147,24 @@ export async function safeRename(
 
 /**
  * Get a safe path for an analysis
- * @param {string} analysisName - Name of the analysis
+ * @param {string} analysisId - ID of the analysis
  * @returns {string|null} Safe path or null if invalid
  */
-export function getAnalysisPath(analysisName) {
-  if (!isAnalysisNameSafe(analysisName)) {
+export function getAnalysisPath(analysisId) {
+  if (!isAnalysisNameSafe(analysisId)) {
     return null;
   }
-  return path.join(config.paths.analysis, analysisName);
+  return path.join(config.paths.analysis, analysisId);
 }
 
 /**
  * Get a safe path for an analysis file
- * @param {string} analysisName - Name of the analysis
+ * @param {string} analysisId - ID of the analysis
  * @param {...string} segments - Additional path segments
  * @returns {string|null} Safe path or null if invalid
  */
-export function getAnalysisFilePath(analysisName, ...segments) {
-  if (!isAnalysisNameSafe(analysisName)) {
+export function getAnalysisFilePath(analysisId, ...segments) {
+  if (!isAnalysisNameSafe(analysisId)) {
     return null;
   }
 
@@ -175,7 +175,7 @@ export function getAnalysisFilePath(analysisName, ...segments) {
     }
   }
 
-  return path.join(config.paths.analysis, analysisName, ...segments);
+  return path.join(config.paths.analysis, analysisId, ...segments);
 }
 
 // Synchronous safe wrappers for startup operations

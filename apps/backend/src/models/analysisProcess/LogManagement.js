@@ -182,8 +182,8 @@ export class LogManager {
     // Broadcast to connected clients via SSE
     const sseManager = await getSseManager();
     sseManager.broadcastUpdate('log', {
-      fileName: this.analysisProcess.analysisName,
-      analysis: this.analysisProcess.analysisName,
+      analysisId: this.analysisProcess.analysisId,
+      analysisName: this.analysisProcess.analysisName,
       log: logEntry,
       totalCount: this.analysisProcess.totalLogCount,
     });
@@ -368,15 +368,15 @@ export class LogManager {
       // Broadcast rotation event
       const sseManager = await getSseManager();
       sseManager.broadcastUpdate('logsCleared', {
-        fileName: this.analysisProcess.analysisName,
-        analysis: this.analysisProcess.analysisName,
+        analysisId: this.analysisProcess.analysisId,
+        analysisName: this.analysisProcess.analysisName,
         reason: 'rotation',
         previousSizeMB: sizeMB,
         preservedCount: preservedLogs.length,
       });
       sseManager.broadcastUpdate('log', {
-        fileName: this.analysisProcess.analysisName,
-        analysis: this.analysisProcess.analysisName,
+        analysisId: this.analysisProcess.analysisId,
+        analysisName: this.analysisProcess.analysisName,
         log: rotationEntry,
         totalCount: this.analysisProcess.totalLogCount,
       });

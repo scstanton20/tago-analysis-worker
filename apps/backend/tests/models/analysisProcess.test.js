@@ -131,8 +131,13 @@ describe('AnalysisProcess', () => {
 
   describe('constructor', () => {
     it('should initialize with default values', () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
 
+      expect(analysis.analysisId).toBe('test-analysis-id');
       expect(analysis.analysisName).toBe('test-analysis');
       expect(analysis.service).toBe(mockService);
       expect(analysis.enabled).toBe(false);
@@ -142,37 +147,58 @@ describe('AnalysisProcess', () => {
       expect(analysis.logs).toEqual([]);
     });
 
-    it('should set up log file path correctly', () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+    it('should set up log file path correctly using analysisId', () => {
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
 
-      expect(analysis.logFile).toContain('test-analysis');
+      // In v5.0, paths use analysisId, not analysisName
+      expect(analysis.logFile).toContain('test-analysis-id');
       expect(analysis.logFile).toContain('analysis.log');
     });
   });
 
   describe('analysisName setter', () => {
-    it('should update analysis name and log file path', () => {
-      const analysis = new AnalysisProcess('old-name', mockService);
+    it('should update analysis name but NOT file paths (paths use analysisId)', () => {
+      const analysis = new AnalysisProcess(
+        'analysis-id',
+        'old-name',
+        mockService,
+      );
 
       analysis.analysisName = 'new-name';
 
+      // Name property should change
       expect(analysis.analysisName).toBe('new-name');
-      expect(analysis.logFile).toContain('new-name');
+      // But file paths should NOT change (they use analysisId)
+      expect(analysis.logFile).toContain('analysis-id');
+      expect(analysis.logFile).not.toContain('new-name');
     });
 
-    it('should reinitialize file logger with new path', () => {
-      const analysis = new AnalysisProcess('old-name', mockService);
+    it('should not affect file logger path when renamed', () => {
+      const analysis = new AnalysisProcess(
+        'analysis-id',
+        'old-name',
+        mockService,
+      );
+      const originalLogFile = analysis.logFile;
 
       analysis.analysisName = 'new-name';
 
-      // File logger should be reinitialized
-      expect(analysis.fileLogger).toBeDefined();
+      // File logger path should remain unchanged
+      expect(analysis.logFile).toBe(originalLogFile);
     });
   });
 
   describe('addLog', () => {
     it('should add log entry to memory buffer', async () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
 
       await analysis.addLog('Test message');
 
@@ -183,21 +209,29 @@ describe('AnalysisProcess', () => {
     });
 
     it('should broadcast log via SSE', async () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
 
       await analysis.addLog('Test message');
 
       expect(sseManager.broadcastUpdate).toHaveBeenCalledWith(
         'log',
         expect.objectContaining({
-          fileName: 'test-analysis',
-          analysis: 'test-analysis',
+          analysisId: 'test-analysis-id',
+          analysisName: 'test-analysis',
         }),
       );
     });
 
     it('should maintain FIFO order and respect max memory logs', async () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
       analysis.maxMemoryLogs = 3;
 
       await analysis.addLog('Message 1');
@@ -213,7 +247,11 @@ describe('AnalysisProcess', () => {
 
   describe('getMemoryLogs', () => {
     it('should return paginated logs', async () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
 
       await analysis.addLog('Log 1');
       await analysis.addLog('Log 2');
@@ -227,7 +265,11 @@ describe('AnalysisProcess', () => {
     });
 
     it('should handle empty logs', () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
 
       const result = analysis.getMemoryLogs(1, 10);
 
@@ -239,7 +281,11 @@ describe('AnalysisProcess', () => {
 
   describe('initializeLogState', () => {
     it('should load existing logs from file', async () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
 
       const mockLogs = [
         '{"time":"2025-01-01T00:00:00.000Z","msg":"Log 1"}',
@@ -259,7 +305,11 @@ describe('AnalysisProcess', () => {
     });
 
     it('should handle missing log file', async () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
 
       const error = new Error('File not found');
       error.code = 'ENOENT';
@@ -272,7 +322,11 @@ describe('AnalysisProcess', () => {
     });
 
     it('should delete oversized log files', async () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
 
       safeStat.mockResolvedValue({
         size: 60 * 1024 * 1024, // 60MB
@@ -291,7 +345,11 @@ describe('AnalysisProcess', () => {
       // 2. During config loading - verifyIntendedState() will handle restart
       // So no direct restart logic is needed in handleOversizedLogFile()
 
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
       analysis.intendedState = 'running';
 
       safeStat.mockResolvedValue({
@@ -317,7 +375,11 @@ describe('AnalysisProcess', () => {
     });
 
     it('should initialize estimatedFileSize when loading existing logs', async () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
       const fileSize = 10 * 1024 * 1024; // 10MB
 
       safeStat.mockResolvedValue({
@@ -336,7 +398,11 @@ describe('AnalysisProcess', () => {
     });
 
     it('should track estimated file size when adding logs', async () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
       analysis.logManager.estimatedFileSize = 0;
 
       // Mock the fileLogger to simulate writing (pino isn't mocked in tests)
@@ -349,7 +415,11 @@ describe('AnalysisProcess', () => {
     });
 
     it('should trigger runtime rotation when file exceeds max size', async () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
 
       // Mock the fileLogger to simulate writing
       analysis.fileLogger = { info: vi.fn() };
@@ -388,7 +458,11 @@ describe('AnalysisProcess', () => {
     });
 
     it('should not trigger rotation if file size is below threshold', async () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
 
       // Mock the fileLogger to simulate writing
       analysis.fileLogger = { info: vi.fn() };
@@ -422,7 +496,11 @@ describe('AnalysisProcess', () => {
       const mockProcess = createMockChildProcess();
       fork.mockReturnValue(mockProcess);
 
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
 
       await analysis.start();
 
@@ -438,7 +516,11 @@ describe('AnalysisProcess', () => {
       const mockProcess = createMockChildProcess();
       fork.mockReturnValue(mockProcess);
 
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
       analysis.isStarting = true;
 
       await analysis.start();
@@ -447,7 +529,11 @@ describe('AnalysisProcess', () => {
     });
 
     it('should not start if process already exists', async () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
       analysis.process = createMockChildProcess();
 
       await analysis.start();
@@ -464,11 +550,17 @@ describe('AnalysisProcess', () => {
         KEY2: 'value2',
       });
 
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
 
       await analysis.start();
 
-      expect(mockService.getEnvironment).toHaveBeenCalledWith('test-analysis');
+      expect(mockService.getEnvironment).toHaveBeenCalledWith(
+        'test-analysis-id',
+      );
       expect(fork).toHaveBeenCalledWith(
         expect.any(String),
         expect.any(Array),
@@ -486,7 +578,11 @@ describe('AnalysisProcess', () => {
         throw new Error('Fork failed');
       });
 
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
 
       await expect(analysis.start()).rejects.toThrow('Fork failed');
       expect(analysis.isStarting).toBe(false);
@@ -496,7 +592,11 @@ describe('AnalysisProcess', () => {
   describe('stop', () => {
     it('should stop running analysis process', async () => {
       const mockProcess = createMockChildProcess();
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
       analysis.process = mockProcess;
       analysis.status = 'running';
 
@@ -526,7 +626,11 @@ describe('AnalysisProcess', () => {
     });
 
     it('should not stop if process is not running', async () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
 
       await analysis.stop();
 
@@ -535,7 +639,11 @@ describe('AnalysisProcess', () => {
 
     it('should force kill after timeout', async () => {
       const mockProcess = createMockChildProcess();
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
       analysis.process = mockProcess;
       analysis.status = 'running';
 
@@ -579,7 +687,11 @@ describe('AnalysisProcess', () => {
 
   describe('handleExit', () => {
     it('should update status when process exits', async () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
       analysis.process = createMockChildProcess();
       analysis.status = 'running';
 
@@ -591,7 +703,11 @@ describe('AnalysisProcess', () => {
     });
 
     it('should auto-restart on unexpected exit', async () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
       analysis.process = createMockChildProcess();
       analysis.status = 'running';
       analysis.intendedState = 'running';
@@ -617,7 +733,11 @@ describe('AnalysisProcess', () => {
     });
 
     it('should detect connection errors and schedule restart', async () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
       analysis.process = createMockChildProcess();
       analysis.status = 'running';
       analysis.intendedState = 'running';
@@ -644,7 +764,11 @@ describe('AnalysisProcess', () => {
     });
 
     it('should not restart if intended state is stopped', async () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
       analysis.process = createMockChildProcess();
       analysis.status = 'running';
       analysis.intendedState = 'stopped';
@@ -662,7 +786,11 @@ describe('AnalysisProcess', () => {
     });
 
     it('should normalize exit code to 0 for manual stops', async () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
       analysis.process = createMockChildProcess();
       analysis.status = 'running';
       analysis.isManualStop = true;
@@ -672,7 +800,7 @@ describe('AnalysisProcess', () => {
       expect(analysis.status).toBe('stopped');
       expect(analysis.isManualStop).toBe(false); // Should be reset
       expect(sseManager.broadcastAnalysisUpdate).toHaveBeenCalledWith(
-        'test-analysis',
+        'test-analysis-id',
         expect.objectContaining({
           update: expect.objectContaining({
             exitCode: 0, // Normalized from null to 0
@@ -682,7 +810,11 @@ describe('AnalysisProcess', () => {
     });
 
     it('should not normalize exit code for non-manual stops', async () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
       analysis.process = createMockChildProcess();
       analysis.status = 'running';
       analysis.isManualStop = false;
@@ -691,7 +823,7 @@ describe('AnalysisProcess', () => {
 
       expect(analysis.status).toBe('stopped');
       expect(sseManager.broadcastAnalysisUpdate).toHaveBeenCalledWith(
-        'test-analysis',
+        'test-analysis-id',
         expect.objectContaining({
           update: expect.objectContaining({
             exitCode: null, // Not normalized, remains null
@@ -701,7 +833,11 @@ describe('AnalysisProcess', () => {
     });
 
     it('should not restart when manual stop flag is set', async () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
       analysis.process = createMockChildProcess();
       analysis.status = 'running';
       // Simulate what stop() does: set both isManualStop AND intendedState
@@ -727,7 +863,11 @@ describe('AnalysisProcess', () => {
       const mockProcess = createMockChildProcess();
       fork.mockReturnValue(mockProcess);
 
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
       await analysis.start();
 
       // Simulate IPC message from child process
@@ -753,7 +893,11 @@ describe('AnalysisProcess', () => {
       const mockProcess = createMockChildProcess();
       fork.mockReturnValue(mockProcess);
 
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
       await analysis.start();
 
       // Get the IPC message handler
@@ -783,7 +927,11 @@ describe('AnalysisProcess', () => {
       const mockProcess = createMockChildProcess();
       fork.mockReturnValue(mockProcess);
 
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
       await analysis.start();
 
       const ipcHandler = mockProcess.on.mock.calls.find(
@@ -807,7 +955,11 @@ describe('AnalysisProcess', () => {
       const mockProcess = createMockChildProcess();
       fork.mockReturnValue(mockProcess);
 
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
       await analysis.start();
 
       const ipcHandler = mockProcess.on.mock.calls.find(
@@ -835,7 +987,11 @@ describe('AnalysisProcess', () => {
 
       fork.mockReturnValue(mockProcess);
 
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
       await analysis.start();
 
       const ipcHandler = mockProcess.on.mock.calls.find(
@@ -856,7 +1012,11 @@ describe('AnalysisProcess', () => {
 
   describe('handleOutput', () => {
     it('should process stdout data', async () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
 
       analysis.handleOutput(false, Buffer.from('Test output\n'));
 
@@ -864,7 +1024,11 @@ describe('AnalysisProcess', () => {
     });
 
     it('should process stderr data with ERROR prefix', async () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
 
       analysis.handleOutput(true, Buffer.from('Error message\n'));
 
@@ -873,7 +1037,11 @@ describe('AnalysisProcess', () => {
 
     it('should detect SDK connection errors and start grace period', async () => {
       const mockProcess = createMockChildProcess();
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
       analysis.process = mockProcess;
       analysis.status = 'running';
 
@@ -895,7 +1063,11 @@ describe('AnalysisProcess', () => {
 
     it('should kill process after grace period expires without connection', async () => {
       const mockProcess = createMockChildProcess();
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
       analysis.process = mockProcess;
       analysis.status = 'running';
       analysis.connectionGracePeriod = 1000; // 1 second for test
@@ -922,7 +1094,11 @@ describe('AnalysisProcess', () => {
 
     it('should clear grace timer on successful connection', async () => {
       const mockProcess = createMockChildProcess();
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
       analysis.process = mockProcess;
       analysis.status = 'running';
       analysis.connectionGracePeriod = 30000;
@@ -958,7 +1134,11 @@ describe('AnalysisProcess', () => {
 
     it('should immediately kill on fatal analysis error', async () => {
       const mockProcess = createMockChildProcess();
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
       analysis.process = mockProcess;
       analysis.status = 'running';
 
@@ -977,7 +1157,11 @@ describe('AnalysisProcess', () => {
     });
 
     it('should handle multi-line output', async () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
 
       analysis.handleOutput(false, Buffer.from('Line 1\nLine 2\nLine 3\n'));
 
@@ -988,7 +1172,11 @@ describe('AnalysisProcess', () => {
   describe('cleanup', () => {
     it('should clean up all resources', async () => {
       const mockProcess = createMockChildProcess();
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
       analysis.process = mockProcess;
       analysis.status = 'running';
       analysis.logs = [{ message: 'test' }];
@@ -1008,7 +1196,11 @@ describe('AnalysisProcess', () => {
         throw new Error('Kill failed');
       });
 
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
       analysis.process = mockProcess;
 
       await expect(analysis.cleanup()).resolves.not.toThrow();
@@ -1016,7 +1208,11 @@ describe('AnalysisProcess', () => {
     });
 
     it('should properly close file logger streams to prevent file descriptor leaks', async () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
 
       // Skip test if file logger initialization failed (can happen in test environment)
       if (!analysis.fileLogger) {
@@ -1070,7 +1266,11 @@ describe('AnalysisProcess', () => {
 
   describe('updateStatus', () => {
     it('should update status and intended state', () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
 
       analysis.updateStatus('running', true);
 
@@ -1081,7 +1281,11 @@ describe('AnalysisProcess', () => {
     });
 
     it('should preserve intended state when stopping (not change to stopped)', () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
       analysis.status = 'running';
       analysis.intendedState = 'running';
 
@@ -1095,7 +1299,11 @@ describe('AnalysisProcess', () => {
     });
 
     it('should preserve intended state on connection error', () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
       analysis.intendedState = 'running';
       analysis.connectionErrorDetected = true;
 
@@ -1105,7 +1313,11 @@ describe('AnalysisProcess', () => {
     });
 
     it('should preserve intended state on unexpected exit to allow auto-restart', () => {
-      const analysis = new AnalysisProcess('test-analysis', mockService);
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
       analysis.intendedState = 'running';
 
       // Simulate unexpected exit - updateStatus should NOT change intendedState

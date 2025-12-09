@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, lazy, Suspense } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useEventListener } from '../../hooks/useEventListener';
 import { useInterval, useTimeout } from '../../hooks/useInterval';
 import {
@@ -12,42 +12,65 @@ import {
   Card,
   Divider,
 } from '@mantine/core';
-import { IconLogin, IconFingerprint } from '@tabler/icons-react';
-import { FormAlert, PrimaryButton, SecondaryButton } from '../global';
-import { signIn, signInPasskey } from '../../lib/auth.js';
+import { IconLogin, IconFingerprint, IconKey } from '@tabler/icons-react';
+import {
+  FormAlert,
+  PrimaryButton,
+  SecondaryButton,
+  CancelButton,
+} from '../global';
+import { signIn, signInPasskey, authClient } from '../../lib/auth.js';
 import { notificationAPI } from '../../utils/notificationAPI.jsx';
 import { useStandardForm } from '../../hooks/forms/useStandardForm';
 import { useAsyncOperation } from '../../hooks/async/useAsyncOperation';
 import Logo from '../ui/logo';
-import AppLoadingOverlay from '../global/indicators/AppLoadingOverlay.jsx';
+import { validatePassword } from '../../validation';
 
-// Lazy load PasswordOnboarding component
-const PasswordOnboarding = lazy(() => import('./passwordOnboarding'));
+// Persists across re-mounts but cleared on page refresh
+let storedCurrentPassword = '';
 
 export default function LoginPage() {
-  // Initialize form with useStandardForm (for login form)
   const { form, submitOperation, handleSubmit } = useStandardForm({
     initialValues: {
       username: '',
       password: '',
+      currentPasswordForChange: '',
+      newPassword: '',
+      confirmPassword: '',
     },
     validate: {
       username: (value) => (!value ? 'Email or username is required' : null),
       password: (value) => (!value ? 'Password is required' : null),
+      newPassword: (value, values) => {
+        if (!values.newPassword && !values.confirmPassword) return null;
+        if (!value) return 'New password is required';
+        return validatePassword(value);
+      },
+      confirmPassword: (value, values) => {
+        if (!values.newPassword && !values.confirmPassword) return null;
+        if (!value) return 'Please confirm your password';
+        if (value !== values.newPassword) return 'Passwords do not match';
+        return null;
+      },
     },
-    resetOnSuccess: true,
+    resetOnSuccess: false,
   });
 
-  // Separate operation for passkey login (not part of the form)
   const passkeyOperation = useAsyncOperation();
+  const passwordChangeOperation = useAsyncOperation();
 
-  // State for password onboarding flow
-  const [showPasswordOnboarding, setShowPasswordOnboarding] = useState(false);
-  const [passwordOnboardingUser, setPasswordOnboardingUser] = useState('');
+  const [passwordChangeMode, setPasswordChangeMode] = useState(false);
+  const [currentPassword, setCurrentPasswordState] = useState(
+    storedCurrentPassword,
+  );
+
+  const setCurrentPassword = useCallback((password) => {
+    storedCurrentPassword = password;
+    setCurrentPasswordState(password);
+  }, []);
 
   // Handle password manager autofill
   const handleAutofill = useCallback(() => {
-    // Small delay to allow password managers to fill fields
     setTimeout(() => {
       const usernameInput = document.getElementById('username');
       const passwordInput = document.getElementById('password');
@@ -69,17 +92,14 @@ export default function LoginPage() {
     }, 100);
   }, [form]);
 
-  // Listen for autofill events using custom hooks
   useEventListener('DOMContentLoaded', handleAutofill, document);
   useEventListener('load', handleAutofill, window);
 
-  // Check periodically for autofill for first 3 seconds
   const [stopPolling, setStopPolling] = useState(false);
   useInterval(handleAutofill, stopPolling ? null : 500, false);
   useTimeout(() => setStopPolling(true), 3000);
 
   const handleLogin = handleSubmit(async (values) => {
-    // Determine if input is email or username
     const isEmail = values.username.includes('@');
 
     let result;
@@ -96,33 +116,77 @@ export default function LoginPage() {
     }
 
     if (result.error) {
-      if (result.error.message === 'REQUIRES_PASSWORD_CHANGE') {
-        // Handle 428 - show password onboarding
-        setShowPasswordOnboarding(true);
-        setPasswordOnboardingUser(values.username);
-        return;
-      }
       throw new Error(result.error.message);
     }
 
-    // Show success notification - Better Auth will handle the redirect automatically
+    // Fetch session to get custom fields like requiresPasswordChange
+    const sessionResult = await authClient.getSession();
+
+    if (sessionResult.data?.user?.requiresPasswordChange) {
+      setCurrentPassword(values.password);
+      setPasswordChangeMode(true);
+      return;
+    }
+
     notificationAPI.success(
       'Welcome back! You have been signed in successfully.',
     );
-    // Form reset is handled automatically by useStandardForm
+    form.reset();
   });
 
-  const handlePasswordOnboardingSuccess = () => {
-    setShowPasswordOnboarding(false);
-    setPasswordOnboardingUser('');
-    notificationAPI.success(
-      'Password changed successfully! Welcome to the application.',
-    );
-    // Trigger auth refresh to update session
+  const handlePasswordChange = async () => {
+    const effectiveCurrentPassword =
+      currentPassword || form.values.currentPasswordForChange;
+
+    if (!currentPassword && !form.values.currentPasswordForChange) {
+      form.setFieldError(
+        'currentPasswordForChange',
+        'Current password is required',
+      );
+      return;
+    }
+
+    const newPasswordError = validatePassword(form.values.newPassword);
+    if (newPasswordError) {
+      form.setFieldError('newPassword', newPasswordError);
+      return;
+    }
+    if (form.values.newPassword !== form.values.confirmPassword) {
+      form.setFieldError('confirmPassword', 'Passwords do not match');
+      return;
+    }
+
+    await passwordChangeOperation.execute(async () => {
+      const result = await authClient.changePassword({
+        currentPassword: effectiveCurrentPassword,
+        newPassword: form.values.newPassword,
+        revokeOtherSessions: false,
+      });
+
+      if (result.error) {
+        throw new Error(result.error.message || 'Failed to change password');
+      }
+
+      notificationAPI.success('Password changed successfully!');
+      setPasswordChangeMode(false);
+      setCurrentPassword('');
+      form.reset();
+      window.dispatchEvent(new Event('auth-change'));
+    });
+  };
+
+  const handleCancelPasswordChange = async () => {
+    try {
+      await authClient.signOut();
+    } catch {
+      // Ignore sign out errors
+    }
+    setPasswordChangeMode(false);
+    setCurrentPassword('');
+    form.reset();
     window.dispatchEvent(new Event('auth-change'));
   };
 
-  // Check WebAuthn support (pure derived state - no side effects needed)
   const isWebAuthnSupported = useMemo(() => {
     return !!(
       window.PublicKeyCredential &&
@@ -130,40 +194,177 @@ export default function LoginPage() {
       window.navigator.credentials.create &&
       window.navigator.credentials.get
     );
-  }, []); // Expensive browser feature detection, properly memoized
+  }, []);
 
   const handlePasskeyLogin = async () => {
     await passkeyOperation.execute(async () => {
       const result = await signInPasskey();
 
-      // Better Auth may return result directly or in a different format
       if (result && result.error) {
         throw new Error(
           result.error.message || 'Passkey authentication failed',
         );
       }
 
-      // Show success notification and trigger auth refresh
+      if (result?.data?.user?.requiresPasswordChange) {
+        notificationAPI.error(
+          'Password change required but not supported for passkey login. Please contact an administrator.',
+        );
+        return;
+      }
+
       notificationAPI.success(
         'Welcome back! You have been signed in successfully.',
       );
-
-      // Force refresh session to update UI
       window.dispatchEvent(new Event('auth-change'));
     });
   };
 
-  // Show password onboarding if required
-  if (showPasswordOnboarding) {
+  if (passwordChangeMode) {
     return (
-      <Suspense
-        fallback={<AppLoadingOverlay message="Loading password setup..." />}
-      >
-        <PasswordOnboarding
-          username={passwordOnboardingUser}
-          onSuccess={handlePasswordOnboardingSuccess}
-        />
-      </Suspense>
+      <Container size="xs" style={{ minHeight: '100vh' }}>
+        <Box
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            minHeight: '100vh',
+            padding: '2rem 0',
+          }}
+        >
+          <Card
+            shadow="xl"
+            padding="xl"
+            radius="lg"
+            style={{
+              width: '100%',
+              maxWidth: 400,
+              background: 'var(--mantine-color-body)',
+              border: '1px solid var(--mantine-color-gray-3)',
+            }}
+          >
+            <Stack gap="lg">
+              <Box ta="center">
+                <Logo size={64} />
+                <Title
+                  order={2}
+                  ta="center"
+                  mt="md"
+                  mb="xs"
+                  style={{
+                    fontWeight: 800,
+                    background:
+                      'linear-gradient(45deg, var(--mantine-color-brand-6), var(--mantine-color-accent-6))',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    backgroundClip: 'text',
+                  }}
+                >
+                  Password Change Required
+                </Title>
+              </Box>
+
+              <FormAlert
+                type="warning"
+                message="Your account requires a password change before you can continue."
+              />
+
+              <FormAlert type="error" message={passwordChangeOperation.error} />
+
+              <Stack gap="md">
+                {!currentPassword && (
+                  <PasswordInput
+                    label="Current Password"
+                    placeholder="Enter your current password"
+                    {...form.getInputProps('currentPasswordForChange')}
+                    required
+                    size="md"
+                    autoComplete="current-password"
+                    name="current-password"
+                    id="current-password-change"
+                    onChange={(e) => {
+                      form.setFieldValue(
+                        'currentPasswordForChange',
+                        e.target.value,
+                      );
+                      if (passwordChangeOperation.error)
+                        passwordChangeOperation.setError(null);
+                    }}
+                  />
+                )}
+
+                <PasswordInput
+                  label="New Password"
+                  placeholder="Enter your new password"
+                  {...form.getInputProps('newPassword')}
+                  description="Must be at least 6 characters with one uppercase letter"
+                  required
+                  size="md"
+                  autoComplete="new-password"
+                  name="new-password"
+                  id="new-password"
+                  onChange={(e) => {
+                    form.setFieldValue('newPassword', e.target.value);
+                    if (passwordChangeOperation.error)
+                      passwordChangeOperation.setError(null);
+                  }}
+                />
+
+                <PasswordInput
+                  label="Confirm New Password"
+                  placeholder="Confirm your new password"
+                  {...form.getInputProps('confirmPassword')}
+                  required
+                  size="md"
+                  autoComplete="new-password"
+                  name="confirm-password"
+                  id="confirm-password"
+                  onChange={(e) => {
+                    form.setFieldValue('confirmPassword', e.target.value);
+                    if (passwordChangeOperation.error)
+                      passwordChangeOperation.setError(null);
+                  }}
+                />
+              </Stack>
+
+              <Stack gap="sm">
+                <PrimaryButton
+                  onClick={handlePasswordChange}
+                  loading={passwordChangeOperation.loading}
+                  fullWidth
+                  size="md"
+                  leftSection={<IconKey size="1rem" />}
+                  radius="md"
+                  disabled={
+                    (!currentPassword &&
+                      !form.values.currentPasswordForChange) ||
+                    !form.values.newPassword ||
+                    !form.values.confirmPassword ||
+                    form.values.newPassword !== form.values.confirmPassword ||
+                    !!form.errors.newPassword ||
+                    !!form.errors.confirmPassword ||
+                    !!form.errors.currentPasswordForChange
+                  }
+                >
+                  {passwordChangeOperation.loading
+                    ? 'Changing Password...'
+                    : 'Change Password'}
+                </PrimaryButton>
+
+                <CancelButton
+                  onClick={handleCancelPasswordChange}
+                  fullWidth
+                  size="md"
+                  radius="md"
+                  disabled={passwordChangeOperation.loading}
+                >
+                  Cancel
+                </CancelButton>
+              </Stack>
+            </Stack>
+          </Card>
+        </Box>
+      </Container>
     );
   }
 

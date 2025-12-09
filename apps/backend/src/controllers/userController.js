@@ -1,10 +1,10 @@
 import { auth } from '../lib/auth.js';
-import { v4 as uuidv4 } from 'uuid';
 import {
   executeQuery,
   executeQueryAll,
   executeUpdate,
 } from '../utils/authDatabase.js';
+import { generateId } from '../utils/generateId.js';
 import { sseManager } from '../utils/sse/index.js';
 
 /**
@@ -399,7 +399,13 @@ export class UserController {
 
       executeUpdate(
         'INSERT INTO teamMember (id, userId, teamId, permissions, createdAt) VALUES (?, ?, ?, ?, ?)',
-        [uuidv4(), userId, teamId, permissionsJson, new Date().toISOString()],
+        [
+          generateId(),
+          userId,
+          teamId,
+          permissionsJson,
+          new Date().toISOString(),
+        ],
         `adding user ${userId} to team ${teamId}`,
       );
 
@@ -908,84 +914,6 @@ export class UserController {
         message: `${userId} has been remvoed from the Organization.`,
         action: 'refresh_user_list',
       },
-    });
-  }
-
-  /**
-   * Set initial password for first-time users
-   * Handles password onboarding for users created without passwords
-   *
-   * @param {Object} req - Express request object
-   * @param {Object} req.body - Request body
-   * @param {string} req.body.newPassword - New password to set
-   * @param {Object} req.user - Authenticated user object
-   * @param {string} req.user.id - User ID
-   * @param {Object} req.log - Request-scoped logger
-   * @param {Object} res - Express response object
-   * @returns {Promise<void>}
-   *
-   * Side effects:
-   * - Hashes and stores password using Better Auth
-   * - Clears requiresPasswordChange flag in database
-   *
-   * Security:
-   * - Validation handled by middleware
-   * - User must be authenticated
-   * - Password is hashed before storage
-   */
-  static async setInitialPassword(req, res) {
-    const { newPassword } = req.body;
-
-    // Validation handled by middleware
-    // Get current user from session
-    if (!req.user?.id) {
-      req.log.warn(
-        { action: 'setInitialPassword' },
-        'Set failed: user not authenticated',
-      );
-      return res.status(401).json({ error: 'User not authenticated' });
-    }
-
-    req.log.info(
-      { action: 'setInitialPassword', userId: req.user.id },
-      'Setting initial password',
-    );
-
-    // Use better-auth's internal adapter to update password
-    const ctx = await auth.$context;
-    const hashedPassword = await ctx.password.hash(newPassword);
-    await ctx.internalAdapter.updatePassword(req.user.id, hashedPassword);
-    req.log.info(
-      { action: 'setInitialPassword', userId: req.user.id },
-      'Password updated successfully',
-    );
-
-    // Clear the requiresPasswordChange flag in database
-    const updateResult = executeUpdate(
-      'UPDATE user SET requiresPasswordChange = 0 WHERE id = ?',
-      [req.user.id],
-      `clearing password change flag for user ${req.user.id}`,
-    );
-
-    if (updateResult.changes === 0) {
-      req.log.warn(
-        { action: 'setInitialPassword', userId: req.user.id },
-        'No user found to clear password flag',
-      );
-    } else {
-      req.log.info(
-        { action: 'setInitialPassword', userId: req.user.id },
-        'Cleared requiresPasswordChange flag',
-      );
-    }
-
-    req.log.info(
-      { action: 'setInitialPassword', userId: req.user.id },
-      'Password onboarding completed',
-    );
-    res.json({
-      success: true,
-      message: 'Password set successfully',
     });
   }
 

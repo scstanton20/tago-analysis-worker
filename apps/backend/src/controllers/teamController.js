@@ -211,7 +211,7 @@ export class TeamController {
    *
    * @param {Object} req - Express request object
    * @param {Object} req.params - URL parameters
-   * @param {string} req.params.name - Analysis name to move
+   * @param {string} req.params.analysisId - UUID of the analysis to move
    * @param {Object} req.body - Request body
    * @param {string} req.body.teamId - Target team ID (or null for "No Team")
    * @param {Object} req.log - Request-scoped logger
@@ -224,30 +224,32 @@ export class TeamController {
    * - Adds analysis to target team structure
    * - Broadcasts 'analysisMove' SSE event
    * - Broadcasts 'teamStructureUpdated' SSE events for both teams
-   *
-   * Security:
-   * - Validation handled by middleware
    */
   static async moveAnalysisToTeam(req, res) {
-    const { name } = req.params;
+    const { analysisId } = req.params;
     const { teamId } = req.body;
 
     // Validation handled by middleware
     req.log.info(
       {
         action: 'moveAnalysisToTeam',
-        analysisName: name,
+        analysisId,
         targetTeamId: teamId,
       },
       'Moving analysis to team',
     );
 
-    const result = await teamService.moveAnalysisToTeam(name, teamId, req.log);
+    const result = await teamService.moveAnalysisToTeam(
+      analysisId,
+      teamId,
+      req.log,
+    );
 
     req.log.info(
       {
         action: 'moveAnalysisToTeam',
-        analysisName: name,
+        analysisId,
+        analysisName: result.analysisName,
         fromTeam: result.from,
         toTeam: result.to,
       },
@@ -255,7 +257,12 @@ export class TeamController {
     );
 
     // Broadcast move notification to users with access to involved teams
-    sseManager.broadcastAnalysisMove(result.analysis, result.from, result.to);
+    sseManager.broadcastAnalysisMove(
+      analysisId,
+      result.analysisName,
+      result.from,
+      result.to,
+    );
 
     // Broadcast structure updates for both teams so tree updates in real-time
     if (result.from) {

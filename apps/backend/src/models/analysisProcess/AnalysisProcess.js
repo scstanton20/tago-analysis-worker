@@ -23,21 +23,26 @@ import { ProcessCleanupManager } from './ProcessCleanup.js';
 export class AnalysisProcess {
   /**
    * Initialize AnalysisProcess with all managers
-   * @param {string} analysisName - Name of the analysis
+   * @param {string} analysisId - UUID of the analysis (used for file paths)
+   * @param {string} analysisName - Display name of the analysis
    * @param {Object} service - Service reference for environment/config
    */
-  constructor(analysisName, service) {
-    // Core identity
+  constructor(analysisId, analysisName, service) {
+    // Core identity - analysisId is the primary identifier (UUID)
+    this._analysisId = analysisId;
     this._analysisName = analysisName;
     this.service = service;
 
-    // Logging for lifecycle events
-    this.logger = createChildLogger('analysis', { analysis: analysisName });
+    // Logging for lifecycle events (include both for debugging)
+    this.logger = createChildLogger('analysis', {
+      analysisId,
+      analysis: analysisName,
+    });
 
-    // Initialize log file path
+    // Initialize log file path using analysisId (not name)
     this.logFile = path.join(
       config.paths.analysis,
-      analysisName,
+      analysisId,
       'logs',
       'analysis.log',
     );
@@ -86,30 +91,35 @@ export class AnalysisProcess {
   }
 
   /**
-   * Get analysis name
+   * Get analysis ID (primary identifier)
+   */
+  get analysisId() {
+    return this._analysisId;
+  }
+
+  /**
+   * Get analysis name (display name)
    */
   get analysisName() {
     return this._analysisName;
   }
 
   /**
-   * Set analysis name and update all related paths
+   * Set analysis name (display name only - paths use analysisId)
+   * This is used for rename operations where only the display name changes
    */
   set analysisName(newName) {
     const oldName = this._analysisName;
     this._analysisName = newName;
-    this.logFile = path.join(
-      config.paths.analysis,
-      newName,
-      'logs',
-      'analysis.log',
-    );
 
-    // Update logger with new analysis name
-    this.logger = createChildLogger('analysis', { analysis: newName });
+    // Update logger with new analysis name (but keep analysisId)
+    this.logger = createChildLogger('analysis', {
+      analysisId: this._analysisId,
+      analysis: newName,
+    });
 
-    // Recreate file logger with new path
-    this.logManager.initializeFileLogger();
+    // Note: logFile path is NOT updated because it's based on analysisId
+    // This is intentional - rename only changes display name, not directory
 
     this.logger.info({ oldName, newName }, 'Updated analysis name');
   }

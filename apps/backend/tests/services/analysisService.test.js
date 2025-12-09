@@ -4,11 +4,12 @@ import {
   createMockFile,
 } from '../utils/testHelpers.js';
 
-// Mock dependencies
-vi.mock('../../src/models/analysisProcess.js', () => ({
-  default: class MockAnalysisProcess {
-    constructor(name, service) {
-      this.analysisName = name;
+// Mock dependencies - must match import path in analysisService.js
+vi.mock('../../src/models/analysisProcess/index.js', () => ({
+  AnalysisProcess: class MockAnalysisProcess {
+    constructor(analysisId, analysisName, service) {
+      this.analysisId = analysisId;
+      this.analysisName = analysisName;
       this.service = service;
       this.enabled = false;
       this.status = 'stopped';
@@ -153,7 +154,7 @@ describe('AnalysisService', () => {
 
       expect(safeWriteFile).toHaveBeenCalled();
       expect(analysisService.configCache).toEqual({
-        version: '4.1',
+        version: '5.0',
         analyses: {},
         teamStructure: {},
       });
@@ -177,14 +178,16 @@ describe('AnalysisService', () => {
         targetFolderId,
       );
 
-      expect(result).toEqual({ analysisName: 'test-analysis' });
+      expect(result.analysisName).toBe('test-analysis');
+      expect(result.analysisId).toBeDefined();
+      expect(typeof result.analysisId).toBe('string');
       expect(mockFile.mv).toHaveBeenCalled();
-      expect(analysisService.analyses.has('test-analysis')).toBe(true);
+      expect(analysisService.analyses.has(result.analysisId)).toBe(true);
       expect(teamService.addItemToTeamStructure).toHaveBeenCalledWith(
         teamId,
         expect.objectContaining({
+          id: result.analysisId,
           type: 'analysis',
-          analysisName: 'test-analysis',
         }),
         targetFolderId,
       );
@@ -201,24 +204,33 @@ describe('AnalysisService', () => {
 
       const result = await analysisService.uploadAnalysis(mockFile, null, null);
 
-      expect(result).toEqual({ analysisName: 'test-analysis' });
-      const analysis = analysisService.analyses.get('test-analysis');
+      expect(result.analysisName).toBe('test-analysis');
+      expect(result.analysisId).toBeDefined();
+      const analysis = analysisService.analyses.get(result.analysisId);
       expect(analysis.teamId).toBe('uncategorized');
     });
 
-    it('should throw error for unsafe analysis names', async () => {
+    it('should handle filenames with special characters safely (v5.0 uses UUID for paths)', async () => {
+      // In v5.0, directories are created using UUID, not analysisName
+      // This makes path traversal via filename impossible
       const mockFile = createMockFile({
-        name: '../../../etc/passwd.js',
+        name: '../../../etc/passwd.js', // Would be dangerous if used for path
       });
+      // Mock file reading for initializeVersionManagement
+      safeReadFile.mockResolvedValue('console.log("test analysis");');
+      teamService.getAllTeams.mockResolvedValueOnce([
+        { id: 'uncategorized', name: 'Uncategorized' },
+      ]);
 
-      const { isAnalysisNameSafe } = await import(
-        '../../src/validation/shared.js'
+      const result = await analysisService.uploadAnalysis(
+        mockFile,
+        'team-123',
+        null,
       );
-      isAnalysisNameSafe.mockReturnValue(false);
 
-      await expect(
-        analysisService.uploadAnalysis(mockFile, 'team-123', null),
-      ).rejects.toThrow('Invalid analysis name');
+      expect(result.analysisId).toBeDefined();
+      // path.parse().name strips directory parts, leaving just 'passwd'
+      expect(result.analysisName).toBe('passwd');
     });
   });
 
@@ -293,163 +305,152 @@ describe('AnalysisService', () => {
 
   describe('deleteAnalysis', () => {
     it('should delete analysis and cleanup resources', async () => {
+      const analysisId = 'test-analysis-uuid-123';
       const analysis = createMockAnalysisProcess({
+        analysisId,
+        analysisName: 'test-analysis',
         teamId: 'team-123',
       });
-      analysisService.analyses.set('test-analysis', analysis);
+      analysisService.analyses.set(analysisId, analysis);
       analysisService.configCache = {
-        version: '4.1',
-        analyses: { 'test-analysis': {} },
+        version: '5.0',
+        analyses: { [analysisId]: { id: analysisId, name: 'test-analysis' } },
         teamStructure: {
           'team-123': {
-            items: [
-              { id: '1', type: 'analysis', analysisName: 'test-analysis' },
-            ],
+            items: [{ id: analysisId, type: 'analysis' }],
           },
         },
       };
 
       const { promises: fs } = await import('fs');
 
-      await analysisService.deleteAnalysis('test-analysis');
+      await analysisService.deleteAnalysis(analysisId);
 
       expect(analysis.stop).toHaveBeenCalled();
       expect(analysis.cleanup).toHaveBeenCalled();
       expect(fs.rm).toHaveBeenCalled();
-      expect(analysisService.analyses.has('test-analysis')).toBe(false);
+      expect(analysisService.analyses.has(analysisId)).toBe(false);
     });
 
     it('should remove analysis from team structure', async () => {
+      const testAnalysisId = 'test-analysis-uuid-123';
+      const otherAnalysisId = 'other-analysis-uuid-456';
+
       const analysis = createMockAnalysisProcess({
+        analysisId: testAnalysisId,
+        analysisName: 'test-analysis',
         teamId: 'team-123',
       });
-      analysisService.analyses.set('test-analysis', analysis);
+      analysisService.analyses.set(testAnalysisId, analysis);
       analysisService.configCache = {
-        version: '4.1',
-        analyses: { 'test-analysis': {} },
+        version: '5.0',
+        analyses: {
+          [testAnalysisId]: { id: testAnalysisId, name: 'test-analysis' },
+          [otherAnalysisId]: { id: otherAnalysisId, name: 'other-analysis' },
+        },
         teamStructure: {
           'team-123': {
             items: [
-              { id: '1', type: 'analysis', analysisName: 'test-analysis' },
-              { id: '2', type: 'analysis', analysisName: 'other-analysis' },
+              { id: testAnalysisId, type: 'analysis' },
+              { id: otherAnalysisId, type: 'analysis' },
             ],
           },
         },
       };
 
-      await analysisService.deleteAnalysis('test-analysis');
+      await analysisService.deleteAnalysis(testAnalysisId);
 
       const teamItems =
         analysisService.configCache.teamStructure['team-123'].items;
       expect(teamItems).toHaveLength(1);
-      expect(teamItems[0].analysisName).toBe('other-analysis');
+      expect(teamItems[0].id).toBe(otherAnalysisId);
     });
   });
 
   describe('renameAnalysis', () => {
     it('should rename analysis successfully', async () => {
+      const analysisId = 'test-analysis-uuid-123';
+
       const analysis = createMockAnalysisProcess({
+        analysisId,
         analysisName: 'old-name',
         status: 'stopped',
       });
-      analysisService.analyses.set('old-name', analysis);
+      analysisService.analyses.set(analysisId, analysis);
 
       // Set up config cache for getConfig() call in renameAnalysis
       analysisService.configCache = {
-        version: '4.1',
+        version: '5.0',
         analyses: {
-          'old-name': {
+          [analysisId]: {
+            id: analysisId,
+            name: 'old-name',
             enabled: false,
-            status: 'stopped',
             teamId: 'team1',
           },
         },
         teamStructure: {
           team1: {
-            items: [],
+            items: [{ id: analysisId, type: 'analysis' }],
           },
         },
       };
 
-      const { safeRename } = await import('../../src/utils/safePath.js');
-      const { promises: fs } = await import('fs');
-      const error = new Error('Not found');
-      error.code = 'ENOENT';
-      fs.access.mockRejectedValueOnce(error);
-
       const result = await analysisService.renameAnalysis(
-        'old-name',
+        analysisId,
         'new-name',
       );
 
       expect(result.success).toBe(true);
-      expect(safeRename).toHaveBeenCalled();
-      expect(analysisService.analyses.has('old-name')).toBe(false);
-      expect(analysisService.analyses.has('new-name')).toBe(true);
+      expect(result.oldName).toBe('old-name');
+      expect(result.newName).toBe('new-name');
+      // In v5.0, the analysis stays keyed by ID, only name property changes
+      expect(analysisService.analyses.has(analysisId)).toBe(true);
+      expect(analysis.analysisName).toBe('new-name');
     });
 
-    it('should throw error if target name already exists', async () => {
-      const analysis = createMockAnalysisProcess({
-        analysisName: 'old-name',
-      });
-      analysisService.analyses.set('old-name', analysis);
-
-      // Set up config cache for getConfig() call in renameAnalysis
+    it('should throw error if analysis not found', async () => {
       analysisService.configCache = {
-        version: '4.1',
-        analyses: {
-          'old-name': {
-            enabled: false,
-            status: 'stopped',
-            teamId: 'team1',
-          },
-        },
-        teamStructure: {
-          team1: {
-            items: [],
-          },
-        },
+        version: '5.0',
+        analyses: {},
+        teamStructure: {},
       };
 
-      const { promises: fs } = await import('fs');
-      fs.access.mockResolvedValue(undefined);
-
       await expect(
-        analysisService.renameAnalysis('old-name', 'existing-name'),
-      ).rejects.toThrow("target 'existing-name' already exists");
+        analysisService.renameAnalysis('nonexistent-uuid', 'new-name'),
+      ).rejects.toThrow("Analysis 'nonexistent-uuid' not found");
     });
 
     it('should restart analysis if it was running', async () => {
+      const analysisId = 'test-analysis-uuid-123';
+
       const analysis = createMockAnalysisProcess({
+        analysisId,
         analysisName: 'old-name',
         status: 'running',
       });
-      analysisService.analyses.set('old-name', analysis);
+      analysisService.analyses.set(analysisId, analysis);
 
-      // Set up config cache for getConfig() call in renameAnalysis
+      // Set up config cache for getConfig() call in renameAnalysis (v5.0)
       analysisService.configCache = {
-        version: '4.1',
+        version: '5.0',
         analyses: {
-          'old-name': {
+          [analysisId]: {
+            id: analysisId,
+            name: 'old-name',
             enabled: false,
-            status: 'running',
             teamId: 'team1',
           },
         },
         teamStructure: {
           team1: {
-            items: [],
+            items: [{ id: analysisId, type: 'analysis' }],
           },
         },
       };
 
-      const { promises: fs } = await import('fs');
-      const error = new Error('Not found');
-      error.code = 'ENOENT';
-      fs.access.mockRejectedValueOnce(error);
-
       const result = await analysisService.renameAnalysis(
-        'old-name',
+        analysisId,
         'new-name',
       );
 
@@ -458,170 +459,7 @@ describe('AnalysisService', () => {
       expect(analysis.start).toHaveBeenCalled();
     });
 
-    it('should update analysisName in teamStructure at root level', async () => {
-      const analysis = createMockAnalysisProcess({
-        analysisName: 'old-name',
-        status: 'stopped',
-      });
-      analysisService.analyses.set('old-name', analysis);
-
-      // Set up config with teamStructure containing the old analysis name
-      analysisService.configCache = {
-        version: '4.1',
-        analyses: {
-          'old-name': {
-            enabled: false,
-            status: 'stopped',
-            teamId: 'team1',
-          },
-        },
-        teamStructure: {
-          team1: {
-            items: [
-              {
-                id: 'item-1',
-                type: 'analysis',
-                analysisName: 'old-name',
-              },
-              {
-                id: 'item-2',
-                type: 'analysis',
-                analysisName: 'other-analysis',
-              },
-            ],
-          },
-        },
-      };
-
-      const { promises: fs } = await import('fs');
-      const error = new Error('Not found');
-      error.code = 'ENOENT';
-      fs.access.mockRejectedValueOnce(error);
-
-      await analysisService.renameAnalysis('old-name', 'new-name');
-
-      // Verify teamStructure was updated
-      const config = await analysisService.getConfig();
-      expect(config.teamStructure.team1.items[0].analysisName).toBe('new-name');
-      expect(config.teamStructure.team1.items[1].analysisName).toBe(
-        'other-analysis',
-      );
-    });
-
-    it('should update analysisName in teamStructure nested in folders', async () => {
-      const analysis = createMockAnalysisProcess({
-        analysisName: 'old-name',
-        status: 'stopped',
-      });
-      analysisService.analyses.set('old-name', analysis);
-
-      // Set up config with nested folder structure
-      analysisService.configCache = {
-        version: '4.1',
-        analyses: {
-          'old-name': {
-            enabled: false,
-            status: 'stopped',
-            teamId: 'team1',
-          },
-        },
-        teamStructure: {
-          team1: {
-            items: [
-              {
-                id: 'folder-1',
-                type: 'folder',
-                name: 'My Folder',
-                items: [
-                  {
-                    id: 'item-1',
-                    type: 'analysis',
-                    analysisName: 'old-name',
-                  },
-                  {
-                    id: 'folder-2',
-                    type: 'folder',
-                    name: 'Nested Folder',
-                    items: [
-                      {
-                        id: 'item-2',
-                        type: 'analysis',
-                        analysisName: 'other-analysis',
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
-          },
-        },
-      };
-
-      const { promises: fs } = await import('fs');
-      const error = new Error('Not found');
-      error.code = 'ENOENT';
-      fs.access.mockRejectedValueOnce(error);
-
-      await analysisService.renameAnalysis('old-name', 'new-name');
-
-      // Verify nested teamStructure was updated
-      const config = await analysisService.getConfig();
-      const folder = config.teamStructure.team1.items[0];
-      expect(folder.items[0].analysisName).toBe('new-name');
-      expect(folder.items[1].items[0].analysisName).toBe('other-analysis');
-    });
-
-    it('should update analysisName across multiple teams in teamStructure', async () => {
-      const analysis = createMockAnalysisProcess({
-        analysisName: 'old-name',
-        status: 'stopped',
-      });
-      analysisService.analyses.set('old-name', analysis);
-
-      // Set up config with same analysis in multiple teams (edge case)
-      analysisService.configCache = {
-        version: '4.1',
-        analyses: {
-          'old-name': {
-            enabled: false,
-            status: 'stopped',
-            teamId: 'team1',
-          },
-        },
-        teamStructure: {
-          team1: {
-            items: [
-              {
-                id: 'item-1',
-                type: 'analysis',
-                analysisName: 'old-name',
-              },
-            ],
-          },
-          team2: {
-            items: [
-              {
-                id: 'item-2',
-                type: 'analysis',
-                analysisName: 'old-name',
-              },
-            ],
-          },
-        },
-      };
-
-      const { promises: fs } = await import('fs');
-      const error = new Error('Not found');
-      error.code = 'ENOENT';
-      fs.access.mockRejectedValueOnce(error);
-
-      await analysisService.renameAnalysis('old-name', 'new-name');
-
-      // Verify all references were updated
-      const config = await analysisService.getConfig();
-      expect(config.teamStructure.team1.items[0].analysisName).toBe('new-name');
-      expect(config.teamStructure.team2.items[0].analysisName).toBe('new-name');
-    });
+    // No longer need to update team structure when renaming - tests for that removed
   });
 
   describe('updateAnalysis', () => {
@@ -1044,25 +882,33 @@ describe('AnalysisService', () => {
     });
 
     it('should update configuration', async () => {
-      // Import the mocked AnalysisProcess class
+      const analysisId = 'test-analysis-uuid-123';
+
+      // Import the mocked AnalysisProcess class - must use instanceof for updateConfig
       const { AnalysisProcess } = await import(
         '../../src/models/analysisProcess/index.js'
       );
 
       // Create an instance using the mocked class
-      const analysis = new AnalysisProcess('test-analysis', analysisService);
+      const analysis = new AnalysisProcess(
+        analysisId,
+        'test-analysis',
+        analysisService,
+      );
       analysis.enabled = false;
       analysis.status = 'stopped';
       analysis.intendedState = 'stopped';
       analysis.lastStartTime = null;
       analysis.teamId = 'test-team-id';
 
-      analysisService.analyses.set('test-analysis', analysis);
+      analysisService.analyses.set(analysisId, analysis);
 
       const newConfig = {
-        version: '4.1',
+        version: '5.0',
         analyses: {
-          'test-analysis': {
+          [analysisId]: {
+            id: analysisId,
+            name: 'test-analysis',
             enabled: true,
             // status is no longer persisted in config
             intendedState: 'running',
@@ -1217,7 +1063,7 @@ describe('AnalysisService', () => {
 
         expect(results.attempted).toHaveLength(3);
         expect(results.failed).toHaveLength(1);
-        expect(results.failed[0].name).toBe('analysis-2');
+        expect(results.failed[0].analysisId).toBe('analysis-2');
         expect(results.succeeded).toHaveLength(2);
       });
 
@@ -1661,7 +1507,7 @@ describe('AnalysisService', () => {
 
       expect(result.failed).toHaveLength(1);
       expect(result.failed[0]).toEqual({
-        name: 'test-analysis',
+        analysisId: 'test-analysis',
         error: 'Start failed',
       });
     });

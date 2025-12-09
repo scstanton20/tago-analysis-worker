@@ -28,7 +28,7 @@ export const modalService = {
    * @returns {string} Modal ID
    */
   openLogDownload: (analysis, onDownload) => {
-    const modalId = `log-download-${analysis.name}-${Date.now()}`;
+    const modalId = `log-download-${analysis.id}-${Date.now()}`;
 
     modals.openContextModal({
       modal: 'logDownload',
@@ -105,11 +105,11 @@ export const modalService = {
    * @param {Function} onSelect - Callback when team is selected
    * @param {Array} teams - Array of team objects
    * @param {string} currentTeam - Current team ID
-   * @param {string} analysisName - Name of the analysis being moved
+   * @param {Object} analysis - Analysis object with id and name
    * @returns {string} Modal ID
    */
-  openChangeTeam: (onSelect, teams, currentTeam, analysisName) => {
-    const modalId = `change-team-${analysisName}-${Date.now()}`;
+  openChangeTeam: (onSelect, teams, currentTeam, analysis) => {
+    const modalId = `change-team-${analysis.id}-${Date.now()}`;
 
     modals.openContextModal({
       modal: 'changeTeam',
@@ -121,7 +121,7 @@ export const modalService = {
         onSelect,
         teams,
         currentTeam,
-        analysisName,
+        analysisName: analysis.name,
       },
     });
 
@@ -242,7 +242,7 @@ export const modalService = {
    * @returns {string} Modal ID
    */
   openVersionHistory: (analysis, onVersionRollback) => {
-    const modalId = `version-history-${analysis.name}-${Date.now()}`;
+    const modalId = `version-history-${analysis.id}-${Date.now()}`;
 
     modals.openContextModal({
       modal: 'versionHistory',
@@ -276,7 +276,7 @@ export const modalService = {
    * @returns {string} Modal ID
    */
   openAnalysisEditor: (analysis, options = {}) => {
-    const modalId = `analysis-editor-${analysis.name}-${Date.now()}`;
+    const modalId = `analysis-editor-${analysis.id}-${Date.now()}`;
 
     modals.openContextModal({
       modal: 'analysisEditor',

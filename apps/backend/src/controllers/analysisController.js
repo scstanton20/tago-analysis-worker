@@ -118,21 +118,26 @@ export class AnalysisController {
     );
 
     req.log.info(
-      { action: 'uploadAnalysis', analysisName: result.analysisName, teamId },
+      {
+        action: 'uploadAnalysis',
+        analysisId: result.analysisId,
+        analysisName: result.analysisName,
+        teamId,
+      },
       'Analysis uploaded',
     );
 
     // Get the complete analysis data to broadcast
-    const analysisData = await analysisService.getAllAnalyses();
-    const createdAnalysis = analysisData[result.analysisName];
+    const createdAnalysis = analysisService.getAnalysisById(result.analysisId);
 
     // Broadcast analysis creation to team users only
     sseManager.broadcastAnalysisUpdate(
-      result.analysisName,
+      result.analysisId,
       {
         type: 'analysisCreated',
         data: {
-          analysis: result.analysisName,
+          analysisId: result.analysisId,
+          analysisName: result.analysisName,
           teamId: teamId,
           analysisData: createdAnalysis,
         },
@@ -205,7 +210,7 @@ export class AnalysisController {
    *
    * @param {Object} req - Express request object
    * @param {Object} req.params - URL parameters
-   * @param {string} req.params.fileName - Name of the analysis file to run
+   * @param {string} req.params.analysisId - UUID of the analysis to run
    * @param {Object} req.log - Request-scoped logger
    * @param {Object} res - Express response object
    * @returns {Promise<void>}
@@ -213,18 +218,15 @@ export class AnalysisController {
    * Side effects:
    * - Starts a child process for the analysis script
    * - Process lifecycle events (analysisUpdate) are broadcast from analysisProcess.js
-   *
-   * Security:
-   * - Filename is sanitized to prevent path traversal attacks
    */
   static async runAnalysis(req, res) {
-    const { fileName } = req.params;
+    const { analysisId } = req.params;
 
-    req.log.info({ action: 'runAnalysis', fileName }, 'Running analysis');
+    req.log.info({ action: 'runAnalysis', analysisId }, 'Running analysis');
 
-    const result = await analysisService.runAnalysis(fileName);
+    const result = await analysisService.runAnalysis(analysisId);
 
-    req.log.info({ action: 'runAnalysis', fileName }, 'Analysis started');
+    req.log.info({ action: 'runAnalysis', analysisId }, 'Analysis started');
 
     // No SSE broadcast needed here - the actual process lifecycle event
     // (analysisUpdate) will be sent from analysisProcess.js when the child process starts
@@ -238,7 +240,7 @@ export class AnalysisController {
    *
    * @param {Object} req - Express request object
    * @param {Object} req.params - URL parameters
-   * @param {string} req.params.fileName - Name of the analysis file to stop
+   * @param {string} req.params.analysisId - UUID of the analysis to stop
    * @param {Object} req.log - Request-scoped logger
    * @param {Object} res - Express response object
    * @returns {Promise<void>}
@@ -246,18 +248,15 @@ export class AnalysisController {
    * Side effects:
    * - Kills the analysis child process
    * - Process lifecycle events (analysisUpdate) are broadcast from analysisProcess.js
-   *
-   * Security:
-   * - Filename is sanitized to prevent path traversal attacks
    */
   static async stopAnalysis(req, res) {
-    const { fileName } = req.params;
+    const { analysisId } = req.params;
 
-    req.log.info({ action: 'stopAnalysis', fileName }, 'Stopping analysis');
+    req.log.info({ action: 'stopAnalysis', analysisId }, 'Stopping analysis');
 
-    const result = await analysisService.stopAnalysis(fileName);
+    const result = await analysisService.stopAnalysis(analysisId);
 
-    req.log.info({ action: 'stopAnalysis', fileName }, 'Analysis stopped');
+    req.log.info({ action: 'stopAnalysis', analysisId }, 'Analysis stopped');
 
     // No SSE broadcast needed here - the actual process lifecycle event
     // (analysisUpdate) will be sent from analysisProcess.js when the child process exits
@@ -271,7 +270,7 @@ export class AnalysisController {
    *
    * @param {Object} req - Express request object
    * @param {Object} req.params - URL parameters
-   * @param {string} req.params.fileName - Name of the analysis file to delete
+   * @param {string} req.params.analysisId - UUID of the analysis to delete
    * @param {Object} req.log - Request-scoped logger
    * @param {Object} res - Express response object
    * @returns {Promise<void>}
@@ -281,46 +280,46 @@ export class AnalysisController {
    * - Removes analysis from configuration
    * - Broadcasts 'analysisDeleted' SSE event to team users
    * - Broadcasts 'teamStructureUpdated' SSE event to team users
-   *
-   * Security:
-   * - Filename is sanitized to prevent path traversal attacks
    */
   static async deleteAnalysis(req, res) {
-    const { fileName } = req.params;
+    const { analysisId } = req.params;
 
-    req.log.info({ action: 'deleteAnalysis', fileName }, 'Deleting analysis');
+    req.log.info({ action: 'deleteAnalysis', analysisId }, 'Deleting analysis');
 
     // Get analysis data before deletion for broadcast
-    const analyses = await analysisService.getAllAnalyses();
-    const analysisToDelete = analyses[fileName];
+    const analysisToDelete = analysisService.getAnalysisById(analysisId);
+    const teamId = analysisToDelete?.teamId;
+    const analysisName = analysisToDelete?.name;
 
-    await analysisService.deleteAnalysis(fileName);
+    await analysisService.deleteAnalysis(analysisId);
 
     req.log.info(
       {
         action: 'deleteAnalysis',
-        fileName,
-        teamId: analysisToDelete?.teamId,
+        analysisId,
+        analysisName,
+        teamId,
       },
       'Analysis deleted',
     );
 
     // Broadcast deletion with analysis data
     sseManager.broadcastAnalysisUpdate(
-      fileName,
+      analysisId,
       {
         type: 'analysisDeleted',
         data: {
-          fileName,
-          teamId: analysisToDelete?.teamId,
+          analysisId,
+          analysisName,
+          teamId,
         },
       },
-      analysisToDelete?.teamId,
+      teamId,
     );
 
     // Broadcast team structure update
-    if (analysisToDelete?.teamId) {
-      await broadcastTeamStructureUpdate(sseManager, analysisToDelete.teamId);
+    if (teamId) {
+      await broadcastTeamStructureUpdate(sseManager, teamId);
     }
 
     res.json({ success: true });
@@ -332,7 +331,7 @@ export class AnalysisController {
    *
    * @param {Object} req - Express request object
    * @param {Object} req.params - URL parameters
-   * @param {string} req.params.fileName - Name of the analysis file
+   * @param {string} req.params.analysisId - UUID of the analysis
    * @param {Object} req.query - Query parameters
    * @param {string} [req.query.version] - Optional version number to retrieve
    * @param {Object} req.log - Request-scoped logger
@@ -342,17 +341,13 @@ export class AnalysisController {
    * Response:
    * - Content-Type: text/plain
    * - Body: File content as string
-   *
-   * Security:
-   * - Filename is sanitized to prevent path traversal attacks
-   * - Version number is validated to prevent negative or non-numeric values
    */
   static async getAnalysisContent(req, res) {
-    const { fileName } = req.params;
+    const { analysisId } = req.params;
     const { version } = req.query;
 
     req.log.info(
-      { action: 'getAnalysisContent', fileName, version },
+      { action: 'getAnalysisContent', analysisId, version },
       'Getting analysis content',
     );
 
@@ -365,7 +360,7 @@ export class AnalysisController {
         req.log.warn(
           {
             action: 'getAnalysisContent',
-            fileName,
+            analysisId,
             version,
           },
           'Invalid version number',
@@ -373,16 +368,16 @@ export class AnalysisController {
         return res.status(400).json({ error: 'Invalid version number' });
       }
       content = await analysisService.getVersionContent(
-        fileName,
+        analysisId,
         versionNumber,
       );
     } else {
       // Get current content
-      content = await analysisService.getAnalysisContent(fileName);
+      content = await analysisService.getAnalysisContent(analysisId);
     }
 
     req.log.info(
-      { action: 'getAnalysisContent', fileName, version },
+      { action: 'getAnalysisContent', analysisId, version },
       'Analysis content retrieved',
     );
 
@@ -396,7 +391,7 @@ export class AnalysisController {
    *
    * @param {Object} req - Express request object
    * @param {Object} req.params - URL parameters
-   * @param {string} req.params.fileName - Name of the analysis file to update
+   * @param {string} req.params.analysisId - UUID of the analysis to update
    * @param {Object} req.body - Request body
    * @param {string} req.body.content - New file content
    * @param {Object} req.log - Request-scoped logger
@@ -408,40 +403,36 @@ export class AnalysisController {
    * - Writes new content to file
    * - Restarts analysis process if it was running
    * - Broadcasts 'analysisUpdated' SSE event
-   *
-   * Security:
-   * - Filename is sanitized to prevent path traversal attacks
-   * - Content validation handled by middleware
    */
   static async updateAnalysis(req, res) {
-    const { fileName } = req.params;
+    const { analysisId } = req.params;
     const { content } = req.body;
 
     // Validation handled by middleware
-    req.log.info({ action: 'updateAnalysis', fileName }, 'Updating analysis');
+    req.log.info({ action: 'updateAnalysis', analysisId }, 'Updating analysis');
 
-    const result = await analysisService.updateAnalysis(fileName, {
+    const result = await analysisService.updateAnalysis(analysisId, {
       content,
     });
 
     req.log.info(
       {
         action: 'updateAnalysis',
-        fileName,
+        analysisId,
         restarted: result.restarted,
       },
       'Analysis updated',
     );
 
     // Get updated analysis data
-    const analyses = await analysisService.getAllAnalyses();
-    const updatedAnalysis = analyses[fileName];
+    const updatedAnalysis = analysisService.getAnalysisById(analysisId);
 
     // Broadcast update with complete analysis data
-    sseManager.broadcastAnalysisUpdate(fileName, {
+    sseManager.broadcastAnalysisUpdate(analysisId, {
       type: 'analysisUpdated',
       data: {
-        fileName,
+        analysisId,
+        analysisName: updatedAnalysis?.name,
         status: 'updated',
         restarted: result.restarted,
         ...updatedAnalysis,
@@ -456,69 +447,70 @@ export class AnalysisController {
   }
 
   /**
-   * Rename an analysis file and directory
-   * Updates file/directory names, configuration, and restarts if running
+   * Rename an analysis display name
+   * Updates the name property in configuration (directory stays the same in v5.0)
    *
    * @param {Object} req - Express request object
    * @param {Object} req.params - URL parameters
-   * @param {string} req.params.fileName - Current name of the analysis file
+   * @param {string} req.params.analysisId - UUID of the analysis to rename
    * @param {Object} req.body - Request body
-   * @param {string} req.body.newFileName - New name for the analysis file
+   * @param {string} req.body.newName - New display name for the analysis
    * @param {Object} req.log - Request-scoped logger
    * @param {Object} res - Express response object
    * @returns {Promise<void>}
    *
    * Side effects:
-   * - Renames analysis directory and files
-   * - Updates configuration with new name
+   * - Updates configuration with new name (directory unchanged)
    * - Restarts analysis process if it was running
    * - Broadcasts 'analysisRenamed' SSE event
-   *
-   * Security:
-   * - Both old and new filenames are sanitized to prevent path traversal attacks
-   * - Name validation handled by middleware
    */
   static async renameAnalysis(req, res) {
-    const { fileName } = req.params;
-    const { newFileName } = req.body;
-    // Sanitize newFileName from body (fileName from params is already sanitized by middleware)
-    const sanitizedNewFileName = sanitizeAndValidateFilename(newFileName);
+    const { analysisId } = req.params;
+    const { newName } = req.body;
+    // Sanitize newName from body
+    const sanitizedNewName = sanitizeAndValidateFilename(newName);
+
+    // Get current analysis data before rename
+    const currentAnalysis = analysisService.getAnalysisById(analysisId);
+    const oldName = currentAnalysis?.name;
 
     // Validation handled by middleware
     req.log.info(
       {
         action: 'renameAnalysis',
-        oldFileName: fileName,
-        newFileName: sanitizedNewFileName,
+        analysisId,
+        oldName,
+        newName: sanitizedNewName,
       },
       'Renaming analysis',
     );
 
     const result = await analysisService.renameAnalysis(
-      fileName,
-      sanitizedNewFileName,
+      analysisId,
+      sanitizedNewName,
     );
 
     req.log.info(
       {
         action: 'renameAnalysis',
-        oldFileName: fileName,
-        newFileName: sanitizedNewFileName,
+        analysisId,
+        oldName,
+        newName: sanitizedNewName,
         restarted: result.restarted,
       },
       'Analysis renamed',
     );
 
     // Get updated analysis data
-    const analyses = await analysisService.getAllAnalyses();
-    const renamedAnalysis = analyses[sanitizedNewFileName];
+    const renamedAnalysis = analysisService.getAnalysisById(analysisId);
 
     // Broadcast update with complete analysis data
-    sseManager.broadcastAnalysisUpdate(sanitizedNewFileName, {
+    sseManager.broadcastAnalysisUpdate(analysisId, {
       type: 'analysisRenamed',
       data: {
-        oldFileName: fileName,
-        newFileName: sanitizedNewFileName,
+        analysisId,
+        oldName,
+        newName: sanitizedNewName,
         status: 'updated',
         restarted: result.restarted,
         ...renamedAnalysis,
@@ -543,7 +535,7 @@ export class AnalysisController {
    *
    * @param {Object} req - Express request object
    * @param {Object} req.params - URL parameters
-   * @param {string} req.params.fileName - Name of the analysis file
+   * @param {string} req.params.analysisId - UUID of the analysis
    * @param {Object} req.query - Query parameters
    * @param {string} [req.query.page=1] - Page number for pagination
    * @param {string} [req.query.limit=100] - Number of log entries per page
@@ -553,26 +545,23 @@ export class AnalysisController {
    *
    * Response:
    * - JSON object with logs array and pagination metadata
-   *
-   * Security:
-   * - Filename is sanitized to prevent path traversal attacks
    */
   static async getLogs(req, res) {
-    const { fileName } = req.params;
+    const { analysisId } = req.params;
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 100;
 
     req.log.info(
-      { action: 'getLogs', fileName, page, limit },
+      { action: 'getLogs', analysisId, page, limit },
       'Getting analysis logs',
     );
 
-    const logs = await analysisService.getLogs(fileName, page, limit);
+    const logs = await analysisService.getLogs(analysisId, page, limit);
 
     req.log.info(
       {
         action: 'getLogs',
-        fileName,
+        analysisId,
         count: logs.logs?.length,
       },
       'Logs retrieved',
@@ -587,7 +576,7 @@ export class AnalysisController {
    *
    * @param {Object} req - Express request object
    * @param {Object} req.params - URL parameters
-   * @param {string} req.params.fileName - Name of the analysis file
+   * @param {string} req.params.analysisId - UUID of the analysis
    * @param {Object} req.query - Query parameters
    * @param {string} req.query.timeRange - Time range filter ('all', '1h', '24h', '7d', '30d')
    * @param {Object} req.log - Request-scoped logger
@@ -605,27 +594,22 @@ export class AnalysisController {
    *
    * Side effects:
    * - Creates and auto-cleans temporary files for filtered downloads
-   *
-   * Security:
-   * - Filename is sanitized to prevent path traversal attacks
-   * - All file paths validated against base directory
-   * - Temporary files cleaned up after sending
    */
   static async downloadLogs(req, res) {
-    const fileName = sanitizeAndValidateFilename(req.params.fileName);
+    const { analysisId } = req.params;
     const { timeRange } = req.query;
 
     req.log.info(
-      { action: 'downloadLogs', fileName, timeRange },
+      { action: 'downloadLogs', analysisId, timeRange },
       'Downloading logs',
     );
 
     if (timeRange === 'all') {
-      return AnalysisController.handleFullLogDownload(fileName, req, res);
+      return AnalysisController.handleFullLogDownload(analysisId, req, res);
     }
 
     return AnalysisController.handleFilteredLogDownload(
-      fileName,
+      analysisId,
       timeRange,
       req,
       res,
@@ -636,15 +620,15 @@ export class AnalysisController {
    * Handle download of complete log file
    * Streams the full analysis.log file directly
    *
-   * @param {string} fileName - Analysis file name
+   * @param {string} analysisId - Analysis UUID
    * @param {Object} req - Express request
    * @param {Object} res - Express response
    * @returns {Promise<void>}
    */
-  static async handleFullLogDownload(fileName, req, res) {
+  static async handleFullLogDownload(analysisId, req, res) {
     const expectedLogFile = path.join(
       config.paths.analysis,
-      fileName,
+      analysisId,
       'logs',
       'analysis.log',
     );
@@ -655,25 +639,29 @@ export class AnalysisController {
     } catch (error) {
       if (error.code === 'ENOENT') {
         req.log.warn(
-          { action: 'downloadLogs', fileName },
+          { action: 'downloadLogs', analysisId },
           'Log file not found',
         );
         return res.status(404).json({
-          error: `Log file for ${fileName} not found`,
+          error: `Log file for analysis ${analysisId} not found`,
         });
       }
       throw error;
     }
 
-    AnalysisController.setLogDownloadHeaders(fileName, res);
+    // Get analysis name for download filename
+    const analysis = analysisService.getAnalysisById(analysisId);
+    const analysisName = analysis?.name || analysisId;
 
-    req.log.info({ action: 'downloadLogs', fileName }, 'Streaming log file');
+    AnalysisController.setLogDownloadHeaders(analysisName, res);
+
+    req.log.info({ action: 'downloadLogs', analysisId }, 'Streaming log file');
 
     // Stream file directly
     res.sendFile(path.resolve(expectedLogFile), (err) => {
       if (err && !res.headersSent) {
         req.log.error(
-          { action: 'downloadLogs', fileName, err },
+          { action: 'downloadLogs', analysisId, err },
           'Error streaming log file',
         );
         return res.status(500).json({ error: 'Failed to download file' });
@@ -685,37 +673,41 @@ export class AnalysisController {
    * Handle download of filtered log file by time range
    * Creates temporary filtered file and streams it
    *
-   * @param {string} fileName - Analysis file name
+   * @param {string} analysisId - Analysis UUID
    * @param {string} timeRange - Time range filter (1h, 24h, etc.)
    * @param {Object} req - Express request
    * @param {Object} res - Express response
    * @returns {Promise<void>}
    */
-  static async handleFilteredLogDownload(fileName, timeRange, req, res) {
+  static async handleFilteredLogDownload(analysisId, timeRange, req, res) {
     try {
       // Get filtered log content
       const result = await analysisService.getLogsForDownload(
-        fileName,
+        analysisId,
         timeRange,
       );
       const { content } = result;
 
+      // Get analysis name for download filename
+      const analysis = analysisService.getAnalysisById(analysisId);
+      const analysisName = analysis?.name || analysisId;
+
       // Create temp file
       const tempLogFile = path.join(
         config.paths.analysis,
-        fileName,
+        analysisId,
         'logs',
-        `${sanitize(path.parse(fileName).name)}_${sanitize(timeRange)}_temp.log`,
+        `${sanitize(analysisName)}_${sanitize(timeRange)}_temp.log`,
       );
 
       const resolvedTempLogFile = path.resolve(tempLogFile);
 
       await safeWriteFile(resolvedTempLogFile, content, config.paths.analysis);
 
-      AnalysisController.setLogDownloadHeaders(fileName, res);
+      AnalysisController.setLogDownloadHeaders(analysisName, res);
 
       req.log.info(
-        { action: 'downloadLogs', fileName, timeRange },
+        { action: 'downloadLogs', analysisId, timeRange },
         'Sending filtered log file',
       );
 
@@ -726,7 +718,7 @@ export class AnalysisController {
             req.log.error(
               {
                 action: 'downloadLogs',
-                fileName,
+                analysisId,
                 err: unlinkError,
               },
               'Error cleaning up temporary file',
@@ -736,7 +728,7 @@ export class AnalysisController {
 
         if (err && !res.headersSent) {
           req.log.error(
-            { action: 'downloadLogs', fileName, err },
+            { action: 'downloadLogs', analysisId, err },
             'Error sending file',
           );
           return res.status(500).json({ error: 'Failed to download file' });
@@ -746,7 +738,7 @@ export class AnalysisController {
       req.log.error(
         {
           action: 'downloadLogs',
-          fileName,
+          analysisId,
           err: writeError,
         },
         'Error writing temporary file',
@@ -761,12 +753,12 @@ export class AnalysisController {
    * Set HTTP headers for log file download
    * Configures Content-Disposition and Content-Type
    *
-   * @param {string} fileName - Analysis file name
+   * @param {string} analysisName - Analysis display name (for the download filename)
    * @param {Object} res - Express response
    * @returns {void}
    */
-  static setLogDownloadHeaders(fileName, res) {
-    const downloadFilename = `${sanitize(path.parse(fileName).name)}.log`;
+  static setLogDownloadHeaders(analysisName, res) {
+    const downloadFilename = `${sanitize(analysisName)}.log`;
     res.setHeader(
       'Content-Disposition',
       `attachment; filename="${downloadFilename}"`,
@@ -780,7 +772,7 @@ export class AnalysisController {
    *
    * @param {Object} req - Express request object
    * @param {Object} req.params - URL parameters
-   * @param {string} req.params.fileName - Name of the analysis file
+   * @param {string} req.params.analysisId - UUID of the analysis
    * @param {Object} req.log - Request-scoped logger
    * @param {Object} res - Express response object
    * @returns {Promise<void>}
@@ -788,24 +780,26 @@ export class AnalysisController {
    * Side effects:
    * - Truncates analysis log file to empty
    * - Broadcasts 'logsCleared' SSE event with clear timestamp
-   *
-   * Security:
-   * - Filename is sanitized to prevent path traversal attacks
    */
   static async clearLogs(req, res) {
-    const { fileName } = req.params;
+    const { analysisId } = req.params;
 
-    req.log.info({ action: 'clearLogs', fileName }, 'Clearing analysis logs');
+    req.log.info({ action: 'clearLogs', analysisId }, 'Clearing analysis logs');
 
-    const result = await analysisService.clearLogs(fileName);
+    const result = await analysisService.clearLogs(analysisId);
 
-    req.log.info({ action: 'clearLogs', fileName }, 'Logs cleared');
+    // Get analysis name for SSE payload
+    const analysis = analysisService.getAnalysisById(analysisId);
+    const analysisName = analysis?.name;
+
+    req.log.info({ action: 'clearLogs', analysisId }, 'Logs cleared');
 
     // Broadcast logs cleared with the "Log file cleared" message included
-    sseManager.broadcastAnalysisUpdate(fileName, {
+    sseManager.broadcastAnalysisUpdate(analysisId, {
       type: 'logsCleared',
       data: {
-        fileName,
+        analysisId,
+        analysisName,
         clearMessage: {
           timestamp: new Date().toLocaleString(),
           message: 'Log file cleared',
@@ -823,7 +817,7 @@ export class AnalysisController {
    *
    * @param {Object} req - Express request object
    * @param {Object} req.params - URL parameters
-   * @param {string} req.params.fileName - Name of the analysis file
+   * @param {string} req.params.analysisId - UUID of the analysis
    * @param {Object} req.query - Query parameters
    * @param {string} [req.query.version] - Optional version number to download (0 or undefined = current)
    * @param {Object} req.log - Request-scoped logger
@@ -834,17 +828,13 @@ export class AnalysisController {
    * - Content-Type: application/javascript
    * - Content-Disposition: attachment with sanitized filename and optional version suffix
    * - Body: Analysis file content
-   *
-   * Security:
-   * - Filename is sanitized to prevent path traversal attacks
-   * - Version number validated to prevent negative or non-numeric values
    */
   static async downloadAnalysis(req, res) {
-    const { fileName } = req.params;
+    const { analysisId } = req.params;
     const { version } = req.query;
 
     req.log.info(
-      { action: 'downloadAnalysis', fileName, version },
+      { action: 'downloadAnalysis', analysisId, version },
       'Downloading analysis',
     );
 
@@ -856,7 +846,7 @@ export class AnalysisController {
         req.log.warn(
           {
             action: 'downloadAnalysis',
-            fileName,
+            analysisId,
             version,
           },
           'Download failed: invalid version number',
@@ -864,22 +854,26 @@ export class AnalysisController {
         return res.status(400).json({ error: 'Invalid version number' });
       }
       content = await analysisService.getVersionContent(
-        fileName,
+        analysisId,
         versionNumber,
       );
     } else {
       // Download current version
-      content = await analysisService.getAnalysisContent(fileName);
+      content = await analysisService.getAnalysisContent(analysisId);
     }
 
     req.log.info(
-      { action: 'downloadAnalysis', fileName, version },
+      { action: 'downloadAnalysis', analysisId, version },
       'Analysis download prepared',
     );
 
+    // Get analysis name for download filename
+    const analysis = analysisService.getAnalysisById(analysisId);
+    const analysisName = analysis?.name || analysisId;
+
     // Set the download filename using headers with sanitized name
     const versionSuffix = version && version !== '0' ? `_v${version}` : '';
-    const downloadFilename = `${sanitize(fileName)}${versionSuffix}.js`;
+    const downloadFilename = `${sanitize(analysisName)}${versionSuffix}.js`;
     res.setHeader(
       'Content-Disposition',
       `attachment; filename="${downloadFilename}"`,
@@ -895,27 +889,24 @@ export class AnalysisController {
    *
    * @param {Object} req - Express request object
    * @param {Object} req.params - URL parameters
-   * @param {string} req.params.fileName - Name of the analysis file
+   * @param {string} req.params.analysisId - UUID of the analysis
    * @param {Object} req.log - Request-scoped logger
    * @param {Object} res - Express response object
    * @returns {Promise<void>}
    *
    * Response:
    * - JSON array of version objects with version numbers and timestamps
-   *
-   * Security:
-   * - Filename is sanitized to prevent path traversal attacks
    */
   static async getVersions(req, res) {
-    const { fileName } = req.params;
+    const { analysisId } = req.params;
     const { page, limit } = req.query;
 
     req.log.info(
-      { action: 'getVersions', fileName, page, limit },
+      { action: 'getVersions', analysisId, page, limit },
       'Getting analysis versions',
     );
 
-    const result = await analysisService.getVersions(fileName, {
+    const result = await analysisService.getVersions(analysisId, {
       page,
       limit,
       logger: req.log,
@@ -924,7 +915,7 @@ export class AnalysisController {
     req.log.info(
       {
         action: 'getVersions',
-        fileName,
+        analysisId,
         count: result.versions.length,
         page: result.page,
         totalPages: result.totalPages,
@@ -941,7 +932,7 @@ export class AnalysisController {
    *
    * @param {Object} req - Express request object
    * @param {Object} req.params - URL parameters
-   * @param {string} req.params.fileName - Name of the analysis file
+   * @param {string} req.params.analysisId - UUID of the analysis
    * @param {Object} req.body - Request body
    * @param {number} req.body.version - Version number to rollback to
    * @param {Object} req.log - Request-scoped logger
@@ -953,13 +944,9 @@ export class AnalysisController {
    * - Creates new version backup before rollback
    * - Restarts analysis process if it was running
    * - Broadcasts 'analysisRolledBack' SSE event
-   *
-   * Security:
-   * - Filename is sanitized to prevent path traversal attacks
-   * - Version number validated by middleware
    */
   static async rollbackToVersion(req, res) {
-    const { fileName } = req.params;
+    const { analysisId } = req.params;
     const { version } = req.body;
 
     // Validation handled by middleware (version is transformed to number)
@@ -968,21 +955,21 @@ export class AnalysisController {
     req.log.info(
       {
         action: 'rollbackToVersion',
-        fileName,
+        analysisId,
         version: versionNumber,
       },
       'Rolling back analysis',
     );
 
     const result = await analysisService.rollbackToVersion(
-      fileName,
+      analysisId,
       versionNumber,
     );
 
     req.log.info(
       {
         action: 'rollbackToVersion',
-        fileName,
+        analysisId,
         version: versionNumber,
         restarted: result.restarted,
       },
@@ -990,14 +977,14 @@ export class AnalysisController {
     );
 
     // Get updated analysis data
-    const analyses = await analysisService.getAllAnalyses();
-    const updatedAnalysis = analyses[fileName];
+    const updatedAnalysis = analysisService.getAnalysisById(analysisId);
 
     // Broadcast rollback with complete analysis data
-    sseManager.broadcastAnalysisUpdate(fileName, {
+    sseManager.broadcastAnalysisUpdate(analysisId, {
       type: 'analysisRolledBack',
       data: {
-        fileName,
+        analysisId,
+        analysisName: updatedAnalysis?.name,
         version: versionNumber,
         status: 'rolled back',
         restarted: result.restarted,
@@ -1019,7 +1006,7 @@ export class AnalysisController {
    *
    * @param {Object} req - Express request object
    * @param {Object} req.params - URL parameters
-   * @param {string} req.params.fileName - Name of the analysis file
+   * @param {string} req.params.analysisId - UUID of the analysis
    * @param {Object} req.body - Request body
    * @param {Object} req.body.env - Environment variables object (key-value pairs)
    * @param {Object} req.log - Request-scoped logger
@@ -1030,42 +1017,37 @@ export class AnalysisController {
    * - Saves encrypted environment variables to disk
    * - Restarts analysis process if it was running (to apply new env vars)
    * - Broadcasts 'analysisEnvironmentUpdated' SSE event
-   *
-   * Security:
-   * - Filename is sanitized to prevent path traversal attacks
-   * - Environment variables are encrypted before storage
-   * - Validation handled by middleware
    */
   static async updateEnvironment(req, res) {
-    const { fileName } = req.params;
+    const { analysisId } = req.params;
     const { env } = req.body;
 
     // Validation handled by middleware
     req.log.info(
-      { action: 'updateEnvironment', fileName },
+      { action: 'updateEnvironment', analysisId },
       'Updating environment variables',
     );
 
-    const result = await analysisService.updateEnvironment(fileName, env);
+    const result = await analysisService.updateEnvironment(analysisId, env);
 
     req.log.info(
       {
         action: 'updateEnvironment',
-        fileName,
+        analysisId,
         restarted: result.restarted,
       },
       'Environment updated',
     );
 
     // Get updated analysis data
-    const analyses = await analysisService.getAllAnalyses();
-    const updatedAnalysis = analyses[fileName];
+    const updatedAnalysis = analysisService.getAnalysisById(analysisId);
 
     // Broadcast update with complete analysis data
-    sseManager.broadcastAnalysisUpdate(fileName, {
+    sseManager.broadcastAnalysisUpdate(analysisId, {
       type: 'analysisEnvironmentUpdated',
       data: {
-        fileName,
+        analysisId,
+        analysisName: updatedAnalysis?.name,
         status: 'updated',
         restarted: result.restarted,
         ...updatedAnalysis,
@@ -1085,30 +1067,26 @@ export class AnalysisController {
    *
    * @param {Object} req - Express request object
    * @param {Object} req.params - URL parameters
-   * @param {string} req.params.fileName - Name of the analysis file
+   * @param {string} req.params.analysisId - UUID of the analysis
    * @param {Object} req.log - Request-scoped logger
    * @param {Object} res - Express response object
    * @returns {Promise<void>}
    *
    * Response:
    * - JSON object with decrypted environment variables (key-value pairs)
-   *
-   * Security:
-   * - Filename is sanitized to prevent path traversal attacks
-   * - Environment variables are decrypted before returning
    */
   static async getEnvironment(req, res) {
-    const { fileName } = req.params;
+    const { analysisId } = req.params;
 
     req.log.info(
-      { action: 'getEnvironment', fileName },
+      { action: 'getEnvironment', analysisId },
       'Getting environment variables',
     );
 
-    const env = await analysisService.getEnvironment(fileName);
+    const env = await analysisService.getEnvironment(analysisId);
 
     req.log.info(
-      { action: 'getEnvironment', fileName },
+      { action: 'getEnvironment', analysisId },
       'Environment variables retrieved',
     );
 

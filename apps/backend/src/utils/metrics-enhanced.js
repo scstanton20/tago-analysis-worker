@@ -35,60 +35,60 @@ const analysisProcesses = new client.Gauge({
   registers: [register],
 });
 
-// Per-process metrics with analysis_name label
+// Per-process metrics with analysis_id label
 const analysisProcessStatus = new client.Gauge({
   name: 'tago_analysis_process_status',
   help: 'Process status (1 = running, 0 = stopped)',
-  labelNames: ['analysis_name'],
+  labelNames: ['analysis_id'],
   registers: [register],
 });
 
 const analysisProcessCPU = new client.Gauge({
   name: 'tago_analysis_cpu_percent',
   help: 'CPU usage percentage of analysis processes',
-  labelNames: ['analysis_name'],
+  labelNames: ['analysis_id'],
   registers: [register],
 });
 
 const analysisProcessMemory = new client.Gauge({
   name: 'tago_analysis_memory_bytes',
   help: 'Memory usage of analysis processes in bytes',
-  labelNames: ['analysis_name'],
+  labelNames: ['analysis_id'],
   registers: [register],
 });
 
 const analysisProcessUptime = new client.Gauge({
   name: 'tago_analysis_uptime_seconds',
   help: 'Process uptime in seconds',
-  labelNames: ['analysis_name'],
+  labelNames: ['analysis_id'],
   registers: [register],
 });
 
 const analysisRestarts = new client.Counter({
   name: 'tago_analysis_restarts_total',
   help: 'Total analysis process restarts',
-  labelNames: ['analysis_name', 'reason'],
+  labelNames: ['analysis_id', 'reason'],
   registers: [register],
 });
 
 const analysisErrors = new client.Counter({
   name: 'tago_analysis_errors_total',
   help: 'Total errors from analysis processes',
-  labelNames: ['analysis_name', 'type'],
+  labelNames: ['analysis_id', 'type'],
   registers: [register],
 });
 
 const analysisLogLines = new client.Counter({
   name: 'tago_analysis_log_lines_total',
   help: 'Total log lines output by analysis',
-  labelNames: ['analysis_name'],
+  labelNames: ['analysis_id'],
   registers: [register],
 });
 
 const analysisIPCMessages = new client.Counter({
   name: 'tago_analysis_ipc_messages_total',
   help: 'Total IPC messages between parent and child',
-  labelNames: ['analysis_name', 'direction'],
+  labelNames: ['analysis_id', 'direction'],
   registers: [register],
 });
 
@@ -96,14 +96,14 @@ const analysisIPCMessages = new client.Counter({
 const analysisDNSCacheHits = new client.Counter({
   name: 'tago_analysis_dns_cache_hits',
   help: 'DNS cache hits per analysis',
-  labelNames: ['analysis_name'],
+  labelNames: ['analysis_id'],
   registers: [register],
 });
 
 const analysisDNSCacheMisses = new client.Counter({
   name: 'tago_analysis_dns_cache_misses',
   help: 'DNS cache misses per analysis',
-  labelNames: ['analysis_name'],
+  labelNames: ['analysis_id'],
   registers: [register],
 });
 
@@ -176,11 +176,11 @@ export async function collectChildProcessMetrics(processes) {
   let runningCount = 0;
   let stoppedCount = 0;
 
-  for (const [name, process] of processes) {
+  for (const [analysisId, process] of processes) {
     const isRunning = process.status === 'running';
 
     // Update process status
-    analysisProcessStatus.set({ analysis_name: name }, isRunning ? 1 : 0);
+    analysisProcessStatus.set({ analysis_id: analysisId }, isRunning ? 1 : 0);
 
     // Count overall processes
     if (isRunning) {
@@ -195,31 +195,31 @@ export async function collectChildProcessMetrics(processes) {
         const stats = await pidusage(process.process.pid);
 
         // CPU and Memory metrics
-        analysisProcessCPU.set({ analysis_name: name }, stats.cpu);
-        analysisProcessMemory.set({ analysis_name: name }, stats.memory);
+        analysisProcessCPU.set({ analysis_id: analysisId }, stats.cpu);
+        analysisProcessMemory.set({ analysis_id: analysisId }, stats.memory);
 
         // Track process start time for uptime calculation
-        if (!processStartTimes.has(name)) {
-          processStartTimes.set(name, Date.now());
+        if (!processStartTimes.has(analysisId)) {
+          processStartTimes.set(analysisId, Date.now());
         }
 
         // Calculate and set uptime
-        const startTime = processStartTimes.get(name);
+        const startTime = processStartTimes.get(analysisId);
         const uptime = (Date.now() - startTime) / 1000;
-        analysisProcessUptime.set({ analysis_name: name }, uptime);
+        analysisProcessUptime.set({ analysis_id: analysisId }, uptime);
       } catch {
         // Process may have exited, reset metrics
-        analysisProcessCPU.set({ analysis_name: name }, 0);
-        analysisProcessMemory.set({ analysis_name: name }, 0);
-        analysisProcessUptime.set({ analysis_name: name }, 0);
-        processStartTimes.delete(name);
+        analysisProcessCPU.set({ analysis_id: analysisId }, 0);
+        analysisProcessMemory.set({ analysis_id: analysisId }, 0);
+        analysisProcessUptime.set({ analysis_id: analysisId }, 0);
+        processStartTimes.delete(analysisId);
       }
     } else {
       // Process is stopped, reset metrics
-      analysisProcessCPU.set({ analysis_name: name }, 0);
-      analysisProcessMemory.set({ analysis_name: name }, 0);
-      analysisProcessUptime.set({ analysis_name: name }, 0);
-      processStartTimes.delete(name);
+      analysisProcessCPU.set({ analysis_id: analysisId }, 0);
+      analysisProcessMemory.set({ analysis_id: analysisId }, 0);
+      analysisProcessUptime.set({ analysis_id: analysisId }, 0);
+      processStartTimes.delete(analysisId);
     }
   }
 
@@ -229,30 +229,30 @@ export async function collectChildProcessMetrics(processes) {
 }
 
 // Helper to track process events
-export function trackProcessRestart(analysisName, reason = 'unknown') {
-  analysisRestarts.inc({ analysis_name: analysisName, reason });
+export function trackProcessRestart(analysisId, reason = 'unknown') {
+  analysisRestarts.inc({ analysis_id: analysisId, reason });
   // Reset start time on restart
-  processStartTimes.set(analysisName, Date.now());
+  processStartTimes.set(analysisId, Date.now());
 }
 
-export function trackProcessError(analysisName, errorType = 'runtime') {
-  analysisErrors.inc({ analysis_name: analysisName, type: errorType });
+export function trackProcessError(analysisId, errorType = 'runtime') {
+  analysisErrors.inc({ analysis_id: analysisId, type: errorType });
 }
 
-export function trackLogLine(analysisName) {
-  analysisLogLines.inc({ analysis_name: analysisName });
+export function trackLogLine(analysisId) {
+  analysisLogLines.inc({ analysis_id: analysisId });
 }
 
-export function trackIPCMessage(analysisName, direction = 'inbound') {
-  analysisIPCMessages.inc({ analysis_name: analysisName, direction });
+export function trackIPCMessage(analysisId, direction = 'inbound') {
+  analysisIPCMessages.inc({ analysis_id: analysisId, direction });
 }
 
-export function trackDNSCache(analysisName, hit = true) {
+export function trackDNSCache(analysisId, hit = true) {
   if (hit) {
-    analysisDNSCacheHits.inc({ analysis_name: analysisName });
+    analysisDNSCacheHits.inc({ analysis_id: analysisId });
     dnsCacheHits.inc();
   } else {
-    analysisDNSCacheMisses.inc({ analysis_name: analysisName });
+    analysisDNSCacheMisses.inc({ analysis_id: analysisId });
     dnsCacheMisses.inc();
   }
 }

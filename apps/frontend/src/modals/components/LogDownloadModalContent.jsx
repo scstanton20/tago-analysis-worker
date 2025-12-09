@@ -31,7 +31,7 @@ const LogDownloadModalContent = ({ id, innerProps }) => {
   // Fetch time range options from the API
   const optionsOperation = useAsyncMount(
     async () => {
-      const result = await analysisService.getLogDownloadOptions(analysis.name);
+      const result = await analysisService.getLogDownloadOptions(analysis.id);
       const options = result?.timeRangeOptions || [];
       setTimeRangeOptions(options);
       // Set default to first option

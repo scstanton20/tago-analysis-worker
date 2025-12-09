@@ -21,6 +21,7 @@ import PropTypes from 'prop-types';
  * <LoadingState loading={true} skeleton pattern="list" />     // List items
  * <LoadingState loading={true} skeleton pattern="logs" />     // Log entries
  * <LoadingState loading={true} skeleton pattern="content" />  // Mixed content
+ * <LoadingState loading={true} skeleton pattern="table" />    // Table rows
  */
 
 // Skeleton pattern generators
@@ -84,6 +85,17 @@ const skeletonPatterns = {
       <Skeleton key={i} height={heights[i % heights.length]} radius="md" />
     ));
   },
+
+  // Table rows - mimics table structure with columns
+  table: (count) =>
+    Array.from({ length: count }).map((_, i) => (
+      <Group key={i} gap="md" wrap="nowrap" py="xs">
+        <Skeleton height={24} width={120} radius="sm" />
+        <Skeleton height={24} style={{ flex: 1 }} radius="sm" />
+        <Skeleton height={24} width={80} radius="sm" />
+        <Skeleton height={24} width={100} radius="sm" />
+      </Group>
+    )),
 };
 
 export function LoadingState({
@@ -140,6 +152,7 @@ LoadingState.propTypes = {
     'list',
     'logs',
     'content',
+    'table',
   ]),
   skeletonCount: PropTypes.number,
   skeletonHeight: PropTypes.oneOfType([PropTypes.number, PropTypes.string]),

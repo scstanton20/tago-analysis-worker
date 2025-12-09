@@ -399,13 +399,13 @@ export function SSEConnectionProvider({ children, onMessage }) {
 
   // Subscribe to analysis channels for log streaming
   const subscribeToAnalysis = useCallback(
-    async (analysisNames) => {
+    async (analysisIds) => {
       if (!sessionId || !isAuthenticated) {
         return { success: false, error: 'Not connected' };
       }
 
-      if (!Array.isArray(analysisNames) || analysisNames.length === 0) {
-        return { success: false, error: 'Invalid analysis names' };
+      if (!Array.isArray(analysisIds) || analysisIds.length === 0) {
+        return { success: false, error: 'Invalid analysis IDs' };
       }
 
       try {
@@ -413,7 +413,7 @@ export function SSEConnectionProvider({ children, onMessage }) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ sessionId, analyses: analysisNames }),
+          body: JSON.stringify({ sessionId, analyses: analysisIds }),
         });
 
         if (!response.ok) {
@@ -424,9 +424,9 @@ export function SSEConnectionProvider({ children, onMessage }) {
 
         const result = await response.json();
 
-        // Track subscriptions locally
-        result.subscribed?.forEach((name) => {
-          subscribedAnalyses.current.add(name);
+        // Track subscriptions locally by analysis ID
+        result.subscribed?.forEach((id) => {
+          subscribedAnalyses.current.add(id);
         });
 
         return result;
@@ -440,15 +440,15 @@ export function SSEConnectionProvider({ children, onMessage }) {
 
   // Unsubscribe from analysis channels
   const unsubscribeFromAnalysis = useCallback(
-    async (analysisNames) => {
+    async (analysisIds) => {
       if (!sessionId || !isAuthenticated) {
         logger.warn('Cannot unsubscribe: No session ID or not authenticated');
         return { success: false, error: 'Not connected' };
       }
 
-      if (!Array.isArray(analysisNames) || analysisNames.length === 0) {
-        logger.warn('Cannot unsubscribe: Invalid analysisNames');
-        return { success: false, error: 'Invalid analysis names' };
+      if (!Array.isArray(analysisIds) || analysisIds.length === 0) {
+        logger.warn('Cannot unsubscribe: Invalid analysisIds');
+        return { success: false, error: 'Invalid analysis IDs' };
       }
 
       try {
@@ -456,7 +456,7 @@ export function SSEConnectionProvider({ children, onMessage }) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({ sessionId, analyses: analysisNames }),
+          body: JSON.stringify({ sessionId, analyses: analysisIds }),
         });
 
         if (!response.ok) {
@@ -468,9 +468,9 @@ export function SSEConnectionProvider({ children, onMessage }) {
         const result = await response.json();
         logger.log('Unsubscribed from analyses:', result);
 
-        // Remove from local tracking
-        result.unsubscribed?.forEach((name) => {
-          subscribedAnalyses.current.delete(name);
+        // Remove from local tracking by analysis ID
+        result.unsubscribed?.forEach((id) => {
+          subscribedAnalyses.current.delete(id);
         });
 
         return result;
