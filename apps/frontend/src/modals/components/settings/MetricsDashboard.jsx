@@ -147,9 +147,9 @@ function ProcessTable({ processes, loading = false }) {
       </Table.Thead>
       <Table.Tbody>
         {processes.map((process, index) => (
-          <Table.Tr key={process.name || index}>
+          <Table.Tr key={process.analysis_id || index}>
             <Table.Td>
-              <Text fw={500}>{process.name}</Text>
+              <Text fw={500}>{process.name || process.analysis_id}</Text>
             </Table.Td>
             <Table.Td>
               <Group gap="xs">
@@ -180,6 +180,7 @@ function ProcessTable({ processes, loading = false }) {
 ProcessTable.propTypes = {
   processes: PropTypes.arrayOf(
     PropTypes.shape({
+      analysis_id: PropTypes.string,
       name: PropTypes.string,
       cpu: PropTypes.number,
       memory: PropTypes.number,

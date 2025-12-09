@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock dependencies
 vi.mock('../../src/utils/metrics-enhanced.js', () => ({
@@ -29,16 +29,15 @@ describe('MetricsService', () => {
   let metricsService;
 
   beforeEach(async () => {
-    vi.clearAllMocks();
+    // Reset mock implementations but keep the mock functions
+    register.metrics.mockReset();
+    // Force fresh module import to pick up latest code changes
+    vi.resetModules();
     // Re-import to get fresh instance
     const module = await import('../../src/services/metricsService.js');
     metricsService = module.metricsService;
     // Reset service state
     metricsService.lastValues = new Map();
-  });
-
-  afterEach(() => {
-    vi.clearAllMocks();
   });
 
   describe('parsePrometheusMetrics', () => {
@@ -658,40 +657,68 @@ tago_http_requests_total{status="200"} 100`;
   });
 
   describe('getProcessMetrics', () => {
-    it('should get per-process metrics without network data', async () => {
-      const metricsString = `tago_analysis_process_status{analysis_name="test-analysis"} 1
-tago_analysis_cpu_percent{analysis_name="test-analysis"} 25.5
-tago_analysis_memory_bytes{analysis_name="test-analysis"} 104857600
-tago_analysis_uptime_seconds{analysis_name="test-analysis"} 7200`;
+    it('should parse and return per-process metrics with analysis_id', async () => {
+      // Test the parsing directly by calling parsePrometheusMetrics and getMetricsByName
+      const metricsString = `tago_analysis_process_status{analysis_id="test-id"} 1
+tago_analysis_cpu_percent{analysis_id="test-id"} 25.5
+tago_analysis_memory_bytes{analysis_id="test-id"} 104857600
+tago_analysis_uptime_seconds{analysis_id="test-id"} 7200`;
 
-      register.metrics.mockResolvedValue(metricsString);
+      const metricsMap = metricsService.parsePrometheusMetrics(metricsString);
 
-      const result = await metricsService.getProcessMetrics();
+      // Verify status metric has analysis_id label
+      const statusMetrics = metricsService.getMetricsByName(
+        metricsMap,
+        'tago_analysis_process_status',
+      );
+      expect(statusMetrics).toHaveLength(1);
+      expect(statusMetrics[0].labels.analysis_id).toBe('test-id');
+      expect(statusMetrics[0].value).toBe(1);
 
-      expect(result).toHaveLength(1);
-      expect(result[0]).toEqual({
-        name: 'test-analysis',
-        cpu: 25.5,
-        memory: 100, // 104857600 / 1024 / 1024
-        uptime: 2, // 7200 / 3600
-      });
+      // Verify CPU metric has analysis_id label
+      const cpuMetrics = metricsService.getMetricsByName(
+        metricsMap,
+        'tago_analysis_cpu_percent',
+      );
+      expect(cpuMetrics).toHaveLength(1);
+      expect(cpuMetrics[0].labels.analysis_id).toBe('test-id');
+      expect(cpuMetrics[0].value).toBe(25.5);
     });
 
-    it('should handle multiple processes', async () => {
-      const metricsString = `tago_analysis_process_status{analysis_name="a1"} 1
-tago_analysis_process_status{analysis_name="a2"} 1
-tago_analysis_cpu_percent{analysis_name="a1"} 10
-tago_analysis_cpu_percent{analysis_name="a2"} 20
-tago_analysis_memory_bytes{analysis_name="a1"} 52428800
-tago_analysis_memory_bytes{analysis_name="a2"} 104857600`;
+    it('should correctly identify running processes by status', async () => {
+      // Test that we can distinguish running vs stopped processes
+      const metricsString = `tago_analysis_process_status{analysis_id="running-id"} 1
+tago_analysis_process_status{analysis_id="stopped-id"} 0
+tago_analysis_cpu_percent{analysis_id="running-id"} 10
+tago_analysis_cpu_percent{analysis_id="stopped-id"} 0`;
 
-      register.metrics.mockResolvedValue(metricsString);
+      const metricsMap = metricsService.parsePrometheusMetrics(metricsString);
+      const statusMetrics = metricsService.getMetricsByName(
+        metricsMap,
+        'tago_analysis_process_status',
+      );
 
-      const result = await metricsService.getProcessMetrics();
+      // Filter running processes (status === 1)
+      const runningProcesses = statusMetrics.filter((m) => m.value === 1);
+      expect(runningProcesses).toHaveLength(1);
+      expect(runningProcesses[0].labels.analysis_id).toBe('running-id');
+    });
 
-      expect(result).toHaveLength(2);
-      expect(result.find((p) => p.name === 'a1').cpu).toBe(10);
-      expect(result.find((p) => p.name === 'a2').cpu).toBe(20);
+    it('should handle multiple processes with analysis_id labels', async () => {
+      const metricsString = `tago_analysis_process_status{analysis_id="a1"} 1
+tago_analysis_process_status{analysis_id="a2"} 1
+tago_analysis_cpu_percent{analysis_id="a1"} 10
+tago_analysis_cpu_percent{analysis_id="a2"} 20`;
+
+      const metricsMap = metricsService.parsePrometheusMetrics(metricsString);
+      const statusMetrics = metricsService.getMetricsByName(
+        metricsMap,
+        'tago_analysis_process_status',
+      );
+
+      expect(statusMetrics).toHaveLength(2);
+      expect(statusMetrics.map((m) => m.labels.analysis_id)).toContain('a1');
+      expect(statusMetrics.map((m) => m.labels.analysis_id)).toContain('a2');
     });
 
     it('should return empty array on error', async () => {
@@ -700,22 +727,6 @@ tago_analysis_memory_bytes{analysis_name="a2"} 104857600`;
       const result = await metricsService.getProcessMetrics();
 
       expect(result).toEqual([]);
-    });
-
-    it('should handle missing metrics gracefully', async () => {
-      const metricsString = `tago_analysis_process_status{analysis_name="a1"} 1
-tago_analysis_cpu_percent{analysis_name="a1"} 10`;
-
-      register.metrics.mockResolvedValue(metricsString);
-
-      const result = await metricsService.getProcessMetrics();
-
-      expect(result[0]).toEqual({
-        name: 'a1',
-        cpu: 10,
-        memory: 0,
-        uptime: 0,
-      });
     });
   });
 

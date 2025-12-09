@@ -9,6 +9,29 @@ import { METRICS } from '../constants.js';
 
 const moduleLogger = createChildLogger('metrics-service');
 
+// Lazy-loaded analysisService to avoid circular dependencies
+let analysisServiceCache = null;
+let analysisServicePromise = null;
+
+async function getAnalysisService() {
+  if (analysisServiceCache) {
+    return analysisServiceCache;
+  }
+  if (!analysisServicePromise) {
+    analysisServicePromise = import('./analysisService.js').then((module) => {
+      analysisServiceCache = module.analysisService;
+      return analysisServiceCache;
+    });
+  }
+  return analysisServicePromise;
+}
+
+// Reset the analysisService cache (for testing)
+export function resetAnalysisServiceCache() {
+  analysisServiceCache = null;
+  analysisServicePromise = null;
+}
+
 class MetricsService {
   /**
    * Initialize metrics service instance
@@ -205,11 +228,19 @@ class MetricsService {
    * Performance: O(n) to parse metrics + O(4) Map lookups vs O(n*4) with array filters
    *
    * @param {object} logger - Logger instance
+   * @param {object} options - Optional overrides for testing
+   * @param {object} options.analysisService - Optional analysisService override
+   * @param {object} options.register - Optional register override for testing
    * @returns {Promise<Array>} Array of running process metrics
    */
-  async getProcessMetrics(logger = moduleLogger) {
+  async getProcessMetrics(logger = moduleLogger, options = {}) {
+    const {
+      analysisService: analysisServiceOverride,
+      register: registerOverride,
+    } = options;
     try {
-      const metricsString = await register.metrics();
+      const registerToUse = registerOverride || register;
+      const metricsString = await registerToUse.metrics();
       const metricsMap = this.parsePrometheusMetrics(metricsString);
       const processes = new Map();
 
@@ -219,10 +250,10 @@ class MetricsService {
         'tago_analysis_process_status',
       );
       statusMetrics.forEach((metric) => {
-        const name = metric.labels.analysis_name;
-        if (name) {
-          if (!processes.has(name)) processes.set(name, {});
-          processes.get(name).status = metric.value;
+        const analysisId = metric.labels.analysis_id;
+        if (analysisId) {
+          if (!processes.has(analysisId)) processes.set(analysisId, {});
+          processes.get(analysisId).status = metric.value;
         }
       });
 
@@ -232,10 +263,10 @@ class MetricsService {
         'tago_analysis_cpu_percent',
       );
       cpuMetrics.forEach((metric) => {
-        const name = metric.labels.analysis_name;
-        if (name) {
-          if (!processes.has(name)) processes.set(name, {});
-          processes.get(name).cpu = metric.value;
+        const analysisId = metric.labels.analysis_id;
+        if (analysisId) {
+          if (!processes.has(analysisId)) processes.set(analysisId, {});
+          processes.get(analysisId).cpu = metric.value;
         }
       });
 
@@ -245,10 +276,10 @@ class MetricsService {
         'tago_analysis_memory_bytes',
       );
       memoryMetrics.forEach((metric) => {
-        const name = metric.labels.analysis_name;
-        if (name) {
-          if (!processes.has(name)) processes.set(name, {});
-          processes.get(name).memory = metric.value / (1024 * 1024); // Convert to MB
+        const analysisId = metric.labels.analysis_id;
+        if (analysisId) {
+          if (!processes.has(analysisId)) processes.set(analysisId, {});
+          processes.get(analysisId).memory = metric.value / (1024 * 1024); // Convert to MB
         }
       });
 
@@ -258,18 +289,24 @@ class MetricsService {
         'tago_analysis_uptime_seconds',
       );
       uptimeMetrics.forEach((metric) => {
-        const name = metric.labels.analysis_name;
-        if (name) {
-          if (!processes.has(name)) processes.set(name, {});
-          processes.get(name).uptime = metric.value / 3600; // Convert to hours
+        const analysisId = metric.labels.analysis_id;
+        if (analysisId) {
+          if (!processes.has(analysisId)) processes.set(analysisId, {});
+          processes.get(analysisId).uptime = metric.value / 3600; // Convert to hours
         }
       });
+
+      // Get analysisService to look up analysis names
+      const analysisServiceInstance =
+        analysisServiceOverride || (await getAnalysisService());
+      const allAnalyses = await analysisServiceInstance.getAllAnalyses();
 
       // Convert to array format and filter to only running processes (status === 1)
       return Array.from(processes.entries())
         .filter(([, metrics]) => metrics.status === 1) // Only include running processes
-        .map(([name, metrics]) => ({
-          name,
+        .map(([analysisId, metrics]) => ({
+          analysis_id: analysisId,
+          name: allAnalyses[analysisId]?.name || analysisId, // Fallback to ID if name not found
           cpu: metrics.cpu || 0,
           memory: metrics.memory || 0,
           uptime: metrics.uptime || 0,
