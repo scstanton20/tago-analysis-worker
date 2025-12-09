@@ -2,10 +2,47 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 describe('analysisSchemas', () => {
   let schemas;
+  let LOG_TIME_RANGE_OPTIONS;
+  let LOG_TIME_RANGE_VALUES;
 
   beforeEach(async () => {
     const module = await import('../../src/validation/analysisSchemas.js');
     schemas = module.analysisValidationSchemas;
+    LOG_TIME_RANGE_OPTIONS = module.LOG_TIME_RANGE_OPTIONS;
+    LOG_TIME_RANGE_VALUES = module.LOG_TIME_RANGE_VALUES;
+  });
+
+  describe('LOG_TIME_RANGE_OPTIONS and LOG_TIME_RANGE_VALUES exports', () => {
+    it('should export LOG_TIME_RANGE_OPTIONS with value and label for each option', () => {
+      expect(LOG_TIME_RANGE_OPTIONS).toBeDefined();
+      expect(Array.isArray(LOG_TIME_RANGE_OPTIONS)).toBe(true);
+      expect(LOG_TIME_RANGE_OPTIONS.length).toBeGreaterThan(0);
+
+      LOG_TIME_RANGE_OPTIONS.forEach((option) => {
+        expect(option).toHaveProperty('value');
+        expect(option).toHaveProperty('label');
+        expect(typeof option.value).toBe('string');
+        expect(typeof option.label).toBe('string');
+      });
+    });
+
+    it('should export LOG_TIME_RANGE_VALUES derived from options', () => {
+      expect(LOG_TIME_RANGE_VALUES).toBeDefined();
+      expect(Array.isArray(LOG_TIME_RANGE_VALUES)).toBe(true);
+
+      // Values should match the values from options
+      const expectedValues = LOG_TIME_RANGE_OPTIONS.map((opt) => opt.value);
+      expect(LOG_TIME_RANGE_VALUES).toEqual(expectedValues);
+    });
+
+    it('should include expected time range values', () => {
+      // These are the expected values - update this test if values change
+      expect(LOG_TIME_RANGE_VALUES).toContain('1h');
+      expect(LOG_TIME_RANGE_VALUES).toContain('24h');
+      expect(LOG_TIME_RANGE_VALUES).toContain('7d');
+      expect(LOG_TIME_RANGE_VALUES).toContain('30d');
+      expect(LOG_TIME_RANGE_VALUES).toContain('all');
+    });
   });
 
   describe('uploadAnalysisSchema', () => {
@@ -231,16 +268,15 @@ describe('analysisSchemas', () => {
 
   describe('downloadLogsSchema', () => {
     describe('query validation', () => {
-      it('should validate valid time ranges', () => {
-        const validRanges = ['1h', '24h', '7d', '30d', 'all'];
-
-        validRanges.forEach((timeRange) => {
+      it('should validate valid time ranges from LOG_TIME_RANGE_VALUES', () => {
+        // Use the exported constant to ensure tests stay in sync with schema
+        LOG_TIME_RANGE_VALUES.forEach((timeRange) => {
           const result = schemas.downloadLogs.query.safeParse({ timeRange });
           expect(result.success).toBe(true);
         });
       });
 
-      it('should reject invalid time ranges with custom error message', () => {
+      it('should reject invalid time ranges with dynamic error message', () => {
         const invalidData = {
           timeRange: 'invalid',
         };
@@ -248,8 +284,9 @@ describe('analysisSchemas', () => {
         const result = schemas.downloadLogs.query.safeParse(invalidData);
 
         expect(result.success).toBe(false);
+        // Error message should include all valid values from the constant
         expect(result.error?.issues[0].message).toBe(
-          'Invalid time range. Must be one of: 1h, 24h, 7d, 30d, all',
+          `Invalid time range. Must be one of: ${LOG_TIME_RANGE_VALUES.join(', ')}`,
         );
       });
 

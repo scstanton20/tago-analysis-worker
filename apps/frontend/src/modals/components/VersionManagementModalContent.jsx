@@ -4,7 +4,7 @@
  * @module modals/components/VersionManagementModalContent
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import { useAsyncMount, useAsyncOperation } from '../../hooks/async';
 import {
   Stack,
@@ -15,6 +15,8 @@ import {
   ActionIcon,
   Divider,
   Box,
+  Pagination,
+  Center,
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { SecondaryButton } from '../../components/global/buttons';
@@ -33,6 +35,8 @@ import { LoadingState, FormAlert } from '../../components/global';
 import logger from '../../utils/logger';
 import PropTypes from 'prop-types';
 
+const VERSIONS_PER_PAGE = 10;
+
 /**
  * VersionManagementModalContent
  * Content component for version management modal
@@ -50,19 +54,79 @@ function VersionManagementModalContent({ id, innerProps }) {
     versions: [],
     nextVersionNumber: 2,
     currentVersion: 1,
+    totalCount: 0,
+    totalPages: 0,
+    page: 1,
   });
+  const [currentPage, setCurrentPage] = useState(1);
+  const [isPageLoading, setIsPageLoading] = useState(false);
   const [rollbackLoading, setRollbackLoading] = useState(null);
   const downloadOperation = useAsyncOperation();
 
-  // Load versions when component mounts or analysis changes
+  // Cache for page data to avoid re-fetching visited pages
+  const pageCache = useRef(new Map());
+
+  // Clear cache (used after rollback when data changes)
+  const clearCache = useCallback(() => {
+    pageCache.current.clear();
+  }, []);
+
+  // Load versions for a specific page (with caching)
+  const loadVersions = useCallback(
+    async (page = 1, skipCache = false) => {
+      if (!analysis?.name) return;
+
+      // Check cache first
+      if (!skipCache && pageCache.current.has(page)) {
+        const cachedData = pageCache.current.get(page);
+        setVersionData(cachedData);
+        setCurrentPage(page);
+        return;
+      }
+
+      // Fetch from API
+      const data = await analysisService.getVersions(analysis.name, {
+        page,
+        limit: VERSIONS_PER_PAGE,
+      });
+
+      // Store in cache
+      pageCache.current.set(page, data);
+
+      setVersionData(data);
+      setCurrentPage(page);
+    },
+    [analysis?.name],
+  );
+
+  // Load initial versions when component mounts or analysis changes
+  // Cache is cleared on mount (when deps change) and on unmount (via onCleanup)
   const loadVersionsOperation = useAsyncMount(
     async () => {
-      if (!analysis?.name) return;
-      const data = await analysisService.getVersions(analysis.name);
-      setVersionData(data);
+      clearCache();
+      await loadVersions(1);
     },
-    { deps: [analysis?.name] },
+    { deps: [analysis?.name], onCleanup: clearCache },
   );
+
+  // Handle page change
+  const handlePageChange = async (page) => {
+    // If page is cached, update instantly without loading state
+    if (pageCache.current.has(page)) {
+      await loadVersions(page);
+      return;
+    }
+
+    // Otherwise show loading state while fetching
+    setIsPageLoading(true);
+    try {
+      await loadVersions(page);
+    } catch (error) {
+      logger.error('Failed to load versions page:', error);
+    } finally {
+      setIsPageLoading(false);
+    }
+  };
 
   const handleRollback = async (version) => {
     modals.openConfirmModal({
@@ -85,11 +149,9 @@ function VersionManagementModalContent({ id, innerProps }) {
             onVersionRollback(version);
           }
 
-          // Reload versions to update current version indicator
-          await loadVersionsOperation.execute(async () => {
-            const data = await analysisService.getVersions(analysis.name);
-            setVersionData(data);
-          });
+          // Clear cache and reload versions to update current version indicator
+          clearCache();
+          await loadVersions(currentPage, true);
         } catch (error) {
           logger.error('Failed to rollback:', error);
         } finally {
@@ -140,14 +202,16 @@ function VersionManagementModalContent({ id, innerProps }) {
     [versionData.currentVersion],
   );
 
-  // Memoize sorted versions to prevent unnecessary array operations
-  const sortedVersions = useMemo(
+  // Filter out the current version from paginated results (already sorted by backend)
+  const displayVersions = useMemo(
     () =>
-      [...versionData.versions]
-        .filter((version) => version.version !== currentVersionNumber)
-        .sort((a, b) => b.version - a.version),
+      versionData.versions.filter(
+        (version) => version.version !== currentVersionNumber,
+      ),
     [versionData.versions, currentVersionNumber],
   );
+
+  const isLoading = loadVersionsOperation.loading || isPageLoading;
 
   return (
     <Box pos="relative">
@@ -168,7 +232,7 @@ function VersionManagementModalContent({ id, innerProps }) {
 
         {loadVersionsOperation.loading ? (
           <LoadingState loading={true} minHeight={200} />
-        ) : versionData.versions.length === 0 ? (
+        ) : versionData.totalCount === 0 ? (
           <FormAlert
             icon={<IconInfoCircle size={16} />}
             title="No Version History"
@@ -184,8 +248,8 @@ function VersionManagementModalContent({ id, innerProps }) {
           <>
             <Group justify="space-between">
               <Text size="sm" c="dimmed">
-                {versionData.versions.length} saved version
-                {versionData.versions.length !== 1 ? 's' : ''} found
+                {versionData.totalCount} saved version
+                {versionData.totalCount !== 1 ? 's' : ''} found
               </Text>
               <Badge
                 variant="light"
@@ -198,110 +262,136 @@ function VersionManagementModalContent({ id, innerProps }) {
 
             <Divider />
 
-            <Table highlightOnHover verticalSpacing="sm">
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Version</Table.Th>
-                  <Table.Th>Created</Table.Th>
-                  <Table.Th>Size</Table.Th>
-                  <Table.Th>Actions</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                <Table.Tr>
-                  <Table.Td>
-                    <Group gap="xs">
-                      <Badge color="green" variant="filled" size="sm">
-                        CURRENT
-                      </Badge>
-                      <Text fw={600}>v{currentVersionNumber}</Text>
-                    </Group>
-                  </Table.Td>
-                  <Table.Td>
-                    <Group gap="xs">
-                      <IconClock size={14} />
-                      <Text size="sm">Active Version</Text>
-                    </Group>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="sm" c="dimmed">
-                      -
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Group gap="xs">
-                      <ActionIcon
-                        variant="light"
-                        color="green"
-                        size="sm"
-                        onClick={() => handleDownloadVersion(0)}
-                        aria-label="Download current version"
-                      >
-                        <IconDownload size={14} aria-hidden="true" />
-                      </ActionIcon>
-                      <ActionIcon
-                        variant="light"
-                        color="blue"
-                        size="sm"
-                        onClick={() => handleViewVersion(0)}
-                        aria-label="View current version content"
-                      >
-                        <IconEyeCode size={14} aria-hidden="true" />
-                      </ActionIcon>
-                    </Group>
-                  </Table.Td>
-                </Table.Tr>
-                {sortedVersions.map((version) => (
-                  <Table.Tr key={version.version}>
-                    <Table.Td>
-                      <Text fw={500}>v{version.version}</Text>
-                    </Table.Td>
-                    <Table.Td>
-                      <Group gap="xs">
-                        <IconClock size={14} />
-                        <Text size="sm">{formatDate(version.timestamp)}</Text>
-                      </Group>
-                    </Table.Td>
-                    <Table.Td>
-                      <Text size="sm">{formatSize(version.size)}</Text>
-                    </Table.Td>
-                    <Table.Td>
-                      <Group gap="xs">
-                        <ActionIcon
-                          variant="light"
-                          color="green"
-                          size="sm"
-                          onClick={() => handleDownloadVersion(version.version)}
-                          aria-label={`Download version ${version.version}`}
-                        >
-                          <IconDownload size={14} aria-hidden="true" />
-                        </ActionIcon>
-                        <ActionIcon
-                          variant="light"
-                          color="orange"
-                          size="sm"
-                          onClick={() => handleRollback(version.version)}
-                          loading={rollbackLoading === version.version}
-                          aria-label={`Rollback to version ${version.version}`}
-                        >
-                          <IconPlayerPlay size={14} aria-hidden="true" />
-                        </ActionIcon>
-                        <ActionIcon
-                          variant="light"
-                          color="blue"
-                          size="sm"
-                          onClick={() => handleViewVersion(version.version)}
-                          loading={loadVersionsOperation.loading}
-                          aria-label={`View this version's content`}
-                        >
-                          <IconEyeCode aria-hidden="true" />
-                        </ActionIcon>
-                      </Group>
-                    </Table.Td>
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
+            <LoadingState
+              loading={isPageLoading}
+              minHeight={480}
+              style={{ overflow: 'hidden' }}
+            >
+              <Box style={{ height: 480 }}>
+                <Table highlightOnHover verticalSpacing="sm" layout="fixed">
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th w={160}>Version</Table.Th>
+                      <Table.Th w={280}>Created</Table.Th>
+                      <Table.Th w={150}>Size</Table.Th>
+                      <Table.Th>Actions</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {currentPage === 1 && (
+                      <Table.Tr>
+                        <Table.Td>
+                          <Group gap="xs">
+                            <Badge color="green" variant="filled" size="sm">
+                              CURRENT
+                            </Badge>
+                            <Text fw={600}>v{currentVersionNumber}</Text>
+                          </Group>
+                        </Table.Td>
+                        <Table.Td>
+                          <Group gap="xs">
+                            <IconClock size={14} />
+                            <Text size="sm">Active Version</Text>
+                          </Group>
+                        </Table.Td>
+                        <Table.Td>
+                          <Text size="sm" c="dimmed">
+                            -
+                          </Text>
+                        </Table.Td>
+                        <Table.Td>
+                          <Group gap="xs">
+                            <ActionIcon
+                              variant="light"
+                              color="green"
+                              size="sm"
+                              onClick={() => handleDownloadVersion(0)}
+                              aria-label="Download current version"
+                            >
+                              <IconDownload size={14} aria-hidden="true" />
+                            </ActionIcon>
+                            <ActionIcon
+                              variant="light"
+                              color="blue"
+                              size="sm"
+                              onClick={() => handleViewVersion(0)}
+                              aria-label="View current version content"
+                            >
+                              <IconEyeCode size={14} aria-hidden="true" />
+                            </ActionIcon>
+                          </Group>
+                        </Table.Td>
+                      </Table.Tr>
+                    )}
+                    {displayVersions.map((version) => (
+                      <Table.Tr key={version.version}>
+                        <Table.Td>
+                          <Text fw={500}>v{version.version}</Text>
+                        </Table.Td>
+                        <Table.Td>
+                          <Group gap="xs">
+                            <IconClock size={14} />
+                            <Text size="sm">
+                              {formatDate(version.timestamp)}
+                            </Text>
+                          </Group>
+                        </Table.Td>
+                        <Table.Td>
+                          <Text size="sm">{formatSize(version.size)}</Text>
+                        </Table.Td>
+                        <Table.Td>
+                          <Group gap="xs">
+                            <ActionIcon
+                              variant="light"
+                              color="green"
+                              size="sm"
+                              onClick={() =>
+                                handleDownloadVersion(version.version)
+                              }
+                              aria-label={`Download version ${version.version}`}
+                            >
+                              <IconDownload size={14} aria-hidden="true" />
+                            </ActionIcon>
+                            <ActionIcon
+                              variant="light"
+                              color="orange"
+                              size="sm"
+                              onClick={() => handleRollback(version.version)}
+                              loading={rollbackLoading === version.version}
+                              aria-label={`Rollback to version ${version.version}`}
+                            >
+                              <IconPlayerPlay size={14} aria-hidden="true" />
+                            </ActionIcon>
+                            <ActionIcon
+                              variant="light"
+                              color="blue"
+                              size="sm"
+                              onClick={() => handleViewVersion(version.version)}
+                              loading={isLoading}
+                              aria-label={`View this version's content`}
+                            >
+                              <IconEyeCode aria-hidden="true" />
+                            </ActionIcon>
+                          </Group>
+                        </Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              </Box>
+            </LoadingState>
+
+            {versionData.totalPages > 1 && (
+              <Center mt="md">
+                <Pagination
+                  value={currentPage}
+                  onChange={handlePageChange}
+                  total={versionData.totalPages}
+                  disabled={isLoading}
+                  withEdges
+                />
+              </Center>
+            )}
           </>
         )}
 

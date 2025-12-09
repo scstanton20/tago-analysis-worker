@@ -42,14 +42,15 @@ vi.mock('../../src/utils/safePath.js', () => ({
   getAnalysisPath: vi.fn((name) => `/tmp/analyses/${name}`),
 }));
 
-vi.mock('../../src/validation/shared.js', () => ({
-  isAnalysisNameSafe: vi.fn(() => true),
-  sanitizeAndValidateFilename: vi.fn((filename) => filename),
-  isValidFilename: vi.fn(() => true),
-  FILENAME_REGEX: /^[a-zA-Z0-9_\-. ]+$/,
-  FILENAME_ERROR_MESSAGE:
-    'Filename can only contain alphanumeric characters, spaces, hyphens, underscores, and periods',
-}));
+vi.mock('../../src/validation/shared.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    isAnalysisNameSafe: vi.fn(() => true),
+    sanitizeAndValidateFilename: vi.fn((filename) => filename),
+    isValidFilename: vi.fn(() => true),
+  };
+});
 
 vi.mock('../../src/utils/cryptoUtils.js', () => ({
   encrypt: vi.fn((value) => `encrypted_${value}`),
@@ -784,7 +785,7 @@ describe('AnalysisService', () => {
   });
 
   describe('version management', () => {
-    it('should get versions list', async () => {
+    it('should get versions list with pagination metadata', async () => {
       const v2Content = 'version 2 content';
 
       // Mock metadata and current file reading
@@ -811,21 +812,120 @@ describe('AnalysisService', () => {
         return Promise.resolve('some other content');
       });
 
-      const versions = await analysisService.getVersions('test-analysis');
+      const result = await analysisService.getVersions('test-analysis');
 
-      expect(versions.versions).toHaveLength(2);
-      expect(versions.currentVersion).toBe(2);
+      // Check pagination metadata
+      expect(result.versions).toHaveLength(2);
+      expect(result.currentVersion).toBe(2);
+      expect(result.page).toBe(1);
+      expect(result.limit).toBe(10);
+      expect(result.totalCount).toBe(2);
+      expect(result.totalPages).toBe(1);
+      expect(result.hasMore).toBe(false);
+      // Versions should be sorted in descending order (newest first)
+      expect(result.versions[0].version).toBe(2);
+      expect(result.versions[1].version).toBe(1);
     });
 
-    it('should return empty versions if metadata does not exist', async () => {
+    it('should paginate versions correctly', async () => {
+      const versions = Array.from({ length: 25 }, (_, i) => ({
+        version: i + 1,
+        timestamp: `2025-01-${String(i + 1).padStart(2, '0')}`,
+        size: 100 + i * 10,
+      }));
+
+      safeReadFile.mockImplementation((path) => {
+        if (path.includes('metadata.json')) {
+          return Promise.resolve(
+            JSON.stringify({
+              versions,
+              nextVersionNumber: 26,
+              currentVersion: 25,
+            }),
+          );
+        }
+        if (path.includes('index.js')) {
+          return Promise.resolve('current content');
+        }
+        return Promise.resolve('some other content');
+      });
+
+      // Test page 1
+      const page1 = await analysisService.getVersions('test-analysis', {
+        page: 1,
+        limit: 10,
+      });
+      expect(page1.versions).toHaveLength(10);
+      expect(page1.page).toBe(1);
+      expect(page1.totalCount).toBe(25);
+      expect(page1.totalPages).toBe(3);
+      expect(page1.hasMore).toBe(true);
+      // First page should have versions 25-16 (descending)
+      expect(page1.versions[0].version).toBe(25);
+      expect(page1.versions[9].version).toBe(16);
+
+      // Test page 2
+      const page2 = await analysisService.getVersions('test-analysis', {
+        page: 2,
+        limit: 10,
+      });
+      expect(page2.versions).toHaveLength(10);
+      expect(page2.page).toBe(2);
+      expect(page2.hasMore).toBe(true);
+      // Second page should have versions 15-6
+      expect(page2.versions[0].version).toBe(15);
+      expect(page2.versions[9].version).toBe(6);
+
+      // Test page 3 (last page with 5 items)
+      const page3 = await analysisService.getVersions('test-analysis', {
+        page: 3,
+        limit: 10,
+      });
+      expect(page3.versions).toHaveLength(5);
+      expect(page3.page).toBe(3);
+      expect(page3.hasMore).toBe(false);
+      // Third page should have versions 5-1
+      expect(page3.versions[0].version).toBe(5);
+      expect(page3.versions[4].version).toBe(1);
+    });
+
+    it('should use default pagination values', async () => {
+      safeReadFile.mockImplementation((path) => {
+        if (path.includes('metadata.json')) {
+          return Promise.resolve(
+            JSON.stringify({
+              versions: [{ version: 1, timestamp: '2025-01-01', size: 100 }],
+              nextVersionNumber: 2,
+              currentVersion: 1,
+            }),
+          );
+        }
+        if (path.includes('index.js')) {
+          return Promise.resolve('current content');
+        }
+        return Promise.resolve('some other content');
+      });
+
+      const result = await analysisService.getVersions('test-analysis');
+
+      expect(result.page).toBe(1);
+      expect(result.limit).toBe(10);
+    });
+
+    it('should return empty versions with pagination metadata if metadata does not exist', async () => {
       const error = new Error('File not found');
       error.code = 'ENOENT';
       safeReadFile.mockRejectedValue(error);
 
-      const versions = await analysisService.getVersions('test-analysis');
+      const result = await analysisService.getVersions('test-analysis');
 
-      expect(versions).toEqual({
+      expect(result).toEqual({
         versions: [],
+        page: 1,
+        limit: 10,
+        totalCount: 0,
+        totalPages: 0,
+        hasMore: false,
         nextVersionNumber: 2,
         currentVersion: 1,
       });

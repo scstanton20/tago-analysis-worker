@@ -479,29 +479,72 @@ describe('AnalysisController', () => {
   });
 
   describe('getVersions', () => {
-    it('should get versions successfully', async () => {
+    it('should get versions successfully with pagination', async () => {
       const req = createMockRequest({
         params: { fileName: 'test-analysis' },
+        query: { page: 1, limit: 10 },
       });
       const res = createMockResponse();
 
       const mockVersions = [
-        { version: 1, timestamp: '2025-01-01', size: 100 },
         { version: 2, timestamp: '2025-01-02', size: 150 },
+        { version: 1, timestamp: '2025-01-01', size: 100 },
       ];
 
-      analysisService.getVersions.mockResolvedValue({
+      const mockResult = {
         versions: mockVersions,
+        page: 1,
+        limit: 10,
+        totalCount: 2,
+        totalPages: 1,
+        hasMore: false,
+        nextVersionNumber: 3,
         currentVersion: 2,
+      };
+
+      analysisService.getVersions.mockResolvedValue(mockResult);
+
+      await AnalysisController.getVersions(req, res);
+
+      expect(analysisService.getVersions).toHaveBeenCalledWith(
+        'test-analysis',
+        {
+          page: 1,
+          limit: 10,
+          logger: req.log,
+        },
+      );
+      expect(res.json).toHaveBeenCalledWith(mockResult);
+    });
+
+    it('should pass pagination parameters to service', async () => {
+      const req = createMockRequest({
+        params: { fileName: 'test-analysis' },
+        query: { page: 2, limit: 5 },
+      });
+      const res = createMockResponse();
+
+      analysisService.getVersions.mockResolvedValue({
+        versions: [],
+        page: 2,
+        limit: 5,
+        totalCount: 0,
+        totalPages: 0,
+        hasMore: false,
+        nextVersionNumber: 2,
+        currentVersion: 1,
       });
 
       await AnalysisController.getVersions(req, res);
 
-      expect(analysisService.getVersions).toHaveBeenCalledWith('test-analysis');
-      expect(res.json).toHaveBeenCalledWith({
-        versions: mockVersions,
-        currentVersion: 2,
-      });
+      expect(analysisService.getVersions).toHaveBeenCalledWith(
+        'test-analysis',
+        {
+          page: 2,
+          limit: 5,
+          logger: req.log,
+        },
+      );
     });
   });
 

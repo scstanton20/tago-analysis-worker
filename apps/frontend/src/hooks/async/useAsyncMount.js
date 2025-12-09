@@ -13,6 +13,7 @@ import { useAsyncOperation } from './useAsyncOperation';
  * @param {Array} options.deps - Dependency array for useEffect (default: [])
  * @param {Function} options.onSuccess - Called when operation succeeds
  * @param {Function} options.onError - Called when operation fails
+ * @param {Function} options.onCleanup - Called when component unmounts (for cache clearing, etc.)
  * @param {*} options.initialData - Initial data value
  * @param {boolean} options.resetOnExecute - Reset error/data before execution (default: true)
  *
@@ -40,7 +41,7 @@ import { useAsyncOperation } from './useAsyncOperation';
  * );
  *
  * @example
- * // With callbacks
+ * // With callbacks and cleanup
  * const operation = useAsyncMount(
  *   async () => {
  *     const response = await api.getData();
@@ -49,16 +50,22 @@ import { useAsyncOperation } from './useAsyncOperation';
  *   },
  *   {
  *     onSuccess: (data) => notificationAPI.success('Data loaded'),
- *     onError: (error) => console.error('Failed to load:', error)
+ *     onError: (error) => console.error('Failed to load:', error),
+ *     onCleanup: () => cache.clear() // Called on unmount
  *   }
  * );
  */
 export function useAsyncMount(asyncFn, options = {}) {
-  const { deps = [], ...asyncOptions } = options;
+  const { deps = [], onCleanup, ...asyncOptions } = options;
   const operation = useAsyncOperation(asyncOptions);
 
   useEffect(() => {
     operation.execute(asyncFn);
+
+    // Return cleanup function if provided
+    if (onCleanup) {
+      return onCleanup;
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 

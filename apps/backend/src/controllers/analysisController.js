@@ -908,24 +908,31 @@ export class AnalysisController {
    */
   static async getVersions(req, res) {
     const { fileName } = req.params;
+    const { page, limit } = req.query;
 
     req.log.info(
-      { action: 'getVersions', fileName },
+      { action: 'getVersions', fileName, page, limit },
       'Getting analysis versions',
     );
 
-    const versions = await analysisService.getVersions(fileName);
+    const result = await analysisService.getVersions(fileName, {
+      page,
+      limit,
+      logger: req.log,
+    });
 
     req.log.info(
       {
         action: 'getVersions',
         fileName,
-        count: versions.length,
+        count: result.versions.length,
+        page: result.page,
+        totalPages: result.totalPages,
       },
       'Versions retrieved',
     );
 
-    res.json(versions);
+    res.json(result);
   }
 
   /**

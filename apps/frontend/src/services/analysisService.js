@@ -199,6 +199,30 @@ export const analysisService = {
     });
   }, 'download analysis logs'),
 
+  getLogDownloadOptions: withErrorHandling(async (fileName) => {
+    logger.debug('Fetching log download options', { fileName });
+
+    const response = await fetchWithHeaders(
+      `/analyses/${fileName}/logs/options`,
+      { method: 'GET' },
+    );
+
+    if (!response.ok) {
+      const errorData = await parseErrorResponse(
+        response,
+        'Failed to fetch log download options',
+      );
+      throw new Error(errorData.error);
+    }
+
+    const result = await response.json();
+    logger.debug('Log download options fetched', {
+      fileName,
+      optionsCount: result?.timeRangeOptions?.length,
+    });
+    return result;
+  }, 'fetch log download options'),
+
   deleteLogs: createDeleteMethod(
     logger,
     'delete analysis logs',
@@ -297,10 +321,17 @@ export const analysisService = {
     await downloadBlob(sanitize(`${fileName}${versionSuffix}`), blob, '.js');
   },
 
-  async getVersions(fileName) {
-    const response = await fetchWithHeaders(`/analyses/${fileName}/versions`, {
-      method: 'GET',
+  async getVersions(fileName, { page = 1, limit = 10 } = {}) {
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: String(limit),
     });
+    const response = await fetchWithHeaders(
+      `/analyses/${fileName}/versions?${params}`,
+      {
+        method: 'GET',
+      },
+    );
     return handleResponse(response);
   },
 

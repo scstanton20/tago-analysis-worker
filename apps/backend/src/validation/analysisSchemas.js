@@ -2,6 +2,25 @@
 import { z } from 'zod';
 import { filenameSchema, pageSchema, limitSchema } from './shared.js';
 
+/**
+ * Time range options for log downloads.
+ */
+export const LOG_TIME_RANGE_OPTIONS = [
+  { value: '1h', label: 'Last Hour' },
+  { value: '24h', label: 'Last 24 Hours' },
+  { value: '7d', label: 'Last 7 Days' },
+  { value: '30d', label: 'Last 30 Days' },
+  { value: 'all', label: 'All Logs' },
+];
+
+/**
+ * Valid time range values extracted from options.
+ * Used for schema validation.
+ */
+export const LOG_TIME_RANGE_VALUES = LOG_TIME_RANGE_OPTIONS.map(
+  (opt) => opt.value,
+);
+
 export const analysisValidationSchemas = {
   /**
    * GET /api/analyses - Get all analyses with optional filtering
@@ -127,8 +146,8 @@ export const analysisValidationSchemas = {
       fileName: filenameSchema,
     }),
     query: z.object({
-      timeRange: z.enum(['1h', '24h', '7d', '30d', 'all'], {
-        message: 'Invalid time range. Must be one of: 1h, 24h, 7d, 30d, all',
+      timeRange: z.enum(LOG_TIME_RANGE_VALUES, {
+        message: `Invalid time range. Must be one of: ${LOG_TIME_RANGE_VALUES.join(', ')}`,
       }),
     }),
   },
@@ -160,6 +179,25 @@ export const analysisValidationSchemas = {
   getVersions: {
     params: z.object({
       fileName: filenameSchema,
+    }),
+    query: z.object({
+      page: z
+        .string()
+        .regex(/^\d+$/, 'Page must be a positive number')
+        .transform((val) => parseInt(val, 10))
+        .refine((val) => val >= 1, 'Page must be at least 1')
+        .optional()
+        .default('1'),
+      limit: z
+        .string()
+        .regex(/^\d+$/, 'Limit must be a positive number')
+        .transform((val) => parseInt(val, 10))
+        .refine(
+          (val) => val >= 1 && val <= 100,
+          'Limit must be between 1 and 100',
+        )
+        .optional()
+        .default('10'),
     }),
   },
 

@@ -15,7 +15,10 @@ import {
 } from '../middleware/rateLimiter.js';
 import { validateRequest } from '../middleware/validateRequest.js';
 import { sanitizeFilenameParam } from '../middleware/sanitizeParams.js';
-import { analysisValidationSchemas } from '../validation/analysisSchemas.js';
+import {
+  analysisValidationSchemas,
+  LOG_TIME_RANGE_OPTIONS,
+} from '../validation/analysisSchemas.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
 const router = Router();
@@ -750,6 +753,49 @@ fileRouter.get(
   requireTeamPermission('view_analyses'),
   asyncHandler(AnalysisController.downloadLogs, 'download logs'),
 );
+
+/**
+ * @swagger
+ * /analyses/{fileName}/logs/options:
+ *   get:
+ *     summary: Get log download options
+ *     description: Returns available time range options for log downloads
+ *     tags: [Analysis Logs]
+ *     parameters:
+ *       - in: path
+ *         name: fileName
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Name of the analysis file
+ *     responses:
+ *       200:
+ *         description: Available time range options
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 timeRangeOptions:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       value:
+ *                         type: string
+ *                         description: The value to use in the timeRange query parameter
+ *                       label:
+ *                         type: string
+ *                         description: Human-readable label for display
+ */
+fileRouter.get(
+  '/logs/options',
+  requireTeamPermission('view_analyses'),
+  (_req, res) => {
+    res.json({ timeRangeOptions: LOG_TIME_RANGE_OPTIONS });
+  },
+);
+
 /**
  * @swagger
  * /analyses/{fileName}/logs:

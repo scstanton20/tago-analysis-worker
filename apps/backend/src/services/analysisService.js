@@ -17,6 +17,7 @@ import {
   getAnalysisPath,
 } from '../utils/safePath.js';
 import { isAnalysisNameSafe } from '../validation/shared.js';
+import { LOG_TIME_RANGE_VALUES } from '../validation/analysisSchemas.js';
 import { AnalysisProcess } from '../models/analysisProcess/index.js';
 import { teamService } from './teamService.js';
 import { createChildLogger, parseLogLine } from '../utils/logging/logger.js';
@@ -47,8 +48,7 @@ class AnalysisService {
   }
 
   validateTimeRange(timeRange) {
-    const validRanges = ['1h', '24h', '7d', '30d', 'all'];
-    return validRanges.includes(timeRange);
+    return LOG_TIME_RANGE_VALUES.includes(timeRange);
   }
 
   async getConfig() {
@@ -1074,8 +1074,13 @@ class AnalysisService {
     return newVersionNumber;
   }
 
-  async getVersions(analysisName, logger = moduleLogger) {
-    logger.info({ action: 'getVersions', analysisName }, 'Getting versions');
+  async getVersions(analysisName, options = {}) {
+    const { page = 1, limit = 10, logger = moduleLogger } = options;
+
+    logger.info(
+      { action: 'getVersions', analysisName, page, limit },
+      'Getting versions',
+    );
 
     const metadataPath = path.join(
       config.paths.analysis,
@@ -1144,10 +1149,41 @@ class AnalysisService {
         // If we can't read the current file, fall back to metadata currentVersion
       }
 
-      return metadata;
+      // Sort versions in descending order (newest first)
+      const sortedVersions = [...metadata.versions].sort(
+        (a, b) => b.version - a.version,
+      );
+
+      // Calculate pagination
+      const totalCount = sortedVersions.length;
+      const totalPages = Math.ceil(totalCount / limit);
+      const startIndex = (page - 1) * limit;
+      const endIndex = startIndex + limit;
+      const paginatedVersions = sortedVersions.slice(startIndex, endIndex);
+      const hasMore = page < totalPages;
+
+      return {
+        versions: paginatedVersions,
+        page,
+        limit,
+        totalCount,
+        totalPages,
+        hasMore,
+        nextVersionNumber: metadata.nextVersionNumber,
+        currentVersion: metadata.currentVersion,
+      };
     } catch (error) {
       if (error.code === 'ENOENT') {
-        return { versions: [], nextVersionNumber: 2, currentVersion: 1 };
+        return {
+          versions: [],
+          page: 1,
+          limit,
+          totalCount: 0,
+          totalPages: 0,
+          hasMore: false,
+          nextVersionNumber: 2,
+          currentVersion: 1,
+        };
       }
       throw error;
     }
