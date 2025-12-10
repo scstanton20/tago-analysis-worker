@@ -196,21 +196,22 @@ export function SSEAnalysesProvider({ children }) {
 
   const handleAnalysisUpdated = useCallback((data) => {
     if (data.data?.analysisId) {
-      const { analysisId, status, teamId, lastRun, startTime } = data.data;
+      const { analysisId, restarted, teamId, lastRun, startTime } = data.data;
       setAnalyses((prev) => {
         if (!prev[analysisId]) return prev;
         return {
           ...prev,
           [analysisId]: {
             ...prev[analysisId],
-            status: status || prev[analysisId].status,
+            status: restarted ? 'running' : prev[analysisId].status,
+            enabled: restarted ? true : prev[analysisId].enabled,
             teamId: teamId || prev[analysisId].teamId,
             lastRun: lastRun || prev[analysisId].lastRun,
             startTime: startTime || prev[analysisId].startTime,
           },
         };
       });
-      if (status !== 'running') {
+      if (!restarted) {
         setLoadingAnalyses((prev) => {
           const newSet = new Set(prev);
           newSet.delete(analysisId);
