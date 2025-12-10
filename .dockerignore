@@ -1,0 +1,48 @@
+# Generic Docker Ignore File
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Node modules (installed fresh in Docker)
+node_modules
+**/node_modules
+
+# Debug logs
+pnpm-debug.log
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# CI/CD (not needed in container)
+.github
+
+# Documentation
+*.md
+!apps/*/README.md
+docs/
+
+# Development/Local config
+.env.local
+.env.*.local
+
+# Test files
+*.test.ts
+*.test.js
+*.spec.ts
+*.spec.js
+**/__tests__
+coverage/
+.nyc_output
+
+# Build artifacts
+.cache/

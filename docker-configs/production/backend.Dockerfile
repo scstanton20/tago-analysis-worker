@@ -10,8 +10,8 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/backend/package.json ./apps/backend/
 
 # Install dependencies
-RUN corepack enable
-RUN pnpm install --filter backend --frozen-lockfile --prod
+RUN --mount=type=cache,id=pnpm,target=/pnpm corepack enable && \
+    pnpm install --filter backend --frozen-lockfile --prod
 
 FROM node:23-alpine AS run
 

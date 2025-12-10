@@ -10,8 +10,8 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/frontend/package.json ./apps/frontend/
 
 # Install dependencies
-RUN corepack enable
-RUN pnpm install --filter frontend --frozen-lockfile
+RUN --mount=type=cache,id=pnpm,target=/pnpm corepack enable && \
+    pnpm install --filter frontend --frozen-lockfile
 
 FROM node:23-alpine AS build
 # Set up pnpm in the runtime container
