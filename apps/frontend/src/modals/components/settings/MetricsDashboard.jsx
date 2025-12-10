@@ -11,6 +11,7 @@ import {
   Progress,
   Tabs,
   Card,
+  Tooltip,
 } from '@mantine/core';
 import {
   FormAlert,
@@ -140,6 +141,18 @@ function ProcessTable({ processes, loading = false }) {
       <Table.Thead>
         <Table.Tr>
           <Table.Th>Process Name</Table.Th>
+          <Table.Th>
+            <Group gap={4}>
+              Analysis ID
+              <Tooltip
+                label="The unique identifier of an analysis related to this worker application only. This does not match the analysis ID in Tago.io."
+                multiline
+                w={250}
+              >
+                <IconAlertCircle size={14} style={{ cursor: 'help' }} />
+              </Tooltip>
+            </Group>
+          </Table.Th>
           <Table.Th>CPU %</Table.Th>
           <Table.Th>Memory (MB)</Table.Th>
           <Table.Th>Uptime (hrs)</Table.Th>
@@ -151,6 +164,7 @@ function ProcessTable({ processes, loading = false }) {
             <Table.Td>
               <Text fw={500}>{process.name || process.analysis_id}</Text>
             </Table.Td>
+            <Table.Td>{process.analysis_id}</Table.Td>
             <Table.Td>
               <Group gap="xs">
                 <Text>{process.cpu?.toFixed(1) || '0.0'}</Text>

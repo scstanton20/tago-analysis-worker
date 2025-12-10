@@ -462,8 +462,8 @@ export class ProcessLifecycleManager {
     this.analysisProcess.enabled = enabled;
 
     // Update intended state only when starting
-    // For stops, intendedState is managed explicitly in stop() for manual stops
-    // and preserved for unexpected exits to allow auto-restart
+    // For stopping, intendedState is preserved to allow auto-restart
+    // Manual stops explicitly set intendedState = 'stopped' in stop()
     if (status === 'running') {
       this.analysisProcess.intendedState = 'running';
       this.analysisProcess.lastStartTime = new Date().toString();
