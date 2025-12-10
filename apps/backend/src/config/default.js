@@ -55,6 +55,9 @@ const config = {
       'HTTP_PROXY',
       'HTTPS_PROXY',
       'NO_PROXY',
+      'DNS_CACHE_ENABLED',
+      'DNS_CACHE_TTL',
+      'DNS_CACHE_MAX_ENTRIES',
     ],
     // Additional environment variables to be set for the child process.
     // These will override any colliding variables from the parent environment.
