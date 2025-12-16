@@ -1,5 +1,5 @@
 import { useState, useCallback, useOptimistic } from 'react';
-import { admin } from '../../lib/auth';
+import { admin, authClient } from '../../lib/auth';
 import { userService } from '../../services/userService';
 import { modalService } from '../../modals/modalService';
 import { useAsyncOperation } from '../async';
@@ -78,8 +78,8 @@ export function useUserCRUD({
 
       const usersList = usersResult.data.users || usersResult.data || [];
 
-      // Only query for the owner member (much more efficient than getting all members)
-      const ownerResult = await admin.organization.listMembers({
+      // Only query for the owner member
+      const ownerResult = await authClient.organization.listMembers({
         query: {
           organizationId,
           filterField: 'role',
