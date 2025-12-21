@@ -1,6 +1,10 @@
 // controllers/statusController.js
 import { createRequire } from 'module';
+import fs from 'fs';
+import path from 'path';
 import ms from 'ms';
+import { analysisService } from '../services/analysisService.js';
+import { sseManager } from '../utils/sse/index.js';
 
 const require = createRequire(import.meta.url);
 
@@ -39,9 +43,6 @@ export class StatusController {
   static async getSystemStatus(req, res) {
     req.log.debug({ action: 'getSystemStatus' }, 'Getting system status');
 
-    // Import analysisService directly instead of dependency injection
-    const { analysisService } = await import('../services/analysisService.js');
-
     // Add safety checks for analyses collection
     const analyses = analysisService?.analyses;
     let runningAnalyses = [];
@@ -55,9 +56,6 @@ export class StatusController {
     // Get Tago SDK version from package.json
     let tagoVersion;
     try {
-      const fs = await import('fs');
-      const path = await import('path');
-
       // Find the SDK package.json by resolving the SDK path
       const sdkPath = require.resolve('@tago-io/sdk');
       let currentDir = path.dirname(sdkPath);
@@ -87,7 +85,6 @@ export class StatusController {
     }
 
     // IMPORTANT: Get current container state from SSE manager
-    const { sseManager } = await import('../utils/sse/index.js');
     const currentContainerState = sseManager.getContainerState();
 
     // Safely calculate uptime with proper null checks

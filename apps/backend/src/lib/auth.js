@@ -175,10 +175,21 @@ export const auth = betterAuth({
         // Use shared helper to get user teams
         const teams = getUserTeams(user.id, user.role || 'user');
 
+        // Check if user is organization owner
+        let isOwner = false;
+        if (session.activeOrganizationId) {
+          const ownerCheck = executeQuery(
+            'SELECT userId FROM member WHERE organizationId = ? AND role = ?',
+            [session.activeOrganizationId, 'owner'],
+            'checking organization owner',
+          );
+          isOwner = ownerCheck?.userId === user.id;
+        }
+
         return {
-          user,
+          user: { ...user, isOwner },
           session,
-          teams, // Add teams at the root level of the response
+          teams,
         };
       } catch (error) {
         authLogger.error(

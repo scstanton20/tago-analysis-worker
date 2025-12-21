@@ -4,7 +4,7 @@
  * @module components/analysis/analysisTree
  */
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { Stack, Group, Text, Box } from '@mantine/core';
 import { IconFolder } from '@tabler/icons-react';
@@ -39,7 +39,7 @@ export default function AnalysisTree({
   const [expandedFolders, setExpandedFolders] = useState({});
 
   // Make the entire tree area a droppable zone for moving items to root
-  const rootDropId = useMemo(() => `root-${teamId}`, [teamId]);
+  const rootDropId = `root-${teamId}`;
 
   const { setNodeRef: setRootDropRef, isOver: isOverRoot } = useDroppable({
     id: rootDropId,
@@ -50,10 +50,7 @@ export default function AnalysisTree({
   });
 
   // Safety check - teamStructure might be undefined during initial load
-  const items = useMemo(
-    () => teamStructure?.[teamId]?.items || [],
-    [teamStructure, teamId],
-  );
+  const items = teamStructure?.[teamId]?.items || [];
 
   // Use drag-and-drop hook
   const {

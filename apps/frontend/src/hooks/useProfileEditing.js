@@ -58,7 +58,8 @@ export function useProfileEditing() {
       email: user.email || '',
       username: user.username || '',
     });
-  }, [user.name, user.email, user.username, profileFormState.form]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only sync when user data changes, not form
+  }, [user.name, user.email, user.username]);
 
   /**
    * Handle profile update submission
@@ -85,7 +86,8 @@ export function useProfileEditing() {
         }, 3000);
       });
     },
-    [updateProfile, profileOperation],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- using .execute for stable reference
+    [updateProfile, profileOperation.execute],
   );
 
   /**

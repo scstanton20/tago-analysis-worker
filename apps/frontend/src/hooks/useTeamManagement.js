@@ -8,15 +8,17 @@ import { useState, useMemo, useRef, useCallback } from 'react';
 import { teamService } from '../services/teamService';
 import { notificationAPI } from '../utils/notificationAPI.jsx';
 import { useAsyncOperation } from './async';
+import { useTeams } from '../contexts/sseContext/index';
 import logger from '../utils/logger';
 
 /**
  * Hook for managing team operations
- * @param {Object} params - Hook parameters
- * @param {Object} params.teams - Teams object
+ * Gets teams directly from SSE context
  * @returns {Object} State and handlers for team management
  */
-export function useTeamManagement({ teams }) {
+export function useTeamManagement() {
+  // Get teams from SSE context
+  const { teams } = useTeams();
   const [editingId, setEditingId] = useState(null);
   const [editingName, setEditingName] = useState('');
   const [editingColor, setEditingColor] = useState('');
@@ -93,7 +95,8 @@ export function useTeamManagement({ teams }) {
 
       return true;
     },
-    [isLoading, usedNames, createTeamOperation],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- using .execute for stable reference
+    [isLoading, usedNames, createTeamOperation.execute],
   );
 
   /**
@@ -135,15 +138,16 @@ export function useTeamManagement({ teams }) {
         setEditingId(null);
       });
     },
-    [editingName, teamsArray, isLoading, updateNameOperation],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- using .execute for stable reference
+    [editingName, teamsArray, isLoading, updateNameOperation.execute],
   );
 
   /**
    * Update local editing color (doesn't make API call)
    */
-  const handleColorClick = useCallback((color) => {
+  const handleColorClick = (color) => {
     setEditingColor(color);
-  }, []);
+  };
 
   /**
    * Save color change to API
@@ -169,7 +173,8 @@ export function useTeamManagement({ teams }) {
         setEditingColor('');
       });
     },
-    [editingColor, isLoading, teamsArray, updateColorOperation],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- using .execute for stable reference
+    [editingColor, isLoading, teamsArray, updateColorOperation.execute],
   );
 
   /**
@@ -188,7 +193,8 @@ export function useTeamManagement({ teams }) {
         );
       });
     },
-    [isLoading, teamsArray, deleteTeamOperation],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- using .execute for stable reference
+    [isLoading, teamsArray, deleteTeamOperation.execute],
   );
 
   // Note: handleDragEnd is implemented in the component since it uses arrayMove from dnd-kit

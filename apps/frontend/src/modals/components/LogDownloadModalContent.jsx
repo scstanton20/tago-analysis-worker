@@ -5,7 +5,7 @@ import { IconDownload } from '@tabler/icons-react';
 import { FormActionButtons, FormAlert } from '../../components/global';
 import { modals } from '@mantine/modals';
 import { useAsyncOperation } from '../../hooks/async/useAsyncOperation';
-import { useAsyncMount } from '../../hooks/async/useAsyncMount';
+import { useAsyncMountOnce } from '../../hooks/async/useAsyncMount';
 import { analysisService } from '../../services/analysisService';
 
 /**
@@ -29,7 +29,7 @@ const LogDownloadModalContent = ({ id, innerProps }) => {
   const downloadOperation = useAsyncOperation();
 
   // Fetch time range options from the API
-  const optionsOperation = useAsyncMount(
+  const optionsOperation = useAsyncMountOnce(
     async () => {
       const result = await analysisService.getLogDownloadOptions(analysis.id);
       const options = result?.timeRangeOptions || [];

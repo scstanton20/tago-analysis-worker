@@ -3,7 +3,7 @@ import { Stack, Text, ScrollArea, Group, Tabs } from '@mantine/core';
 import { IconInfoCircle, IconCode } from '@tabler/icons-react';
 import { FormAlert, PaperCard, LoadingState } from '../../../components/global';
 import { utilsDocsService } from '../../../services/utilsDocsService';
-import { useAsyncMount } from '../../../hooks/async';
+import { useAsyncMountOnce } from '../../../hooks/async';
 
 /**
  * UtilsDocs Component
@@ -16,7 +16,7 @@ function UtilsDocs() {
   const [activeTab, setActiveTab] = useState(null);
 
   // Load documentation on component mount
-  const loadDocsOperation = useAsyncMount(async () => {
+  const loadDocsOperation = useAsyncMountOnce(async () => {
     const response = await utilsDocsService.getDocs();
     setDocs(response);
 

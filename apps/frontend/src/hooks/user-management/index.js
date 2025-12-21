@@ -1,9 +1,9 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
-import { authClient } from '../../lib/auth';
-import logger from '../../utils/logger.js';
+import { useMemo, useCallback } from 'react';
 import { useUserForm } from './useUserForm';
 import { useUserValidation } from './useUserValidation';
 import { useUserOperations } from './useUserOperations';
+import { usePermissions } from '../usePermissions';
+import { useTeams } from '../../contexts/sseContext/index';
 import {
   transformTeamsToOptions,
   extractExistingUserData,
@@ -13,43 +13,17 @@ import {
  * Main hook for managing user operations
  * Composes smaller focused hooks for better maintainability
  * Encapsulates all state, handlers, and business logic for user management
+ * All context data (currentUser, teams, permissions) accessed internally via hooks
  */
-export function useUserManagement({
-  currentUser,
-  organizationId,
-  refreshUserData,
-  refetchSession,
-  teams,
-}) {
+export function useUserManagement() {
+  // Get organization data from centralized PermissionsContext
+  const { isOwner } = usePermissions();
+
+  // Get teams from SSE context
+  const { teams } = useTeams();
+
   // Convert teams from SSE object to array format for dropdown
   const availableTeams = useMemo(() => transformTeamsToOptions(teams), [teams]);
-
-  // Fetch current user's member role on mount
-  const [currentUserMemberRole, setCurrentUserMemberRole] = useState(null);
-  const [memberRoleError, setMemberRoleError] = useState(null);
-
-  useEffect(() => {
-    const fetchMemberRole = async () => {
-      try {
-        const { data, error } =
-          await authClient.organization.getActiveMemberRole();
-        if (error) {
-          setMemberRoleError(error.message);
-          logger.error('Error fetching member role:', error);
-          return;
-        }
-        if (data?.role) {
-          setCurrentUserMemberRole(data.role);
-          setMemberRoleError(null);
-        }
-      } catch (err) {
-        logger.error('Error fetching member role:', err);
-        setMemberRoleError(err.message);
-      }
-    };
-
-    fetchMemberRole();
-  }, []);
 
   // Initialize form management hook
   const {
@@ -59,23 +33,18 @@ export function useUserManagement({
     setShowCreateForm,
     createdUserInfo,
     setCreatedUserInfo,
-    isRootUser,
+    isOwnerEditingSelf,
     form,
     formState,
     handleCancel,
     handleCreate,
   } = useUserForm({
-    currentUser,
-    currentUserMemberRole,
+    isOwner,
   });
 
   // Initialize operations hook (includes users state)
   // Note: This must be initialized first to get users list
   const operations = useUserOperations({
-    organizationId,
-    currentUser,
-    refreshUserData,
-    refetchSession,
     editingUser,
     setEditingUser,
     setShowCreateForm,
@@ -126,23 +95,20 @@ export function useUserManagement({
   // Note: Department permissions are now handled by DepartmentPermissionsField component
   // The useDepartmentPermissions hook is no longer needed at this level
 
-  // Combine all errors
-  const combinedError = error || memberRoleError;
-
   return {
     // State
     users,
     loading,
     editingUser,
     showCreateForm,
-    error: combinedError,
+    error,
     createdUserInfo,
     setCreatedUserInfo,
     availableTeams,
     actions,
     form,
     formState,
-    isRootUser,
+    isOwnerEditingSelf,
     // Functions
     loadUsers,
     loadActions,

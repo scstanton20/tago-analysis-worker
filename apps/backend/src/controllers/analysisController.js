@@ -169,19 +169,39 @@ export class AnalysisController {
    * - Prevents timing attacks by filtering at data retrieval level
    */
   static async getAnalyses(req, res) {
+    // Extract query parameters for filtering
+    const { search, teamId, status, page, limit } = req.query;
+
     req.log.info(
-      { action: 'getAnalyses', userId: req.user.id, role: req.user.role },
+      {
+        action: 'getAnalyses',
+        userId: req.user.id,
+        role: req.user.role,
+        filters: { search, teamId, status, page, limit },
+      },
       'Retrieving analyses',
     );
 
+    // Build filter options
+    const filterOptions = {
+      search: search || '',
+      teamId: teamId || null,
+      status: status || null,
+      page: page ? parseInt(page, 10) : null,
+      limit: limit ? parseInt(limit, 10) : null,
+    };
+
     // Get analyses filtered at service layer for security
-    let analyses;
+    let result;
 
     if (req.user.role === 'admin') {
-      // Admin users see all analyses - no filter
-      analyses = await analysisService.getAllAnalyses(null, req.log);
+      // Admin users see all analyses - no team filter
+      result = await analysisService.getAllAnalyses(filterOptions);
+      const count = filterOptions.page
+        ? Object.keys(result.analyses).length
+        : Object.keys(result).length;
       req.log.info(
-        { action: 'getAnalyses', count: Object.keys(analyses).length },
+        { action: 'getAnalyses', count },
         'All analyses retrieved (admin)',
       );
     } else {
@@ -193,15 +213,21 @@ export class AnalysisController {
       const allowedTeamIds = getUserTeamIds(req.user.id, 'view_analyses');
 
       // Service filters by team ID before loading file stats (prevents timing attacks)
-      analyses = await analysisService.getAllAnalyses(allowedTeamIds, req.log);
+      result = await analysisService.getAllAnalyses({
+        ...filterOptions,
+        allowedTeamIds,
+      });
 
+      const count = filterOptions.page
+        ? Object.keys(result.analyses).length
+        : Object.keys(result).length;
       req.log.info(
-        { action: 'getAnalyses', count: Object.keys(analyses).length },
+        { action: 'getAnalyses', count },
         'Filtered analyses retrieved',
       );
     }
 
-    res.json(analyses);
+    res.json(result);
   }
 
   /**

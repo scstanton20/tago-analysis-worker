@@ -26,9 +26,6 @@ import { useAsyncOperation } from '../../hooks/async/useAsyncOperation';
 import Logo from '../ui/logo';
 import { validatePassword } from '../../validation';
 
-// Persists across re-mounts but cleared on page refresh
-let storedCurrentPassword = '';
-
 export default function LoginPage() {
   const { form, submitOperation, handleSubmit } = useStandardForm({
     initialValues: {
@@ -60,14 +57,7 @@ export default function LoginPage() {
   const passwordChangeOperation = useAsyncOperation();
 
   const [passwordChangeMode, setPasswordChangeMode] = useState(false);
-  const [currentPassword, setCurrentPasswordState] = useState(
-    storedCurrentPassword,
-  );
-
-  const setCurrentPassword = useCallback((password) => {
-    storedCurrentPassword = password;
-    setCurrentPasswordState(password);
-  }, []);
+  const [currentPassword, setCurrentPassword] = useState('');
 
   // Handle password manager autofill
   const handleAutofill = useCallback(() => {
@@ -198,12 +188,18 @@ export default function LoginPage() {
 
   const handlePasskeyLogin = async () => {
     await passkeyOperation.execute(async () => {
-      const result = await signInPasskey();
+      let result;
+      try {
+        result = await signInPasskey();
+      } catch (err) {
+        // Handle thrown errors - use message property if available
+        throw new Error(err.message || 'Passkey authentication failed');
+      }
 
-      if (result && result.error) {
-        throw new Error(
-          result.error.message || 'Passkey authentication failed',
-        );
+      // Check for error in result.error (nested) or result directly (flat)
+      const error = result?.error || (result?.code ? result : null);
+      if (error) {
+        throw new Error(error.message || 'Passkey authentication failed');
       }
 
       if (result?.data?.user?.requiresPasswordChange) {
@@ -427,7 +423,7 @@ export default function LoginPage() {
                   {...form.getInputProps('username')}
                   required
                   size="md"
-                  autoComplete="username"
+                  autoComplete="username webauthn"
                   name="username"
                   id="username"
                   description="You can sign in with either your email address or username"
@@ -443,7 +439,7 @@ export default function LoginPage() {
                   {...form.getInputProps('password')}
                   required
                   size="md"
-                  autoComplete="current-password"
+                  autoComplete="current-password webauthn"
                   name="password"
                   id="password"
                   onChange={(e) => {

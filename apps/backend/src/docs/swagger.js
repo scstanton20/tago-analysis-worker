@@ -124,30 +124,6 @@ Users can have different permissions in different teams, and admin users have gl
           },
           required: ['error', 'code', 'details'],
         },
-        SecurityInfo: {
-          type: 'object',
-          description: `**Password Security:**
-            
-**Password Requirements:**
-- Minimum 6 characters (recommended: 12+ characters)
-- No maximum length limit
-- All character types supported
-- Unicode support for international passwords`,
-        },
-        RealTimeInfo: {
-          type: 'object',
-          description: `**Real-time Updates:**
-            
-This API provides real-time updates via **Server-Sent Events (SSE)** for:
-- Analysis status changes and log streaming
-- System health monitoring
-- Department management updates
-- Session management notifications
-
-**SSE Endpoint:** \`GET /api/sse/events\`
-**Authentication:** HTTP-only cookies (access_token)
-**Connection:** Persistent keep-alive with automatic reconnection`,
-        },
         User: {
           type: 'object',
           properties: {
@@ -259,12 +235,7 @@ This API provides real-time updates via **Server-Sent Events (SSE)** for:
             },
           },
         },
-        Department: {
-          $ref: '#/components/schemas/Team',
-          description:
-            'Alias for Team - departments and teams are the same entity',
-        },
-        TeamCreateRequest: {
+        TeamRequest: {
           type: 'object',
           properties: {
             name: {
@@ -280,24 +251,6 @@ This API provides real-time updates via **Server-Sent Events (SSE)** for:
               type: 'number',
               description: 'Display order',
               example: 1,
-            },
-          },
-          required: ['name'],
-        },
-        TeamUpdateRequest: {
-          type: 'object',
-          properties: {
-            name: {
-              type: 'string',
-              description: 'Team name',
-            },
-            color: {
-              type: 'string',
-              description: 'Team color (hex format)',
-            },
-            order: {
-              type: 'number',
-              description: 'Display order',
             },
           },
         },
@@ -571,34 +524,6 @@ This API provides real-time updates via **Server-Sent Events (SSE)** for:
               },
             },
           },
-        },
-        BetterAuthInfo: {
-          type: 'object',
-          description: `**Better-Auth Endpoints:**
-            
-This API uses Better-Auth for authentication. The following Better-Auth endpoints are available but not documented here:
-
-**Authentication:**
-- \`POST /api/auth/sign-in/email\` - Email/password login
-- \`POST /api/auth/sign-up/email\` - Email/password registration
-- \`POST /api/auth/sign-out\` - Sign out
-- \`GET /api/auth/get-session\` - Get current session
-
-**Password Management:**
-- \`POST /api/auth/forget-password\` - Request password reset
-- \`POST /api/auth/reset-password\` - Reset password with token
-- \`POST /api/auth/change-password\` - Change password when authenticated
-
-**Organization Management:**
-- \`POST /api/auth/organization/create\` - Create organization
-- \`GET /api/auth/organization/list\` - List user organizations
-- \`POST /api/auth/organization/invite\` - Invite user to organization
-
-**WebAuthn/Passkey Support:**
-- \`POST /api/auth/passkey/register\` - Register passkey
-- \`POST /api/auth/passkey/authenticate\` - Authenticate with passkey
-
-**Note:** Most user management is handled through the custom \`/api/users/*\` endpoints documented in this API for better integration with the team permission system.`,
         },
         DNSConfig: {
           type: 'object',

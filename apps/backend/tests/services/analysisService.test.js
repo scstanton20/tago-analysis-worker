@@ -84,7 +84,6 @@ vi.mock('../../src/config/default.js', () => {
     analysis: {
       maxLogsInMemory: 100,
       forceKillTimeout: 5000,
-      autoRestartDelay: 5000,
     },
   };
 
@@ -1297,7 +1296,7 @@ describe('AnalysisService', () => {
       analysisService.analyses.set('analysis1', analysis1);
       analysisService.analyses.set('analysis2', analysis2);
 
-      const result = await analysisService.getAllAnalyses(null);
+      const result = await analysisService.getAllAnalyses({});
 
       expect(Object.keys(result)).toHaveLength(2);
       expect(result['analysis1']).toBeDefined();
@@ -1321,7 +1320,9 @@ describe('AnalysisService', () => {
       analysisService.analyses.set('analysis2', analysis2);
       analysisService.analyses.set('analysis3', analysis3);
 
-      const result = await analysisService.getAllAnalyses(['team-1', 'team-2']);
+      const result = await analysisService.getAllAnalyses({
+        allowedTeamIds: ['team-1', 'team-2'],
+      });
 
       expect(Object.keys(result)).toHaveLength(2);
       expect(result['analysis1']).toBeDefined();
@@ -1344,7 +1345,9 @@ describe('AnalysisService', () => {
       analysisService.analyses.set('analysis1', analysis1);
       analysisService.analyses.set('analysis2', analysis2);
 
-      const result = await analysisService.getAllAnalyses(['team-3']);
+      const result = await analysisService.getAllAnalyses({
+        allowedTeamIds: ['team-3'],
+      });
 
       expect(Object.keys(result)).toHaveLength(0);
     });
@@ -1361,9 +1364,270 @@ describe('AnalysisService', () => {
       const analysis1 = createMockAnalysisProcess({ teamId: null });
       analysisService.analyses.set('analysis1', analysis1);
 
-      const result = await analysisService.getAllAnalyses(['team-1']);
+      const result = await analysisService.getAllAnalyses({
+        allowedTeamIds: ['team-1'],
+      });
 
       expect(Object.keys(result)).toHaveLength(0);
+    });
+  });
+
+  describe('getAllAnalyses with advanced filtering', () => {
+    beforeEach(async () => {
+      const { safeStat } = await import('../../src/utils/safePath.js');
+      safeReaddir.mockResolvedValue([
+        'analysis1',
+        'analysis2',
+        'analysis3',
+        'analysis4',
+        'analysis5',
+      ]);
+      safeStat.mockResolvedValue({
+        isFile: () => true,
+        size: 1024,
+        birthtime: new Date(),
+      });
+
+      // Set up test data with different names, statuses, and teams
+      analysisService.analyses.set(
+        'analysis1',
+        createMockAnalysisProcess({
+          analysisName: 'temperature-sensor',
+          teamId: 'team-1',
+          status: 'running',
+        }),
+      );
+      analysisService.analyses.set(
+        'analysis2',
+        createMockAnalysisProcess({
+          analysisName: 'humidity-monitor',
+          teamId: 'team-1',
+          status: 'stopped',
+        }),
+      );
+      analysisService.analyses.set(
+        'analysis3',
+        createMockAnalysisProcess({
+          analysisName: 'pressure-sensor',
+          teamId: 'team-2',
+          status: 'running',
+        }),
+      );
+      analysisService.analyses.set(
+        'analysis4',
+        createMockAnalysisProcess({
+          analysisName: 'temp-logger',
+          teamId: 'team-2',
+          status: 'error',
+        }),
+      );
+      analysisService.analyses.set(
+        'analysis5',
+        createMockAnalysisProcess({
+          analysisName: 'data-processor',
+          teamId: 'team-3',
+          status: 'stopped',
+        }),
+      );
+    });
+
+    describe('search filtering', () => {
+      it('should filter analyses by name (case-insensitive)', async () => {
+        const result = await analysisService.getAllAnalyses({
+          search: 'temp',
+        });
+
+        expect(Object.keys(result)).toHaveLength(2);
+        expect(result['analysis1']).toBeDefined(); // temperature-sensor
+        expect(result['analysis4']).toBeDefined(); // temp-logger
+      });
+
+      it('should return all analyses when search is empty', async () => {
+        const result = await analysisService.getAllAnalyses({
+          search: '',
+        });
+
+        expect(Object.keys(result)).toHaveLength(5);
+      });
+
+      it('should return empty when no analyses match search', async () => {
+        const result = await analysisService.getAllAnalyses({
+          search: 'nonexistent',
+        });
+
+        expect(Object.keys(result)).toHaveLength(0);
+      });
+    });
+
+    describe('status filtering', () => {
+      it('should filter analyses by running status', async () => {
+        const result = await analysisService.getAllAnalyses({
+          status: 'running',
+        });
+
+        expect(Object.keys(result)).toHaveLength(2);
+        expect(result['analysis1']).toBeDefined();
+        expect(result['analysis3']).toBeDefined();
+      });
+
+      it('should filter analyses by stopped status', async () => {
+        const result = await analysisService.getAllAnalyses({
+          status: 'stopped',
+        });
+
+        expect(Object.keys(result)).toHaveLength(2);
+        expect(result['analysis2']).toBeDefined();
+        expect(result['analysis5']).toBeDefined();
+      });
+
+      it('should filter analyses by error status', async () => {
+        const result = await analysisService.getAllAnalyses({
+          status: 'error',
+        });
+
+        expect(Object.keys(result)).toHaveLength(1);
+        expect(result['analysis4']).toBeDefined();
+      });
+    });
+
+    describe('teamId filtering', () => {
+      it('should filter analyses by specific team', async () => {
+        const result = await analysisService.getAllAnalyses({
+          teamId: 'team-1',
+        });
+
+        expect(Object.keys(result)).toHaveLength(2);
+        expect(result['analysis1']).toBeDefined();
+        expect(result['analysis2']).toBeDefined();
+      });
+
+      it('should respect allowedTeamIds when teamId is specified', async () => {
+        // User only has access to team-1, but requests team-2
+        const result = await analysisService.getAllAnalyses({
+          allowedTeamIds: ['team-1'],
+          teamId: 'team-2',
+        });
+
+        // Should return empty - team-2 is not in allowed teams
+        expect(Object.keys(result)).toHaveLength(0);
+      });
+
+      it('should allow teamId filter when within allowedTeamIds', async () => {
+        const result = await analysisService.getAllAnalyses({
+          allowedTeamIds: ['team-1', 'team-2'],
+          teamId: 'team-1',
+        });
+
+        expect(Object.keys(result)).toHaveLength(2);
+        expect(result['analysis1']).toBeDefined();
+        expect(result['analysis2']).toBeDefined();
+      });
+    });
+
+    describe('combined filtering', () => {
+      it('should combine search and status filters', async () => {
+        const result = await analysisService.getAllAnalyses({
+          search: 'sensor',
+          status: 'running',
+        });
+
+        expect(Object.keys(result)).toHaveLength(2);
+        expect(result['analysis1']).toBeDefined(); // temperature-sensor, running
+        expect(result['analysis3']).toBeDefined(); // pressure-sensor, running
+      });
+
+      it('should combine search and teamId filters', async () => {
+        const result = await analysisService.getAllAnalyses({
+          search: 'sensor',
+          teamId: 'team-1',
+        });
+
+        expect(Object.keys(result)).toHaveLength(1);
+        expect(result['analysis1']).toBeDefined(); // temperature-sensor, team-1
+      });
+
+      it('should combine all filters', async () => {
+        const result = await analysisService.getAllAnalyses({
+          allowedTeamIds: ['team-1', 'team-2'],
+          teamId: 'team-2',
+          search: 'sensor',
+          status: 'running',
+        });
+
+        expect(Object.keys(result)).toHaveLength(1);
+        expect(result['analysis3']).toBeDefined(); // pressure-sensor, team-2, running
+      });
+    });
+
+    describe('pagination', () => {
+      it('should return paginated results', async () => {
+        const result = await analysisService.getAllAnalyses({
+          page: 1,
+          limit: 2,
+        });
+
+        expect(result.analyses).toBeDefined();
+        expect(Object.keys(result.analyses)).toHaveLength(2);
+        expect(result.pagination).toBeDefined();
+        expect(result.pagination.page).toBe(1);
+        expect(result.pagination.limit).toBe(2);
+        expect(result.pagination.total).toBe(5);
+        expect(result.pagination.totalPages).toBe(3);
+        expect(result.pagination.hasMore).toBe(true);
+      });
+
+      it('should return second page of results', async () => {
+        const result = await analysisService.getAllAnalyses({
+          page: 2,
+          limit: 2,
+        });
+
+        expect(Object.keys(result.analyses)).toHaveLength(2);
+        expect(result.pagination.page).toBe(2);
+        expect(result.pagination.hasMore).toBe(true);
+      });
+
+      it('should return last page with fewer items', async () => {
+        const result = await analysisService.getAllAnalyses({
+          page: 3,
+          limit: 2,
+        });
+
+        expect(Object.keys(result.analyses)).toHaveLength(1);
+        expect(result.pagination.page).toBe(3);
+        expect(result.pagination.hasMore).toBe(false);
+      });
+
+      it('should combine pagination with filters', async () => {
+        const result = await analysisService.getAllAnalyses({
+          status: 'running',
+          page: 1,
+          limit: 1,
+        });
+
+        expect(Object.keys(result.analyses)).toHaveLength(1);
+        expect(result.pagination.total).toBe(2); // 2 running analyses
+        expect(result.pagination.totalPages).toBe(2);
+      });
+    });
+
+    describe('response format', () => {
+      it('should return non-paginated format when no pagination params', async () => {
+        const result = await analysisService.getAllAnalyses({
+          search: 'temp',
+        });
+
+        // Should be flat object, not { analyses, pagination }
+        expect(result.analyses).toBeUndefined();
+        expect(result.pagination).toBeUndefined();
+        expect(Object.keys(result)).toHaveLength(2);
+      });
+
+      it('should return all analyses when called with empty options', async () => {
+        const result = await analysisService.getAllAnalyses({});
+
+        expect(Object.keys(result)).toHaveLength(5);
+      });
     });
   });
 

@@ -40,7 +40,6 @@ const config = {
   analysis: {
     maxLogsInMemory: ANALYSIS_PROCESS.MAX_MEMORY_LOGS_DEFAULT,
     forceKillTimeout: ANALYSIS_PROCESS.FORCE_KILL_TIMEOUT_MS,
-    autoRestartDelay: ANALYSIS_PROCESS.AUTO_RESTART_DELAY_MS,
   },
   process: {
     // Defines a whitelist of environment variables from the parent process (this backend)

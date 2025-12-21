@@ -65,7 +65,7 @@ router.get(
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/TeamCreateRequest'
+ *             $ref: '#/components/schemas/TeamRequest'
  *     responses:
  *       201:
  *         description: Team created successfully
@@ -175,7 +175,7 @@ const teamIdRouter = Router({ mergeParams: true });
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/TeamUpdateRequest'
+ *             $ref: '#/components/schemas/TeamRequest'
  *     responses:
  *       200:
  *         description: Team updated successfully

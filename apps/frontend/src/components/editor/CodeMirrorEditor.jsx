@@ -54,38 +54,54 @@ export function CodeMirrorEditor({
     onDiagnosticsChange || (() => {}),
   );
   const handleViewReady = useEffectEvent(onViewReady || (() => {}));
+  const handleFormatReady = useEffectEvent(onFormatReady || (() => {}));
+
+  // Stable functions to read current props without triggering effect re-runs
+  // This allows mount-only effects to access the latest prop values
+  const getTheme = useEffectEvent(() => {
+    return colorScheme === 'dark' ||
+      (colorScheme === 'auto' &&
+        window.matchMedia('(prefers-color-scheme: dark)').matches)
+      ? vsCodeDark
+      : vsCodeLight;
+  });
+  const getLanguage = useEffectEvent(() => language);
+  const getDiffMode = useEffectEvent(() => diffMode);
+  const getOriginalContent = useEffectEvent(() => originalContent);
+  const getValue = useEffectEvent(() => value);
+  const getReadOnly = useEffectEvent(() => readOnly);
 
   // Create editor once on mount
   useEffect(() => {
     if (!editorRef.current || viewRef.current) return;
 
-    // Get appropriate theme for CodeMirror (external library needs explicit theme objects)
-    const theme =
-      colorScheme === 'dark' ||
-      (colorScheme === 'auto' &&
-        window.matchMedia('(prefers-color-scheme: dark)').matches)
-        ? vsCodeDark
-        : vsCodeLight;
+    // Get initial prop values via useEffectEvent
+    const theme = getTheme();
+    const currentDiffMode = getDiffMode();
+    const currentOriginalContent = getOriginalContent();
+    const currentValue = getValue();
+    const currentLanguage = getLanguage();
+    const currentReadOnly = getReadOnly();
 
-    if (diffMode && originalContent) {
+    if (currentDiffMode && currentOriginalContent) {
       // Create unified diff view (inline diff)
       const extensions = [
         readOnlySetup, // Use consistent read-only setup for diff views
         themeCompartmentRef.current.of(theme),
         unifiedMergeView({
-          original: value || '', // Current version as original
+          original: currentValue || '', // Current version as original
           mergeControls: false, // Disable accept/reject controls for read-only viewing
           collapseUnchanged: { margin: 3, minSize: 4 }, // Collapse unchanged lines
         }),
       ];
 
       // Add language support
-      if (language === 'javascript') {
+      if (currentLanguage === 'javascript') {
         extensions.push(javascript());
       }
 
       const state = EditorState.create({
-        doc: originalContent || '', // Previous version content as the document
+        doc: currentOriginalContent || '', // Previous version content as the document
         extensions,
       });
 
@@ -95,22 +111,20 @@ export function CodeMirrorEditor({
       });
 
       viewRef.current = view;
-      currentDiffValueRef.current = value;
-      currentDiffOriginalRef.current = originalContent;
+      currentDiffValueRef.current = currentValue;
+      currentDiffOriginalRef.current = currentOriginalContent;
 
       // Expose view to parent component
-      if (onViewReady) {
-        handleViewReady(view);
-      }
+      handleViewReady(view);
     } else {
       // Create regular editor
       const extensions = [
-        readOnly ? readOnlySetup : basicSetup,
+        currentReadOnly ? readOnlySetup : basicSetup,
         themeCompartmentRef.current.of(theme),
       ];
 
       // Add update listener for editable editors
-      if (!readOnly && onChange) {
+      if (!currentReadOnly) {
         extensions.push(
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {
@@ -122,11 +136,11 @@ export function CodeMirrorEditor({
       }
 
       // Add language support
-      if (language === 'javascript') {
+      if (currentLanguage === 'javascript') {
         extensions.push(javascript());
 
         // Add editor keymap (Tab indentation + format) and linting for editable JavaScript editors
-        if (!readOnly) {
+        if (!currentReadOnly) {
           extensions.push(editorKeymap);
           extensions.push(lintGutter());
           extensions.push(createJavaScriptLinter(handleDiagnosticsChange));
@@ -134,7 +148,7 @@ export function CodeMirrorEditor({
       }
 
       const state = EditorState.create({
-        doc: value || '',
+        doc: currentValue || '',
         extensions,
       });
 
@@ -147,12 +161,16 @@ export function CodeMirrorEditor({
     }
 
     // Expose format function to parent component
-    if (onFormatReady && !readOnly && language === 'javascript' && !diffMode) {
-      onFormatReady(() => formatCode(viewRef.current));
+    if (
+      !currentReadOnly &&
+      currentLanguage === 'javascript' &&
+      !currentDiffMode
+    ) {
+      handleFormatReady(() => formatCode(viewRef.current));
     }
 
     // Expose view to parent component
-    if (onViewReady && viewRef.current) {
+    if (viewRef.current) {
       handleViewReady(viewRef.current);
     }
 
@@ -162,8 +180,7 @@ export function CodeMirrorEditor({
         viewRef.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Create only once on mount
+  }, []); // Mount-only effect - all external dependencies handled via useEffectEvent
 
   // Update theme when colorScheme changes
   useEffect(() => {
@@ -198,12 +215,7 @@ export function CodeMirrorEditor({
           // Recreate the unified diff view with new content
           const parent = viewRef.current.dom.parentNode;
           // Get appropriate theme for CodeMirror (external library needs explicit theme objects)
-          const theme =
-            colorScheme === 'dark' ||
-            (colorScheme === 'auto' &&
-              window.matchMedia('(prefers-color-scheme: dark)').matches)
-              ? vsCodeDark
-              : vsCodeLight;
+          const theme = getTheme();
 
           viewRef.current.destroy();
 
@@ -217,7 +229,7 @@ export function CodeMirrorEditor({
             }),
           ];
 
-          if (language === 'javascript') {
+          if (getLanguage() === 'javascript') {
             extensions.push(javascript());
           }
 
@@ -236,9 +248,7 @@ export function CodeMirrorEditor({
           currentDiffOriginalRef.current = originalContent;
 
           // Expose view to parent component
-          if (onViewReady) {
-            handleViewReady(view);
-          }
+          handleViewReady(view);
         }
       } else {
         // Regular editor - just update content
@@ -257,12 +267,7 @@ export function CodeMirrorEditor({
         }
       }
     }
-    // colorScheme is intentionally excluded from dependencies.
-    // Theme changes are handled by the separate effect (lines 187-202)
-    // using dispatch with compartment.reconfigure. This prevents unnecessary
-    // editor destruction when only the theme changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, diffMode, originalContent]);
+  }, [value, diffMode, originalContent]); // colorScheme and language accessed via useEffectEvent
 
   return (
     <div

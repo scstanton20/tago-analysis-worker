@@ -8,7 +8,6 @@ import {
 import sanitize from 'sanitize-filename';
 import {
   createServiceLogger,
-  createGetMethod,
   createPostMethod,
   createDeleteMethod,
 } from '../utils/serviceFactory';
@@ -16,12 +15,6 @@ import {
 const logger = createServiceLogger('analysisService');
 
 export const analysisService = {
-  getAnalyses: createGetMethod(logger, 'fetch analyses list', '/analyses', {
-    debugMessage: 'Fetching analyses list',
-    successMessage: 'Analyses list fetched successfully',
-    getSuccessParams: (result) => ({ count: result?.analyses?.length }),
-  }),
-
   uploadAnalysis: withErrorHandling(async (file, teamId = null) => {
     logger.debug('Uploading analysis', {
       fileName: file.name,

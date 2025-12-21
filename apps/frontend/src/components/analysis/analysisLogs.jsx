@@ -43,8 +43,9 @@ const AnalysisLogs = ({ analysis }) => {
   // Ref to track the last logsClearedAt timestamp we've processed
   const lastClearedAtRef = useRef(null);
 
-  // Memoize sseLogs to prevent unnecessary re-renders
-  const sseLogs = useMemo(() => analysis.logs || [], [analysis.logs]);
+  // analysis.logs is always an array (guaranteed by SSEAnalysesProvider)
+  const sseLogs = analysis.logs;
+  const totalLogCount = analysis.totalLogCount || sseLogs.length;
 
   // Auto-scroll hook for managing scroll behavior
   const { handleScrollPositionChange, disableAutoScroll } = useAutoScroll({
@@ -52,10 +53,6 @@ const AnalysisLogs = ({ analysis }) => {
     items: sseLogs,
     hasLoadedInitial: hasLoadedInitial.current,
   });
-  const totalLogCount = useMemo(
-    () => analysis.totalLogCount || sseLogs.length,
-    [analysis.totalLogCount, sseLogs.length],
-  );
 
   const loadInitialLogs = useCallback(async () => {
     if (hasLoadedInitial.current) return;
@@ -113,11 +110,7 @@ const AnalysisLogs = ({ analysis }) => {
     previousLogCountRef.current = 0; // Reset log count tracker
     disableAutoScroll(); // Start with auto-scroll disabled
     loadInitialLogs();
-    // loadInitialLogs & disableAutoScroll are stable callbacks that depend on
-    // analysis.id, so they'll naturally update when analysis.id changes.
-    // Including them in deps would cause unnecessary reruns.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [analysis.id]);
+  }, [analysis.id, disableAutoScroll, loadInitialLogs]);
 
   const loadMoreLogs = useCallback(async () => {
     if (isLoadingMore.current || !hasMore) return;

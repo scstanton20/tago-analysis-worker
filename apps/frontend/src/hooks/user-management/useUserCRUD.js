@@ -4,6 +4,8 @@ import { userService } from '../../services/userService';
 import { modalService } from '../../modals/modalService';
 import { useAsyncOperation } from '../async';
 import { useEventListener } from '../useEventListener';
+import { usePermissions } from '../usePermissions';
+import { useAuth } from '../useAuth';
 import { notificationAPI } from '../../utils/notificationAPI.jsx';
 import logger from '../../utils/logger.js';
 import { generateSecurePassword } from '../../validation';
@@ -18,15 +20,18 @@ import {
  * Handles user data loading, form submission, editing, and deletion
  */
 export function useUserCRUD({
-  organizationId,
-  currentUser,
-  refreshUserData,
   editingUser,
   setEditingUser,
   setShowCreateForm,
   setCreatedUserInfo,
   form,
 }) {
+  // Get current user from AuthContext
+  const { user: currentUser } = useAuth();
+
+  // Get organization data from centralized permissions context
+  const { organizationId, refreshUserData } = usePermissions();
+
   // State management
   const [users, setUsers] = useState([]);
   const [actions, setActions] = useState([]);
@@ -65,12 +70,15 @@ export function useUserCRUD({
    */
   const loadUsers = useCallback(async () => {
     await loadUsersOperation.execute(async () => {
-      // Get full user data from admin.listUsers (includes username, banned, etc.)
-      const usersResult = await admin.listUsers({
-        query: {
-          limit: 100,
-        },
-      });
+      // Fetch users and org members in parallel
+      const [usersResult, membersResult] = await Promise.all([
+        admin.listUsers({ query: { limit: 100 } }),
+        organizationId
+          ? authClient.organization.listMembers({
+              query: { organizationId, limit: 100 },
+            })
+          : Promise.resolve({ data: { members: [] } }),
+      ]);
 
       if (usersResult.error) {
         throw new Error(usersResult.error.message);
@@ -78,33 +86,24 @@ export function useUserCRUD({
 
       const usersList = usersResult.data.users || usersResult.data || [];
 
-      // Only query for the owner member
-      const ownerResult = await authClient.organization.listMembers({
-        query: {
-          organizationId,
-          filterField: 'role',
-          filterOperator: 'eq',
-          filterValue: 'owner',
-          limit: 1,
-        },
-      });
-
-      if (ownerResult.error) {
-        logger.warn('Failed to fetch owner member:', ownerResult.error);
+      // Build a map of userId -> memberRole from org members
+      const memberRoles = new Map();
+      if (!membersResult.error && membersResult.data?.members) {
+        for (const member of membersResult.data.members) {
+          memberRoles.set(member.userId, member.role);
+        }
       }
 
-      const ownerMember = ownerResult.data?.members?.[0];
-      const ownerUserId = ownerMember?.userId || null;
-
-      // Mark the owner user
+      // Combine users with their membership roles
       const usersWithRoles = usersList.map((user) => ({
         ...user,
-        memberRole: user.id === ownerUserId ? 'owner' : null,
+        memberRole: memberRoles.get(user.id) || null,
       }));
 
       setUsers(usersWithRoles);
     });
-  }, [loadUsersOperation, organizationId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- using .execute for stable reference
+  }, [loadUsersOperation.execute, organizationId]);
 
   /**
    * Load available permissions/actions
@@ -120,7 +119,8 @@ export function useUserCRUD({
         setActions([]);
       }
     });
-  }, [loadActionsOperation]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- using .execute for stable reference
+  }, [loadActionsOperation.execute]);
 
   /**
    * Handle form submission for creating or updating a user
@@ -517,7 +517,8 @@ export function useUserCRUD({
         onConfirm();
       }
     },
-    [organizationId, deleteOperation],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- using .execute for stable reference
+    [organizationId, deleteOperation.execute],
   );
 
   /**

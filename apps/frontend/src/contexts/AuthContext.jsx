@@ -22,6 +22,7 @@ export const AuthProvider = ({ children }) => {
     const sessionData = session?.session || null;
     const isAuthenticated = !!(session && user && sessionData);
     const isAdmin = user?.role === 'admin';
+    const isOwner = user?.isOwner || false;
     const isImpersonating = !!sessionData?.impersonatedBy;
 
     return {
@@ -31,6 +32,7 @@ export const AuthProvider = ({ children }) => {
       isAuthenticated,
       isLoading: sessionLoading,
       isAdmin,
+      isOwner,
       isImpersonating,
       impersonatedBy: sessionData?.impersonatedBy || null,
     };

@@ -1,4 +1,3 @@
-import { useMemo } from 'react';
 import { useAnalyses } from '../contexts/sseContext';
 import { useAuth } from './useAuth';
 import { usePermissions } from './usePermissions';
@@ -19,10 +18,7 @@ export function useFilteredAnalyses(selectedTeam) {
   const { isAdmin } = useAuth();
   const { isTeamMember } = usePermissions();
 
-  return useMemo(
-    () => filterAnalysesByTeam(analyses, selectedTeam, isAdmin, isTeamMember),
-    [analyses, selectedTeam, isAdmin, isTeamMember],
-  );
+  return filterAnalysesByTeam(analyses, selectedTeam, isAdmin, isTeamMember);
 }
 
 export default useFilteredAnalyses;

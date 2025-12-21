@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { analysisService } from '../services/analysisService';
-import { useAsyncOperation, useAsyncMount } from './async';
+import { useAsyncOperation, useAsyncEffect } from './async';
 import { notificationAPI } from '../utils/notificationAPI.jsx';
 import logger from '../utils/logger';
 
@@ -114,18 +114,18 @@ export function useAnalysisEdit({
   /**
    * Store format function reference
    */
-  const handleFormatReady = useCallback((formatFn) => {
+  const handleFormatReady = (formatFn) => {
     setFormatCodeFn(() => formatFn);
-  }, []);
+  };
 
   /**
    * Trigger code formatting
    */
-  const handleFormat = useCallback(async () => {
+  const handleFormat = async () => {
     if (formatCodeFn) {
       await formatCodeFn();
     }
-  }, [formatCodeFn]);
+  };
 
   /**
    * Toggle diff mode and load current content if needed
@@ -149,26 +149,24 @@ export function useAnalysisEdit({
         }
       }
     },
-    [analysisId, currentContent, loadDiffOperation],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- using .execute for stable reference
+    [analysisId, currentContent, loadDiffOperation.execute],
   );
 
   /**
    * Load content when component mounts or analysis changes
    */
-  useAsyncMount(
-    async () => {
-      if (!analysisId) return;
+  useAsyncEffect(async () => {
+    if (!analysisId) return;
 
-      const fileContent = isEnvMode
-        ? await analysisService.getAnalysisENVContent(analysisId)
-        : await analysisService.getAnalysisContent(analysisId, version);
+    const fileContent = isEnvMode
+      ? await analysisService.getAnalysisENVContent(analysisId)
+      : await analysisService.getAnalysisContent(analysisId, version);
 
-      setContent(fileContent);
-      setOriginalContent(fileContent);
-      setHasChanges(false);
-    },
-    { deps: [analysisId, isEnvMode, type, version] },
-  );
+    setContent(fileContent);
+    setOriginalContent(fileContent);
+    setHasChanges(false);
+  }, [analysisId, isEnvMode, type, version]);
 
   /**
    * Save analysis content with auto-formatting

@@ -32,6 +32,7 @@ export function useAutoScroll({ scrollRef, items, hasLoadedInitial }) {
     ) {
       const element = scrollRef.current;
       // useLayoutEffect fires before paint, so no need for requestAnimationFrame
+      // eslint-disable-next-line react-compiler/react-compiler -- DOM ref mutation is safe and intended for scrolling
       element.scrollTop = element.scrollHeight;
     }
   }, [items, scrollRef, hasLoadedInitial]);
@@ -39,6 +40,7 @@ export function useAutoScroll({ scrollRef, items, hasLoadedInitial }) {
   /**
    * Handle scroll position changes to detect user intent
    * Disables auto-scroll when user scrolls up, re-enables when scrolling to bottom
+   * Memoized since it only mutates refs, making it safe for effect dependencies
    */
   const handleScrollPositionChange = useCallback(() => {
     if (!scrollRef.current) return;
@@ -60,6 +62,7 @@ export function useAutoScroll({ scrollRef, items, hasLoadedInitial }) {
 
   /**
    * Enable auto-scroll (useful for resetting state)
+   * Memoized since it only mutates refs, making it safe for effect dependencies
    */
   const enableAutoScroll = useCallback(() => {
     shouldAutoScroll.current = true;
@@ -67,6 +70,7 @@ export function useAutoScroll({ scrollRef, items, hasLoadedInitial }) {
 
   /**
    * Disable auto-scroll (useful for resetting state)
+   * Memoized since it only mutates refs, making it safe for effect dependencies
    */
   const disableAutoScroll = useCallback(() => {
     shouldAutoScroll.current = false;

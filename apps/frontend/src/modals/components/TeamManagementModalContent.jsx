@@ -21,7 +21,6 @@ import { Box, Stack, Text, Divider } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import { LoadingState } from '../../components/global';
 import { useTeamManagement } from '../../hooks/useTeamManagement';
-import { useVisibleTeams } from '../../hooks/useVisibleTeams';
 const TeamCreateForm = lazy(() =>
   import('../../components/teams/TeamCreateForm').then((m) => ({
     default: m.TeamCreateForm,
@@ -44,9 +43,6 @@ import logger from '../../utils/logger';
  * @returns {JSX.Element} Modal content
  */
 function TeamManagementModalContent() {
-  // Use hook directly to get reactive team data
-  const { teamsObject: teams } = useVisibleTeams();
-
   const {
     editingId,
     editingName,
@@ -65,7 +61,7 @@ function TeamManagementModalContent() {
     startEditingColor,
     cancelEditing,
     isNameUsed,
-  } = useTeamManagement({ teams });
+  } = useTeamManagement();
 
   // Handle delete with confirmation modal
   const handleDeleteTeam = (team) => {

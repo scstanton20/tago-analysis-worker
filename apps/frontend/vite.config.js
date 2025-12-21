@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react-swc';
+import react from '@vitejs/plugin-react';
 import fs from 'fs';
 
 // Docker detection
@@ -15,7 +15,13 @@ const isDocker = (() => {
 const backendUrl = isDocker ? 'http://backend:3000' : 'http://localhost:3000';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react({
+      babel: {
+        plugins: ['babel-plugin-react-compiler'],
+      },
+    }),
+  ],
   server: {
     host: true,
     port: 5173,

@@ -32,7 +32,6 @@ vi.mock('../../src/config/default.js', () => ({
     analysis: {
       maxLogsInMemory: 100,
       forceKillTimeout: 5000,
-      autoRestartDelay: 5000,
     },
     storage: {
       base: '/tmp',
@@ -702,7 +701,7 @@ describe('AnalysisProcess', () => {
       expect(sseManager.broadcastAnalysisUpdate).toHaveBeenCalled();
     });
 
-    it('should auto-restart on unexpected exit', async () => {
+    it('should NOT auto-restart on unexpected exit (code errors require user fix)', async () => {
       const analysis = new AnalysisProcess(
         'test-analysis-id',
         'test-analysis',
@@ -721,13 +720,14 @@ describe('AnalysisProcess', () => {
 
       expect(analysis.status).toBe('stopped');
 
-      // Should schedule restart
-      vi.advanceTimersByTime(5000);
+      // Should NOT schedule restart for code errors
+      vi.advanceTimersByTime(10000);
 
       // Allow async operations to settle
       await vi.runAllTimersAsync();
 
-      expect(startSpy).toHaveBeenCalled();
+      // No restart - user must fix the code error
+      expect(startSpy).not.toHaveBeenCalled();
 
       vi.useRealTimers();
     });
@@ -1294,7 +1294,7 @@ describe('AnalysisProcess', () => {
       analysis.updateStatus('stopped', false);
 
       expect(analysis.status).toBe('stopped');
-      // intendedState should remain 'running' to allow auto-restart
+      // intendedState should remain 'running' for health check recovery
       expect(analysis.intendedState).toBe('running');
     });
 
@@ -1312,7 +1312,7 @@ describe('AnalysisProcess', () => {
       expect(analysis.intendedState).toBe('running');
     });
 
-    it('should preserve intended state on unexpected exit to allow auto-restart', () => {
+    it('should preserve intended state on unexpected exit for health check recovery', () => {
       const analysis = new AnalysisProcess(
         'test-analysis-id',
         'test-analysis',
@@ -1323,7 +1323,7 @@ describe('AnalysisProcess', () => {
       // Simulate unexpected exit - updateStatus should NOT change intendedState
       analysis.updateStatus('stopped', false);
 
-      // intendedState stays 'running' so shouldRestart() can return true
+      // intendedState stays 'running' so health check can restart it later
       expect(analysis.intendedState).toBe('running');
     });
   });

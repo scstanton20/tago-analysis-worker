@@ -14,7 +14,7 @@ export default function UserForm({
   formState,
   editingUser,
   currentUser,
-  isRootUser,
+  isOwnerEditingSelf,
   availableTeams,
   availableActions,
   onSubmit,
@@ -42,11 +42,11 @@ export default function UserForm({
           </FormAlert>
         )}
 
-        {isRootUser && (
+        {isOwnerEditingSelf && (
           <FormAlert color="orange" variant="light">
             <Text size="sm">
-              This is the root administrator account. The administrator role
-              cannot be changed to maintain system security.
+              This is the organization owner account. The owner role cannot be
+              changed to maintain system security.
             </Text>
           </FormAlert>
         )}
@@ -96,14 +96,14 @@ export default function UserForm({
           required
           clearable={false}
           allowDeselect={false}
-          disabled={isRootUser || editingUser?.id === currentUser?.id}
+          disabled={isOwnerEditingSelf || editingUser?.id === currentUser?.id}
           description={
-            editingUser?.id === currentUser?.id && !isRootUser
+            editingUser?.id === currentUser?.id && !isOwnerEditingSelf
               ? 'You cannot change your own role'
               : undefined
           }
           data={
-            isRootUser
+            isOwnerEditingSelf
               ? [
                   {
                     value: 'admin',
@@ -176,7 +176,7 @@ UserForm.propTypes = {
     id: PropTypes.string.isRequired,
     role: PropTypes.string,
   }),
-  isRootUser: PropTypes.bool.isRequired,
+  isOwnerEditingSelf: PropTypes.bool.isRequired,
   availableTeams: PropTypes.arrayOf(
     PropTypes.shape({
       value: PropTypes.string.isRequired,

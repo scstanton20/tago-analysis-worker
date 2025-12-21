@@ -337,7 +337,17 @@ class AnalysisService {
   }
 
   // Get all analyses - in v5.0 directories are named by analysisId (UUID)
-  async getAllAnalyses(allowedTeamIds = null) {
+  // Supports advanced filtering via options object
+  async getAllAnalyses(options = {}) {
+    const {
+      allowedTeamIds = null,
+      search = '',
+      status = null,
+      teamId = null,
+      page = null,
+      limit = null,
+    } = options;
+
     const analysisDirectories = await safeReaddir(config.paths.analysis);
 
     const results = await Promise.all(
@@ -358,11 +368,30 @@ class AnalysisService {
             return null;
           }
 
+          // Team ID filter: Skip if doesn't match requested team
+          if (teamId !== null && analysis?.teamId !== teamId) {
+            return null;
+          }
+
+          // Status filter: Skip if doesn't match requested status
+          if (status !== null && (analysis?.status || 'stopped') !== status) {
+            return null;
+          }
+
+          // Search filter: Skip if name doesn't contain search term (case-insensitive)
+          const analysisName = analysis?.analysisName || analysisId;
+          if (
+            search &&
+            !analysisName.toLowerCase().includes(search.toLowerCase())
+          ) {
+            return null;
+          }
+
           const stats = await safeStat(indexPath, config.paths.analysis);
 
           return {
             id: analysisId,
-            name: analysis?.analysisName || analysisId,
+            name: analysisName,
             size: formatFileSize(stats.size),
             created: stats.birthtime,
             status: analysis?.status || 'stopped',
@@ -377,9 +406,40 @@ class AnalysisService {
       }),
     );
 
+    // Filter out nulls
+    const filteredResults = results.filter(Boolean);
+
+    // If pagination is requested, return paginated format
+    if (page !== null && limit !== null) {
+      const total = filteredResults.length;
+      const totalPages = Math.ceil(total / limit);
+      const startIndex = (page - 1) * limit;
+      const paginatedResults = filteredResults.slice(
+        startIndex,
+        startIndex + limit,
+      );
+
+      // Convert to object
+      const analysesObj = {};
+      paginatedResults.forEach((analysis) => {
+        analysesObj[analysis.id] = analysis;
+      });
+
+      return {
+        analyses: analysesObj,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages,
+          hasMore: page < totalPages,
+        },
+      };
+    }
+
     // Return as object keyed by analysisId to match SSE expectations
     const analysesObj = {};
-    results.filter(Boolean).forEach((analysis) => {
+    filteredResults.forEach((analysis) => {
       analysesObj[analysis.id] = analysis;
     });
     return analysesObj;
@@ -1143,7 +1203,13 @@ class AnalysisService {
     );
 
     // Update metadata to track current version after rollback
-    const metadata = await this.getVersions(analysisId);
+    // Read metadata.json directly instead of using getVersions() which returns pagination fields
+    const metadataContent = await safeReadFile(
+      metadataPath,
+      config.paths.analysis,
+      'utf8',
+    );
+    const metadata = JSON.parse(metadataContent);
     metadata.currentVersion = version;
     await safeWriteFile(
       metadataPath,

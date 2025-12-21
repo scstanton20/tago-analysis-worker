@@ -78,7 +78,8 @@ export function usePasskeyManagement() {
         setPasskeys([]);
       }
     });
-  }, [loadPasskeysOperation]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- using .execute for stable reference
+  }, [loadPasskeysOperation.execute]);
 
   /**
    * Data loading function (loads WebAuthn support and passkeys)
@@ -119,7 +120,13 @@ export function usePasskeyManagement() {
         );
       }
     },
-    [loadPasskeys, passkeyFormState, registerPasskeyOperation],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- using .execute/.error for stable reference
+    [
+      loadPasskeys,
+      passkeyFormState,
+      registerPasskeyOperation.execute,
+      registerPasskeyOperation.error,
+    ],
   );
 
   /**
@@ -127,34 +134,40 @@ export function usePasskeyManagement() {
    */
   const handleDeletePasskey = useCallback(
     async (credentialId) => {
-      await deletePasskeyOperation.execute(async () => {
+      const result = await deletePasskeyOperation.execute(async () => {
         // Use Better Auth passkey deletion
         if (passkey && passkey.deletePasskey) {
-          const result = await passkey.deletePasskey({
+          const deleteResult = await passkey.deletePasskey({
             id: credentialId,
           });
 
-          if (result.error) {
-            throw new Error(result.error.message);
+          if (deleteResult.error) {
+            throw new Error(deleteResult.error.message);
           }
 
-          notificationAPI.success('Passkey deleted successfully!');
-
-          // Reload passkeys list
-          await loadPasskeys();
+          return true; // Return success indicator
         } else {
           throw new Error('Passkey deletion not available');
         }
       });
 
-      // Show error notification if operation failed
-      if (deletePasskeyOperation.error) {
+      // Only reload and show success if deletion succeeded
+      if (result) {
+        notificationAPI.success('Passkey deleted successfully!');
+        // Reload passkeys list after successful deletion
+        await loadPasskeys();
+      } else if (deletePasskeyOperation.error) {
         notificationAPI.error(
           'Failed to delete passkey: ' + deletePasskeyOperation.error,
         );
       }
     },
-    [loadPasskeys, deletePasskeyOperation],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- using .execute/.error for stable reference
+    [
+      loadPasskeys,
+      deletePasskeyOperation.execute,
+      deletePasskeyOperation.error,
+    ],
   );
 
   return {

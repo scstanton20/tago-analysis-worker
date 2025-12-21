@@ -5,7 +5,7 @@
  */
 
 import { useState, useMemo, useCallback, useRef } from 'react';
-import { useAsyncMount, useAsyncOperation } from '../../hooks/async';
+import { useAsyncEffect, useAsyncOperation } from '../../hooks/async';
 import {
   Stack,
   Text,
@@ -100,12 +100,13 @@ function VersionManagementModalContent({ innerProps }) {
 
   // Load initial versions when component mounts or analysis changes
   // Cache is cleared on mount (when deps change) and on unmount (via onCleanup)
-  const loadVersionsOperation = useAsyncMount(
+  const loadVersionsOperation = useAsyncEffect(
     async () => {
       clearCache();
       await loadVersions(1);
     },
-    { deps: [analysis?.id], onCleanup: clearCache },
+    [analysis?.id],
+    { onCleanup: clearCache },
   );
 
   // Handle page change
@@ -195,11 +196,8 @@ function VersionManagementModalContent({ innerProps }) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
 
-  // Memoize current version to prevent unnecessary recalculations
-  const currentVersionNumber = useMemo(
-    () => versionData.currentVersion,
-    [versionData.currentVersion],
-  );
+  // Current version for display
+  const currentVersionNumber = versionData.currentVersion;
 
   // Filter out the current version from paginated results (already sorted by backend)
   const displayVersions = useMemo(

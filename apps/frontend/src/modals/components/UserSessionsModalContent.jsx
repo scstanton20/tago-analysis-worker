@@ -23,7 +23,7 @@ import {
 import { admin } from '../../lib/auth';
 import { notificationAPI } from '../../utils/notificationAPI.jsx';
 import { userService } from '../../services/userService';
-import { useAsyncOperation, useAsyncMount } from '../../hooks/async';
+import { useAsyncOperation, useAsyncEffect } from '../../hooks/async';
 import logger from '../../utils/logger';
 import PropTypes from 'prop-types';
 
@@ -42,42 +42,43 @@ function UserSessionsModalContent({ innerProps }) {
   const revokeSessionOperation = useAsyncOperation();
   const revokeAllOperation = useAsyncOperation();
 
+  // Shared session parsing logic extracted to reduce duplication
+  const parseSessionsResponse = useCallback((result) => {
+    if (result.error) {
+      throw new Error(result.error.message);
+    }
+
+    let sessionsData = [];
+    if (result.data && Array.isArray(result.data)) {
+      sessionsData = result.data;
+    } else if (
+      result.data &&
+      result.data.sessions &&
+      Array.isArray(result.data.sessions)
+    ) {
+      sessionsData = result.data.sessions;
+    } else if (Array.isArray(result)) {
+      sessionsData = result;
+    } else {
+      logger.warn('Unexpected sessions response structure:', result);
+      sessionsData = [];
+    }
+
+    return sessionsData;
+  }, []);
+
   // Load sessions when component mounts (modal opens)
-  const loadSessionsOperation = useAsyncMount(
-    async () => {
-      if (!user?.id) return;
+  const loadSessionsOperation = useAsyncEffect(async () => {
+    if (!user?.id) return;
 
-      const result = await admin.listUserSessions({
-        userId: user.id,
-      });
+    const result = await admin.listUserSessions({
+      userId: user.id,
+    });
 
-      logger.log('List sessions result:', result);
-
-      if (result.error) {
-        throw new Error(result.error.message);
-      }
-
-      // Handle different possible response structures
-      let sessionsData = [];
-      if (result.data && Array.isArray(result.data)) {
-        sessionsData = result.data;
-      } else if (
-        result.data &&
-        result.data.sessions &&
-        Array.isArray(result.data.sessions)
-      ) {
-        sessionsData = result.data.sessions;
-      } else if (Array.isArray(result)) {
-        sessionsData = result;
-      } else {
-        logger.warn('Unexpected sessions response structure:', result);
-        sessionsData = [];
-      }
-
-      setSessions(sessionsData);
-    },
-    { deps: [user?.id] },
-  );
+    logger.log('List sessions result:', result);
+    const sessionsData = parseSessionsResponse(result);
+    setSessions(sessionsData);
+  }, [user?.id, parseSessionsResponse]);
 
   // Helper function to manually reload sessions
   const loadSessions = useCallback(async () => {
@@ -89,32 +90,10 @@ function UserSessionsModalContent({ innerProps }) {
       });
 
       logger.log('List sessions result:', result);
-
-      if (result.error) {
-        throw new Error(result.error.message);
-      }
-
-      // Handle different possible response structures
-      let sessionsData = [];
-      if (result.data && Array.isArray(result.data)) {
-        sessionsData = result.data;
-      } else if (
-        result.data &&
-        result.data.sessions &&
-        Array.isArray(result.data.sessions)
-      ) {
-        sessionsData = result.data.sessions;
-      } else if (Array.isArray(result)) {
-        sessionsData = result;
-      } else {
-        logger.warn('Unexpected sessions response structure:', result);
-        sessionsData = [];
-      }
-
+      const sessionsData = parseSessionsResponse(result);
       setSessions(sessionsData);
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+  }, [user.id, loadSessionsOperation, parseSessionsResponse]);
 
   const handleRevokeSession = async (sessionToken) => {
     modals.openConfirmModal({

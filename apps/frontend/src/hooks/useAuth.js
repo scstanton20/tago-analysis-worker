@@ -15,6 +15,7 @@ import { AuthContext } from '../contexts/AuthContext';
  * @property {Object|null} user - Current authenticated user object
  * @property {boolean} isAuthenticated - Whether user is authenticated
  * @property {boolean} isAdmin - Whether user has admin role
+ * @property {boolean} isOwner - Whether user is organization owner
  * @property {boolean} isLoading - Whether authentication is loading
  * @property {Function} login - Login function
  * @property {Function} logout - Logout function

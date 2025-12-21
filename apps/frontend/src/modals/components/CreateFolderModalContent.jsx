@@ -1,6 +1,6 @@
 import { TextInput, Stack } from '@mantine/core';
 import { FormActionButtons, FormAlert } from '../../components/global';
-import { useEffect } from 'react';
+import { useEffect, useEffectEvent } from 'react';
 import PropTypes from 'prop-types';
 import { modals } from '@mantine/modals';
 import teamService from '../../services/teamService';
@@ -42,14 +42,16 @@ const CreateFolderModalContent = ({ id, context, innerProps }) => {
     resetOnSuccess: true,
   });
 
+  const updateModalTitle = useEffectEvent((title) => {
+    context.updateModal({ id, title });
+  });
+
   // Update modal title dynamically based on whether it's a subfolder
   useEffect(() => {
     const title = parentFolderId
       ? `Create Subfolder in "${parentFolderName}"`
       : 'Create Folder';
-    context.updateModal({ id, title });
-    // context and id are stable references from Mantine and should NOT be in deps
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    updateModalTitle(title);
   }, [parentFolderId, parentFolderName]);
 
   const handleCreate = handleSubmit(async (values) => {

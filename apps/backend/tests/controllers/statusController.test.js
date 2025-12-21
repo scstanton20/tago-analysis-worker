@@ -33,14 +33,26 @@ vi.mock('../../src/utils/responseHelpers.js', () => ({
   }),
 }));
 
-// Mock fs module
+// Mock fs module - needs default export for static import
 vi.mock('fs', () => ({
+  default: {
+    existsSync: vi.fn(),
+    readFileSync: vi.fn(),
+  },
   existsSync: vi.fn(),
   readFileSync: vi.fn(),
 }));
 
-// Mock path module
+// Mock path module - needs default export for static import
 vi.mock('path', () => ({
+  default: {
+    dirname: vi.fn((p) => {
+      const parts = p.split('/');
+      parts.pop();
+      return parts.join('/') || '/';
+    }),
+    join: vi.fn((...args) => args.join('/')),
+  },
   dirname: vi.fn((p) => {
     const parts = p.split('/');
     parts.pop();
@@ -60,15 +72,27 @@ vi.mock('ms', () => ({
 }));
 
 // Import after mocks
-const fs = await import('fs');
+const fsModule = await import('fs');
+const fs = fsModule.default;
 const { sseManager } = await import('../../src/utils/sse/index.js');
+const { analysisService } = await import(
+  '../../src/services/analysisService.js'
+);
 const { StatusController } = await import(
   '../../src/controllers/statusController.js'
 );
 
+// Store original analyses map to reset between tests
+const defaultAnalysesMap = new Map([
+  ['running-analysis', { status: 'running' }],
+  ['stopped-analysis', { status: 'stopped' }],
+]);
+
 describe('StatusController', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset analyses map to default state for each test
+    analysisService.analyses = new Map(defaultAnalysesMap);
   });
 
   describe('getSystemStatus', () => {
@@ -338,12 +362,8 @@ describe('StatusController', () => {
         JSON.stringify({ name: '@tago-io/sdk', version: '12.4.0' }),
       );
 
-      // Mock analysisService with null analyses
-      vi.doMock('../../src/services/analysisService.js', () => ({
-        analysisService: {
-          analyses: null,
-        },
-      }));
+      // Set analyses to null to test edge case handling
+      analysisService.analyses = null;
 
       await StatusController.getSystemStatus(req, res);
 

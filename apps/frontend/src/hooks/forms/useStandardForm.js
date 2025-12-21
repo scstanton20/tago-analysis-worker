@@ -1,5 +1,5 @@
 import { useForm } from '@mantine/form';
-import { useCallback, useMemo } from 'react';
+import { useCallback } from 'react';
 import { useAsyncOperation } from '../async/useAsyncOperation';
 
 /**
@@ -107,7 +107,8 @@ export function useStandardForm(config = {}) {
     (message) => {
       submitOperation.setError(message);
     },
-    [submitOperation],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- using .setError for stable reference
+    [submitOperation.setError],
   );
 
   /**
@@ -115,7 +116,8 @@ export function useStandardForm(config = {}) {
    */
   const clearFormError = useCallback(() => {
     submitOperation.setError(null);
-  }, [submitOperation]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- using .setError for stable reference
+  }, [submitOperation.setError]);
 
   /**
    * Reset form and clear all errors
@@ -123,7 +125,8 @@ export function useStandardForm(config = {}) {
   const resetForm = useCallback(() => {
     form.reset();
     submitOperation.reset();
-  }, [form, submitOperation]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- using .reset for stable reference
+  }, [form, submitOperation.reset]);
 
   /**
    * Check if form has changes (dirty state)
@@ -160,11 +163,7 @@ export function useStandardForm(config = {}) {
    * Compute isDirty as a reactive boolean value
    * Updates whenever form values change
    */
-  const isDirty = useMemo(() => {
-    return form.isDirty();
-    // form is stable but form.values changes - we only need form.values in deps
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.values]);
+  const isDirty = form.isDirty();
 
   return {
     // Core form object (Mantine Form)

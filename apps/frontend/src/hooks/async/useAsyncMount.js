@@ -1,75 +1,109 @@
-import { useEffect } from 'react';
+import { useEffect, useEffectEvent } from 'react';
 import { useAsyncOperation } from './useAsyncOperation';
 
 /**
- * useAsyncMount - Execute an async operation on component mount
+ * useAsyncMountOnce - Execute an async operation once on component mount
  *
- * Encapsulates the pattern of using useEffect with empty dependency array
- * to execute an async operation when a component mounts. This hook handles
- * the boilerplate of managing the effect lifecycle and async operation state.
+ * Use this hook when you need to run an async operation exactly once when
+ * the component mounts. For operations that should re-run when dependencies
+ * change, use useAsyncEffect instead.
  *
  * @param {Function} asyncFn - Async function to execute on mount
  * @param {Object} options - Configuration options
- * @param {Array} options.deps - Dependency array for useEffect (default: [])
  * @param {Function} options.onSuccess - Called when operation succeeds
  * @param {Function} options.onError - Called when operation fails
- * @param {Function} options.onCleanup - Called when component unmounts (for cache clearing, etc.)
+ * @param {Function} options.onCleanup - Called when component unmounts
  * @param {*} options.initialData - Initial data value
  * @param {boolean} options.resetOnExecute - Reset error/data before execution (default: true)
  *
- * @returns {Object} The useAsyncOperation state and methods (loading, error, data, execute, reset, setError, setData)
+ * @returns {Object} The useAsyncOperation state and methods
  *
  * @example
- * // Basic usage - load data on mount
- * const operation = useAsyncMount(async () => {
+ * const operation = useAsyncMountOnce(async () => {
  *   const response = await api.getData();
- *   setData(response);
  *   return response;
  * });
  *
  * if (operation.loading) return <LoadingSpinner />;
  * if (operation.error) return <ErrorMessage error={operation.error} />;
- *
- * @example
- * // With custom dependencies
- * const operation = useAsyncMount(
- *   async () => {
- *     const response = await api.getData(userId);
- *     setData(response);
- *   },
- *   { deps: [userId] }
- * );
- *
- * @example
- * // With callbacks and cleanup
- * const operation = useAsyncMount(
- *   async () => {
- *     const response = await api.getData();
- *     setData(response);
- *     return response;
- *   },
- *   {
- *     onSuccess: (data) => notificationAPI.success('Data loaded'),
- *     onError: (error) => console.error('Failed to load:', error),
- *     onCleanup: () => cache.clear() // Called on unmount
- *   }
- * );
  */
-export function useAsyncMount(asyncFn, options = {}) {
-  const { deps = [], onCleanup, ...asyncOptions } = options;
+export function useAsyncMountOnce(asyncFn, options = {}) {
+  const { onCleanup, ...asyncOptions } = options;
   const operation = useAsyncOperation(asyncOptions);
 
-  useEffect(() => {
-    operation.execute(asyncFn);
+  // Wrap callbacks with useEffectEvent for stable references
+  const stableAsyncFn = useEffectEvent(asyncFn);
+  const stableCleanup = useEffectEvent(() => {
+    if (onCleanup) onCleanup();
+  });
+  const stableExecute = useEffectEvent((fn) => operation.execute(fn));
 
-    // Return cleanup function if provided
-    if (onCleanup) {
-      return onCleanup;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    stableExecute(stableAsyncFn);
+    return stableCleanup;
+  }, []); // Empty deps - mount only, ESLint verified
+
+  return operation;
+}
+
+/**
+ * useAsyncEffect - Execute an async operation when dependencies change
+ *
+ * Use this hook when you need to run an async operation that should re-execute
+ * when specific dependencies change. For mount-only operations, use
+ * useAsyncMountOnce instead.
+ *
+ * @param {Function} asyncFn - Async function to execute
+ * @param {Array} deps - Dependency array that triggers re-execution
+ * @param {Object} options - Configuration options
+ * @param {Function} options.onSuccess - Called when operation succeeds
+ * @param {Function} options.onError - Called when operation fails
+ * @param {Function} options.onCleanup - Called on cleanup (unmount or before re-run)
+ * @param {*} options.initialData - Initial data value
+ * @param {boolean} options.resetOnExecute - Reset error/data before execution (default: true)
+ *
+ * @returns {Object} The useAsyncOperation state and methods
+ *
+ * @example
+ * const operation = useAsyncEffect(
+ *   async () => {
+ *     const response = await api.getData(userId);
+ *     return response;
+ *   },
+ *   [userId]
+ * );
+ *
+ * @example
+ * // With cleanup
+ * const operation = useAsyncEffect(
+ *   async () => {
+ *     const response = await api.getData(userId);
+ *     return response;
+ *   },
+ *   [userId],
+ *   { onCleanup: () => cache.clear() }
+ * );
+ */
+export function useAsyncEffect(asyncFn, deps, options = {}) {
+  const { onCleanup, ...asyncOptions } = options;
+  const operation = useAsyncOperation(asyncOptions);
+
+  // Wrap all callbacks with useEffectEvent for stable references
+  // This allows deps to be passed directly without needing execute in the array
+  const stableAsyncFn = useEffectEvent(asyncFn);
+  const stableCleanup = useEffectEvent(() => {
+    if (onCleanup) onCleanup();
+  });
+  const stableExecute = useEffectEvent((fn) => operation.execute(fn));
+
+  useEffect(() => {
+    stableExecute(stableAsyncFn);
+    return stableCleanup;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deps is user-provided, ESLint cannot statically verify dynamic arrays
   }, deps);
 
   return operation;
 }
 
-export default useAsyncMount;
+// Default export for backwards compatibility
+export default useAsyncMountOnce;

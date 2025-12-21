@@ -24,7 +24,7 @@ import {
   LoadingState,
 } from '../../../components/global';
 import { notificationAPI } from '../../../utils/notificationAPI.jsx';
-import { useAsyncOperation, useAsyncMount } from '../../../hooks/async';
+import { useAsyncOperation, useAsyncEffect } from '../../../hooks/async';
 import {
   IconTransfer,
   IconTrash,
@@ -62,23 +62,20 @@ function DNSCacheSettings() {
   const stats = dnsCache?.stats || initialStats;
 
   // Load config on mount when authenticated
-  const loadConfigOperation = useAsyncMount(
-    async () => {
-      const data = await dnsService.getConfig();
+  const loadConfigOperation = useAsyncEffect(async () => {
+    const data = await dnsService.getConfig();
 
-      // Set initial data for immediate display (SSE will update later)
-      setInitialConfig(data.config);
-      setInitialStats(data.stats);
+    // Set initial data for immediate display (SSE will update later)
+    setInitialConfig(data.config);
+    setInitialStats(data.stats);
 
-      // Initialize pending values from loaded config
-      setPendingTtl(data.config.ttl);
-      setPendingMaxEntries(data.config.maxEntries);
-      setHasUnsavedChanges(false);
-      setValidationErrors({});
-      initializedRef.current = true;
-    },
-    { deps: [isAuthenticated] },
-  );
+    // Initialize pending values from loaded config
+    setPendingTtl(data.config.ttl);
+    setPendingMaxEntries(data.config.maxEntries);
+    setHasUnsavedChanges(false);
+    setValidationErrors({});
+    initializedRef.current = true;
+  }, [isAuthenticated]);
 
   // Initialize pending values when config is first loaded (fallback for SSE updates)
   // This is a valid initialization pattern - we're deriving editable state from props

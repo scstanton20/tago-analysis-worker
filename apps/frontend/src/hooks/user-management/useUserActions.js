@@ -3,6 +3,7 @@ import { admin } from '../../lib/auth';
 import { userService } from '../../services/userService';
 import { modalService } from '../../modals/modalService';
 import { useAsyncOperation } from '../async';
+import { useAuth } from '../useAuth';
 import { notificationAPI } from '../../utils/notificationAPI.jsx';
 import logger from '../../utils/logger.js';
 
@@ -10,7 +11,9 @@ import logger from '../../utils/logger.js';
  * Hook for managing administrative user actions
  * Handles banning, unbanning, impersonating, and session management
  */
-export function useUserActions({ refetchSession, loadUsers }) {
+export function useUserActions({ loadUsers }) {
+  // Get refetchSession from AuthContext
+  const { refetchSession } = useAuth();
   // Async operations
   const banOperation = useAsyncOperation();
   const unbanOperation = useAsyncOperation();
@@ -54,7 +57,8 @@ export function useUserActions({ refetchSession, loadUsers }) {
         onConfirm();
       }
     },
-    [refetchSession, impersonateOperation],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- using .execute for stable reference
+    [refetchSession, impersonateOperation.execute],
   );
 
   /**
@@ -103,7 +107,8 @@ export function useUserActions({ refetchSession, loadUsers }) {
         onConfirm();
       }
     },
-    [loadUsers, banOperation],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- using .execute for stable reference
+    [loadUsers, banOperation.execute],
   );
 
   /**
@@ -130,7 +135,8 @@ export function useUserActions({ refetchSession, loadUsers }) {
         onConfirm();
       }
     },
-    [loadUsers, unbanOperation],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- using .execute for stable reference
+    [loadUsers, unbanOperation.execute],
   );
 
   return {

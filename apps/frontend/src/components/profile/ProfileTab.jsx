@@ -5,13 +5,14 @@
  */
 
 import PropTypes from 'prop-types';
-import { Stack, Group, Text, Box, TextInput } from '@mantine/core';
+import { Stack, Group, Text, Box, TextInput, Badge } from '@mantine/core';
 import {
   FormAlert,
   FormActionButtons,
   ContentBox,
   SecondaryButton,
 } from '../global';
+import { usePermissions } from '../../hooks/usePermissions';
 
 export function ProfileTab({
   user,
@@ -25,6 +26,10 @@ export function ProfileTab({
   handleCancelProfileEdit,
 }) {
   const { form, isDirty } = profileFormState;
+  const { isOwner } = usePermissions();
+
+  // Determine display role - Owner takes precedence
+  const displayRole = isOwner ? 'Owner' : user.role;
   return (
     <Stack gap="md">
       <FormAlert type="error" message={profileError} />
@@ -58,9 +63,15 @@ export function ProfileTab({
               <Text size="sm" fw={500}>
                 Role:
               </Text>
-              <Text size="sm" transform="capitalize">
-                {user.role}
-              </Text>
+              {isOwner ? (
+                <Badge variant="filled" color="brand">
+                  Owner
+                </Badge>
+              ) : (
+                <Text size="sm" tt="capitalize">
+                  {displayRole}
+                </Text>
+              )}
             </Group>
           </Stack>
           <Group justify="flex-end" mt="md">
@@ -110,9 +121,15 @@ export function ProfileTab({
                 <Text size="sm" fw={500}>
                   Role:
                 </Text>
-                <Text size="sm" transform="capitalize">
-                  {user.role}
-                </Text>
+                {isOwner ? (
+                  <Badge variant="filled" color="brand">
+                    Owner
+                  </Badge>
+                ) : (
+                  <Text size="sm" tt="capitalize">
+                    {displayRole}
+                  </Text>
+                )}
               </Group>
             </Box>
 

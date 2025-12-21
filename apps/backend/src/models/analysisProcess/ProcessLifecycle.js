@@ -5,11 +5,11 @@
  * - Process forking and initialization
  * - Graceful and forceful shutdown
  * - Exit code processing and normalization
- * - Auto-restart logic with exponential backoff
+ * - Connection error restart with exponential backoff
  *
  * Exit Scenarios:
  * 1. Manual stop (isManualStop=true) → Code normalized to 0, no restart
- * 2. Unexpected exit (code !== 0) → Auto-restart if intendedState='running'
+ * 2. Unexpected exit (code !== 0) → No auto-restart (user must fix code errors)
  * 3. Connection error → Restart with exponential backoff
  * 4. Graceful exit (code=0, manual) → No restart
  */
@@ -130,27 +130,6 @@ export class ProcessLifecycleManager {
     const connectionError = this.analysisProcess.connectionErrorDetected;
 
     return !wasManualStop && intendedRunning && (errorExit || connectionError);
-  }
-
-  /**
-   * Schedule auto-restart with regular delay
-   *
-   * Used for unexpected exits (non-zero exit code).
-   * Restart happens without attempt counter / backoff.
-   *
-   * @private
-   */
-  scheduleAutoRestart() {
-    const delay = this.config.analysis.autoRestartDelay || 5000;
-
-    this.analysisProcess.logger.warn(
-      'Listener exited unexpectedly, scheduling auto-restart',
-    );
-    this.analysisProcess.addLog(
-      'Listener exited unexpectedly, auto-restarting...',
-    );
-
-    setTimeout(() => this.analysisProcess.start(), delay);
   }
 
   /**
@@ -557,13 +536,12 @@ export class ProcessLifecycleManager {
       delete this.analysisProcess._exitPromiseReject;
     }
 
-    // Decide whether to restart
-    if (this.shouldRestart(code)) {
-      if (this.analysisProcess.connectionErrorDetected) {
-        this.scheduleConnectionRestart();
-      } else {
-        this.scheduleAutoRestart();
-      }
+    // Decide whether to restart (only for connection errors with backoff)
+    if (
+      this.shouldRestart(code) &&
+      this.analysisProcess.connectionErrorDetected
+    ) {
+      this.scheduleConnectionRestart();
     } else if (this.analysisProcess.connectionErrorDetected) {
       // Reset connection error flag if not restarting
       this.analysisProcess.connectionErrorDetected = false;

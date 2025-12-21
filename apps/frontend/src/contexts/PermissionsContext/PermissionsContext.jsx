@@ -1,127 +1,62 @@
-import { useState, useCallback, useMemo, useContext, useEffect } from 'react';
+import { useMemo, useContext } from 'react';
 import { AuthContext } from '../AuthContext.jsx';
 import { useTeams } from '../sseContext/index.js';
 import { PermissionsContext } from './context.js';
-import { useEventListener } from '../../hooks/useEventListener.js';
-import logger from '../../utils/logger.js';
+import { StaticPermissionsContext } from './StaticPermissionsContext.js';
+import { RealtimeTeamContext } from './RealtimeTeamContext.js';
 
-export const PermissionsProvider = ({ children }) => {
+/**
+ * StaticPermissionsProvider - Provides auth-related permissions that don't change with SSE
+ * This provider only re-renders when user/session data changes, not on SSE team updates
+ *
+ * All permission data now comes directly from the Better Auth session (customSession plugin),
+ * eliminating the need for additional API calls.
+ */
+const StaticPermissionsProvider = ({ children }) => {
   const authContext = useContext(AuthContext);
-  const { teams: sseTeams } = useTeams();
 
   if (!authContext) {
-    throw new Error('PermissionsProvider must be used within an AuthProvider');
+    throw new Error(
+      'StaticPermissionsProvider must be used within an AuthProvider',
+    );
   }
 
-  const { user, isAuthenticated, isAdmin, session } = authContext;
+  const { user, isAuthenticated, isAdmin, isOwner, session } = authContext;
 
-  const [organizationMembership, setOrganizationMembership] = useState(null);
-  const [membershipLoading, setMembershipLoading] = useState(false);
-
-  // Track user ID to detect user changes (including impersonation)
-  const [currentUserId, setCurrentUserId] = useState(user?.id || null);
-
-  // Derive organizationId directly from session instead of storing in state
+  // All data comes directly from session (injected by Better Auth customSession plugin)
   const organizationId = session?.session?.activeOrganizationId || null;
+  const userTeams = useMemo(() => session?.teams || [], [session?.teams]);
 
-  // Get teams directly from session (injected by Better Auth customSession plugin)
-  // Teams are at the root level of the session response
-  const userTeams = useMemo(() => {
-    return session?.teams || [];
-  }, [session]);
+  // Derive organization membership role from session data
+  const organizationMembership = useMemo(() => {
+    if (!isAuthenticated || !user) return null;
+    if (isOwner) return 'owner';
+    if (user.role === 'admin') return 'admin';
+    return 'member';
+  }, [isAuthenticated, user, isOwner]);
 
-  // Memoize organization data loading function
-  const loadOrganizationData = useCallback(async () => {
-    if (!isAuthenticated || !user) {
-      setOrganizationMembership(null);
-      return;
-    }
-
-    try {
-      setMembershipLoading(true);
-
-      // Assume admin users have 'owner' role in organization
-      const orgRole = user.role === 'admin' ? 'owner' : 'member';
-      setOrganizationMembership(orgRole);
-
-      // Teams are now loaded directly from session (see userTeams useMemo above)
-      // No need for separate API call - Better Auth session callback injects teams
-      const isAdminUser = user.role === 'admin';
-      logger.log(
-        `✓ Loaded ${userTeams.length} team memberships from session${isAdminUser ? ' (all teams for admin)' : ''}`,
-      );
-    } catch (error) {
-      logger.error('Error loading organization data:', error);
-      setOrganizationMembership(null);
-    } finally {
-      setMembershipLoading(false);
-    }
-  }, [isAuthenticated, user, userTeams.length]);
-
-  // Watch for user ID changes (including impersonation) and reload permissions
-  useEffect(() => {
-    const newUserId = user?.id || null;
-
-    // If user ID changed (including from one user to another during impersonation)
-    if (isAuthenticated && newUserId && newUserId !== currentUserId) {
-      logger.log(
-        `User changed from ${currentUserId} to ${newUserId}, reloading permissions...`,
-      );
-      setCurrentUserId(newUserId);
-
-      // Clear existing data and reload (teams come from session automatically)
-      setOrganizationMembership(null);
-
-      loadOrganizationData();
-    } else if (!isAuthenticated && currentUserId) {
-      // User logged out, clear user ID
-      setCurrentUserId(null);
-    }
-  }, [user?.id, isAuthenticated, currentUserId, loadOrganizationData]);
-
-  // Listen for auth-change events (triggered by permission updates)
-  const handleAuthChangeForPermissions = useCallback(async () => {
-    if (!isAuthenticated || !user) {
-      return;
-    }
-
-    logger.log(
-      'PermissionsContext: Auth change event detected, reloading permissions...',
-    );
-
-    // Clear existing data (teams come from session automatically)
-    setOrganizationMembership(null);
-
-    // Reload organization data
-    await loadOrganizationData();
-  }, [isAuthenticated, user, loadOrganizationData]);
-
-  useEventListener('auth-change', handleAuthChangeForPermissions);
-
-  // Memoize team helper functions to prevent recreating on every render
-  const teamHelpers = useMemo(
+  const staticContextValue = useMemo(
     () => ({
-      isTeamMember: (teamId) => {
-        // Global admins have access to all teams
-        if (user?.role === 'admin') return true;
+      // Core state values (all derived from session)
+      organizationMembership,
+      organizationId,
+      userTeams,
+      membershipLoading: false, // No longer needed - data comes from session
+      isOwner,
 
-        // Check if user is a member of this team
+      // Team helper functions
+      isTeamMember: (teamId) => {
+        if (user?.role === 'admin') return true;
         return userTeams.some((team) => team.id === teamId);
       },
 
       canAccessTeam: (teamId) => {
-        // Global admins can access any team
         if (user?.role === 'admin') return true;
-
-        // Check if user is a member of the corresponding team
         return userTeams.some((team) => team.id === teamId);
       },
 
       hasOrganizationRole: (allowedRoles) => {
-        // Global admins have access to everything
         if (user?.role === 'admin') return true;
-
-        // Check organization role
         return (
           organizationMembership &&
           allowedRoles.includes(organizationMembership)
@@ -129,7 +64,6 @@ export const PermissionsProvider = ({ children }) => {
       },
 
       getUserAccessibleTeams: () => {
-        // Global admins can see all teams
         if (user?.role === 'admin') {
           return {
             userTeams,
@@ -137,39 +71,26 @@ export const PermissionsProvider = ({ children }) => {
             hasFullAccess: true,
           };
         }
-
         return {
           userTeams,
           isGlobalAdmin: false,
           hasFullAccess: false,
         };
       },
-    }),
-    [user?.role, userTeams, organizationMembership],
-  );
 
-  // Memoize base permission functions that don't depend on SSE data
-  // This prevents unnecessary re-computation when SSE teams update
-  const basePermissionHelpers = useMemo(
-    () => ({
-      // Check if user has a specific permission based on their team memberships
+      // Base permission functions
       checkUserPermission: (permission, teamId = null) => {
         if (!isAuthenticated || !user) return false;
-
-        // Admin has all permissions
         if (user.role === 'admin') return true;
 
-        // If checking for a specific team, check only that team's permissions
         if (teamId) {
           const team = userTeams.find((t) => t.id === teamId);
           return team?.permissions?.includes(permission) || false;
         }
 
-        // If no specific team, check if user has this permission in ANY of their teams
         return userTeams.some((team) => team.permissions?.includes(permission));
       },
 
-      // Get permissions for a specific team
       getTeamPermissions: (teamId) => {
         if (isAdmin) {
           return [
@@ -185,14 +106,53 @@ export const PermissionsProvider = ({ children }) => {
         const team = userTeams.find((t) => t.id === teamId);
         return team?.permissions || [];
       },
+
+      // Refresh functions (now no-ops since data comes from session)
+      // Session refresh happens via AuthContext when needed
+      refreshMembership: async () => {},
+      refreshUserData: async () => {},
     }),
-    [isAuthenticated, user, isAdmin, userTeams],
+    [
+      organizationMembership,
+      organizationId,
+      userTeams,
+      isOwner,
+      isAuthenticated,
+      user,
+      isAdmin,
+    ],
   );
 
-  // Memoize SSE-dependent helper separately to avoid re-computing all helpers on SSE updates
-  const sseEnhancedHelpers = useMemo(
+  return (
+    <StaticPermissionsContext.Provider value={staticContextValue}>
+      {children}
+    </StaticPermissionsContext.Provider>
+  );
+};
+
+/**
+ * RealtimeTeamProvider - Provides SSE-dependent team data
+ * This provider re-renders when SSE team data updates
+ */
+const RealtimeTeamProvider = ({ children }) => {
+  const { teams: sseTeams } = useTeams();
+  const staticContext = useContext(StaticPermissionsContext);
+
+  if (!staticContext) {
+    throw new Error(
+      'RealtimeTeamProvider must be used within StaticPermissionsProvider',
+    );
+  }
+
+  const { userTeams } = staticContext;
+
+  // Get isAdmin from AuthContext
+  const authContext = useContext(AuthContext);
+  const isAdmin = authContext?.isAdmin;
+
+  // Memoize SSE-dependent helper - only changes when sseTeams updates
+  const realtimeContextValue = useMemo(
     () => ({
-      // Get teams where user has a specific permission (merges with SSE data for latest team info)
       getTeamsWithPermission: (permission) => {
         if (isAdmin) {
           const sseTeamsObject = sseTeams || {};
@@ -239,10 +199,8 @@ export const PermissionsProvider = ({ children }) => {
         return teamsWithPermission.map((userTeam) => {
           const sseTeam = sseTeamsObject[userTeam.id];
           if (!sseTeam) {
-            // If SSE doesn't have this team yet, use userTeam data
             return userTeam;
           }
-          // Merge SSE team data with user permissions
           return {
             ...userTeam,
             name: sseTeam.name,
@@ -256,68 +214,56 @@ export const PermissionsProvider = ({ children }) => {
     [isAdmin, userTeams, sseTeams],
   );
 
-  // Combine base helpers with SSE-enhanced helpers
-  const permissionHelpers = useMemo(
-    () => ({
-      ...basePermissionHelpers,
-      ...sseEnhancedHelpers,
-    }),
-    [basePermissionHelpers, sseEnhancedHelpers],
+  return (
+    <RealtimeTeamContext.Provider value={realtimeContextValue}>
+      {children}
+    </RealtimeTeamContext.Provider>
   );
+};
 
-  // Refresh functions using useCallback for side-effect functions
-  const refreshMembership = useCallback(async () => {
-    await loadOrganizationData();
-  }, [loadOrganizationData]);
+/**
+ * LegacyPermissionsProvider - Provides combined context for backward compatibility
+ * Consumes both Static and Realtime contexts and combines them
+ */
+const LegacyPermissionsProvider = ({ children }) => {
+  const staticContext = useContext(StaticPermissionsContext);
+  const realtimeContext = useContext(RealtimeTeamContext);
 
-  const refreshUserData = useCallback(async () => {
-    try {
-      logger.log('Refreshing permissions and team data');
-
-      // Clear and reload organization data (teams come from session automatically)
-      setOrganizationMembership(null);
-
-      // Reload organization data
-      await loadOrganizationData();
-    } catch (error) {
-      logger.error('Error refreshing permissions data:', error);
-    }
-  }, [loadOrganizationData]);
-
-  // Memoize the complete context value to prevent unnecessary re-renders
-  const contextValue = useMemo(
+  // Combine both contexts for backward compatibility
+  const combinedContextValue = useMemo(
     () => ({
-      // Organization/team data and state
-      organizationMembership,
-      organizationId,
-      userTeams,
-      membershipLoading,
-
-      // Team helper functions
-      ...teamHelpers,
-
-      // Permission helpers
-      ...permissionHelpers,
-
-      // Refresh functions
-      refreshMembership,
-      refreshUserData,
+      ...staticContext,
+      ...realtimeContext,
     }),
-    [
-      organizationMembership,
-      organizationId, // Derived from session, will update when session changes
-      userTeams,
-      membershipLoading,
-      teamHelpers,
-      permissionHelpers,
-      refreshMembership,
-      refreshUserData,
-    ],
+    [staticContext, realtimeContext],
   );
 
   return (
-    <PermissionsContext.Provider value={contextValue}>
+    <PermissionsContext.Provider value={combinedContextValue}>
       {children}
     </PermissionsContext.Provider>
+  );
+};
+
+/**
+ * PermissionsProvider - Main provider that composes all permission contexts
+ *
+ * Architecture:
+ * - StaticPermissionsProvider: Auth-related data (doesn't re-render on SSE)
+ * - RealtimeTeamProvider: SSE team data (re-renders on SSE updates)
+ * - LegacyPermissionsProvider: Combined context for backward compatibility
+ *
+ * Components can use:
+ * - usePermissions() - Full API (backward compatible)
+ * - useStaticPermissions() - Only static auth data (optimized)
+ * - useRealtimeTeams() - Only SSE team data (optimized)
+ */
+export const PermissionsProvider = ({ children }) => {
+  return (
+    <StaticPermissionsProvider>
+      <RealtimeTeamProvider>
+        <LegacyPermissionsProvider>{children}</LegacyPermissionsProvider>
+      </RealtimeTeamProvider>
+    </StaticPermissionsProvider>
   );
 };

@@ -5,4 +5,4 @@
  */
 
 export { useAsyncOperation } from './useAsyncOperation';
-export { useAsyncMount } from './useAsyncMount';
+export { useAsyncMountOnce, useAsyncEffect } from './useAsyncMount';

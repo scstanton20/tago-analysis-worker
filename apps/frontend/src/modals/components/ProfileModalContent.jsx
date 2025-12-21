@@ -14,7 +14,7 @@ import {
 import { modals } from '@mantine/modals';
 import { useProfileModal } from '../../hooks/useProfileModal';
 import { LoadingState } from '../../components/global';
-import { useAsyncMount } from '../../hooks/async';
+import { useAsyncMountOnce } from '../../hooks/async';
 const ProfileTab = lazy(() =>
   import('../../components/profile/ProfileTab').then((m) => ({
     default: m.ProfileTab,
@@ -74,7 +74,7 @@ function ProfileModalContent({ id }) {
   });
 
   // Load data when component mounts (modal opens)
-  useAsyncMount(async () => {
+  useAsyncMountOnce(async () => {
     await loadData();
   });
 

@@ -59,11 +59,23 @@ export function SSEAnalysesProvider({ children }) {
       if (Array.isArray(data.analyses)) {
         // Convert array to object keyed by id
         data.analyses.forEach((analysis) => {
-          analysesObj[analysis.id] = analysis;
+          analysesObj[analysis.id] = {
+            ...analysis,
+            logs: analysis.logs || [], // Ensure logs is always an array
+          };
         });
       } else {
         // Already keyed by analysisId
-        analysesObj = data.analyses;
+        analysesObj = Object.entries(data.analyses).reduce(
+          (acc, [id, analysis]) => {
+            acc[id] = {
+              ...analysis,
+              logs: analysis.logs || [], // Ensure logs is always an array
+            };
+            return acc;
+          },
+          {},
+        );
       }
     }
 
@@ -141,6 +153,7 @@ export function SSEAnalysesProvider({ children }) {
           id: analysisId,
           name: analysisName,
           teamId: teamId || 'uncategorized',
+          logs: analysisData.logs || [], // Ensure logs is always an array
         };
 
         setAnalyses((prev) => ({

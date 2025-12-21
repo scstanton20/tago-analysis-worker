@@ -7,7 +7,7 @@ export const transformTeamsToOptions = (teams) => {
   }
 
   return Object.values(teams)
-    .filter((team) => !team.isSystem) // Exclude system teams
+    .filter((team) => !team.isSystem)
     .map((team) => ({
       value: team.id,
       label: team.name,

@@ -9,21 +9,14 @@ import { useUserActions } from './useUserActions';
  * Maintains backward compatibility with existing components
  */
 export function useUserOperations({
-  organizationId,
-  currentUser,
-  refreshUserData,
-  refetchSession,
   editingUser,
   setEditingUser,
   setShowCreateForm,
   setCreatedUserInfo,
   form,
 }) {
-  // Compose CRUD hook
+  // Compose CRUD hook (currentUser, organizationId, refreshUserData come from contexts internally)
   const crud = useUserCRUD({
-    organizationId,
-    currentUser,
-    refreshUserData,
     editingUser,
     setEditingUser,
     setShowCreateForm,
@@ -31,9 +24,8 @@ export function useUserOperations({
     form,
   });
 
-  // Compose actions hook (needs loadUsers from CRUD)
+  // Compose actions hook (refetchSession comes from useAuth internally)
   const actions = useUserActions({
-    refetchSession,
     loadUsers: crud.loadUsers,
   });
 

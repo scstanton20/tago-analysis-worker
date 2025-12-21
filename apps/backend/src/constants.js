@@ -25,7 +25,6 @@ export const ANALYSIS_PROCESS = {
   // Process restart behavior
   INITIAL_RESTART_DELAY_MS: 5000, // 5 seconds
   MAX_RESTART_DELAY_MS: 60000, // 1 minute
-  AUTO_RESTART_DELAY_MS: 1000, // 1 second (for unexpected exits)
   FORCE_KILL_TIMEOUT_MS: 3000, // 3 seconds
 
   // Connection management

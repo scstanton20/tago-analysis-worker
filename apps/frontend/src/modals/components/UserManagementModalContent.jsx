@@ -4,7 +4,7 @@
  * @module modals/components/UserManagementModalContent
  */
 
-import { useEffect } from 'react';
+import { useEffect, useEffectEvent } from 'react';
 import {
   Stack,
   Group,
@@ -23,9 +23,7 @@ import {
 import { IconPlus, IconUser, IconCopy, IconCheck } from '@tabler/icons-react';
 import { modals } from '@mantine/modals';
 import { useAuth } from '../../hooks/useAuth';
-import { usePermissions } from '../../hooks/usePermissions';
 import { useUserManagement } from '../../hooks/user-management';
-import { useTeams } from '../../contexts/sseContext/index';
 import UserTable from './users/UserTable.jsx';
 import UserForm from './users/UserForm.jsx';
 import PropTypes from 'prop-types';
@@ -39,11 +37,10 @@ import PropTypes from 'prop-types';
  * @returns {JSX.Element} Modal content
  */
 function UserManagementModalContent({ id }) {
-  const { user: currentUser, isAdmin, refetchSession } = useAuth();
-  const { organizationId, refreshUserData } = usePermissions();
-  const { teams } = useTeams();
+  const { user: currentUser, isAdmin } = useAuth();
 
   // Use the custom hook that encapsulates all the business logic
+  // All context data (currentUser, teams, permissions) are accessed internally via hooks
   const {
     // State
     users,
@@ -56,7 +53,7 @@ function UserManagementModalContent({ id }) {
     availableTeams,
     actions,
     formState,
-    isRootUser,
+    isOwnerEditingSelf,
     // Functions
     loadUsers,
     loadActions,
@@ -71,24 +68,20 @@ function UserManagementModalContent({ id }) {
     handleCancel,
     handleCreate,
     handleUsernameBlur,
-  } = useUserManagement({
-    currentUser,
-    organizationId,
-    refreshUserData,
-    refetchSession,
-    teams,
+  } = useUserManagement();
+
+  // Wrap data loading in useEffectEvent since loadUsers and loadActions are stable
+  // callbacks from useUserManagement hook that don't need to be in deps
+  const loadData = useEffectEvent(() => {
+    loadUsers();
+    loadActions();
   });
 
   // Load data when user becomes admin
   useEffect(() => {
     if (isAdmin) {
-      loadUsers();
-      loadActions();
+      loadData();
     }
-    // loadUsers and loadActions are stable callbacks from useUserManagement hook
-    // Including them in deps would cause infinite loops due to internal operation state
-    // We only want to reload when isAdmin status changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin]);
 
   // Only show if user is admin
@@ -217,7 +210,7 @@ function UserManagementModalContent({ id }) {
               formState={formState}
               editingUser={editingUser}
               currentUser={currentUser}
-              isRootUser={isRootUser}
+              isOwnerEditingSelf={isOwnerEditingSelf}
               availableTeams={availableTeams}
               availableActions={actions}
               onSubmit={handleSubmit}

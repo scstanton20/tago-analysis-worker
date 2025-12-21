@@ -22,11 +22,6 @@ export default function App() {
 function AppRouter() {
   const { isAuthenticated, isLoading, user } = useAuth();
 
-  // Show loading overlay during initial auth check
-  if (isLoading) {
-    return <AppLoadingOverlay message="Verifying authentication..." />;
-  }
-
   // Show login page if not authenticated OR if user needs to change password
   if (!isAuthenticated || user?.requiresPasswordChange) {
     return (
@@ -34,6 +29,11 @@ function AppRouter() {
         <LoginPage />
       </ErrorBoundary>
     );
+  }
+
+  // Show loading overlay during initial auth check (only when potentially authenticated)
+  if (isLoading) {
+    return <AppLoadingOverlay message="Verifying authentication..." />;
   }
 
   // Only load SSE and heavy components when authenticated

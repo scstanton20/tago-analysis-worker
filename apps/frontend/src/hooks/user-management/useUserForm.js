@@ -1,11 +1,16 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState } from 'react';
 import { useStandardForm } from '../forms/useStandardForm';
+import { useAuth } from '../useAuth';
 import { getFormValidationRules } from './utils/validation';
 
 /**
  * Hook for managing user form state and UI
+ * @param {Object} params - Hook parameters
+ * @param {boolean} params.isOwner - Whether current user is the organization owner
  */
-export function useUserForm({ currentUser, currentUserMemberRole }) {
+export function useUserForm({ isOwner }) {
+  // Get current user from AuthContext
+  const { user: currentUser } = useAuth();
   // State management
   const [editingUser, setEditingUser] = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -28,30 +33,26 @@ export function useUserForm({ currentUser, currentUserMemberRole }) {
 
   const { form } = formState;
 
-  // Check if the current user is the root user editing their own account
-  // Root users (member role 'owner') cannot change their own role
-  const isRootUser = useMemo(
-    () =>
-      currentUserMemberRole === 'owner' && editingUser?.id === currentUser?.id,
-    [currentUserMemberRole, editingUser, currentUser],
-  );
+  // Check if the owner is editing their own account
+  // Owners cannot change their own role
+  const isOwnerEditingSelf = isOwner && editingUser?.id === currentUser?.id;
 
   /**
    * Cancel form and reset state
    */
-  const handleCancel = useCallback(() => {
+  const handleCancel = () => {
     setEditingUser(null);
     setShowCreateForm(false);
     setCreatedUserInfo(null);
     form.reset();
     form.clearFieldError('username');
     form.clearFieldError('email');
-  }, [form]);
+  };
 
   /**
    * Show create form with empty values
    */
-  const handleCreate = useCallback(() => {
+  const handleCreate = () => {
     setEditingUser(null);
     form.setValues({
       name: '',
@@ -64,7 +65,7 @@ export function useUserForm({ currentUser, currentUserMemberRole }) {
     setShowCreateForm(true);
     form.clearFieldError('username');
     form.clearFieldError('email');
-  }, [form]);
+  };
 
   return {
     // State
@@ -74,7 +75,7 @@ export function useUserForm({ currentUser, currentUserMemberRole }) {
     setShowCreateForm,
     createdUserInfo,
     setCreatedUserInfo,
-    isRootUser,
+    isOwnerEditingSelf,
     // Form
     form,
     formState,

@@ -69,6 +69,14 @@ vi.mock('fs', () => ({
   },
 }));
 
+vi.mock('../../src/middleware/betterAuthMiddleware.js', () => ({
+  getUserTeamIds: vi.fn().mockReturnValue(['team-1', 'team-2']),
+  authMiddleware: vi.fn((req, res, next) => next()),
+  extractAnalysisTeam: vi.fn((req, res, next) => next()),
+  requireTeamPermission: vi.fn(() => (req, res, next) => next()),
+  requireAnyTeamPermission: vi.fn(() => (req, res, next) => next()),
+}));
+
 // Import after mocks
 const { analysisService } = await import(
   '../../src/services/analysisService.js'
@@ -97,11 +105,13 @@ describe('AnalysisController', () => {
       const res = createMockResponse();
 
       analysisService.uploadAnalysis.mockResolvedValue({
+        analysisId: 'analysis-uuid-123',
         analysisName: 'test-analysis',
       });
 
       analysisService.getAllAnalyses.mockResolvedValue({
-        'test-analysis': {
+        'analysis-uuid-123': {
+          id: 'analysis-uuid-123',
           name: 'test-analysis',
           status: 'stopped',
         },
@@ -122,7 +132,10 @@ describe('AnalysisController', () => {
         'team-123',
         'folder-123',
       );
-      expect(res.json).toHaveBeenCalledWith({ analysisName: 'test-analysis' });
+      expect(res.json).toHaveBeenCalledWith({
+        analysisId: 'analysis-uuid-123',
+        analysisName: 'test-analysis',
+      });
       expect(sseManager.broadcastAnalysisUpdate).toHaveBeenCalled();
     });
 
@@ -166,45 +179,193 @@ describe('AnalysisController', () => {
     it('should return all analyses for admin users', async () => {
       const req = createMockRequest({
         user: { id: 'admin-id', role: 'admin' },
+        query: {},
       });
       const res = createMockResponse();
 
       const mockAnalyses = {
-        'analysis-1': { name: 'analysis-1', status: 'running' },
-        'analysis-2': { name: 'analysis-2', status: 'stopped' },
+        'uuid-analysis-1': {
+          id: 'uuid-analysis-1',
+          name: 'analysis-1',
+          status: 'running',
+        },
+        'uuid-analysis-2': {
+          id: 'uuid-analysis-2',
+          name: 'analysis-2',
+          status: 'stopped',
+        },
       };
 
       analysisService.getAllAnalyses.mockResolvedValue(mockAnalyses);
 
       await AnalysisController.getAnalyses(req, res);
 
-      expect(analysisService.getAllAnalyses).toHaveBeenCalledWith(
-        null,
-        req.log,
-      );
+      expect(analysisService.getAllAnalyses).toHaveBeenCalledWith({
+        search: '',
+        teamId: null,
+        status: null,
+        page: null,
+        limit: null,
+      });
       expect(res.json).toHaveBeenCalledWith(mockAnalyses);
     });
 
     it('should return filtered analyses for regular users', async () => {
       const req = createMockRequest({
         user: { id: 'user-id', role: 'user' },
+        query: {},
       });
       const res = createMockResponse();
 
       const mockAnalyses = {
-        'analysis-1': { name: 'analysis-1', status: 'running' },
+        'uuid-analysis-1': {
+          id: 'uuid-analysis-1',
+          name: 'analysis-1',
+          status: 'running',
+        },
       };
 
       analysisService.getAllAnalyses.mockResolvedValue(mockAnalyses);
 
-      // Mock betterAuthMiddleware
-      vi.doMock('../../src/middleware/betterAuthMiddleware.js', () => ({
-        getUserTeamIds: vi.fn().mockReturnValue(['team-1', 'team-2']),
-      }));
-
+      // betterAuthMiddleware is mocked at module level with getUserTeamIds returning ['team-1', 'team-2']
       await AnalysisController.getAnalyses(req, res);
 
       expect(res.json).toHaveBeenCalledWith(mockAnalyses);
+    });
+
+    it('should pass search query param to service', async () => {
+      const req = createMockRequest({
+        user: { id: 'admin-id', role: 'admin' },
+        query: { search: 'temperature' },
+      });
+      const res = createMockResponse();
+
+      const mockAnalyses = {
+        'uuid-analysis-1': {
+          id: 'uuid-analysis-1',
+          name: 'temperature-sensor',
+          status: 'running',
+        },
+      };
+
+      analysisService.getAllAnalyses.mockResolvedValue(mockAnalyses);
+
+      await AnalysisController.getAnalyses(req, res);
+
+      expect(analysisService.getAllAnalyses).toHaveBeenCalledWith({
+        search: 'temperature',
+        teamId: null,
+        status: null,
+        page: null,
+        limit: null,
+      });
+    });
+
+    it('should pass status query param to service', async () => {
+      const req = createMockRequest({
+        user: { id: 'admin-id', role: 'admin' },
+        query: { status: 'running' },
+      });
+      const res = createMockResponse();
+
+      analysisService.getAllAnalyses.mockResolvedValue({});
+
+      await AnalysisController.getAnalyses(req, res);
+
+      expect(analysisService.getAllAnalyses).toHaveBeenCalledWith({
+        search: '',
+        teamId: null,
+        status: 'running',
+        page: null,
+        limit: null,
+      });
+    });
+
+    it('should pass teamId query param to service', async () => {
+      const req = createMockRequest({
+        user: { id: 'admin-id', role: 'admin' },
+        query: { teamId: 'team-123' },
+      });
+      const res = createMockResponse();
+
+      analysisService.getAllAnalyses.mockResolvedValue({});
+
+      await AnalysisController.getAnalyses(req, res);
+
+      expect(analysisService.getAllAnalyses).toHaveBeenCalledWith({
+        search: '',
+        teamId: 'team-123',
+        status: null,
+        page: null,
+        limit: null,
+      });
+    });
+
+    it('should pass pagination params to service', async () => {
+      const req = createMockRequest({
+        user: { id: 'admin-id', role: 'admin' },
+        query: { page: '2', limit: '10' },
+      });
+      const res = createMockResponse();
+
+      const mockResult = {
+        analyses: { 'analysis-1': { name: 'test', status: 'stopped' } },
+        pagination: {
+          page: 2,
+          limit: 10,
+          total: 15,
+          totalPages: 2,
+          hasMore: false,
+        },
+      };
+
+      analysisService.getAllAnalyses.mockResolvedValue(mockResult);
+
+      await AnalysisController.getAnalyses(req, res);
+
+      expect(analysisService.getAllAnalyses).toHaveBeenCalledWith({
+        search: '',
+        teamId: null,
+        status: null,
+        page: 2,
+        limit: 10,
+      });
+      expect(res.json).toHaveBeenCalledWith(mockResult);
+    });
+
+    it('should combine all query params', async () => {
+      const req = createMockRequest({
+        user: { id: 'admin-id', role: 'admin' },
+        query: {
+          search: 'temp',
+          teamId: 'team-1',
+          status: 'running',
+          page: '1',
+          limit: '5',
+        },
+      });
+      const res = createMockResponse();
+
+      analysisService.getAllAnalyses.mockResolvedValue({
+        analyses: {},
+        pagination: {
+          page: 1,
+          limit: 5,
+          total: 0,
+          totalPages: 0,
+          hasMore: false,
+        },
+      });
+
+      await AnalysisController.getAnalyses(req, res);
+
+      expect(analysisService.getAllAnalyses).toHaveBeenCalledWith({
+        search: 'temp',
+        teamId: 'team-1',
+        status: 'running',
+        page: 1,
+        limit: 5,
+      });
     });
   });
 

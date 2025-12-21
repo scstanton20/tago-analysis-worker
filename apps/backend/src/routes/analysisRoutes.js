@@ -44,9 +44,9 @@ router.use(authMiddleware);
  *                 type: string
  *                 format: binary
  *                 description: Analysis JavaScript file
- *               department:
+ *               teamId:
  *                 type: string
- *                 description: Department ID to assign the analysis
+ *                 description: Team ID to assign the analysis
  *     responses:
  *       200:
  *         description: Analysis uploaded successfully
@@ -100,23 +100,81 @@ router.post(
  * /analyses:
  *   get:
  *     summary: Get all analyses
- *     description: Retrieve list of all analyses with their current status and configuration
+ *     description: |
+ *       Retrieve list of all analyses with their current status and configuration.
+ *       Supports filtering by search term, status, and team. Pagination is optional.
+ *
+ *       **Permissions:** Results are filtered based on user's team permissions.
+ *       Admin users see all analyses; regular users only see analyses in their teams.
  *     tags: [Analysis Management]
+ *     parameters:
+ *       - in: query
+ *         name: analysis name
+ *         schema:
+ *           type: string
+ *           maxLength: 100
+ *         description: Case-insensitive name filter for analysis name
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [running, stopped, error]
+ *         description: Filter by analysis status
+ *       - in: query
+ *         name: teamId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by team/department ID
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *         description: Page number for pagination (requires limit)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *         description: Number of results per page (requires page)
  *     responses:
  *       200:
  *         description: List of analyses retrieved successfully
  *         content:
  *           application/json:
  *             schema:
- *               type: object
- *               properties:
- *                 analyses:
- *                   type: array
- *                   items:
+ *               oneOf:
+ *                 - type: object
+ *                   description: Non-paginated response (when page/limit not provided)
+ *                   additionalProperties:
  *                     $ref: '#/components/schemas/Analysis'
- *                 departments:
- *                   type: object
- *                   description: Department mapping
+ *                 - type: object
+ *                   description: Paginated response (when page and limit provided)
+ *                   properties:
+ *                     analyses:
+ *                       type: object
+ *                       additionalProperties:
+ *                         $ref: '#/components/schemas/Analysis'
+ *                     pagination:
+ *                       type: object
+ *                       properties:
+ *                         page:
+ *                           type: integer
+ *                           description: Current page number
+ *                         limit:
+ *                           type: integer
+ *                           description: Items per page
+ *                         total:
+ *                           type: integer
+ *                           description: Total number of items
+ *                         totalPages:
+ *                           type: integer
+ *                           description: Total number of pages
+ *                         hasMore:
+ *                           type: boolean
+ *                           description: Whether more pages exist
  *       403:
  *         description: Insufficient permissions
  *         content:
