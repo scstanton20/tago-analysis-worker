@@ -14,10 +14,16 @@ import {
   Center,
   Loader,
   Box,
+  ActionIcon,
+  Transition,
 } from '@mantine/core';
+import { IconChevronUp } from '@tabler/icons-react';
 import { EmptyState, UtilityButton } from '../global';
 
 const LOGS_PER_PAGE = 100;
+
+// Threshold in pixels - show scroll-to-top button when scrolled this far down
+const SCROLL_THRESHOLD = 100;
 
 const AnalysisLogs = ({ analysis }) => {
   const { subscribeToAnalysis, unsubscribeFromAnalysis, sessionId } =
@@ -29,7 +35,15 @@ const AnalysisLogs = ({ analysis }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [isScrolledAway, setIsScrolledAway] = useState(false);
   const scrollRef = useRef(null);
+
+  // Scroll to top (where live logs appear) with smooth animation
+  const scrollToTop = useCallback(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, []);
   const isLoadingMore = useRef(false);
   const hasLoadedInitial = useRef(false);
   // Refs to track latest log state for deduplication without deps
@@ -48,11 +62,23 @@ const AnalysisLogs = ({ analysis }) => {
   const totalLogCount = analysis.totalLogCount || sseLogs.length;
 
   // Auto-scroll hook for managing scroll behavior
-  const { handleScrollPositionChange, disableAutoScroll } = useAutoScroll({
-    scrollRef,
-    items: sseLogs,
-    hasLoadedInitial: hasLoadedInitial.current,
-  });
+  const { handleScrollPositionChange: autoScrollHandler, disableAutoScroll } =
+    useAutoScroll({
+      scrollRef,
+      items: sseLogs,
+      hasLoadedInitial: hasLoadedInitial.current,
+    });
+
+  // Combined scroll handler that tracks both auto-scroll and scroll-away state
+  const handleScrollPositionChange = useCallback(
+    ({ y }) => {
+      // Update auto-scroll behavior
+      autoScrollHandler();
+      // Track if user has scrolled away from top (where live logs are)
+      setIsScrolledAway(y > SCROLL_THRESHOLD);
+    },
+    [autoScrollHandler],
+  );
 
   const loadInitialLogs = useCallback(async () => {
     if (hasLoadedInitial.current) return;
@@ -302,100 +328,126 @@ const AnalysisLogs = ({ analysis }) => {
       </Box>
 
       {/* Logs Content */}
-      <ScrollArea
-        h={height}
-        p="sm"
-        viewportRef={scrollRef}
-        onScrollPositionChange={handleScrollPositionChange}
-        onBottomReached={handleBottomReached}
-        type="scroll"
-        scrollbarSize={8}
-      >
-        {isLoading && logs.length === 0 ? (
-          <Center h="100%">
-            <Group>
-              <Loader size="sm" />
-              <Text c="dimmed" size="sm">
-                Loading logs...
-              </Text>
-            </Group>
-          </Center>
-        ) : logs.length === 0 ? (
-          <EmptyState
-            title="No logs available"
-            description={
-              analysis.status === 'running'
-                ? 'Waiting for new logs...'
-                : undefined
-            }
-            py="xl"
-          />
-        ) : (
-          <Stack gap={2}>
-            {logs.map((log, index) => {
-              const isError = log.message?.toLowerCase().includes('error');
-              const isWarning = log.message?.toLowerCase().includes('warn');
+      <Box pos="relative">
+        {/* Scroll to Top Button */}
+        <Transition mounted={isScrolledAway} transition="fade" duration={200}>
+          {(styles) => (
+            <ActionIcon
+              style={{
+                ...styles,
+                position: 'absolute',
+                top: 8,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 10,
+              }}
+              variant="filled"
+              color="gray"
+              size="md"
+              radius="xl"
+              onClick={scrollToTop}
+              aria-label="Scroll to live logs"
+            >
+              <IconChevronUp size={18} />
+            </ActionIcon>
+          )}
+        </Transition>
 
-              return (
-                <Group
-                  key={
-                    log.sequence
-                      ? `seq-${log.sequence}`
-                      : `${log.timestamp}-${index}`
-                  }
-                  gap="xs"
-                  wrap="nowrap"
-                  p={4}
-                  styles={{
-                    root: {
-                      borderRadius: 'var(--mantine-radius-sm)',
-                      '&:hover': {
-                        backgroundColor: 'var(--mantine-color-gray-light)',
+        <ScrollArea
+          h={height}
+          p="sm"
+          viewportRef={scrollRef}
+          onScrollPositionChange={handleScrollPositionChange}
+          onBottomReached={handleBottomReached}
+          type="scroll"
+          scrollbarSize={8}
+        >
+          {isLoading && logs.length === 0 ? (
+            <Center h="100%">
+              <Group>
+                <Loader size="sm" />
+                <Text c="dimmed" size="sm">
+                  Loading logs...
+                </Text>
+              </Group>
+            </Center>
+          ) : logs.length === 0 ? (
+            <EmptyState
+              title="No logs available"
+              description={
+                analysis.status === 'running'
+                  ? 'Waiting for new logs...'
+                  : undefined
+              }
+              py="xl"
+            />
+          ) : (
+            <Stack gap={2}>
+              {logs.map((log, index) => {
+                const isError = log.message?.toLowerCase().includes('error');
+                const isWarning = log.message?.toLowerCase().includes('warn');
+
+                return (
+                  <Group
+                    key={
+                      log.sequence
+                        ? `seq-${log.sequence}`
+                        : `${log.timestamp}-${index}`
+                    }
+                    gap="xs"
+                    wrap="nowrap"
+                    p={4}
+                    styles={{
+                      root: {
+                        borderRadius: 'var(--mantine-radius-sm)',
+                        '&:hover': {
+                          backgroundColor: 'var(--mantine-color-gray-light)',
+                        },
                       },
-                    },
-                  }}
-                >
-                  <Text
-                    size="xs"
-                    c="dimmed"
-                    ff="monospace"
-                    style={{ flexShrink: 0 }}
-                    component="span"
+                    }}
                   >
-                    {log.timestamp}
-                  </Text>
-                  <Text
-                    size="xs"
-                    c={isError ? 'red' : isWarning ? 'yellow' : undefined}
-                    ff="monospace"
-                    style={{ wordBreak: 'break-word' }}
-                    component="span"
-                  >
-                    {log.message}
-                  </Text>
-                </Group>
-              );
-            })}
-
-            {hasMore && !isLoading && (
-              <Center py="sm">
-                {isLoadingMore.current ? (
-                  <Group>
-                    <Loader size="xs" />
-                    <Text size="xs" c="dimmed">
-                      Loading more...
+                    <Text
+                      size="xs"
+                      c="dimmed"
+                      ff="monospace"
+                      style={{ flexShrink: 0 }}
+                      component="span"
+                    >
+                      {log.timestamp}
+                    </Text>
+                    <Text
+                      size="xs"
+                      c={isError ? 'red' : isWarning ? 'yellow' : undefined}
+                      ff="monospace"
+                      style={{ wordBreak: 'break-word' }}
+                      component="span"
+                    >
+                      {log.message}
                     </Text>
                   </Group>
-                ) : (
-                  <UtilityButton size="xs" onClick={loadMoreLogs}>
-                    Load more logs...
-                  </UtilityButton>
-                )}
-              </Center>
-            )}
-          </Stack>
-        )}
-      </ScrollArea>
+                );
+              })}
+
+              {hasMore && !isLoading && (
+                <Center py="sm">
+                  {isLoadingMore.current ? (
+                    <Group>
+                      <Loader size="xs" />
+                      <Text size="xs" c="dimmed">
+                        Loading more...
+                      </Text>
+                    </Group>
+                  ) : (
+                    <UtilityButton size="xs" onClick={loadMoreLogs}>
+                      Load more logs...
+                    </UtilityButton>
+                  )}
+                </Center>
+              )}
+            </Stack>
+          )}
+        </ScrollArea>
+      </Box>
 
       {/* Resize Handle */}
       <Box
