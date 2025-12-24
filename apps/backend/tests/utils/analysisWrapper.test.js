@@ -5,10 +5,15 @@ import path from 'path';
 const mockLogger = {
   error: vi.fn(),
   info: vi.fn(),
+  warn: vi.fn(),
+  debug: vi.fn(),
+  trace: vi.fn(),
+  fatal: vi.fn(),
+  child: vi.fn(() => mockLogger),
 };
 
-vi.mock('../../src/utils/logging/logger.js', () => ({
-  createChildLogger: vi.fn(() => mockLogger),
+vi.mock('../../src/utils/logging/sandboxLogger.js', () => ({
+  createLogger: vi.fn(() => mockLogger),
 }));
 
 // Mock sharedDNSCache

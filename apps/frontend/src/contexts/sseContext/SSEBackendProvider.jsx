@@ -1,6 +1,9 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { BackendContext } from './contexts/BackendContext.js';
+import { createLogger } from '../../utils/logger.js';
+
+const logger = createLogger('SSEBackend');
 
 // Metrics come every 1 second - if we miss 3+ updates, backend is offline
 const METRICS_STALE_THRESHOLD_MS = 3500;
@@ -90,7 +93,7 @@ export function SSEBackendProvider({ children }) {
   // Set up staleness detection - check every second if metrics are stale
   // Run once on mount, no dependencies to prevent re-creating interval
   useEffect(() => {
-    console.log('[SSEBackend] Setting up staleness detection interval');
+    logger.debug('Setting up staleness detection interval');
     stalenessCheckIntervalRef.current = setInterval(() => {
       const now = Date.now();
       const lastUpdate = lastMetricsUpdateRef.current;
@@ -100,7 +103,7 @@ export function SSEBackendProvider({ children }) {
         const timeSinceLastUpdate = now - lastUpdate;
 
         if (timeSinceLastUpdate > METRICS_STALE_THRESHOLD_MS) {
-          console.warn(
+          logger.warn(
             `Backend metrics stale - last update ${Math.round(timeSinceLastUpdate / 1000)}s ago. Backend is offline.`,
           );
 

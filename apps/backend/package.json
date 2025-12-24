@@ -1,10 +1,10 @@
 {
   "name": "backend",
   "private": true,
-  "version": "2.5.321",
+  "version": "2.5.322",
   "type": "module",
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=23.0.0"
   },
   "imports": {
     "#tago-utils": "./src/utils/in-process-utils/index.js"

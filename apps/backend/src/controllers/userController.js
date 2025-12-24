@@ -5,7 +5,10 @@ import {
   executeUpdate,
 } from '../utils/authDatabase.js';
 import { generateId } from '../utils/generateId.js';
+import { createChildLogger } from '../utils/logging/logger.js';
 import { sseManager } from '../utils/sse/index.js';
+
+const logger = createChildLogger('user-controller');
 
 /**
  * Helper function to get user team memberships
@@ -63,9 +66,9 @@ export function getUserTeams(userId, userRole) {
         return JSON.parse(membership.permissions);
       } catch (error) {
         // Log error but don't crash - return empty permissions
-        console.error(
-          `Failed to parse permissions for user ${userId}, team ${membership.id}:`,
-          error.message,
+        logger.error(
+          { err: error, userId, teamId: membership.id },
+          'Failed to parse permissions',
         );
         return [];
       }

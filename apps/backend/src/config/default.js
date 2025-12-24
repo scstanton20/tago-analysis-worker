@@ -62,6 +62,17 @@ const config = {
     // These will override any colliding variables from the parent environment.
     additionalEnv: {},
   },
+  // Uses Node.js Permission Model (--permission) to restrict filesystem access
+  sandbox: {
+    // Enable/disable filesystem sandboxing (default: true in production, false in development)
+    enabled: process.env.SANDBOX_ENABLED
+      ? process.env.SANDBOX_ENABLED === 'true'
+      : process.env.NODE_ENV === 'production',
+    // Allow child processes to spawn their own children (disabled for security)
+    allowChildProcess: false,
+    // Allow worker threads (disabled - child uses logger without pino)
+    allowWorkerThreads: false,
+  },
 };
 
 // Derive paths from base storage

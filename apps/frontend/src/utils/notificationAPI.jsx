@@ -7,6 +7,9 @@ import {
   updateNotification,
 } from '../utils/notificationService.jsx';
 import { generateStandardPresets } from '../utils/notificationPresets.js';
+import { createLogger } from './logger.js';
+
+const logger = createLogger('NotificationAPI');
 
 /**
  * Notification API that provides notification utilities and promise-based operation helpers.
@@ -120,7 +123,9 @@ export const createNotificationAPI = () => {
         });
       } catch (notifError) {
         // Log but don't throw - the operation succeeded even if notification failed
-        console.error('Failed to show success notification:', notifError);
+        logger.error('Failed to show success notification', {
+          error: notifError,
+        });
       }
 
       return result;
@@ -141,7 +146,9 @@ export const createNotificationAPI = () => {
         });
       } catch (notifError) {
         // Log but don't prevent error from propagating
-        console.error('Failed to show error notification:', notifError);
+        logger.error('Failed to show error notification', {
+          error: notifError,
+        });
       }
 
       throw err;
@@ -152,19 +159,27 @@ export const createNotificationAPI = () => {
   const presets = generateStandardPresets(executeWithNotification);
 
   const success = (message, title = 'Success') => {
-    showSuccess(message, title).catch(console.error);
+    showSuccess(message, title).catch((err) =>
+      logger.error('Failed to show success notification', { error: err }),
+    );
   };
 
   const error = (message, title = 'Error') => {
-    showError(message, title).catch(console.error);
+    showError(message, title).catch((err) =>
+      logger.error('Failed to show error notification', { error: err }),
+    );
   };
 
   const info = (message, title = 'Info') => {
-    showInfo(message, title).catch(console.error);
+    showInfo(message, title).catch((err) =>
+      logger.error('Failed to show info notification', { error: err }),
+    );
   };
 
   const warning = (message, title = 'Warning') => {
-    showWarning(message, title).catch(console.error);
+    showWarning(message, title).catch((err) =>
+      logger.error('Failed to show warning notification', { error: err }),
+    );
   };
 
   return {

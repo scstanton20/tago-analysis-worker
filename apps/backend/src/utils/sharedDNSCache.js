@@ -1,10 +1,14 @@
 // utils/sharedDNSCache.js
 // This module provides shared DNS caching via IPC to the main process
+//
+// Note: Uses logger (sandboxLogger) since this runs in sandboxed
+// child process. All output goes to stdout/stderr which parent captures
+// and routes through its pino pipeline (SSE, file, Loki).
 import dns from 'dns';
 import { promises as dnsPromises } from 'dns';
-import { createChildLogger } from './logging/logger.js';
+import { createLogger } from './logging/sandboxLogger.js';
 
-const logger = createChildLogger('shared-dns-cache');
+const logger = createLogger('shared-dns-cache');
 let requestId = 0;
 const pendingRequests = new Map();
 

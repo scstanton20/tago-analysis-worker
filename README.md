@@ -4,7 +4,7 @@ A full-stack application for managing and running Tago.io analysis scripts with 
 
 ## Features
 
-- 🔧 **Analysis Management**: Upload, run, stop, and monitor Tago.io analysis scripts
+- 🔧 **Analysis Management & Runtime**: Upload, run, stop, and monitor Tago.io analysis scripts. Uses Node's Permission Model to sandbox each process.
 - 🏢 **Department Organization**: Hierarchical organization with drag-and-drop management
 - 👥 **User Management**: Role-based access control with fine-grained permissions
 - 📊 **Real-time Monitoring**: Live status updates, metrics, and log streaming via Prom-Client and Server-Sent Events (SSE)
@@ -16,17 +16,18 @@ A full-stack application for managing and running Tago.io analysis scripts with 
 ## Tech Stack
 
 - **Frontend**: React 19 + Vite + Mantine 8.x
-- **Backend**: Node.js 22+ + Express.js 5.x + Server-Sent Events
+- **Backend**: Node.js + Express.js 5.x + Server-Sent Events
 - **Package Manager**: pnpm workspaces
 - **Authentication**: Better Auth
 - **Real-time**: Server-Sent Events (SSE)
 - **Security**: Encryption for sensitive data
+- **Docker Containerization**: Images are built using docker
 
 ## Quick Start
 
 ### Prerequisites
 
-- Node.js 22+
+- Node.js 23+
 - pnpm 10.13.1+
 
 ### Installation

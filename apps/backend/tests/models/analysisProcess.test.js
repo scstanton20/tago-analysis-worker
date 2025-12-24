@@ -39,6 +39,11 @@ vi.mock('../../src/config/default.js', () => ({
     process: {
       env: {},
     },
+    sandbox: {
+      enabled: false, // Default to disabled for existing tests
+      allowChildProcess: false,
+      allowWorkerThreads: false,
+    },
   },
 }));
 
@@ -1325,6 +1330,225 @@ describe('AnalysisProcess', () => {
 
       // intendedState stays 'running' so health check can restart it later
       expect(analysis.intendedState).toBe('running');
+    });
+  });
+
+  describe('sandbox (filesystem isolation)', () => {
+    it('should not pass sandbox execArgv when sandbox is disabled', async () => {
+      const mockProcess = createMockChildProcess();
+      fork.mockReturnValue(mockProcess);
+
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
+
+      await analysis.start();
+
+      // Should fork with empty execArgv (no sandbox flags)
+      expect(fork).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Array),
+        expect.objectContaining({
+          execArgv: [],
+        }),
+      );
+    });
+
+    it('should pass --permission flag when sandbox is enabled', async () => {
+      // Override config for this test
+      const { config } = await import('../../src/config/default.js');
+      config.sandbox.enabled = true;
+
+      const mockProcess = createMockChildProcess();
+      fork.mockReturnValue(mockProcess);
+
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
+
+      await analysis.start();
+
+      // Should include --permission flag
+      const forkCall = fork.mock.calls[0];
+      const forkOptions = forkCall[2];
+      expect(forkOptions.execArgv).toContain('--permission');
+
+      // Restore config
+      config.sandbox.enabled = false;
+    });
+
+    it('should include --allow-fs-read with restricted paths when sandbox is enabled', async () => {
+      const { config } = await import('../../src/config/default.js');
+      config.sandbox.enabled = true;
+
+      const mockProcess = createMockChildProcess();
+      fork.mockReturnValue(mockProcess);
+
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
+
+      await analysis.start();
+
+      const forkCall = fork.mock.calls[0];
+      const forkOptions = forkCall[2];
+
+      // Implementation uses separate --allow-fs-read flags for each path
+      const allowFsReadArgs = forkOptions.execArgv.filter((arg) =>
+        arg.startsWith('--allow-fs-read='),
+      );
+
+      expect(allowFsReadArgs.length).toBeGreaterThan(0);
+
+      // Join all args to check that required paths are present
+      const allAllowedPaths = allowFsReadArgs.join(' ');
+
+      // Should include the specific analysis file path
+      expect(allAllowedPaths).toContain('test-analysis-id');
+      expect(allAllowedPaths).toContain('index.js');
+      // Should include node_modules
+      expect(allAllowedPaths).toContain('node_modules');
+      // Should include utils folder
+      expect(allAllowedPaths).toContain('utils');
+
+      // Restore config
+      config.sandbox.enabled = false;
+    });
+
+    it('should NOT include --allow-fs-write when sandbox is enabled (no write access)', async () => {
+      const { config } = await import('../../src/config/default.js');
+      config.sandbox.enabled = true;
+
+      const mockProcess = createMockChildProcess();
+      fork.mockReturnValue(mockProcess);
+
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
+
+      await analysis.start();
+
+      const forkCall = fork.mock.calls[0];
+      const forkOptions = forkCall[2];
+
+      // Should NOT have any --allow-fs-write flag
+      const hasWritePermission = forkOptions.execArgv.some((arg) =>
+        arg.startsWith('--allow-fs-write'),
+      );
+      expect(hasWritePermission).toBe(false);
+
+      // Restore config
+      config.sandbox.enabled = false;
+    });
+
+    it('should NOT include --allow-child-process by default', async () => {
+      const { config } = await import('../../src/config/default.js');
+      config.sandbox.enabled = true;
+      config.sandbox.allowChildProcess = false;
+
+      const mockProcess = createMockChildProcess();
+      fork.mockReturnValue(mockProcess);
+
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
+
+      await analysis.start();
+
+      const forkCall = fork.mock.calls[0];
+      const forkOptions = forkCall[2];
+
+      expect(forkOptions.execArgv).not.toContain('--allow-child-process');
+
+      // Restore config
+      config.sandbox.enabled = false;
+    });
+
+    it('should include --allow-child-process when explicitly enabled', async () => {
+      const { config } = await import('../../src/config/default.js');
+      config.sandbox.enabled = true;
+      config.sandbox.allowChildProcess = true;
+
+      const mockProcess = createMockChildProcess();
+      fork.mockReturnValue(mockProcess);
+
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
+
+      await analysis.start();
+
+      const forkCall = fork.mock.calls[0];
+      const forkOptions = forkCall[2];
+
+      expect(forkOptions.execArgv).toContain('--allow-child-process');
+
+      // Restore config
+      config.sandbox.enabled = false;
+      config.sandbox.allowChildProcess = false;
+    });
+
+    it('should NOT include --allow-worker by default', async () => {
+      const { config } = await import('../../src/config/default.js');
+      config.sandbox.enabled = true;
+      config.sandbox.allowWorkerThreads = false;
+
+      const mockProcess = createMockChildProcess();
+      fork.mockReturnValue(mockProcess);
+
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
+
+      await analysis.start();
+
+      const forkCall = fork.mock.calls[0];
+      const forkOptions = forkCall[2];
+
+      expect(forkOptions.execArgv).not.toContain('--allow-worker');
+
+      // Restore config
+      config.sandbox.enabled = false;
+    });
+
+    it('should include --allow-worker when explicitly enabled', async () => {
+      const { config } = await import('../../src/config/default.js');
+      config.sandbox.enabled = true;
+      config.sandbox.allowWorkerThreads = true;
+
+      const mockProcess = createMockChildProcess();
+      fork.mockReturnValue(mockProcess);
+
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
+
+      await analysis.start();
+
+      const forkCall = fork.mock.calls[0];
+      const forkOptions = forkCall[2];
+
+      expect(forkOptions.execArgv).toContain('--allow-worker');
+
+      // Restore config
+      config.sandbox.enabled = false;
+      config.sandbox.allowWorkerThreads = false;
     });
   });
 });

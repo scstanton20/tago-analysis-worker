@@ -70,13 +70,64 @@ async function getDnsCache() {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const WRAPPER_SCRIPT = path.join(
+const WRAPPER_SCRIPT = path.resolve(
   __dirname,
   '..',
   '..',
   'utils',
   'analysisWrapper.js',
 );
+// Resolve to absolute paths (no '..' segments) for Node.js Permission Model
+const BACKEND_SRC = path.resolve(__dirname, '..', '..');
+const BACKEND_ROOT = path.resolve(BACKEND_SRC, '..');
+
+/**
+ * Build execArgv array with permission flags for sandboxed execution
+ *
+ * @param {string} analysisFilePath - Path to the analysis index.js file
+ * @param {Object} sandboxConfig - Sandbox configuration from config
+ * @returns {string[]} Array of Node.js CLI flags
+ */
+function buildSandboxExecArgv(analysisFilePath, sandboxConfig) {
+  if (!sandboxConfig.enabled) {
+    return [];
+  }
+
+  const execArgv = ['--permission'];
+
+  // Calculate allowed read paths (minimal set for security)
+  // All paths must be absolute (resolved) for Node.js Permission Model
+  // Use separate --allow-fs-read flags for each path
+  const allowedReadPaths = [
+    // The specific analysis index.js file - ONLY this analysis, not others
+    path.resolve(analysisFilePath),
+    // Backend utils/ folder for wrapper dependencies (logger, DNS cache)
+    path.resolve(BACKEND_SRC, 'utils/'),
+    // Backend constants.js (needed by logging utilities)
+    path.resolve(BACKEND_SRC, 'constants.js'),
+    // Backend node_modules (direct dependencies like pino, @tago-io/sdk)
+    path.resolve(BACKEND_ROOT, 'node_modules/'),
+    // Root node_modules/.pnpm (pnpm's shared store for symlinked packages)
+    path.resolve(BACKEND_ROOT, '..', '..', 'node_modules/'),
+  ];
+
+  // Add each path as a separate --allow-fs-read flag
+  for (const allowedPath of allowedReadPaths) {
+    execArgv.push(`--allow-fs-read=${allowedPath}`);
+  }
+
+  // Allow child process spawning only if explicitly enabled (default: false)
+  if (sandboxConfig.allowChildProcess) {
+    execArgv.push('--allow-child-process');
+  }
+
+  // Allow worker threads only if explicitly enabled (default: false)
+  if (sandboxConfig.allowWorkerThreads) {
+    execArgv.push('--allow-worker');
+  }
+
+  return execArgv;
+}
 
 export class ProcessLifecycleManager {
   /**
@@ -299,6 +350,16 @@ export class ProcessLifecycleManager {
         }
       }
 
+      // Build sandbox execArgv if enabled
+      const sandboxExecArgv = buildSandboxExecArgv(filePath, config.sandbox);
+
+      if (sandboxExecArgv.length > 0) {
+        this.analysisProcess.logger.info(
+          { sandboxEnabled: true, execArgv: sandboxExecArgv },
+          'Sandbox enabled - filesystem access restricted',
+        );
+      }
+
       // Fork the wrapper script
       // stdio: ['inherit', 'pipe', 'pipe', 'ipc']
       // - inherit stdin
@@ -313,6 +374,7 @@ export class ProcessLifecycleManager {
           STORAGE_BASE: config.storage.base,
         },
         stdio: ['inherit', 'pipe', 'pipe', 'ipc'],
+        execArgv: sandboxExecArgv,
       });
 
       if (!this.analysisProcess.process) {

@@ -1,12 +1,16 @@
 #!/usr/bin/env node
 // utils/analysisWrapper.js
 // Wrapper script that initializes DNS cache before running analysis
+//
+// Note: Uses sandboxLogger since this runs in sandboxed child process.
+// All output goes to stdout/stderr which parent captures and routes
+// through its pino pipeline (SSE, file, Loki).
 
 import path from 'path';
-import { createChildLogger } from './logging/logger.js';
+import { createLogger } from './logging/sandboxLogger.js';
 import './sharedDNSCache.js'; // This auto-initializes shared DNS cache if enabled
 
-const logger = createChildLogger('analysis-wrapper');
+const logger = createLogger('analysis-wrapper');
 
 // Get the analysis file path from command line arguments
 const analysisFile = process.argv[2];

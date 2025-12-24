@@ -30,7 +30,7 @@ import { useAsyncOperation } from '../async/useAsyncOperation';
  *     email: (value) => !value ? 'Required' : null,
  *   },
  *   resetOnSuccess: true,
- *   onSuccess: () => console.log('Form submitted!'),
+ *   onSuccess: () => showNotification('Form submitted!'),
  * });
  *
  * const handleFormSubmit = handleSubmit(async (values) => {
@@ -38,7 +38,7 @@ import { useAsyncOperation } from '../async/useAsyncOperation';
  * });
  *
  * // isDirty is a reactive boolean value (not a function)
- * console.log(isDirty); // true if form has changes, false otherwise
+ * // Returns true if form has changes, false otherwise
  *
  * // For async validation, use useDebouncedCallback from @mantine/hooks directly:
  * import { useDebouncedCallback } from '@mantine/hooks';

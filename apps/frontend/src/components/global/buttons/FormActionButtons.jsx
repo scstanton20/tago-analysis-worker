@@ -4,6 +4,9 @@ import { PrimaryButton } from './PrimaryButton';
 import { SuccessButton } from './SuccessButton';
 import { DangerButton } from './DangerButton';
 import { CancelButton } from './CancelButton';
+import { createLogger } from '../../../utils/logger.js';
+
+const logger = createLogger('FormActionButtons');
 
 /**
  * FormActionButtons - Reusable form action button group
@@ -54,8 +57,8 @@ export function FormActionButtons({
   // Detect if legacy props are being used and show deprecation warning
   const usingLegacyProps = submitVariant || submitGradient || submitColor;
   if (usingLegacyProps && import.meta.env.DEV) {
-    console.warn(
-      '[FormActionButtons] The props "submitVariant", "submitGradient", and "submitColor" are deprecated. ' +
+    logger.warn(
+      'The props "submitVariant", "submitGradient", and "submitColor" are deprecated. ' +
         'Please use "submitPreset" instead with values: "primary", "success", or "danger".',
     );
   }
