@@ -37,7 +37,7 @@ const SettingsModalContent = () => {
       <Group
         align="flex-start"
         gap="md"
-        style={{ height: 730, width: '100%' }}
+        style={{ height: 1200, width: '100%' }}
         wrap="nowrap"
       >
         {/* Sidebar */}
@@ -47,7 +47,7 @@ const SettingsModalContent = () => {
               API Docs
             </Tabs.Tab>
             <Tabs.Tab value="utils" leftSection={<IconCode size={16} />}>
-              Utils Docs
+              Utils & Packages Docs
             </Tabs.Tab>
             <Tabs.Tab value="metrics" leftSection={<IconChartBar size={16} />}>
               Metrics
@@ -89,7 +89,7 @@ const SettingsModalContent = () => {
                   <IframeLoader
                     src={`${window.location.origin}/api/docs`}
                     title="API Documentation"
-                    height="650px"
+                    height="1000px"
                   />
                 </PaperCard>
               </Stack>
