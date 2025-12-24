@@ -12,7 +12,6 @@ import {
   Tabs,
   Card,
   Tooltip,
-  ScrollArea,
 } from '@mantine/core';
 import {
   FormAlert,
@@ -138,59 +137,57 @@ function ProcessTable({ processes, loading = false }) {
   }
 
   return (
-    <ScrollArea h={980} type="scroll" scrollbarSize={8}>
-      <Table striped highlightOnHover>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Process Name</Table.Th>
-            <Table.Th>
-              <Group gap={4}>
-                Analysis ID
-                <Tooltip
-                  label="The unique identifier of an analysis related to this worker application only. This does not match the analysis ID in Tago.io."
-                  multiline
-                  w={250}
-                >
-                  <IconAlertCircle size={14} style={{ cursor: 'help' }} />
-                </Tooltip>
+    <Table striped highlightOnHover>
+      <Table.Thead>
+        <Table.Tr>
+          <Table.Th>Process Name</Table.Th>
+          <Table.Th>
+            <Group gap={4}>
+              Analysis ID
+              <Tooltip
+                label="The unique identifier of an analysis related to this worker application only. This does not match the analysis ID in Tago.io."
+                multiline
+                w={250}
+              >
+                <IconAlertCircle size={14} style={{ cursor: 'help' }} />
+              </Tooltip>
+            </Group>
+          </Table.Th>
+          <Table.Th>CPU %</Table.Th>
+          <Table.Th>Memory (MB)</Table.Th>
+          <Table.Th>Uptime (hrs)</Table.Th>
+        </Table.Tr>
+      </Table.Thead>
+      <Table.Tbody>
+        {processes.map((process, index) => (
+          <Table.Tr key={process.analysis_id || index}>
+            <Table.Td>
+              <Text fw={500}>{process.name || process.analysis_id}</Text>
+            </Table.Td>
+            <Table.Td>{process.analysis_id}</Table.Td>
+            <Table.Td>
+              <Group gap="xs">
+                <Text>{process.cpu?.toFixed(1) || '0.0'}</Text>
+                <Progress
+                  value={Math.min(process.cpu || 0, 100)}
+                  size="xs"
+                  color={
+                    process.cpu > 80
+                      ? 'red'
+                      : process.cpu > 50
+                        ? 'orange'
+                        : 'blue'
+                  }
+                  w={50}
+                />
               </Group>
-            </Table.Th>
-            <Table.Th>CPU %</Table.Th>
-            <Table.Th>Memory (MB)</Table.Th>
-            <Table.Th>Uptime (hrs)</Table.Th>
+            </Table.Td>
+            <Table.Td>{process.memory?.toFixed(0) || '0'}</Table.Td>
+            <Table.Td>{process.uptime?.toFixed(1) || '0.0'}</Table.Td>
           </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {processes.map((process, index) => (
-            <Table.Tr key={process.analysis_id || index}>
-              <Table.Td>
-                <Text fw={500}>{process.name || process.analysis_id}</Text>
-              </Table.Td>
-              <Table.Td>{process.analysis_id}</Table.Td>
-              <Table.Td>
-                <Group gap="xs">
-                  <Text>{process.cpu?.toFixed(1) || '0.0'}</Text>
-                  <Progress
-                    value={Math.min(process.cpu || 0, 100)}
-                    size="xs"
-                    color={
-                      process.cpu > 80
-                        ? 'red'
-                        : process.cpu > 50
-                          ? 'orange'
-                          : 'blue'
-                    }
-                    w={50}
-                  />
-                </Group>
-              </Table.Td>
-              <Table.Td>{process.memory?.toFixed(0) || '0'}</Table.Td>
-              <Table.Td>{process.uptime?.toFixed(1) || '0.0'}</Table.Td>
-            </Table.Tr>
-          ))}
-        </Table.Tbody>
-      </Table>
-    </ScrollArea>
+        ))}
+      </Table.Tbody>
+    </Table>
   );
 }
 
@@ -404,7 +401,7 @@ function MetricsTabContent({
           title="Analysis Processes"
           icon={<IconChartBar size={20} />}
           actions={
-            <Badge variant="light" color="blue">
+            <Badge variant="light" color="brand">
               {processes.length} processes
             </Badge>
           }
@@ -503,7 +500,7 @@ function MetricsDashboard() {
       )}
 
       {/* Tabbed Metrics View */}
-      <Tabs value={activeTab} onChange={setActiveTab}>
+      <Tabs value={activeTab} onChange={setActiveTab} color="brand">
         <Tabs.List>
           <Tabs.Tab value="total" leftSection={<IconSum size={16} />}>
             Total System

@@ -25,7 +25,7 @@ export function UtilityButton({
   rightSection,
   fullWidth = false,
   type = 'button',
-  color,
+  color = 'brand',
   ...props
 }) {
   return (

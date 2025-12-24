@@ -9,7 +9,6 @@ import {
   SimpleGrid,
   Badge,
   Card,
-  ScrollArea,
   ActionIcon,
   Tooltip,
   Divider,
@@ -42,7 +41,7 @@ function DNSCacheSettings() {
   const { isAuthenticated } = useAuth();
   const loadEntriesOperation = useAsyncOperation();
   const [entries, setEntries] = useState([]);
-  const [showEntries, setShowEntries] = useState(false);
+  const [showEntries, setShowEntries] = useState(true); // Default to open
 
   // Manual save state for TTL and maxEntries
   const [pendingTtl, setPendingTtl] = useState(null);
@@ -75,6 +74,13 @@ function DNSCacheSettings() {
     setHasUnsavedChanges(false);
     setValidationErrors({});
     initializedRef.current = true;
+  }, [isAuthenticated]);
+
+  // Load cache entries on mount since showEntries defaults to true
+  // Uses separate async effect to properly track loading state
+  useAsyncEffect(async () => {
+    const entriesData = await dnsService.getCacheEntries();
+    setEntries(entriesData.entries);
   }, [isAuthenticated]);
 
   // Initialize pending values when config is first loaded (fallback for SSE updates)
@@ -348,7 +354,7 @@ function DNSCacheSettings() {
                         100,
                       )}
                       size="sm"
-                      color="blue"
+                      color="brand"
                     />
                     <Text size="sm" fw={600}>
                       {formatTTL(stats?.ttlPeriodRemaining || 0)} left
@@ -389,6 +395,98 @@ function DNSCacheSettings() {
             }
           >
             <Stack gap="md">
+              {showEntries && (
+                <>
+                  {loadEntriesOperation.loading ? (
+                    <LoadingState loading={true} minHeight={100} />
+                  ) : entries.length === 0 ? (
+                    <Text size="sm" c="dimmed" ta="center" py="md">
+                      No cache entries
+                    </Text>
+                  ) : (
+                    <Stack gap="xs">
+                      {entries.map((entry) => (
+                        <Paper key={entry.key} p="xs" withBorder>
+                          <Group justify="space-between">
+                            <Stack gap={4}>
+                              <Group gap="xs">
+                                <Badge size="sm" variant="light">
+                                  {entry.key.split(':')[0]}
+                                </Badge>
+                                <Text size="sm" fw={500}>
+                                  {entry.key.includes(':')
+                                    ? entry.key.split(':').slice(1).join(':')
+                                    : entry.key}
+                                </Text>
+                              </Group>
+                              <Group gap="xs">
+                                <Text size="xs" c="dimmed">
+                                  TTL: {formatTTL(entry.remainingTTL)}
+                                </Text>
+                                <Text size="xs" c="dimmed">
+                                  Age: {formatTTL(entry.age)}
+                                </Text>
+                                {entry.expired && (
+                                  <Badge size="xs" color="red">
+                                    Expired
+                                  </Badge>
+                                )}
+                              </Group>
+                              {(() => {
+                                // Handle different DNS cache data structures
+                                let addressDisplay = null;
+
+                                if (entry.data?.address) {
+                                  if (typeof entry.data.address === 'string') {
+                                    // Single string address
+                                    addressDisplay = entry.data.address;
+                                  } else if (
+                                    Array.isArray(entry.data.address)
+                                  ) {
+                                    // Array of address objects
+                                    const addresses = entry.data.address
+                                      .map((addr) => addr.address || addr)
+                                      .filter(
+                                        (addr) => typeof addr === 'string',
+                                      );
+                                    addressDisplay = addresses.join(', ');
+                                  }
+                                } else if (
+                                  entry.data?.addresses &&
+                                  Array.isArray(entry.data.addresses)
+                                ) {
+                                  // Array of string addresses
+                                  addressDisplay =
+                                    entry.data.addresses.join(', ');
+                                }
+
+                                return addressDisplay ? (
+                                  <Text size="xs" c="dimmed">
+                                    Address: {addressDisplay}
+                                  </Text>
+                                ) : null;
+                              })()}
+                            </Stack>
+                            <Tooltip label="Delete entry">
+                              <ActionIcon
+                                size="sm"
+                                variant="subtle"
+                                color="red"
+                                onClick={() => handleDeleteEntry(entry.key)}
+                              >
+                                <IconTrash size={16} />
+                              </ActionIcon>
+                            </Tooltip>
+                          </Group>
+                        </Paper>
+                      ))}
+                    </Stack>
+                  )}
+                  <Divider />
+                </>
+              )}
+
+              {/* Toggle button at bottom */}
               <UtilityButton
                 onClick={() => {
                   setShowEntries(!showEntries);
@@ -400,101 +498,6 @@ function DNSCacheSettings() {
                 {showEntries ? 'Hide' : 'Show'} Cache Entries (
                 {stats?.cacheSize || 0})
               </UtilityButton>
-
-              {showEntries && (
-                <>
-                  <Divider />
-                  {loadEntriesOperation.loading ? (
-                    <LoadingState loading={true} minHeight={100} />
-                  ) : entries.length === 0 ? (
-                    <Text size="sm" c="dimmed" ta="center" py="md">
-                      No cache entries
-                    </Text>
-                  ) : (
-                    <ScrollArea h={300}>
-                      <Stack gap="xs">
-                        {entries.map((entry) => (
-                          <Paper key={entry.key} p="xs" withBorder>
-                            <Group justify="space-between">
-                              <Stack gap={4}>
-                                <Group gap="xs">
-                                  <Badge size="sm" variant="light">
-                                    {entry.key.split(':')[0]}
-                                  </Badge>
-                                  <Text size="sm" fw={500}>
-                                    {entry.key.includes(':')
-                                      ? entry.key.split(':').slice(1).join(':')
-                                      : entry.key}
-                                  </Text>
-                                </Group>
-                                <Group gap="xs">
-                                  <Text size="xs" c="dimmed">
-                                    TTL: {formatTTL(entry.remainingTTL)}
-                                  </Text>
-                                  <Text size="xs" c="dimmed">
-                                    Age: {formatTTL(entry.age)}
-                                  </Text>
-                                  {entry.expired && (
-                                    <Badge size="xs" color="red">
-                                      Expired
-                                    </Badge>
-                                  )}
-                                </Group>
-                                {(() => {
-                                  // Handle different DNS cache data structures
-                                  let addressDisplay = null;
-
-                                  if (entry.data?.address) {
-                                    if (
-                                      typeof entry.data.address === 'string'
-                                    ) {
-                                      // Single string address
-                                      addressDisplay = entry.data.address;
-                                    } else if (
-                                      Array.isArray(entry.data.address)
-                                    ) {
-                                      // Array of address objects
-                                      const addresses = entry.data.address
-                                        .map((addr) => addr.address || addr)
-                                        .filter(
-                                          (addr) => typeof addr === 'string',
-                                        );
-                                      addressDisplay = addresses.join(', ');
-                                    }
-                                  } else if (
-                                    entry.data?.addresses &&
-                                    Array.isArray(entry.data.addresses)
-                                  ) {
-                                    // Array of string addresses
-                                    addressDisplay =
-                                      entry.data.addresses.join(', ');
-                                  }
-
-                                  return addressDisplay ? (
-                                    <Text size="xs" c="dimmed">
-                                      Address: {addressDisplay}
-                                    </Text>
-                                  ) : null;
-                                })()}
-                              </Stack>
-                              <Tooltip label="Delete entry">
-                                <ActionIcon
-                                  size="sm"
-                                  variant="subtle"
-                                  color="red"
-                                  onClick={() => handleDeleteEntry(entry.key)}
-                                >
-                                  <IconTrash size={16} />
-                                </ActionIcon>
-                              </Tooltip>
-                            </Group>
-                          </Paper>
-                        ))}
-                      </Stack>
-                    </ScrollArea>
-                  )}
-                </>
-              )}
             </Stack>
           </PaperCard>
         </Stack>

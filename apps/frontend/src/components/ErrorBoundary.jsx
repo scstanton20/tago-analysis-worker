@@ -8,11 +8,16 @@ import {
   Paper,
   Code,
   Group,
+  CopyButton,
+  ActionIcon,
+  Tooltip,
 } from '@mantine/core';
 import {
   IconAlertTriangle,
   IconAlertCircle,
   IconRefresh,
+  IconCopy,
+  IconCheck,
 } from '@tabler/icons-react';
 import { IconLabel, PrimaryButton, SecondaryButton } from './global';
 import logger from '../utils/logger';
@@ -125,9 +130,33 @@ function GlobalErrorFallback({ error, reset }) {
                 backgroundColor: 'var(--mantine-color-default)',
               }}
             >
-              <Text size="sm" fw={600} mb="xs">
-                Error Details:
-              </Text>
+              <Group justify="space-between" mb="xs">
+                <Text size="sm" fw={600}>
+                  Error Details:
+                </Text>
+                <CopyButton value={error.toString()} timeout={2000}>
+                  {({ copied, copy }) => (
+                    <Tooltip
+                      label={copied ? 'Copied' : 'Copy'}
+                      withArrow
+                      position="left"
+                    >
+                      <ActionIcon
+                        color={copied ? 'teal' : 'gray'}
+                        variant="subtle"
+                        onClick={copy}
+                        size="sm"
+                      >
+                        {copied ? (
+                          <IconCheck size={14} />
+                        ) : (
+                          <IconCopy size={14} />
+                        )}
+                      </ActionIcon>
+                    </Tooltip>
+                  )}
+                </CopyButton>
+              </Group>
               <Code block>{error.toString()}</Code>
             </Paper>
           )}

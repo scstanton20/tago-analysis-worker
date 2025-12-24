@@ -1,5 +1,5 @@
 import { useState, lazy, Suspense } from 'react';
-import { Stack, Group, Text, Tabs, Box } from '@mantine/core';
+import { Stack, Group, Text, Tabs, Box, ScrollArea } from '@mantine/core';
 import {
   IconBook,
   IconTransfer,
@@ -16,11 +16,19 @@ const DNSCacheSettings = lazy(() => import('./settings/DNSCacheSettings'));
 const MetricsDashboard = lazy(() => import('./settings/MetricsDashboard'));
 const UtilsDocs = lazy(() => import('./settings/UtilsDocs'));
 
+// Modal content height - accounts for modal header/padding
+const MODAL_CONTENT_HEIGHT = 'calc(85vh - 60px)';
+
 /**
  * SettingsModalContent
  *
  * Modal content for application settings with tabbed interface.
  * Provides access to API documentation, metrics dashboard, utilities documentation, and DNS cache settings.
+ *
+ * Architecture:
+ * - Sidebar stays fixed in place (sticky positioning)
+ * - Single ScrollArea wraps the content panels
+ * - Individual tabs should NOT have their own ScrollAreas
  *
  * Note: This component does not accept any props.
  */
@@ -33,15 +41,30 @@ const SettingsModalContent = () => {
   };
 
   return (
-    <Tabs value={activeTab} onChange={setActiveTab} orientation="vertical">
-      <Group
-        align="flex-start"
-        gap="md"
-        style={{ height: 1200, width: '100%' }}
-        wrap="nowrap"
+    <Tabs
+      value={activeTab}
+      onChange={setActiveTab}
+      orientation="vertical"
+      color="brand"
+    >
+      <Box
+        style={{
+          display: 'flex',
+          gap: 'var(--mantine-spacing-md)',
+          height: MODAL_CONTENT_HEIGHT,
+          width: '100%',
+        }}
       >
-        {/* Sidebar */}
-        <Box style={{ minWidth: 100, flexShrink: 0 }}>
+        {/* Sidebar - Sticky, does not scroll */}
+        <Box
+          style={{
+            minWidth: 100,
+            flexShrink: 0,
+            position: 'sticky',
+            top: 0,
+            alignSelf: 'flex-start',
+          }}
+        >
           <Tabs.List>
             <Tabs.Tab value="api" leftSection={<IconBook size={16} />}>
               API Docs
@@ -58,8 +81,14 @@ const SettingsModalContent = () => {
           </Tabs.List>
         </Box>
 
-        {/* Content Area */}
-        <Box style={{ flex: 1, height: '100%' }}>
+        {/* Content Area - Single ScrollArea for all tab content */}
+        <ScrollArea
+          style={{ flex: 1 }}
+          h="100%"
+          type="scroll"
+          scrollbarSize={8}
+          offsetScrollbars
+        >
           <Suspense
             fallback={
               <LoadingState
@@ -108,8 +137,8 @@ const SettingsModalContent = () => {
               <DNSCacheSettings />
             </Tabs.Panel>
           </Suspense>
-        </Box>
-      </Group>
+        </ScrollArea>
+      </Box>
     </Tabs>
   );
 };

@@ -1,14 +1,5 @@
 import { useState } from 'react';
-import {
-  Stack,
-  Text,
-  ScrollArea,
-  Group,
-  Tabs,
-  Anchor,
-  Code,
-  Select,
-} from '@mantine/core';
+import { Stack, Text, Group, Tabs, Anchor, Code, Select } from '@mantine/core';
 import {
   IconInfoCircle,
   IconCode,
@@ -104,7 +95,7 @@ function UtilsDocs() {
         Available In-Process Utilities & Packages Documentation
       </Text>
 
-      <Tabs value={activeTab} onChange={setActiveTab}>
+      <Tabs value={activeTab} onChange={setActiveTab} color="brand">
         <Tabs.List>
           <Tabs.Tab value="packages" leftSection={<IconPackage size={14} />}>
             Packages
@@ -154,123 +145,117 @@ function UtilsDocs() {
         </>
       )}
 
-      <ScrollArea h={980} type="scroll" scrollbarSize={8}>
-        {activeTab === 'packages' && (
-          <Stack gap="md">
-            {AVAILABLE_PACKAGES.map((pkg) => (
-              <PaperCard key={pkg.name} withBorder>
-                <Stack gap="sm">
-                  <Group justify="space-between">
-                    <Text size="md" fw={600}>
-                      <IconPackage
-                        size={16}
-                        style={{ verticalAlign: 'middle', marginRight: 6 }}
-                      />
-                      {pkg.name}
-                    </Text>
-                    <Anchor
-                      href={pkg.docsUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      size="sm"
-                    >
-                      <Group gap={4}>
-                        Documentation
-                        <IconExternalLink size={14} />
-                      </Group>
-                    </Anchor>
-                  </Group>
-                  <Text size="sm" c="dimmed">
-                    {pkg.description}
+      {activeTab === 'packages' && (
+        <Stack gap="md">
+          {AVAILABLE_PACKAGES.map((pkg) => (
+            <PaperCard key={pkg.name} withBorder>
+              <Stack gap="sm">
+                <Group justify="space-between">
+                  <Text size="md" fw={600}>
+                    <IconPackage
+                      size={16}
+                      style={{ verticalAlign: 'middle', marginRight: 6 }}
+                    />
+                    {pkg.name}
                   </Text>
-                  <Code block>{pkg.import}</Code>
-                </Stack>
-              </PaperCard>
-            ))}
-          </Stack>
-        )}
-
-        {activeTab === 'utilities' && (
-          <LoadingState
-            loading={loadDocsOperation.loading}
-            skeleton
-            pattern="content"
-            skeletonCount={4}
-          >
-            {docs && selectedUtility && groupedPaths[selectedUtility] && (
-              <Stack gap="lg">
-                {groupedPaths[selectedUtility].map(([path, methods]) => (
-                  <PaperCard key={path} withBorder>
-                    <Stack gap="sm">
-                      <Group justify="apart">
-                        <Text size="md" fw={600}>
-                          <IconCode
-                            size={16}
-                            style={{ verticalAlign: 'middle' }}
-                          />{' '}
-                          {path.split('/').pop()}
-                        </Text>
-                      </Group>
-
-                      {Object.entries(methods).map(([method, details]) => (
-                        <Stack key={method} gap="xs">
-                          <Text size="sm">{details.description}</Text>
-
-                          {details.parameters &&
-                            details.parameters.length > 0 && (
-                              <Stack gap="xs">
-                                <Text size="sm" fw={500}>
-                                  Parameters:
-                                </Text>
-                                {details.parameters.map((param, idx) => (
-                                  <div
-                                    key={idx}
-                                    style={{ paddingLeft: '1rem' }}
-                                  >
-                                    <Text size="sm" c="dimmed">
-                                      <code>{param.name}</code> (
-                                      {param.schema.type})
-                                      {param.required && ' *'}
-                                      {param.description &&
-                                        ` - ${param.description}`}
-                                    </Text>
-                                  </div>
-                                ))}
-                              </Stack>
-                            )}
-
-                          {details['x-code-samples'] &&
-                            details['x-code-samples'].length > 0 && (
-                              <Stack gap="xs">
-                                <Text size="sm" fw={500}>
-                                  Example:
-                                </Text>
-                                <pre
-                                  style={{
-                                    padding: '0.75rem',
-                                    borderRadius: '4px',
-                                    overflow: 'auto',
-                                    maxWidth: '100%',
-                                    whiteSpace: 'pre-wrap',
-                                    wordBreak: 'break-word',
-                                  }}
-                                >
-                                  <code>
-                                    {details['x-code-samples'][0].source}
-                                  </code>
-                                </pre>
-                              </Stack>
-                            )}
-                        </Stack>
-                      ))}
-                    </Stack>
-                  </PaperCard>
-                ))}
+                  <Anchor
+                    href={pkg.docsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    size="sm"
+                  >
+                    <Group gap={4}>
+                      Documentation
+                      <IconExternalLink size={14} />
+                    </Group>
+                  </Anchor>
+                </Group>
+                <Text size="sm" c="dimmed">
+                  {pkg.description}
+                </Text>
+                <Code block>{pkg.import}</Code>
               </Stack>
-            )}
-          </LoadingState>
-        )}
-      </ScrollArea>
+            </PaperCard>
+          ))}
+        </Stack>
+      )}
+
+      {activeTab === 'utilities' && (
+        <LoadingState
+          loading={loadDocsOperation.loading}
+          skeleton
+          pattern="content"
+          skeletonCount={4}
+        >
+          {docs && selectedUtility && groupedPaths[selectedUtility] && (
+            <Stack gap="lg">
+              {groupedPaths[selectedUtility].map(([path, methods]) => (
+                <PaperCard key={path} withBorder>
+                  <Stack gap="sm">
+                    <Group justify="apart">
+                      <Text size="md" fw={600}>
+                        <IconCode
+                          size={16}
+                          style={{ verticalAlign: 'middle' }}
+                        />{' '}
+                        {path.split('/').pop()}
+                      </Text>
+                    </Group>
+
+                    {Object.entries(methods).map(([method, details]) => (
+                      <Stack key={method} gap="xs">
+                        <Text size="sm">{details.description}</Text>
+
+                        {details.parameters &&
+                          details.parameters.length > 0 && (
+                            <Stack gap="xs">
+                              <Text size="sm" fw={500}>
+                                Parameters:
+                              </Text>
+                              {details.parameters.map((param, idx) => (
+                                <div key={idx} style={{ paddingLeft: '1rem' }}>
+                                  <Text size="sm" c="dimmed">
+                                    <code>{param.name}</code> (
+                                    {param.schema.type}){param.required && ' *'}
+                                    {param.description &&
+                                      ` - ${param.description}`}
+                                  </Text>
+                                </div>
+                              ))}
+                            </Stack>
+                          )}
+
+                        {details['x-code-samples'] &&
+                          details['x-code-samples'].length > 0 && (
+                            <Stack gap="xs">
+                              <Text size="sm" fw={500}>
+                                Example:
+                              </Text>
+                              <pre
+                                style={{
+                                  padding: '0.75rem',
+                                  borderRadius: '4px',
+                                  overflow: 'auto',
+                                  maxWidth: '100%',
+                                  whiteSpace: 'pre-wrap',
+                                  wordBreak: 'break-word',
+                                }}
+                              >
+                                <code>
+                                  {details['x-code-samples'][0].source}
+                                </code>
+                              </pre>
+                            </Stack>
+                          )}
+                      </Stack>
+                    ))}
+                  </Stack>
+                </PaperCard>
+              ))}
+            </Stack>
+          )}
+        </LoadingState>
+      )}
     </Stack>
   );
 }
