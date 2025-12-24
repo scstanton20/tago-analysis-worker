@@ -1,4 +1,4 @@
-FROM node:23-alpine AS deps
+FROM node:23-alpine@sha256:a34e14ef1df25b58258956049ab5a71ea7f0d498e41d0b514f4b8de09af09456 AS deps
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
@@ -9,11 +9,9 @@ WORKDIR /app
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/frontend/package.json ./apps/frontend/
 
-# Install dependencies
-RUN --mount=type=cache,id=pnpm,target=/pnpm corepack enable && \
-    pnpm install --filter frontend --frozen-lockfile
+RUN corepack enable && pnpm install --filter frontend --frozen-lockfile
 
-FROM node:23-alpine AS build
+FROM node:23-alpine@sha256:a34e14ef1df25b58258956049ab5a71ea7f0d498e41d0b514f4b8de09af09456 AS build
 # Set up pnpm in the runtime container
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
@@ -43,7 +41,7 @@ WORKDIR /app/apps/frontend
 RUN pnpm build
 
 # Production stage - Frontend
-FROM nginx:alpine AS frontend
+FROM nginx:alpine@sha256:8491795299c8e739b7fcc6285d531d9812ce2666e07bd3dd8db00020ad132295 AS frontend
 
 # Install dependencies for certificate generation and environment substitution
 RUN apk add --no-cache openssl gettext

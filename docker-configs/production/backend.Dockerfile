@@ -1,4 +1,4 @@
-FROM node:23-alpine AS deps
+FROM node:23-alpine@sha256:a34e14ef1df25b58258956049ab5a71ea7f0d498e41d0b514f4b8de09af09456 AS deps
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
@@ -9,11 +9,9 @@ WORKDIR /app
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/backend/package.json ./apps/backend/
 
-# Install dependencies
-RUN --mount=type=cache,id=pnpm,target=/pnpm corepack enable && \
-    pnpm install --filter backend --frozen-lockfile --prod
+RUN corepack enable && pnpm install --filter backend --frozen-lockfile --prod
 
-FROM node:23-alpine AS run
+FROM node:23-alpine@sha256:a34e14ef1df25b58258956049ab5a71ea7f0d498e41d0b514f4b8de09af09456 AS run
 
 # Install openssl for certificate generation
 RUN apk add --no-cache openssl
@@ -32,8 +30,6 @@ COPY --from=deps /app/apps/backend/node_modules ./apps/backend/node_modules
 
 # Copy source code
 COPY --chown=node:node apps/backend/src ./apps/backend/src
-
-# NODE_PATH not needed for ESM - analysis processes run with proper cwd
 
 # Set working directory to backend app (like development)
 WORKDIR /app/apps/backend

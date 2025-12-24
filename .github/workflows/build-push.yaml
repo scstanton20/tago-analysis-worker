@@ -30,12 +30,6 @@ jobs:
         run: |
           echo "VERSION=$(node -p "require('${{ matrix.app.path }}/package.json').version")" >> $GITHUB_OUTPUT
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3.7.0
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Login to Github Container Registry
         uses: docker/login-action@v3
         with:
@@ -54,6 +48,11 @@ jobs:
             echo "${{ matrix.app.name }} image ${{ steps.version.outputs.VERSION }} does not exist"
             echo "EXISTS=false" >> $GITHUB_OUTPUT
           fi
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3.7.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Build and push ${{ matrix.app.name }} image
         if: steps.image-check.outputs.EXISTS == 'false'
