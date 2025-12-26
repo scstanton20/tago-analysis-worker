@@ -435,7 +435,7 @@ export class UserController {
   static async sendTeamAssignmentNotifications(userId, teamCount) {
     const message = `You have been assigned to ${teamCount} team${teamCount !== 1 ? 's' : ''}`;
 
-    sseManager.sendToUser(userId, {
+    await sseManager.sendToUser(userId, {
       type: 'userTeamsUpdated',
       data: {
         userId,
@@ -639,7 +639,7 @@ export class UserController {
         ? `You have been assigned to ${teamCount} team${teamCount !== 1 ? 's' : ''}`
         : 'Your team access has been removed';
 
-    sseManager.sendToUser(userId, {
+    await sseManager.sendToUser(userId, {
       type: 'userTeamsUpdated',
       data: {
         userId,
@@ -746,7 +746,7 @@ export class UserController {
     // Send SSE notification to the affected user to refresh their data
     // Role changes may affect permissions
     const roleLabel = role === 'admin' ? 'Administrator' : 'User';
-    sseManager.sendToUser(userId, {
+    await sseManager.sendToUser(userId, {
       type: 'userRoleUpdated',
       data: {
         userId,

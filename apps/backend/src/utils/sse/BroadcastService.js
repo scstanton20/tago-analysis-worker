@@ -53,6 +53,8 @@ export class BroadcastService {
         if (session.isConnected) {
           // Send without event type so it arrives at eventSource.onmessage
           await session.push(data);
+          // Update our independent lastPush tracking for stale detection
+          this.manager.sessionLastPush.set(session.id, Date.now());
           sentCount++;
         } else {
           failedSessions.push(session);
@@ -141,7 +143,7 @@ export class BroadcastService {
 
       let sentCount = 0;
       for (const userId of authorizedUsers) {
-        sentCount += this.manager.sessionManager.sendToUser(userId, data);
+        sentCount += await this.manager.sessionManager.sendToUser(userId, data);
       }
 
       return sentCount;
@@ -280,6 +282,11 @@ export class BroadcastService {
    */
   sendHeartbeat() {
     this.broadcast({ type: 'heartbeat' });
+    // Update lastPush for all sessions since heartbeat goes to all via channel
+    const now = Date.now();
+    for (const session of this.manager.sessions.values()) {
+      this.manager.sessionLastPush.set(session.id, now);
+    }
   }
 
   /**

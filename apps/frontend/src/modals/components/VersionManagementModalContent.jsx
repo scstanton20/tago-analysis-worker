@@ -17,6 +17,7 @@ import {
   Box,
   Pagination,
   Center,
+  Tooltip,
 } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import {
@@ -307,24 +308,28 @@ function VersionManagementModalContent({ innerProps }) {
                         </Table.Td>
                         <Table.Td>
                           <Group gap="xs">
-                            <ActionIcon
-                              variant="light"
-                              color="green"
-                              size="sm"
-                              onClick={() => handleDownloadVersion(0)}
-                              aria-label="Download current version"
-                            >
-                              <IconDownload size={14} aria-hidden="true" />
-                            </ActionIcon>
-                            <ActionIcon
-                              variant="light"
-                              color="blue"
-                              size="sm"
-                              onClick={() => handleViewVersion(0)}
-                              aria-label="View current version content"
-                            >
-                              <IconEyeCode size={14} aria-hidden="true" />
-                            </ActionIcon>
+                            <Tooltip label="Download" withArrow>
+                              <ActionIcon
+                                variant="light"
+                                color="green"
+                                size="sm"
+                                onClick={() => handleDownloadVersion(0)}
+                                aria-label="Download current version"
+                              >
+                                <IconDownload size={14} aria-hidden="true" />
+                              </ActionIcon>
+                            </Tooltip>
+                            <Tooltip label="View Code" withArrow>
+                              <ActionIcon
+                                variant="light"
+                                color="blue"
+                                size="sm"
+                                onClick={() => handleViewVersion(0)}
+                                aria-label="View current version content"
+                              >
+                                <IconEyeCode size={14} aria-hidden="true" />
+                              </ActionIcon>
+                            </Tooltip>
                           </Group>
                         </Table.Td>
                       </Table.Tr>
@@ -347,37 +352,45 @@ function VersionManagementModalContent({ innerProps }) {
                         </Table.Td>
                         <Table.Td>
                           <Group gap="xs">
-                            <ActionIcon
-                              variant="light"
-                              color="green"
-                              size="sm"
-                              onClick={() =>
-                                handleDownloadVersion(version.version)
-                              }
-                              aria-label={`Download version ${version.version}`}
-                            >
-                              <IconDownload size={14} aria-hidden="true" />
-                            </ActionIcon>
-                            <ActionIcon
-                              variant="light"
-                              color="orange"
-                              size="sm"
-                              onClick={() => handleRollback(version.version)}
-                              loading={rollbackLoading === version.version}
-                              aria-label={`Rollback to version ${version.version}`}
-                            >
-                              <IconPlayerPlay size={14} aria-hidden="true" />
-                            </ActionIcon>
-                            <ActionIcon
-                              variant="light"
-                              color="blue"
-                              size="sm"
-                              onClick={() => handleViewVersion(version.version)}
-                              loading={isLoading}
-                              aria-label={`View this version's content`}
-                            >
-                              <IconEyeCode aria-hidden="true" />
-                            </ActionIcon>
+                            <Tooltip label="Download" withArrow>
+                              <ActionIcon
+                                variant="light"
+                                color="green"
+                                size="sm"
+                                onClick={() =>
+                                  handleDownloadVersion(version.version)
+                                }
+                                aria-label={`Download version ${version.version}`}
+                              >
+                                <IconDownload size={14} aria-hidden="true" />
+                              </ActionIcon>
+                            </Tooltip>
+                            <Tooltip label="Rollback" withArrow>
+                              <ActionIcon
+                                variant="light"
+                                color="orange"
+                                size="sm"
+                                onClick={() => handleRollback(version.version)}
+                                loading={rollbackLoading === version.version}
+                                aria-label={`Rollback to version ${version.version}`}
+                              >
+                                <IconPlayerPlay size={14} aria-hidden="true" />
+                              </ActionIcon>
+                            </Tooltip>
+                            <Tooltip label="View Code" withArrow>
+                              <ActionIcon
+                                variant="light"
+                                color="blue"
+                                size="sm"
+                                onClick={() =>
+                                  handleViewVersion(version.version)
+                                }
+                                loading={isLoading}
+                                aria-label={`View this version's content`}
+                              >
+                                <IconEyeCode aria-hidden="true" />
+                              </ActionIcon>
+                            </Tooltip>
                           </Group>
                         </Table.Td>
                       </Table.Tr>

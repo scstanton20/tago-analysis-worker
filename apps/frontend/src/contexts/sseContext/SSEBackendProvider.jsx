@@ -131,25 +131,32 @@ export function SSEBackendProvider({ children }) {
   // Message handler to be called by parent
   const handleMessage = useCallback(
     (data) => {
-      switch (data.type) {
-        case 'statusUpdate':
-          handleStatusUpdate(data);
-          break;
-        case 'dnsConfigUpdated':
-          handleDnsConfigUpdated(data);
-          break;
-        case 'dnsCacheCleared':
-        case 'dnsStatsReset':
-          handleDnsStatsUpdate(data);
-          break;
-        case 'metricsUpdate':
-          handleMetricsUpdate(data);
-          break;
-        case 'connectionLost':
-          handleConnectionLost();
-          break;
-        default:
-          break;
+      try {
+        switch (data.type) {
+          case 'statusUpdate':
+            handleStatusUpdate(data);
+            break;
+          case 'dnsConfigUpdated':
+            handleDnsConfigUpdated(data);
+            break;
+          case 'dnsCacheCleared':
+          case 'dnsStatsReset':
+            handleDnsStatsUpdate(data);
+            break;
+          case 'metricsUpdate':
+            handleMetricsUpdate(data);
+            break;
+          case 'connectionLost':
+            handleConnectionLost();
+            break;
+          default:
+            break;
+        }
+      } catch (error) {
+        logger.error('Error in SSEBackendProvider handleMessage:', {
+          type: data?.type,
+          error: error.message,
+        });
       }
     },
     [

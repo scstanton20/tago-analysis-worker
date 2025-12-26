@@ -48,6 +48,8 @@ export class SessionManager {
 
       // Track session
       this.manager.sessions.set(session.id, session);
+      // Initialize last push timestamp for stale detection (independent of better-sse internals)
+      this.manager.sessionLastPush.set(session.id, Date.now());
 
       // Register to global channel
       this.manager.globalChannel.register(session);
@@ -99,8 +101,9 @@ export class SessionManager {
       // Deregister from global channel
       this.manager.globalChannel.deregister(session);
 
-      // Remove from sessions map
+      // Remove from sessions map and lastPush tracking
       this.manager.sessions.delete(sessionId);
+      this.manager.sessionLastPush.delete(sessionId);
 
       logger.info({ userId, sessionId }, 'SSE session removed');
     }
@@ -140,22 +143,38 @@ export class SessionManager {
    * Extracted from sse.js lines 196-221
    * @param {string} userId - User ID
    * @param {Object} data - Message data
-   * @returns {number} Count of messages sent
+   * @returns {Promise<number>} Count of messages sent
    */
-  sendToUser(userId, data) {
+  async sendToUser(userId, data) {
     const userSessions = this.getSessionsByUserId(userId);
     let sentCount = 0;
+    const failedSessions = [];
 
     for (const session of userSessions) {
       try {
-        session.push(data);
+        // session.push() returns a Promise - must await to catch errors
+        await session.push(data);
+        // Update our independent lastPush tracking for stale detection
+        this.manager.sessionLastPush.set(session.id, Date.now());
         sentCount++;
       } catch (error) {
         logger.error(
-          { userId, sessionId: session.id, error },
+          { userId, sessionId: session.id, error: error.message },
           'Error sending to user',
         );
-        this.removeClient(userId, session.id);
+        failedSessions.push(session.id);
+      }
+    }
+
+    // Clean up failed sessions after iteration to avoid modifying during loop
+    for (const sessionId of failedSessions) {
+      try {
+        await this.removeClient(userId, sessionId);
+      } catch (cleanupError) {
+        logger.error(
+          { userId, sessionId, error: cleanupError.message },
+          'Error cleaning up failed session',
+        );
       }
     }
 
@@ -226,7 +245,7 @@ export class SessionManager {
     logger.info({ userId, reason }, 'Forcing user logout via SSE');
 
     // Send logout notification
-    const sentCount = this.sendToUser(userId, {
+    const sentCount = await this.sendToUser(userId, {
       type: 'forceLogout',
       reason: reason,
       timestamp: new Date().toISOString(),

@@ -73,7 +73,9 @@ export class HeartbeatService {
     const staleSessions = [];
 
     for (const session of this.manager.sessions.values()) {
-      const timeSinceLastPush = now - (session.lastPushAt?.getTime() || now);
+      // Use our own tracking instead of relying on better-sse internals
+      const lastPush = this.manager.sessionLastPush.get(session.id) || now;
+      const timeSinceLastPush = now - lastPush;
       if (timeSinceLastPush > timeout) {
         staleSessions.push(session);
         logger.info(

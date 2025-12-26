@@ -104,34 +104,41 @@ export function SSETeamsProvider({ children }) {
   // Message handler to be called by parent
   const handleMessage = useCallback(
     (data) => {
-      switch (data.type) {
-        case 'init':
-          handleInit(data);
-          break;
-        case 'teamCreated':
-        case 'teamUpdated':
-          handleTeamCreatedOrUpdated(data);
-          break;
-        case 'teamDeleted':
-          handleTeamDeleted(data);
-          break;
-        case 'teamsReordered':
-          handleTeamsReordered(data);
-          break;
-        case 'teamStructureUpdated':
-          handleTeamStructureUpdated(data);
-          break;
-        case 'userTeamsUpdated':
-          handleUserTeamsUpdated(data);
-          break;
-        // Folder operations are handled by teamStructureUpdated
-        case 'folderCreated':
-        case 'folderUpdated':
-        case 'folderDeleted':
-          // No-op - structure updates handled by teamStructureUpdated
-          break;
-        default:
-          break;
+      try {
+        switch (data.type) {
+          case 'init':
+            handleInit(data);
+            break;
+          case 'teamCreated':
+          case 'teamUpdated':
+            handleTeamCreatedOrUpdated(data);
+            break;
+          case 'teamDeleted':
+            handleTeamDeleted(data);
+            break;
+          case 'teamsReordered':
+            handleTeamsReordered(data);
+            break;
+          case 'teamStructureUpdated':
+            handleTeamStructureUpdated(data);
+            break;
+          case 'userTeamsUpdated':
+            handleUserTeamsUpdated(data);
+            break;
+          // Folder operations are handled by teamStructureUpdated
+          case 'folderCreated':
+          case 'folderUpdated':
+          case 'folderDeleted':
+            // No-op - structure updates handled by teamStructureUpdated
+            break;
+          default:
+            break;
+        }
+      } catch (error) {
+        logger.error('Error in SSETeamsProvider handleMessage:', {
+          type: data?.type,
+          error: error.message,
+        });
       }
     },
     [

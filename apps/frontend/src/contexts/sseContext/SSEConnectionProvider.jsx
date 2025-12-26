@@ -25,6 +25,12 @@ export function SSEConnectionProvider({ children, onMessage }) {
   const connectionStatusRef = useRef('connecting');
   const subscribedAnalyses = useRef(new Set());
 
+  // Use ref for onMessage to prevent dependency cascade causing reconnections
+  const onMessageRef = useRef(onMessage);
+  useEffect(() => {
+    onMessageRef.current = onMessage;
+  }, [onMessage]);
+
   const getSSEUrl = useCallback(() => {
     if (!isAuthenticated) return null;
 
@@ -55,9 +61,9 @@ export function SSEConnectionProvider({ children, onMessage }) {
       }
 
       const data = await response.json();
-      // Pass status update to message handler
-      if (onMessage) {
-        onMessage({ type: 'statusUpdate', data });
+      // Pass status update to message handler (use ref to avoid dependency cascade)
+      if (onMessageRef.current) {
+        onMessageRef.current({ type: 'statusUpdate', data });
       }
       // Show success notification when status update completes
       showSuccess('Status refreshed successfully', 'Status Updated', 3000);
@@ -65,7 +71,7 @@ export function SSEConnectionProvider({ children, onMessage }) {
       logger.error('Error requesting status update:', error);
       showError('Failed to refresh status', 'Error', 4000);
     }
-  }, [isAuthenticated, onMessage]);
+  }, [isAuthenticated]);
 
   // Handle session invalidation
   const handleSessionInvalidated = useCallback((data) => {
@@ -113,15 +119,15 @@ export function SSEConnectionProvider({ children, onMessage }) {
           return;
         }
 
-        // Forward all messages to parent handler
-        if (onMessage) {
-          onMessage(data);
+        // Forward all messages to parent handler (use ref to avoid dependency cascade)
+        if (onMessageRef.current) {
+          onMessageRef.current(data);
         }
       } catch (error) {
         logger.error('Error handling SSE message:', error);
       }
     },
-    [onMessage, handleSessionInvalidated],
+    [handleSessionInvalidated],
   );
 
   // Define createConnection before reconnect to avoid circular dependency issues
@@ -175,8 +181,9 @@ export function SSEConnectionProvider({ children, onMessage }) {
 
             // Notify message handler that EventSource detected connection lost
             // This handles native disconnection (network failure, server restart, etc.)
-            if (onMessage) {
-              onMessage({ type: 'connectionLost' });
+            // Use ref to avoid dependency cascade causing reconnections
+            if (onMessageRef.current) {
+              onMessageRef.current({ type: 'connectionLost' });
             }
 
             // Use ref to avoid circular dependency
@@ -193,7 +200,7 @@ export function SSEConnectionProvider({ children, onMessage }) {
 
       eventSource.onmessage = handleMessage;
     });
-  }, [handleMessage, getSSEUrl, onMessage]);
+  }, [handleMessage, getSSEUrl]);
 
   const reconnect = useCallback(async () => {
     if (!mountedRef.current) return;

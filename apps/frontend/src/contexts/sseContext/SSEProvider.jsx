@@ -30,100 +30,109 @@ function MessageRouter({ children }) {
 
   // Stable handleMessage that doesn't change unless absolutely necessary
   const handleMessage = useCallback((data) => {
-    // Route messages to appropriate contexts using refs
-    switch (data.type) {
-      // Analysis-related messages
-      case 'init':
-        analysesRef.current.handleMessage(data);
-        teamsRef.current.handleMessage(data);
-        break;
-      case 'analysisUpdate':
-      case 'analysisCreated':
-      case 'analysisDeleted':
-      case 'analysisRenamed':
-      case 'analysisStatus':
-      case 'analysisUpdated':
-      case 'analysisEnvironmentUpdated':
-      case 'analysisMovedToTeam':
-      case 'log':
-      case 'logsCleared':
-      case 'analysisRolledBack':
-        analysesRef.current.handleMessage(data);
-        break;
-
-      // Team-related messages
-      case 'teamCreated':
-      case 'teamUpdated':
-      case 'teamDeleted':
-      case 'teamsReordered':
-      case 'teamStructureUpdated':
-      case 'folderCreated':
-      case 'folderUpdated':
-      case 'folderDeleted':
-      case 'userTeamsUpdated':
-        teamsRef.current.handleMessage(data);
-        // Also notify analyses context about team deletion
-        if (data.type === 'teamDeleted') {
+    try {
+      // Route messages to appropriate contexts using refs
+      switch (data.type) {
+        // Analysis-related messages
+        case 'init':
           analysesRef.current.handleMessage(data);
-        }
-        break;
+          teamsRef.current.handleMessage(data);
+          break;
+        case 'analysisUpdate':
+        case 'analysisCreated':
+        case 'analysisDeleted':
+        case 'analysisRenamed':
+        case 'analysisStatus':
+        case 'analysisUpdated':
+        case 'analysisEnvironmentUpdated':
+        case 'analysisMovedToTeam':
+        case 'log':
+        case 'logsCleared':
+        case 'analysisRolledBack':
+          analysesRef.current.handleMessage(data);
+          break;
 
-      // Backend/metrics-related messages
-      case 'statusUpdate':
-      case 'dnsConfigUpdated':
-      case 'dnsCacheCleared':
-      case 'dnsStatsReset':
-      case 'metricsUpdate':
-      case 'connectionLost':
-        backendRef.current.handleMessage(data);
-        break;
+        // Team-related messages
+        case 'teamCreated':
+        case 'teamUpdated':
+        case 'teamDeleted':
+        case 'teamsReordered':
+        case 'teamStructureUpdated':
+        case 'folderCreated':
+        case 'folderUpdated':
+        case 'folderDeleted':
+        case 'userTeamsUpdated':
+          teamsRef.current.handleMessage(data);
+          // Also notify analyses context about team deletion
+          if (data.type === 'teamDeleted') {
+            analysesRef.current.handleMessage(data);
+          }
+          break;
 
-      case 'userRoleUpdated':
-        // Show notification to user about role changes
-        if (data.data?.showNotification && data.data?.message) {
-          showSuccess(data.data.message, 'Role Updated', 5000);
-        }
-        // Note: Backend already sends a fresh 'init' message after role updates
-        // via refreshInitDataForUser(), so we don't need to trigger 'auth-change'
-        // which would clear PermissionsContext data and cause a race condition
-        logger.log(
-          'SSE: User role updated - new init message will arrive with updated permissions',
-        );
-        break;
+        // Backend/metrics-related messages
+        case 'statusUpdate':
+        case 'dnsConfigUpdated':
+        case 'dnsCacheCleared':
+        case 'dnsStatsReset':
+        case 'metricsUpdate':
+        case 'connectionLost':
+          backendRef.current.handleMessage(data);
+          break;
 
-      case 'forceLogout':
-        // Force logout the user
-        logger.log('SSE: Received force logout, logging out user...');
-        window.dispatchEvent(
-          new CustomEvent('force-logout', {
-            detail: {
-              reason: data.reason || 'Your session has been terminated',
-              timestamp: data.timestamp,
-            },
-          }),
-        );
-        break;
+        case 'userRoleUpdated':
+          // Show notification to user about role changes
+          if (data.data?.showNotification && data.data?.message) {
+            showSuccess(data.data.message, 'Role Updated', 5000);
+          }
+          // Note: Backend already sends a fresh 'init' message after role updates
+          // via refreshInitDataForUser(), so we don't need to trigger 'auth-change'
+          // which would clear PermissionsContext data and cause a race condition
+          logger.log(
+            'SSE: User role updated - new init message will arrive with updated permissions',
+          );
+          break;
 
-      case 'userDeleted':
-        // Dispatch custom event for user deletion
-        logger.log('SSE: User deleted:', data.data);
-        window.dispatchEvent(
-          new CustomEvent('userDeleted', {
-            detail: data.data,
-          }),
-        );
-        break;
+        case 'forceLogout':
+          // Force logout the user
+          logger.log('SSE: Received force logout, logging out user...');
+          window.dispatchEvent(
+            new CustomEvent('force-logout', {
+              detail: {
+                reason: data.reason || 'Your session has been terminated',
+                timestamp: data.timestamp,
+              },
+            }),
+          );
+          break;
 
-      case 'refresh':
-        // Refresh data via SSE instead of page reload
-        logger.log(
-          'Received refresh event - data will be updated via other SSE events',
-        );
-        break;
+        case 'userDeleted':
+          // Dispatch custom event for user deletion
+          logger.log('SSE: User deleted:', data.data);
+          window.dispatchEvent(
+            new CustomEvent('userDeleted', {
+              detail: data.data,
+            }),
+          );
+          break;
 
-      default:
-        logger.log('Unhandled SSE message type:', data.type);
-        break;
+        case 'refresh':
+          // Refresh data via SSE instead of page reload
+          logger.log(
+            'Received refresh event - data will be updated via other SSE events',
+          );
+          break;
+
+        default:
+          logger.log('Unhandled SSE message type:', data.type);
+          break;
+      }
+    } catch (error) {
+      // Error boundary - prevent SSE message processing errors from crashing the app
+      logger.error('Error processing SSE message:', {
+        type: data?.type,
+        error: error.message,
+        stack: error.stack,
+      });
     }
   }, []); // Empty dependencies - stable function that uses refs
 

@@ -27,6 +27,7 @@ export class SSEManager {
     this.sessions = new Map(); // sessionId -> Session
     this.analysisChannels = new Map(); // analysisId -> Channel
     this.globalChannel = createChannel(); // Global channel for non-log broadcasts
+    this.sessionLastPush = new Map(); // sessionId -> timestamp (independent tracking for stale detection)
 
     this.containerState = {
       status: 'ready',
@@ -180,7 +181,7 @@ export class SSEManager {
     return this.sessionManager.removeClient(userId, sessionId);
   }
 
-  sendToUser(userId, data) {
+  async sendToUser(userId, data) {
     return this.sessionManager.sendToUser(userId, data);
   }
 

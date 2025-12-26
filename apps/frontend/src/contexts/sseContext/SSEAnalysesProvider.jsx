@@ -124,6 +124,8 @@ export function SSEAnalysesProvider({ children }) {
           data.update.status === 'stopped' &&
           data.update.exitCode !== undefined
         ) {
+          logSequences.current.delete(analysisId);
+
           // Analysis stopped
           if (data.update.exitCode === 0) {
             // Normal exit - use info notification with X icon for stopped
@@ -220,6 +222,9 @@ export function SSEAnalysesProvider({ children }) {
     [removeLoadingAnalysis],
   );
 
+  // Maximum sequences to track per analysis to prevent memory leaks
+  const MAX_SEQUENCES_PER_ANALYSIS = 10000;
+
   const handleLog = useCallback((data) => {
     if (data.data?.analysisId && data.data?.log) {
       const { analysisId, log, totalCount } = data.data;
@@ -233,7 +238,19 @@ export function SSEAnalysesProvider({ children }) {
       // Add sequence to tracking
       if (log.sequence) {
         sequences.add(log.sequence);
-        logSequences.current.set(analysisId, sequences);
+
+        // Cleanup: Keep only recent sequences to prevent memory leaks
+        // When we exceed the limit, clear old sequences (they won't be duplicated anymore anyway)
+        if (sequences.size > MAX_SEQUENCES_PER_ANALYSIS) {
+          // Convert to array, sort descending, keep most recent
+          const sequencesArray = Array.from(sequences).sort((a, b) => b - a);
+          const trimmedSequences = new Set(
+            sequencesArray.slice(0, MAX_SEQUENCES_PER_ANALYSIS),
+          );
+          logSequences.current.set(analysisId, trimmedSequences);
+        } else {
+          logSequences.current.set(analysisId, sequences);
+        }
       }
 
       setAnalyses((prev) => {
@@ -344,42 +361,49 @@ export function SSEAnalysesProvider({ children }) {
   // Message handler to be called by parent
   const handleMessage = useCallback(
     (data) => {
-      switch (data.type) {
-        case 'init':
-          handleInit(data);
-          break;
-        case 'analysisUpdate':
-          handleAnalysisUpdate(data);
-          break;
-        case 'analysisCreated':
-          handleAnalysisCreated(data);
-          break;
-        case 'analysisDeleted':
-          handleAnalysisDeleted(data);
-          break;
-        // Consolidated handler for metadata updates (renamed, updated, env updated)
-        case 'analysisRenamed':
-        case 'analysisUpdated':
-        case 'analysisEnvironmentUpdated':
-          handleAnalysisMetadataUpdated(data);
-          break;
-        case 'log':
-          handleLog(data);
-          break;
-        case 'logsCleared':
-          handleLogsCleared(data);
-          break;
-        case 'analysisRolledBack':
-          handleAnalysisRolledBack(data);
-          break;
-        case 'analysisMovedToTeam':
-          handleAnalysisMovedToTeam(data);
-          break;
-        case 'teamDeleted':
-          handleTeamDeleted(data);
-          break;
-        default:
-          break;
+      try {
+        switch (data.type) {
+          case 'init':
+            handleInit(data);
+            break;
+          case 'analysisUpdate':
+            handleAnalysisUpdate(data);
+            break;
+          case 'analysisCreated':
+            handleAnalysisCreated(data);
+            break;
+          case 'analysisDeleted':
+            handleAnalysisDeleted(data);
+            break;
+          // Consolidated handler for metadata updates (renamed, updated, env updated)
+          case 'analysisRenamed':
+          case 'analysisUpdated':
+          case 'analysisEnvironmentUpdated':
+            handleAnalysisMetadataUpdated(data);
+            break;
+          case 'log':
+            handleLog(data);
+            break;
+          case 'logsCleared':
+            handleLogsCleared(data);
+            break;
+          case 'analysisRolledBack':
+            handleAnalysisRolledBack(data);
+            break;
+          case 'analysisMovedToTeam':
+            handleAnalysisMovedToTeam(data);
+            break;
+          case 'teamDeleted':
+            handleTeamDeleted(data);
+            break;
+          default:
+            break;
+        }
+      } catch (error) {
+        logger.error('Error in SSEAnalysesProvider handleMessage:', {
+          type: data?.type,
+          error: error.message,
+        });
       }
     },
     [
