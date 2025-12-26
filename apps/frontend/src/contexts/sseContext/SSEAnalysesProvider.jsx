@@ -186,10 +186,16 @@ export function SSEAnalysesProvider({ children }) {
     }
   }, []);
 
-  const handleAnalysisRenamed = useCallback((data) => {
-    // In v5.0, renaming only changes the name property - analysisId stays the same
-    if (data.data?.analysisId && data.data?.newName) {
-      const { analysisId, newName, restarted, teamId } = data.data;
+  /**
+   * Unified handler for analysis metadata updates.
+   * Handles: analysisUpdated, analysisRenamed, analysisEnvironmentUpdated
+   */
+  const handleAnalysisMetadataUpdated = useCallback(
+    (data) => {
+      if (!data.data?.analysisId) return;
+
+      const { analysisId, restarted, teamId, lastRun, startTime, newName } =
+        data.data;
 
       setAnalyses((prev) => {
         if (!prev[analysisId]) return prev;
@@ -197,25 +203,7 @@ export function SSEAnalysesProvider({ children }) {
           ...prev,
           [analysisId]: {
             ...prev[analysisId],
-            name: newName,
-            status: restarted ? 'running' : prev[analysisId].status,
-            enabled: restarted ? true : prev[analysisId].enabled,
-            teamId: teamId || prev[analysisId].teamId,
-          },
-        };
-      });
-    }
-  }, []);
-
-  const handleAnalysisUpdated = useCallback((data) => {
-    if (data.data?.analysisId) {
-      const { analysisId, restarted, teamId, lastRun, startTime } = data.data;
-      setAnalyses((prev) => {
-        if (!prev[analysisId]) return prev;
-        return {
-          ...prev,
-          [analysisId]: {
-            ...prev[analysisId],
+            ...(newName && { name: newName }),
             status: restarted ? 'running' : prev[analysisId].status,
             enabled: restarted ? true : prev[analysisId].enabled,
             teamId: teamId || prev[analysisId].teamId,
@@ -224,34 +212,13 @@ export function SSEAnalysesProvider({ children }) {
           },
         };
       });
+
       if (!restarted) {
-        setLoadingAnalyses((prev) => {
-          const newSet = new Set(prev);
-          newSet.delete(analysisId);
-          return newSet;
-        });
+        removeLoadingAnalysis(analysisId);
       }
-    }
-  }, []);
-
-  const handleAnalysisEnvironmentUpdated = useCallback((data) => {
-    if (data.data?.analysisId) {
-      const { analysisId, status, teamId, lastRun, startTime } = data.data;
-      setAnalyses((prev) => {
-        if (!prev[analysisId]) return prev;
-        return {
-          ...prev,
-          [analysisId]: {
-            ...prev[analysisId],
-            status: status || prev[analysisId].status,
-            teamId: teamId || prev[analysisId].teamId,
-            lastRun: lastRun || prev[analysisId].lastRun,
-            startTime: startTime || prev[analysisId].startTime,
-          },
-        };
-      });
-    }
-  }, []);
+    },
+    [removeLoadingAnalysis],
+  );
 
   const handleLog = useCallback((data) => {
     if (data.data?.analysisId && data.data?.log) {
@@ -390,14 +357,11 @@ export function SSEAnalysesProvider({ children }) {
         case 'analysisDeleted':
           handleAnalysisDeleted(data);
           break;
+        // Consolidated handler for metadata updates (renamed, updated, env updated)
         case 'analysisRenamed':
-          handleAnalysisRenamed(data);
-          break;
         case 'analysisUpdated':
-          handleAnalysisUpdated(data);
-          break;
         case 'analysisEnvironmentUpdated':
-          handleAnalysisEnvironmentUpdated(data);
+          handleAnalysisMetadataUpdated(data);
           break;
         case 'log':
           handleLog(data);
@@ -423,9 +387,7 @@ export function SSEAnalysesProvider({ children }) {
       handleAnalysisUpdate,
       handleAnalysisCreated,
       handleAnalysisDeleted,
-      handleAnalysisRenamed,
-      handleAnalysisUpdated,
-      handleAnalysisEnvironmentUpdated,
+      handleAnalysisMetadataUpdated,
       handleLog,
       handleLogsCleared,
       handleAnalysisRolledBack,

@@ -8,7 +8,6 @@
 
 import { createChildLogger } from '../logging/logger.js';
 import { createChannel } from 'better-sse';
-import { SSE_API_VERSION } from './utils.js';
 
 import { SessionManager } from './SessionManager.js';
 import { ChannelManager } from './ChannelManager.js';
