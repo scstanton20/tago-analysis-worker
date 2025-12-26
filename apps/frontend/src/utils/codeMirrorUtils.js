@@ -5,7 +5,7 @@
 
 import { EditorView, lineNumbers, keymap } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
-import { indentWithTab } from '@codemirror/commands';
+import { indentWithTab, defaultKeymap } from '@codemirror/commands';
 import { linter } from '@codemirror/lint';
 import * as prettier from 'prettier/standalone';
 import { Linter } from 'eslint-linter-browserify';
@@ -55,13 +55,7 @@ export async function formatCode(view) {
  */
 export const editorKeymap = keymap.of([
   indentWithTab, // Enable Tab for indentation
-  {
-    key: 'Mod-Shift-f', // Ctrl+Shift+F on Windows/Linux, Cmd+Shift+F on Mac
-    run: (view) => {
-      formatCode(view);
-      return true;
-    },
-  },
+  defaultKeymap,
 ]);
 
 /**
