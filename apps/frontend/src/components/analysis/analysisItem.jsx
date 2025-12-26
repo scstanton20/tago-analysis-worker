@@ -11,6 +11,7 @@ import {
   IconFolderPlus,
   IconFolderCog,
   IconHistory,
+  IconInfoCircle,
 } from '@tabler/icons-react';
 import {
   ActionMenu,
@@ -279,6 +280,18 @@ export default function AnalysisItem({ analysis, reorderMode = false }) {
               canDeleteAnalyses(analysis)) && (
               <ActionMenu
                 items={[
+                  // Analysis Information - Available to anyone who can view analyses
+                  ...(canViewAnalyses(analysis)
+                    ? [
+                        {
+                          label: 'Information',
+                          icon: <IconInfoCircle size={16} />,
+                          onClick: () =>
+                            modalService.openAnalysisInfo(analysis),
+                        },
+                        { type: 'divider' },
+                      ]
+                    : []),
                   // Team Management - Admins can move any analysis, users can move uncategorized
                   ...(isAdmin || isUncategorized
                     ? [

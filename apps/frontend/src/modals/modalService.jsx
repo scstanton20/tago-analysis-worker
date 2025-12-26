@@ -1,5 +1,5 @@
 import { modals } from '@mantine/modals';
-import { IconHistory, IconUser } from '@tabler/icons-react';
+import { IconHistory, IconUser, IconInfoCircle } from '@tabler/icons-react';
 import { IconLabel } from '../components/global';
 
 /**
@@ -316,6 +316,64 @@ export const modalService = {
       closeOnClickOutside: false,
       innerProps: {
         targetTeam: options.targetTeam || null,
+      },
+    });
+
+    return modalId;
+  },
+
+  /**
+   * Open Analysis Info modal
+   * Shows comprehensive metadata about an analysis
+   * @param {Object} analysis - The analysis to view info for
+   * @param {Function} onNotesUpdated - Optional callback when notes are updated
+   * @returns {string} Modal ID
+   */
+  openAnalysisInfo: (analysis, onNotesUpdated) => {
+    const modalId = `analysis-info-${analysis.id}-${Date.now()}`;
+
+    modals.openContextModal({
+      modal: 'analysisInfo',
+      modalId,
+      title: (
+        <IconLabel
+          icon={<IconInfoCircle size={20} aria-hidden="true" />}
+          label={`Analysis Information`}
+          fw={600}
+        />
+      ),
+      size: 'lg',
+      closeOnEscape: true,
+      innerProps: {
+        analysis,
+        onNotesUpdated,
+      },
+    });
+
+    return modalId;
+  },
+
+  /**
+   * Open Analysis Notes modal
+   * Provides a markdown editor for analysis documentation
+   * @param {Object} analysis - The analysis to edit notes for
+   * @param {Function} onNotesUpdated - Optional callback when notes are saved
+   * @returns {string} Modal ID
+   */
+  openAnalysisNotes: (analysis, onNotesUpdated) => {
+    const modalId = `analysis-notes-${analysis.id}-${Date.now()}`;
+
+    modals.openContextModal({
+      modal: 'analysisNotes',
+      modalId,
+      title: '', // Custom header in content
+      size: '90%',
+      closeOnEscape: false,
+      closeOnClickOutside: false,
+      withCloseButton: false, // Custom close button in content
+      innerProps: {
+        analysis,
+        onNotesUpdated,
       },
     });
 

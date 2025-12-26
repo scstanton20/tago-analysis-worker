@@ -246,4 +246,34 @@ export const analysisValidationSchemas = {
       analysisId: analysisIdSchema,
     }),
   },
+
+  /**
+   * GET /api/analyses/:analysisId/info - Get analysis notes
+   */
+  getAnalysisNotes: {
+    params: z.object({
+      analysisId: analysisIdSchema,
+    }),
+  },
+
+  /**
+   * PUT /api/analyses/:analysisId/info - Update analysis notes
+   */
+  updateAnalysisNotes: {
+    params: z.object({
+      analysisId: analysisIdSchema,
+    }),
+    body: z.object({
+      content: z.string().max(100000, 'Notes content must not exceed 100KB'),
+    }),
+  },
+
+  /**
+   * GET /api/analyses/:analysisId/info/meta - Get analysis metadata
+   */
+  getAnalysisMeta: {
+    params: z.object({
+      analysisId: analysisIdSchema,
+    }),
+  },
 };

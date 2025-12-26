@@ -1,4 +1,5 @@
 import { analysisService } from '../services/analysisService.js';
+import { analysisInfoService } from '../services/analysisInfoService.js';
 import { sseManager } from '../utils/sse/index.js';
 import path from 'path';
 import { config } from '../config/default.js';
@@ -1117,5 +1118,123 @@ export class AnalysisController {
     );
 
     res.json(env);
+  }
+
+  /**
+   * Get analysis metadata
+   * Returns comprehensive metadata about the analysis including file stats,
+   * version info, process status, team ownership, and DNS usage
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.analysisId - UUID of the analysis
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Response:
+   * - JSON object with comprehensive analysis metadata
+   */
+  static async getAnalysisMeta(req, res) {
+    const { analysisId } = req.params;
+
+    req.log.info(
+      { action: 'getAnalysisMeta', analysisId },
+      'Getting analysis metadata',
+    );
+
+    const meta = await analysisInfoService.getAnalysisMeta(analysisId, req.log);
+
+    req.log.info(
+      { action: 'getAnalysisMeta', analysisId },
+      'Analysis metadata retrieved',
+    );
+
+    res.json(meta);
+  }
+
+  /**
+   * Get analysis notes
+   * Returns markdown notes for the analysis, creating default template if none exist
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.analysisId - UUID of the analysis
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Response:
+   * - JSON object with notes content and metadata
+   */
+  static async getAnalysisNotes(req, res) {
+    const { analysisId } = req.params;
+
+    req.log.info(
+      { action: 'getAnalysisNotes', analysisId },
+      'Getting analysis notes',
+    );
+
+    const notes = await analysisInfoService.getAnalysisNotes(
+      analysisId,
+      req.log,
+    );
+
+    req.log.info(
+      { action: 'getAnalysisNotes', analysisId, isNew: notes.isNew },
+      'Analysis notes retrieved',
+    );
+
+    res.json(notes);
+  }
+
+  /**
+   * Update analysis notes
+   * Saves markdown notes for the analysis
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.analysisId - UUID of the analysis
+   * @param {Object} req.body - Request body
+   * @param {string} req.body.content - New notes content (markdown)
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   *
+   * Response:
+   * - JSON object with success status and notes metadata
+   */
+  static async updateAnalysisNotes(req, res) {
+    const { analysisId } = req.params;
+    const { content } = req.body;
+
+    req.log.info(
+      { action: 'updateAnalysisNotes', analysisId },
+      'Updating analysis notes',
+    );
+
+    const result = await analysisInfoService.updateAnalysisNotes(
+      analysisId,
+      content,
+      req.log,
+    );
+
+    req.log.info(
+      { action: 'updateAnalysisNotes', analysisId },
+      'Analysis notes updated',
+    );
+
+    // Broadcast notes update
+    sseManager.broadcastAnalysisUpdate(analysisId, {
+      type: 'analysisNotesUpdated',
+      data: {
+        analysisId,
+        analysisName: result.analysisName,
+        lineCount: result.lineCount,
+        lastModified: result.lastModified,
+      },
+    });
+
+    res.json(result);
   }
 }

@@ -409,6 +409,166 @@ describe('analysisSchemas', () => {
     });
   });
 
+  describe('getAnalysisNotes schema', () => {
+    describe('params validation', () => {
+      it('should validate valid analysisId (UUID)', () => {
+        const validData = {
+          analysisId: '123e4567-e89b-12d3-a456-426614174000',
+        };
+
+        const result = schemas.getAnalysisNotes.params.safeParse(validData);
+
+        expect(result.success).toBe(true);
+      });
+
+      it('should reject invalid UUID', () => {
+        const invalidData = {
+          analysisId: 'not-a-uuid',
+        };
+
+        const result = schemas.getAnalysisNotes.params.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0].message).toContain('UUID');
+      });
+
+      it('should require analysisId field', () => {
+        const invalidData = {};
+
+        const result = schemas.getAnalysisNotes.params.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0].path).toContain('analysisId');
+      });
+    });
+  });
+
+  describe('updateAnalysisNotes schema', () => {
+    describe('params validation', () => {
+      it('should validate valid analysisId (UUID)', () => {
+        const validData = {
+          analysisId: '123e4567-e89b-12d3-a456-426614174000',
+        };
+
+        const result = schemas.updateAnalysisNotes.params.safeParse(validData);
+
+        expect(result.success).toBe(true);
+      });
+
+      it('should reject invalid UUID', () => {
+        const invalidData = {
+          analysisId: 'not-a-uuid',
+        };
+
+        const result =
+          schemas.updateAnalysisNotes.params.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+      });
+    });
+
+    describe('body validation', () => {
+      it('should validate valid content', () => {
+        const validData = {
+          content: '# Analysis Notes\n\nSome documentation here.',
+        };
+
+        const result = schemas.updateAnalysisNotes.body.safeParse(validData);
+
+        expect(result.success).toBe(true);
+      });
+
+      it('should allow empty content string', () => {
+        const validData = {
+          content: '',
+        };
+
+        const result = schemas.updateAnalysisNotes.body.safeParse(validData);
+
+        expect(result.success).toBe(true);
+      });
+
+      it('should require content field', () => {
+        const invalidData = {};
+
+        const result = schemas.updateAnalysisNotes.body.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0].path).toContain('content');
+      });
+
+      it('should reject content exceeding 100KB', () => {
+        const invalidData = {
+          content: 'a'.repeat(100001),
+        };
+
+        const result = schemas.updateAnalysisNotes.body.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0].message).toContain('100KB');
+      });
+
+      it('should accept content at max length (100KB)', () => {
+        const validData = {
+          content: 'a'.repeat(100000),
+        };
+
+        const result = schemas.updateAnalysisNotes.body.safeParse(validData);
+
+        expect(result.success).toBe(true);
+      });
+    });
+  });
+
+  describe('getAnalysisMeta schema', () => {
+    describe('params validation', () => {
+      it('should validate valid analysisId (UUID)', () => {
+        const validData = {
+          analysisId: '123e4567-e89b-12d3-a456-426614174000',
+        };
+
+        const result = schemas.getAnalysisMeta.params.safeParse(validData);
+
+        expect(result.success).toBe(true);
+      });
+
+      it('should reject invalid UUID', () => {
+        const invalidData = {
+          analysisId: 'not-a-uuid',
+        };
+
+        const result = schemas.getAnalysisMeta.params.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0].message).toContain('UUID');
+      });
+
+      it('should require analysisId field', () => {
+        const invalidData = {};
+
+        const result = schemas.getAnalysisMeta.params.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0].path).toContain('analysisId');
+      });
+
+      it('should accept various valid UUID formats', () => {
+        const validUUIDs = [
+          '123e4567-e89b-12d3-a456-426614174000',
+          'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+          '00000000-0000-0000-0000-000000000000',
+        ];
+
+        validUUIDs.forEach((uuid) => {
+          const result = schemas.getAnalysisMeta.params.safeParse({
+            analysisId: uuid,
+          });
+          expect(result.success).toBe(true);
+        });
+      });
+    });
+  });
+
   describe('getAnalyses schema', () => {
     describe('query validation', () => {
       it('should validate empty query object', () => {

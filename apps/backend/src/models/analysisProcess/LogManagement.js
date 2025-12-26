@@ -186,6 +186,7 @@ export class LogManager {
       analysisName: this.analysisProcess.analysisName,
       log: logEntry,
       totalCount: this.analysisProcess.totalLogCount,
+      logFileSize: this.estimatedFileSize,
     });
   }
 

@@ -227,7 +227,7 @@ export function SSEAnalysesProvider({ children }) {
 
   const handleLog = useCallback((data) => {
     if (data.data?.analysisId && data.data?.log) {
-      const { analysisId, log, totalCount } = data.data;
+      const { analysisId, log, totalCount, logFileSize } = data.data;
 
       // Check for duplicate using sequence number
       const sequences = logSequences.current.get(analysisId) || new Set();
@@ -261,6 +261,7 @@ export function SSEAnalysesProvider({ children }) {
             ...prev[analysisId],
             logs: [log, ...(prev[analysisId]?.logs || [])].slice(0, 1000),
             totalLogCount: totalCount,
+            logFileSize: logFileSize,
           },
         };
       });
@@ -285,6 +286,7 @@ export function SSEAnalysesProvider({ children }) {
             ...prev[analysisId],
             logs: clearedLogs,
             totalLogCount: clearedLogs.length,
+            logFileSize: 0,
             logsClearedAt: Date.now(),
           },
         };
@@ -310,6 +312,7 @@ export function SSEAnalysesProvider({ children }) {
             ...analysisData,
             logs: [], // Clear logs since they were cleared during rollback
             totalLogCount: 0,
+            logFileSize: 0,
             currentVersion: version,
           },
         };

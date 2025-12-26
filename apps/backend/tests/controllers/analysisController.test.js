@@ -59,7 +59,16 @@ vi.mock('../../src/config/default.js', () => ({
   config: {
     paths: {
       analysis: '/tmp/test-analyses',
+      config: '/tmp/test-config',
     },
+  },
+}));
+
+vi.mock('../../src/services/analysisInfoService.js', () => ({
+  analysisInfoService: {
+    getAnalysisMeta: vi.fn(),
+    getAnalysisNotes: vi.fn(),
+    updateAnalysisNotes: vi.fn(),
   },
 }));
 

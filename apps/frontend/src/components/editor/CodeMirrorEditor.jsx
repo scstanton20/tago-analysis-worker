@@ -14,6 +14,7 @@ import { basicSetup } from 'codemirror';
 import { EditorView } from '@codemirror/view';
 import { EditorState, Compartment } from '@codemirror/state';
 import { javascript } from '@codemirror/lang-javascript';
+import { markdown } from '@codemirror/lang-markdown';
 import { lintGutter } from '@codemirror/lint';
 import { unifiedMergeView } from '@codemirror/merge';
 import { useMantineColorScheme } from '@mantine/core';
@@ -98,6 +99,8 @@ export function CodeMirrorEditor({
       // Add language support
       if (currentLanguage === 'javascript') {
         extensions.push(javascript());
+      } else if (currentLanguage === 'markdown') {
+        extensions.push(markdown());
       }
 
       const state = EditorState.create({
@@ -145,6 +148,8 @@ export function CodeMirrorEditor({
           extensions.push(lintGutter());
           extensions.push(createJavaScriptLinter(handleDiagnosticsChange));
         }
+      } else if (currentLanguage === 'markdown') {
+        extensions.push(markdown());
       }
 
       const state = EditorState.create({

@@ -10,6 +10,8 @@ import {
   createServiceLogger,
   createPostMethod,
   createDeleteMethod,
+  createGetMethod,
+  createPutMethod,
 } from '../utils/serviceFactory';
 
 const logger = createServiceLogger('analysisService');
@@ -348,6 +350,43 @@ export const analysisService = {
         analysisId,
         version,
       }),
+    },
+  ),
+
+  getAnalysisMeta: createGetMethod(
+    logger,
+    'fetch analysis metadata',
+    (analysisId) => `/analyses/${analysisId}/info/meta`,
+    {
+      debugMessage: 'Fetching analysis metadata',
+      successMessage: 'Analysis metadata fetched successfully',
+      getDebugParams: (analysisId) => ({ analysisId }),
+      getSuccessParams: (_result, analysisId) => ({ analysisId }),
+    },
+  ),
+
+  getAnalysisNotes: createGetMethod(
+    logger,
+    'fetch analysis notes',
+    (analysisId) => `/analyses/${analysisId}/info`,
+    {
+      debugMessage: 'Fetching analysis notes',
+      successMessage: 'Analysis notes fetched successfully',
+      getDebugParams: (analysisId) => ({ analysisId }),
+      getSuccessParams: (_result, analysisId) => ({ analysisId }),
+    },
+  ),
+
+  updateAnalysisNotes: createPutMethod(
+    logger,
+    'update analysis notes',
+    (analysisId) => `/analyses/${analysisId}/info`,
+    (_analysisId, content) => ({ content }),
+    {
+      debugMessage: 'Updating analysis notes',
+      successMessage: 'Analysis notes updated successfully',
+      getDebugParams: (analysisId) => ({ analysisId }),
+      getSuccessParams: (_result, analysisId) => ({ analysisId }),
     },
   ),
 };

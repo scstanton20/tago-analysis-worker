@@ -1035,6 +1035,285 @@ analysisIdRouter.post(
   asyncHandler(AnalysisController.rollbackToVersion, 'rollback to version'),
 );
 
+// Analysis info routes
+/**
+ * @swagger
+ * /analyses/{analysisId}/info/meta:
+ *   get:
+ *     summary: Get analysis metadata
+ *     description: |
+ *       Retrieve comprehensive metadata about an analysis including:
+ *       - File statistics (size, line count, creation/modification dates)
+ *       - Environment variable summary (count, size)
+ *       - Log file statistics
+ *       - Version history summary
+ *       - Team ownership information
+ *       - Process status and metrics (if running)
+ *       - DNS cache usage statistics
+ *     tags: [Analysis Management]
+ *     parameters:
+ *       - in: path
+ *         name: analysisId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: UUID of the analysis
+ *     responses:
+ *       200:
+ *         description: Analysis metadata retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 analysisId:
+ *                   type: string
+ *                   format: uuid
+ *                 analysisName:
+ *                   type: string
+ *                 file:
+ *                   type: object
+ *                   properties:
+ *                     size:
+ *                       type: integer
+ *                     sizeFormatted:
+ *                       type: string
+ *                     lineCount:
+ *                       type: integer
+ *                     created:
+ *                       type: string
+ *                       format: date-time
+ *                     modified:
+ *                       type: string
+ *                       format: date-time
+ *                 environment:
+ *                   type: object
+ *                   properties:
+ *                     size:
+ *                       type: integer
+ *                     lineCount:
+ *                       type: integer
+ *                     variableCount:
+ *                       type: integer
+ *                 logs:
+ *                   type: object
+ *                   properties:
+ *                     size:
+ *                       type: integer
+ *                     sizeFormatted:
+ *                       type: string
+ *                     totalCount:
+ *                       type: integer
+ *                 versions:
+ *                   type: object
+ *                   properties:
+ *                     count:
+ *                       type: integer
+ *                     currentVersion:
+ *                       type: integer
+ *                 team:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     name:
+ *                       type: string
+ *                 process:
+ *                   type: object
+ *                   properties:
+ *                     status:
+ *                       type: string
+ *                       enum: [running, stopped]
+ *                     enabled:
+ *                       type: boolean
+ *                     lastStartTime:
+ *                       type: string
+ *                       format: date-time
+ *                 metrics:
+ *                   type: object
+ *                   nullable: true
+ *                   properties:
+ *                     cpu:
+ *                       type: number
+ *                     memory:
+ *                       type: number
+ *                     uptime:
+ *                       type: number
+ *                 dns:
+ *                   type: object
+ *                   properties:
+ *                     enabled:
+ *                       type: boolean
+ *                     cacheSize:
+ *                       type: integer
+ *                     hitRate:
+ *                       type: string
+ *       404:
+ *         description: Analysis not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       403:
+ *         description: Insufficient permissions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+analysisIdRouter.get(
+  '/info/meta',
+  fileOperationLimiter,
+  validateRequest(analysisValidationSchemas.getAnalysisMeta),
+  requireTeamPermission('view_analyses'),
+  asyncHandler(AnalysisController.getAnalysisMeta, 'get analysis metadata'),
+);
+
+/**
+ * @swagger
+ * /analyses/{analysisId}/info:
+ *   get:
+ *     summary: Get analysis notes
+ *     description: |
+ *       Retrieve markdown notes for an analysis.
+ *       If no notes exist, a default template will be created and returned.
+ *     tags: [Analysis Management]
+ *     parameters:
+ *       - in: path
+ *         name: analysisId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: UUID of the analysis
+ *     responses:
+ *       200:
+ *         description: Analysis notes retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 analysisId:
+ *                   type: string
+ *                   format: uuid
+ *                 analysisName:
+ *                   type: string
+ *                 content:
+ *                   type: string
+ *                   description: Markdown content of the notes
+ *                 isNew:
+ *                   type: boolean
+ *                   description: Whether default template was just created
+ *                 lineCount:
+ *                   type: integer
+ *                 size:
+ *                   type: integer
+ *                 sizeFormatted:
+ *                   type: string
+ *                 lastModified:
+ *                   type: string
+ *                   format: date-time
+ *       404:
+ *         description: Analysis not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       403:
+ *         description: Insufficient permissions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+analysisIdRouter.get(
+  '/info',
+  fileOperationLimiter,
+  validateRequest(analysisValidationSchemas.getAnalysisNotes),
+  requireTeamPermission('view_analyses'),
+  asyncHandler(AnalysisController.getAnalysisNotes, 'get analysis notes'),
+);
+
+/**
+ * @swagger
+ * /analyses/{analysisId}/info:
+ *   put:
+ *     summary: Update analysis notes
+ *     description: Update markdown notes for an analysis
+ *     tags: [Analysis Management]
+ *     parameters:
+ *       - in: path
+ *         name: analysisId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: UUID of the analysis
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               content:
+ *                 type: string
+ *                 description: Markdown content for the notes
+ *                 maxLength: 100000
+ *             required:
+ *               - content
+ *     responses:
+ *       200:
+ *         description: Notes updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 analysisId:
+ *                   type: string
+ *                 analysisName:
+ *                   type: string
+ *                 lineCount:
+ *                   type: integer
+ *                 size:
+ *                   type: integer
+ *                 sizeFormatted:
+ *                   type: string
+ *                 lastModified:
+ *                   type: string
+ *                   format: date-time
+ *       400:
+ *         description: Invalid content provided
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ValidationError'
+ *       404:
+ *         description: Analysis not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       403:
+ *         description: Insufficient permissions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+analysisIdRouter.put(
+  '/info',
+  fileOperationLimiter,
+  validateRequest(analysisValidationSchemas.updateAnalysisNotes),
+  requireTeamPermission('edit_analyses'),
+  asyncHandler(AnalysisController.updateAnalysisNotes, 'update analysis notes'),
+);
+
 router.use('/:analysisId', analysisIdRouter);
 
 export { router as analysisRouter };

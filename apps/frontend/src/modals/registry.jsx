@@ -10,6 +10,8 @@ import VersionManagementModalContent from './components/VersionManagementModalCo
 import UserManagementModalContent from './components/UserManagementModalContent.jsx';
 import AnalysisEditModalContent from './components/AnalysisEditModalContent.jsx';
 import AnalysisCreatorModalContent from './components/AnalysisCreatorModalContent.jsx';
+import AnalysisInfoModalContent from './components/AnalysisInfoModalContent.jsx';
+import AnalysisNotesModalContent from './components/AnalysisNotesModalContent.jsx';
 
 /**
  * Modal Registry
@@ -43,6 +45,8 @@ const modalComponents = {
   userManagement: UserManagementModalContent,
   analysisEditor: AnalysisEditModalContent,
   analysisCreator: AnalysisCreatorModalContent,
+  analysisInfo: AnalysisInfoModalContent,
+  analysisNotes: AnalysisNotesModalContent,
 };
 
 export default modalComponents;
