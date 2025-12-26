@@ -52,6 +52,7 @@ export async function formatCode(view) {
 
 /**
  * Create format command for keyboard shortcut and Tab indentation
+ * Includes defaultKeymap which provides Cmd+/ (Ctrl+/) for comment toggle
  */
 export const editorKeymap = keymap.of([
   indentWithTab, // Enable Tab for indentation

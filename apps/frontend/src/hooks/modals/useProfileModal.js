@@ -6,10 +6,10 @@
  */
 
 import { useState, useCallback } from 'react';
-import { useAuth } from './useAuth';
-import { usePasswordManagement } from './usePasswordManagement';
-import { useProfileEditing } from './useProfileEditing';
-import { usePasskeyManagement } from './usePasskeyManagement';
+import { useAuth } from '../useAuth';
+import { usePasswordManagement } from '../usePasswordManagement';
+import { useProfileEditing } from '../useProfileEditing';
+import { usePasskeyManagement } from '../usePasskeyManagement';
 
 /**
  * Orchestrator hook for managing profile modal
@@ -46,6 +46,12 @@ export function useProfileModal({ closeModal }) {
     closeModal();
   }, [password, passkeys, closeModal]);
 
+  // Compute if any form has unsaved changes
+  const hasUnsavedChanges =
+    (profile.isEditingProfile && profile.profileFormState.isDirty) ||
+    password.passwordFormState.isDirty ||
+    passkeys.passkeyFormState.isDirty;
+
   return {
     // Tab state
     activeTab,
@@ -80,6 +86,9 @@ export function useProfileModal({ closeModal }) {
     passkeyFormState: passkeys.passkeyFormState,
     handleRegisterPasskey: passkeys.handleRegisterPasskey,
     handleDeletePasskey: passkeys.handleDeletePasskey,
+
+    // Unsaved changes tracking
+    hasUnsavedChanges,
 
     // Modal control
     handleClose,

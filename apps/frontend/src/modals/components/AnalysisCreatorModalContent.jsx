@@ -19,7 +19,9 @@ import {
   FormAlert,
   LoadingState,
   FormActionButtons,
+  UnsavedChangesOverlay,
 } from '../../components/global';
+import { useUnsavedChangesGuard } from '../../hooks/modals';
 import { Dropzone } from '@mantine/dropzone';
 import {
   IconUpload,
@@ -127,6 +129,17 @@ const AnalysisCreatorModalContent = ({ id, innerProps }) => {
     form.setFieldValue('editorContent', newContent);
   };
 
+  // Calculate hasFormContent before any early returns (hooks must be called unconditionally)
+  const hasFormContent =
+    form.values.selectedFile ||
+    form.values.editorContent !== DEFAULT_EDITOR_CONTENT ||
+    form.values.analysisName ||
+    form.values.editableFileName;
+
+  // Guard against closing with unsaved content (must be called before early returns)
+  const { showConfirmation, requestAction, confirmDiscard, cancelDiscard } =
+    useUnsavedChangesGuard(hasFormContent);
+
   // If user has no upload permissions anywhere, show warning
   if (!isAdmin && uploadableTeams.length === 0) {
     return (
@@ -153,11 +166,6 @@ const AnalysisCreatorModalContent = ({ id, innerProps }) => {
     );
   }
 
-  const hasFormContent =
-    form.values.selectedFile ||
-    form.values.editorContent !== DEFAULT_EDITOR_CONTENT ||
-    form.values.analysisName ||
-    form.values.editableFileName;
   const isSaveDisabled =
     isCurrentAnalysisLoading ||
     (form.values.mode === 'create' && !form.values.analysisName) ||
@@ -287,7 +295,9 @@ const AnalysisCreatorModalContent = ({ id, innerProps }) => {
   });
 
   const handleCancel = () => {
-    modals.close(id);
+    if (requestAction(() => modals.close(id))) {
+      modals.close(id);
+    }
   };
 
   // Utility functions
@@ -297,7 +307,16 @@ const AnalysisCreatorModalContent = ({ id, innerProps }) => {
   };
 
   return (
-    <Stack>
+    <Stack style={{ position: 'relative' }}>
+      {/* Unsaved changes confirmation overlay */}
+      {showConfirmation && (
+        <UnsavedChangesOverlay
+          onConfirm={confirmDiscard}
+          onCancel={cancelDiscard}
+          message="You have unsaved content. Are you sure you want to discard it?"
+        />
+      )}
+
       {/* Mode Toggle */}
       <Tabs value={form.values.mode} onChange={handleModeChange}>
         <Tabs.List>
@@ -487,6 +506,16 @@ const AnalysisCreatorModalContent = ({ id, innerProps }) => {
                 </Suspense>
               )}
             </Box>
+
+            {/* Editor stats */}
+            <Group gap="md">
+              <Text size="xs" c="dimmed">
+                {form.values.editorContent.split('\n').length} lines
+              </Text>
+              <Text size="xs" c="dimmed">
+                {form.values.editorContent.length.toLocaleString()} characters
+              </Text>
+            </Group>
           </Stack>
         </Tabs.Panel>
       </Tabs>

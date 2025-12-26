@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { modals } from '@mantine/modals';
+import { ConfirmDialog } from '../../components/global';
 import { useUserCRUD } from './useUserCRUD';
 import { useUserActions } from './useUserActions';
 
@@ -32,11 +32,9 @@ export function useUserOperations({
   // Wrap delete handler with confirmation modal
   const handleDelete = useCallback(
     (user) => {
-      modals.openConfirmModal({
+      ConfirmDialog.delete({
         title: 'Delete User',
-        children: `Are you sure you want to delete user "${user.name || user.email}"?`,
-        labels: { confirm: 'Delete', cancel: 'Cancel' },
-        confirmProps: { color: 'red' },
+        itemName: user.name || user.email,
         onConfirm: () => crud.handleDelete(user),
       });
     },
@@ -46,11 +44,10 @@ export function useUserOperations({
   // Wrap impersonate handler with confirmation modal
   const handleImpersonate = useCallback(
     (user) => {
-      modals.openConfirmModal({
+      ConfirmDialog.info({
         title: 'Impersonate User',
-        children: `Are you sure you want to impersonate "${user.name || user.email}"? You will be logged in as this user.`,
-        labels: { confirm: 'Impersonate', cancel: 'Cancel' },
-        confirmProps: { color: 'blue' },
+        message: `Are you sure you want to impersonate "${user.name || user.email}"? You will be logged in as this user.`,
+        confirmLabel: 'Impersonate',
         onConfirm: () => actions.handleImpersonate(user),
       });
     },
@@ -60,11 +57,10 @@ export function useUserOperations({
   // Wrap ban handler with confirmation modal
   const handleBanUser = useCallback(
     (user) => {
-      modals.openConfirmModal({
+      ConfirmDialog.destructive({
         title: 'Ban User',
-        children: `Are you sure you want to ban "${user.name || user.email}"? This will immediately log them out and prevent them from signing in.`,
-        labels: { confirm: 'Ban User', cancel: 'Cancel' },
-        confirmProps: { color: 'red' },
+        message: `Are you sure you want to ban "${user.name || user.email}"? This will immediately log them out and prevent them from signing in.`,
+        confirmLabel: 'Ban User',
         onConfirm: () => actions.handleBanUser(user),
       });
     },

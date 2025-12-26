@@ -41,6 +41,8 @@ import {
 } from '@tabler/icons-react';
 import { modals } from '@mantine/modals';
 import { useAnalysisEdit } from '../../hooks/useAnalysisEdit';
+import { useUnsavedChangesGuard } from '../../hooks/modals';
+import { UnsavedChangesOverlay } from '../../components/global';
 import { useDiagnostics } from '../../hooks/useDiagnostics';
 const CodeMirrorEditor = lazy(() =>
   import('../../components/editor/CodeMirrorEditor.jsx').then((m) => ({
@@ -116,6 +118,17 @@ function AnalysisEditModalContent({ id, innerProps }) {
     navigateToPrevDiagnostic,
   } = useDiagnostics();
 
+  // Guard against closing with unsaved changes
+  const { showConfirmation, requestClose, confirmDiscard, cancelDiscard } =
+    useUnsavedChangesGuard(hasChanges && !readOnly);
+
+  // Handle close with unsaved changes check
+  const handleClose = () => {
+    if (requestClose(() => modals.close(id))) {
+      modals.close(id);
+    }
+  };
+
   // Handle save and close
   const handleSaveAndClose = async () => {
     const success = await handleSave();
@@ -130,7 +143,16 @@ function AnalysisEditModalContent({ id, innerProps }) {
   const versionText = version !== null && version !== 0 ? ` (v${version})` : '';
 
   return (
-    <Stack h="calc(100vh - 200px)">
+    <Stack h="calc(100vh - 200px)" style={{ position: 'relative' }}>
+      {/* Unsaved changes confirmation overlay */}
+      {showConfirmation && (
+        <UnsavedChangesOverlay
+          onConfirm={confirmDiscard}
+          onCancel={cancelDiscard}
+          message="You have unsaved changes to this analysis. Are you sure you want to discard them?"
+        />
+      )}
+
       {/* Custom modal header - replacing default Mantine header */}
       <Box
         mb="sm"
@@ -200,7 +222,7 @@ function AnalysisEditModalContent({ id, innerProps }) {
               </Text>
             )}
           </Group>
-          <CloseButton onClick={() => modals.close(id)} size="lg" />
+          <CloseButton onClick={handleClose} size="lg" />
         </Group>
         {showDiffToggle && (
           <Group gap="xs" wrap="nowrap">
@@ -256,88 +278,102 @@ function AnalysisEditModalContent({ id, innerProps }) {
         </Suspense>
       </Box>
 
-      <Group
-        justify="space-between"
+      <Stack
+        gap="xs"
         pt="md"
         style={{ borderTop: '1px solid var(--mantine-color-gray-3)' }}
       >
-        <Group>
-          {!readOnly && !isEnvMode && formatCodeFn && (
-            <SecondaryButton
-              leftSection={<IconWand size={16} />}
-              onClick={handleFormat}
-              disabled={isLoading || !hasFormatChanges}
-            >
-              Format (Ctrl/CMD+Shift+F)
-            </SecondaryButton>
-          )}
-          {!readOnly && !isEnvMode && (errorCount > 0 || warningCount > 0) && (
-            <Group gap="xs">
-              <Group gap={4}>
-                {errorCount > 0 && (
-                  <Tooltip
-                    label={`${errorCount} error${errorCount > 1 ? 's' : ''}`}
-                  >
-                    <Badge
-                      color="red"
-                      variant="filled"
-                      leftSection={<IconCircleXFilled size={12} />}
-                    >
-                      {errorCount}
-                    </Badge>
-                  </Tooltip>
-                )}
-                {warningCount > 0 && (
-                  <Tooltip
-                    label={`${warningCount} warning${warningCount > 1 ? 's' : ''}`}
-                  >
-                    <Badge
-                      color="yellow"
-                      variant="filled"
-                      leftSection={<IconAlertTriangleFilled size={12} />}
-                    >
-                      {warningCount}
-                    </Badge>
-                  </Tooltip>
-                )}
-              </Group>
-              <Group gap={4}>
-                <Tooltip label="Previous issue">
-                  <ActionIcon
-                    variant="subtle"
-                    onClick={navigateToPrevDiagnostic}
-                    disabled={errorCount + warningCount === 0}
-                    size="sm"
-                  >
-                    <IconChevronUp size={16} />
-                  </ActionIcon>
-                </Tooltip>
-                <Tooltip label="Next issue">
-                  <ActionIcon
-                    variant="subtle"
-                    onClick={navigateToNextDiagnostic}
-                    disabled={errorCount + warningCount === 0}
-                    size="sm"
-                  >
-                    <IconChevronDown size={16} />
-                  </ActionIcon>
-                </Tooltip>
-              </Group>
-            </Group>
+        {/* Editor stats */}
+        <Group gap="md">
+          <Text size="xs" c="dimmed">
+            {content.split('\n').length} lines
+          </Text>
+          <Text size="xs" c="dimmed">
+            {content.length.toLocaleString()} characters
+          </Text>
+        </Group>
+
+        <Group justify="space-between">
+          <Group gap="lg">
+            {!readOnly && !isEnvMode && formatCodeFn && (
+              <SecondaryButton
+                leftSection={<IconWand size={16} />}
+                onClick={handleFormat}
+                disabled={isLoading || !hasFormatChanges}
+              >
+                Format (Ctrl/CMD+Shift+F)
+              </SecondaryButton>
+            )}
+            {!readOnly &&
+              !isEnvMode &&
+              (errorCount > 0 || warningCount > 0) && (
+                <Group gap="xs">
+                  <Group gap={4}>
+                    {errorCount > 0 && (
+                      <Tooltip
+                        label={`${errorCount} error${errorCount > 1 ? 's' : ''}`}
+                      >
+                        <Badge
+                          color="red"
+                          variant="filled"
+                          leftSection={<IconCircleXFilled size={12} />}
+                        >
+                          {errorCount}
+                        </Badge>
+                      </Tooltip>
+                    )}
+                    {warningCount > 0 && (
+                      <Tooltip
+                        label={`${warningCount} warning${warningCount > 1 ? 's' : ''}`}
+                      >
+                        <Badge
+                          color="yellow"
+                          variant="filled"
+                          leftSection={<IconAlertTriangleFilled size={12} />}
+                        >
+                          {warningCount}
+                        </Badge>
+                      </Tooltip>
+                    )}
+                  </Group>
+                  <Group gap={4}>
+                    <Tooltip label="Previous issue">
+                      <ActionIcon
+                        variant="subtle"
+                        onClick={navigateToPrevDiagnostic}
+                        disabled={errorCount + warningCount === 0}
+                        size="sm"
+                      >
+                        <IconChevronUp size={16} />
+                      </ActionIcon>
+                    </Tooltip>
+                    <Tooltip label="Next issue">
+                      <ActionIcon
+                        variant="subtle"
+                        onClick={navigateToNextDiagnostic}
+                        disabled={errorCount + warningCount === 0}
+                        size="sm"
+                      >
+                        <IconChevronDown size={16} />
+                      </ActionIcon>
+                    </Tooltip>
+                  </Group>
+                </Group>
+              )}
+          </Group>
+          {!readOnly ? (
+            <FormActionButtons
+              onSubmit={handleSaveAndClose}
+              onCancel={handleClose}
+              loading={isLoading}
+              disabled={!hasChanges}
+              submitLabel="Save Changes"
+            />
+          ) : (
+            <CancelButton onClick={handleClose}>Close</CancelButton>
           )}
         </Group>
-        {!readOnly ? (
-          <FormActionButtons
-            onSubmit={handleSaveAndClose}
-            onCancel={() => modals.close(id)}
-            loading={isLoading}
-            disabled={!hasChanges}
-            submitLabel="Save Changes"
-          />
-        ) : (
-          <CancelButton onClick={() => modals.close(id)}>Close</CancelButton>
-        )}
-      </Group>
+      </Stack>
     </Stack>
   );
 }

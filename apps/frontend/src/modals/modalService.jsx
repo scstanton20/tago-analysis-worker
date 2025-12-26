@@ -158,9 +158,10 @@ export const modalService = {
     modals.openContextModal({
       modal: 'teamManagement',
       modalId,
-      title: 'Manage Teams',
+      title: '', // Custom header will be in the content
       size: 'lg',
       closeOnEscape: false,
+      withCloseButton: false, // Custom close button in content handles unsaved changes
       innerProps: {},
     });
 
@@ -177,15 +178,10 @@ export const modalService = {
     modals.openContextModal({
       modal: 'profile',
       modalId,
-      title: (
-        <IconLabel
-          icon={<IconUser size={20} aria-hidden="true" />}
-          label="Profile Settings"
-          fw={600}
-        />
-      ),
+      title: '', // Custom header will be in the content
       size: 'lg',
       closeOnEscape: false,
+      withCloseButton: false, // Custom close button in content handles unsaved changes
       innerProps: {},
     });
 

@@ -91,7 +91,12 @@ function InfoRow({ label, value, mono = false }) {
       <Text size="sm" c="dimmed">
         {label}
       </Text>
-      <Text size="sm" fw={500} ff={mono ? 'monospace' : undefined}>
+      <Text
+        size="sm"
+        fw={500}
+        ff={mono ? 'monospace' : undefined}
+        component="span"
+      >
         {value ?? 'N/A'}
       </Text>
     </Group>

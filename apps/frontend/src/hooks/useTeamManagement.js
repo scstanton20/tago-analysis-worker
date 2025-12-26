@@ -241,6 +241,23 @@ export function useTeamManagement() {
     [teamsArray],
   );
 
+  /**
+   * Check if there are unsaved inline edits
+   * Returns true if a team is being edited and the values differ from original
+   */
+  const hasUnsavedInlineEdits = useMemo(() => {
+    if (!editingId) return false;
+
+    const currentTeam = teamsArray.find((t) => t.id === editingId);
+    if (!currentTeam) return false;
+
+    // Check if name or color has changed from original
+    const nameChanged = editingName !== currentTeam.name;
+    const colorChanged = editingColor !== currentTeam.color;
+
+    return nameChanged || colorChanged;
+  }, [editingId, editingName, editingColor, teamsArray]);
+
   return {
     // State
     editingId,
@@ -269,5 +286,6 @@ export function useTeamManagement() {
     cancelEditing,
     resetState,
     isNameUsed,
+    hasUnsavedInlineEdits,
   };
 }

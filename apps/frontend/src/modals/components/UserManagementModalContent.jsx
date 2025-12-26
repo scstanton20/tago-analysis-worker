@@ -19,7 +19,9 @@ import {
   ContentBox,
   LoadingState,
   PrimaryButton,
+  UnsavedChangesOverlay,
 } from '../../components/global';
+import { useUnsavedChangesGuard } from '../../hooks/modals';
 import { IconPlus, IconUser, IconCopy, IconCheck } from '@tabler/icons-react';
 import { modals } from '@mantine/modals';
 import { useAuth } from '../../hooks/useAuth';
@@ -84,6 +86,11 @@ function UserManagementModalContent({ id }) {
     }
   }, [isAdmin]);
 
+  // Guard against closing with unsaved form data
+  const hasUnsavedFormData = showCreateForm && formState?.isDirty;
+  const { showConfirmation, requestAction, confirmDiscard, cancelDiscard } =
+    useUnsavedChangesGuard(hasUnsavedFormData);
+
   // Only show if user is admin
   if (!isAdmin) {
     return null;
@@ -92,7 +99,12 @@ function UserManagementModalContent({ id }) {
   // Handle close button click - conditionally close form or modal
   const handleCloseClick = () => {
     if (showCreateForm || createdUserInfo) {
-      handleCancel(); // Just close the form, stay in modal
+      // If form has unsaved changes, show confirmation
+      if (hasUnsavedFormData) {
+        requestAction(() => handleCancel());
+      } else {
+        handleCancel(); // Just close the form, stay in modal
+      }
     } else {
       modals.close(id); // Close the entire modal
     }
@@ -100,7 +112,16 @@ function UserManagementModalContent({ id }) {
 
   return (
     <LoadingState loading={loading}>
-      <Stack gap="md">
+      <Stack gap="md" style={{ position: 'relative' }}>
+        {/* Unsaved changes confirmation overlay */}
+        {showConfirmation && (
+          <UnsavedChangesOverlay
+            onConfirm={confirmDiscard}
+            onCancel={cancelDiscard}
+            message="You have unsaved changes to this user. Are you sure you want to discard them?"
+          />
+        )}
+
         {/* Custom Modal Header */}
         <Group gap="xs" justify="space-between" mb="md">
           <Group gap="xs">

@@ -67,7 +67,33 @@ export const ConfirmDialog = {
   },
 
   /**
-   * Opens a warning confirmation dialog with yellow styling
+   * Opens a destructive action confirmation dialog with red styling
+   * Use for dangerous actions like ban, revoke, remove access, etc.
+   */
+  destructive: ({
+    title = 'Confirm Action',
+    message,
+    confirmLabel = 'Confirm',
+    onConfirm,
+    onCancel,
+    loading = false,
+    ...props
+  }) => {
+    ConfirmDialog.open({
+      title,
+      message,
+      confirmLabel,
+      confirmColor: 'red',
+      onConfirm,
+      onCancel,
+      loading,
+      ...props,
+    });
+  },
+
+  /**
+   * Opens a warning confirmation dialog with orange styling
+   * Use for actions that need caution but aren't necessarily destructive
    */
   warning: ({
     title = 'Warning',
@@ -82,7 +108,7 @@ export const ConfirmDialog = {
       title,
       message,
       confirmLabel,
-      confirmColor: 'yellow',
+      confirmColor: 'orange',
       onConfirm,
       onCancel,
       loading,
@@ -113,6 +139,36 @@ export const ConfirmDialog = {
       ...props,
     });
   },
+
+  /**
+   * Opens an unsaved changes confirmation dialog
+   * Used when user tries to close a modal or navigate away with pending changes
+   */
+  unsavedChanges: ({
+    title = 'Unsaved Changes',
+    message,
+    confirmLabel = 'Discard Changes',
+    cancelLabel = 'Keep Editing',
+    onConfirm,
+    onCancel,
+    loading = false,
+    ...props
+  }) => {
+    const defaultMessage =
+      'You have unsaved changes. Are you sure you want to discard them?';
+
+    ConfirmDialog.open({
+      title,
+      message: message || defaultMessage,
+      confirmLabel,
+      cancelLabel,
+      confirmColor: 'red',
+      onConfirm,
+      onCancel,
+      loading,
+      ...props,
+    });
+  },
 };
 
 // PropTypes for better IDE support
@@ -133,6 +189,16 @@ ConfirmDialog.delete.propTypes = {
   title: PropTypes.string,
   message: PropTypes.string,
   itemName: PropTypes.string,
+  onConfirm: PropTypes.func.isRequired,
+  onCancel: PropTypes.func,
+  loading: PropTypes.bool,
+};
+
+ConfirmDialog.unsavedChanges.propTypes = {
+  title: PropTypes.string,
+  message: PropTypes.string,
+  confirmLabel: PropTypes.string,
+  cancelLabel: PropTypes.string,
   onConfirm: PropTypes.func.isRequired,
   onCancel: PropTypes.func,
   loading: PropTypes.bool,

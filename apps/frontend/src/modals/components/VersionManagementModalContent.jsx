@@ -19,7 +19,6 @@ import {
   Center,
   Tooltip,
 } from '@mantine/core';
-import { modals } from '@mantine/modals';
 import {
   IconDownload,
   IconPlayerPlay,
@@ -31,7 +30,11 @@ import {
 import { analysisService } from '../../services/analysisService';
 import { notificationAPI } from '../../utils/notificationAPI.jsx';
 import { modalService } from '../modalService';
-import { LoadingState, FormAlert } from '../../components/global';
+import {
+  LoadingState,
+  FormAlert,
+  ConfirmDialog,
+} from '../../components/global';
 import logger from '../../utils/logger';
 import PropTypes from 'prop-types';
 
@@ -130,11 +133,10 @@ function VersionManagementModalContent({ innerProps }) {
   };
 
   const handleRollback = async (version) => {
-    modals.openConfirmModal({
+    ConfirmDialog.warning({
       title: 'Rollback to Previous Version',
-      children: `Are you sure you want to rollback "${analysis.name}" to version ${version}? This will clear the current logs and restart the analysis if it's running.`,
-      labels: { confirm: 'Rollback', cancel: 'Cancel' },
-      confirmProps: { color: 'orange' },
+      message: `Are you sure you want to rollback "${analysis.name}" to version ${version}? This will clear the current logs and restart the analysis if it's running.`,
+      confirmLabel: 'Rollback',
       onConfirm: async () => {
         setRollbackLoading(version);
         try {

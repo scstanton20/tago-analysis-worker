@@ -26,7 +26,7 @@ import {
   Tooltip,
 } from '@mantine/core';
 import { ActionMenu } from '../global/menus/ActionMenu';
-import { modals } from '@mantine/modals';
+import { ConfirmDialog } from '../global';
 import {
   IconFileText,
   IconUserX,
@@ -168,16 +168,9 @@ export default function AnalysisList({
           break;
 
         case 'delete':
-          modals.openConfirmModal({
+          ConfirmDialog.delete({
             title: 'Delete Folder',
-            children: (
-              <Text size="sm">
-                Are you sure you want to delete "{folder.name}"? All items
-                inside will be moved to the parent folder.
-              </Text>
-            ),
-            labels: { confirm: 'Delete', cancel: 'Cancel' },
-            confirmProps: { color: 'red' },
+            message: `Are you sure you want to delete "${folder.name}"? All items inside will be moved to the parent folder.`,
             onConfirm: async () => {
               if (reorderMode) {
                 const isTempFolder = folder.id.startsWith('temp-');

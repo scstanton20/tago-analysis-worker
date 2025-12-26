@@ -13,24 +13,18 @@ import {
   CloseButton,
   Badge,
   ScrollArea,
-  TypographyStylesProvider,
-  Alert,
 } from '@mantine/core';
-import {
-  IconNotes,
-  IconEdit,
-  IconEye,
-  IconAlertTriangle,
-} from '@tabler/icons-react';
+import { IconNotes, IconEdit, IconEye } from '@tabler/icons-react';
 import {
   FormAlert,
   FormActionButtons,
   LoadingState,
   SecondaryButton,
   CancelButton,
-  DangerButton,
+  UnsavedChangesOverlay,
 } from '../../components/global';
 import { modals } from '@mantine/modals';
+import { useUnsavedChangesGuard } from '../../hooks/modals';
 import { analysisService } from '../../services/analysisService';
 import { useAsyncMountOnce } from '../../hooks/async/useAsyncMount';
 import { useAsyncOperation } from '../../hooks/async/useAsyncOperation';
@@ -47,7 +41,6 @@ function AnalysisNotesModalContent({ id, innerProps }) {
   const [content, setContent] = useState('');
   const [originalContent, setOriginalContent] = useState('');
   const [isEditing, setIsEditing] = useState(false);
-  const [pendingAction, setPendingAction] = useState(null); // 'view' | 'close' | null
 
   // Load notes on mount
   const {
@@ -66,45 +59,33 @@ function AnalysisNotesModalContent({ id, innerProps }) {
   // Check if content has changed
   const hasChanges = content !== originalContent;
 
+  // Guard against closing/switching with unsaved changes
+  const { showConfirmation, requestAction, confirmDiscard, cancelDiscard } =
+    useUnsavedChangesGuard(isEditing && hasChanges);
+
+  // Handle close with unsaved changes check
+  const handleClose = () => {
+    if (requestAction(() => modals.close(id))) {
+      modals.close(id);
+    }
+  };
+
   // Handle editor content change
   const handleEditorChange = useCallback((value) => {
     setContent(value);
   }, []);
 
-  // Toggle edit mode
+  // Toggle edit mode with unsaved changes check
   const handleToggleEdit = () => {
     if (isEditing && hasChanges) {
-      // Show confirmation inline
-      setPendingAction('view');
+      // Request action - will show confirmation overlay
+      requestAction(() => {
+        setContent(originalContent);
+        setIsEditing(false);
+      });
     } else {
       setIsEditing(!isEditing);
     }
-  };
-
-  // Handle close modal
-  const handleClose = () => {
-    if (isEditing && hasChanges) {
-      // Show confirmation inline
-      setPendingAction('close');
-    } else {
-      modals.close(id);
-    }
-  };
-
-  // Confirm discard changes
-  const handleConfirmDiscard = () => {
-    if (pendingAction === 'view') {
-      setContent(originalContent);
-      setIsEditing(false);
-    } else if (pendingAction === 'close') {
-      modals.close(id);
-    }
-    setPendingAction(null);
-  };
-
-  // Cancel discard
-  const handleCancelDiscard = () => {
-    setPendingAction(null);
   };
 
   // Handle save
@@ -138,7 +119,16 @@ function AnalysisNotesModalContent({ id, innerProps }) {
   }
 
   return (
-    <Stack h="calc(100vh - 200px)">
+    <Stack h="calc(100vh - 200px)" style={{ position: 'relative' }}>
+      {/* Unsaved changes confirmation overlay */}
+      {showConfirmation && (
+        <UnsavedChangesOverlay
+          onConfirm={confirmDiscard}
+          onCancel={cancelDiscard}
+          message="You have unsaved changes to these notes. Are you sure you want to discard them?"
+        />
+      )}
+
       {/* Custom modal header */}
       <Box
         mb="sm"
@@ -164,44 +154,16 @@ function AnalysisNotesModalContent({ id, innerProps }) {
                 isEditing ? <IconEye size={14} /> : <IconEdit size={14} />
               }
               onClick={handleToggleEdit}
-              disabled={pendingAction !== null}
             >
               {isEditing ? 'View' : 'Edit'}
             </SecondaryButton>
-            <CloseButton
-              onClick={handleClose}
-              size="lg"
-              disabled={pendingAction !== null}
-            />
+            <CloseButton onClick={handleClose} size="lg" />
           </Group>
         </Group>
       </Box>
 
-      {/* Unsaved changes confirmation */}
-      {pendingAction && (
-        <Alert
-          color="red"
-          icon={<IconAlertTriangle size={16} />}
-          title="Unsaved Changes"
-        >
-          <Stack gap="sm">
-            <Text size="sm">
-              You have unsaved changes. Are you sure you want to discard them?
-            </Text>
-            <Group gap="xs">
-              <DangerButton size="xs" onClick={handleConfirmDiscard}>
-                Discard Changes
-              </DangerButton>
-              <CancelButton size="xs" onClick={handleCancelDiscard}>
-                Keep Editing
-              </CancelButton>
-            </Group>
-          </Stack>
-        </Alert>
-      )}
-
       {/* Info alert for markdown format - only show in edit mode */}
-      {isEditing && !pendingAction && (
+      {isEditing && (
         <FormAlert type="info" title="Markdown Supported">
           <Text size="sm">
             Write your notes using Markdown syntax. Use headings (##), lists
@@ -230,11 +192,9 @@ function AnalysisNotesModalContent({ id, innerProps }) {
           />
         ) : (
           <ScrollArea h="100%" offsetScrollbars>
-            <TypographyStylesProvider p="md">
-              <Markdown>
-                {content || '*No notes yet. Click Edit to add notes.*'}
-              </Markdown>
-            </TypographyStylesProvider>
+            <Markdown>
+              {content || '*No notes yet. Click Edit to add notes.*'}
+            </Markdown>
           </ScrollArea>
         )}
       </Box>
@@ -269,7 +229,7 @@ function AnalysisNotesModalContent({ id, innerProps }) {
             onSubmit={handleSave}
             onCancel={handleToggleEdit}
             loading={saveOp.loading}
-            disabled={!hasChanges || pendingAction !== null}
+            disabled={!hasChanges}
             submitLabel="Save Notes"
             cancelLabel="Cancel Edit"
           />

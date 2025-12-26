@@ -11,8 +11,8 @@ import {
   LoadingState,
   SecondaryButton,
   DangerButton,
+  ConfirmDialog,
 } from '../../components/global';
-import { modals } from '@mantine/modals';
 import {
   IconDeviceLaptop,
   IconDeviceMobile,
@@ -96,11 +96,10 @@ function UserSessionsModalContent({ innerProps }) {
   }, [user.id, loadSessionsOperation, parseSessionsResponse]);
 
   const handleRevokeSession = async (sessionToken) => {
-    modals.openConfirmModal({
+    ConfirmDialog.destructive({
       title: 'Revoke Session',
-      children: 'Are you sure you want to revoke this session?',
-      labels: { confirm: 'Revoke', cancel: 'Cancel' },
-      confirmProps: { color: 'red' },
+      message: 'Are you sure you want to revoke this session?',
+      confirmLabel: 'Revoke',
       onConfirm: async () => {
         await executeRevokeSession(sessionToken);
       },
@@ -154,11 +153,10 @@ function UserSessionsModalContent({ innerProps }) {
   };
 
   const handleRevokeAllSessions = async () => {
-    modals.openConfirmModal({
+    ConfirmDialog.destructive({
       title: 'Revoke All Sessions',
-      children: `Are you sure you want to revoke ALL sessions for ${user.name || user.email}? This will log them out of all devices.`,
-      labels: { confirm: 'Revoke All', cancel: 'Cancel' },
-      confirmProps: { color: 'red' },
+      message: `Are you sure you want to revoke ALL sessions for ${user.name || user.email}? This will log them out of all devices.`,
+      confirmLabel: 'Revoke All',
       onConfirm: async () => {
         await executeRevokeAllSessions();
       },

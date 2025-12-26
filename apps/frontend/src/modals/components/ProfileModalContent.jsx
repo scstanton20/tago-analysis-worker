@@ -5,15 +5,15 @@
  */
 
 import { lazy, Suspense } from 'react';
-import { Tabs, Badge, Stack } from '@mantine/core';
+import { Tabs, Badge, Stack, Group, Text, CloseButton } from '@mantine/core';
 import {
   IconKey,
   IconShield,
   IconUser as TabIconUser,
 } from '@tabler/icons-react';
 import { modals } from '@mantine/modals';
-import { useProfileModal } from '../../hooks/useProfileModal';
-import { LoadingState } from '../../components/global';
+import { useProfileModal, useUnsavedChangesGuard } from '../../hooks/modals';
+import { LoadingState, UnsavedChangesOverlay } from '../../components/global';
 import { useAsyncMountOnce } from '../../hooks/async';
 const ProfileTab = lazy(() =>
   import('../../components/profile/ProfileTab').then((m) => ({
@@ -69,6 +69,7 @@ function ProfileModalContent({ id }) {
     handleDeletePasskey,
     handleClose,
     loadData,
+    hasUnsavedChanges,
   } = useProfileModal({
     closeModal: () => modals.close(id),
   });
@@ -77,6 +78,17 @@ function ProfileModalContent({ id }) {
   useAsyncMountOnce(async () => {
     await loadData();
   });
+
+  // Guard against closing with unsaved changes
+  const { showConfirmation, requestAction, confirmDiscard, cancelDiscard } =
+    useUnsavedChangesGuard(hasUnsavedChanges);
+
+  // Handle close button click with unsaved changes check
+  const handleCloseClick = () => {
+    if (requestAction(() => handleClose())) {
+      handleClose();
+    }
+  };
 
   return (
     <Suspense
@@ -89,7 +101,31 @@ function ProfileModalContent({ id }) {
         />
       }
     >
-      <Stack>
+      <Stack style={{ position: 'relative' }}>
+        {/* Unsaved changes confirmation overlay */}
+        {showConfirmation && (
+          <UnsavedChangesOverlay
+            onConfirm={confirmDiscard}
+            onCancel={cancelDiscard}
+            message="You have unsaved changes to your profile. Are you sure you want to discard them?"
+          />
+        )}
+
+        {/* Custom Modal Header */}
+        <Group gap="xs" justify="space-between" mb="md">
+          <Group gap="xs">
+            <TabIconUser size={20} aria-hidden="true" />
+            <Text fw={600} size="lg">
+              Profile Settings
+            </Text>
+          </Group>
+          <CloseButton
+            onClick={handleCloseClick}
+            size="lg"
+            aria-label="Close profile settings"
+          />
+        </Group>
+
         <Tabs value={activeTab} onChange={setActiveTab}>
           <Tabs.List>
             <Tabs.Tab value="profile" leftSection={<TabIconUser size={16} />}>

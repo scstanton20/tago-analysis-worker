@@ -4,13 +4,20 @@
  * @module components/teams/TeamCreateForm
  */
 
+import { useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { Box, Stack, Group, Text, TextInput, ColorSwatch } from '@mantine/core';
 import { TeamColorPicker } from './TeamColorPicker';
 import { FormActionButtons } from '../global';
 import { useStandardForm } from '../../hooks/forms/useStandardForm';
 
-export function TeamCreateForm({ usedNames, usedColors, isLoading, onSubmit }) {
+export function TeamCreateForm({
+  usedNames,
+  usedColors,
+  isLoading,
+  onSubmit,
+  onDirtyChange,
+}) {
   // Form setup with validation using useStandardForm
   const { form, handleSubmit, isDirty, loading } = useStandardForm({
     initialValues: {
@@ -29,6 +36,11 @@ export function TeamCreateForm({ usedNames, usedColors, isLoading, onSubmit }) {
     },
     resetOnSuccess: false, // Manual reset based on parent's success response
   });
+
+  // Report dirty state changes to parent
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
 
   // Handle form submission
   const handleFormSubmit = handleSubmit(async (values) => {
@@ -118,4 +130,5 @@ TeamCreateForm.propTypes = {
   usedColors: PropTypes.instanceOf(Set).isRequired,
   isLoading: PropTypes.bool,
   onSubmit: PropTypes.func.isRequired,
+  onDirtyChange: PropTypes.func,
 };

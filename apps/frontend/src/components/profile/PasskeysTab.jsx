@@ -16,14 +16,18 @@ import {
   ActionIcon,
   Badge,
 } from '@mantine/core';
-import { modals } from '@mantine/modals';
 import {
   IconFingerprint,
   IconShield,
   IconPlus,
   IconTrash,
 } from '@tabler/icons-react';
-import { FormAlert, PaperCard, FormActionButtons } from '../global';
+import {
+  FormAlert,
+  PaperCard,
+  FormActionButtons,
+  ConfirmDialog,
+} from '../global';
 
 export function PasskeysTab({
   isWebAuthnSupported,
@@ -37,12 +41,10 @@ export function PasskeysTab({
 }) {
   const { form, isDirty } = passkeyFormState;
   const confirmDeletePasskey = (credentialId) => {
-    modals.openConfirmModal({
+    ConfirmDialog.delete({
       title: 'Delete Passkey',
-      children:
+      message:
         'Are you sure you want to delete this passkey? You may lose access to your account if this is your only authentication method.',
-      labels: { confirm: 'Delete', cancel: 'Cancel' },
-      confirmProps: { color: 'red' },
       onConfirm: () => handleDeletePasskey(credentialId),
     });
   };

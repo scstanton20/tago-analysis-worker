@@ -100,7 +100,11 @@ export function CodeMirrorEditor({
       if (currentLanguage === 'javascript') {
         extensions.push(javascript());
       } else if (currentLanguage === 'markdown') {
-        extensions.push(markdown());
+        // Remove HTML parsers to avoid MixedParse crash when typing near HTML comments
+        // The comment tokens (<!-- -->) are still defined at the language level
+        extensions.push(
+          markdown({ extensions: { remove: ['HTMLBlock', 'HTMLTag'] } }),
+        );
       }
 
       const state = EditorState.create({
@@ -149,7 +153,15 @@ export function CodeMirrorEditor({
           extensions.push(createJavaScriptLinter(handleDiagnosticsChange));
         }
       } else if (currentLanguage === 'markdown') {
-        extensions.push(markdown());
+        // Remove HTML parsers to avoid MixedParse crash when typing near HTML comments
+        extensions.push(
+          markdown({ extensions: { remove: ['HTMLBlock', 'HTMLTag'] } }),
+        );
+
+        // Add editor keymap for markdown (Tab indentation + comment toggle with Cmd+/)
+        if (!currentReadOnly) {
+          extensions.push(editorKeymap);
+        }
       }
 
       const state = EditorState.create({
@@ -236,6 +248,11 @@ export function CodeMirrorEditor({
 
           if (getLanguage() === 'javascript') {
             extensions.push(javascript());
+          } else if (getLanguage() === 'markdown') {
+            // Remove HTML parsers to avoid MixedParse crash
+            extensions.push(
+              markdown({ extensions: { remove: ['HTMLBlock', 'HTMLTag'] } }),
+            );
           }
 
           const state = EditorState.create({
@@ -290,7 +307,7 @@ CodeMirrorEditor.propTypes = {
   value: PropTypes.string,
   onChange: PropTypes.func,
   readOnly: PropTypes.bool,
-  language: PropTypes.oneOf(['javascript', 'plaintext']),
+  language: PropTypes.oneOf(['javascript', 'markdown', 'plaintext']),
   height: PropTypes.string,
   diffMode: PropTypes.bool,
   originalContent: PropTypes.string,
