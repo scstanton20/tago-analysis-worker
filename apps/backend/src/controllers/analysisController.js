@@ -5,8 +5,8 @@ import path from 'path';
 import { config } from '../config/default.js';
 import { promises as fs } from 'fs';
 import sanitize from 'sanitize-filename';
+import archiver from 'archiver';
 import { FILE_SIZE } from '../constants.js';
-import { safeWriteFile, safeUnlink } from '../utils/safePath.js';
 import {
   sanitizeAndValidateFilename,
   isValidFilename,
@@ -644,8 +644,8 @@ export class AnalysisController {
   }
 
   /**
-   * Handle download of complete log file
-   * Streams the full analysis.log file directly
+   * Handle download of complete log file as a compressed zip
+   * Streams the analysis.log file through archiver for compression
    *
    * @param {string} analysisId - Analysis UUID
    * @param {Object} req - Express request
@@ -679,26 +679,38 @@ export class AnalysisController {
     // Get analysis name for download filename
     const analysis = analysisService.getAnalysisById(analysisId);
     const analysisName = analysis?.name || analysisId;
+    const sanitizedName = sanitize(analysisName);
 
-    AnalysisController.setLogDownloadHeaders(analysisName, res);
+    AnalysisController.setZipDownloadHeaders(sanitizedName, res);
 
-    req.log.info({ action: 'downloadLogs', analysisId }, 'Streaming log file');
+    req.log.info(
+      { action: 'downloadLogs', analysisId },
+      'Streaming compressed log file',
+    );
 
-    // Stream file directly
-    res.sendFile(path.resolve(expectedLogFile), (err) => {
-      if (err && !res.headersSent) {
-        req.log.error(
-          { action: 'downloadLogs', analysisId, err },
-          'Error streaming log file',
-        );
-        return res.status(500).json({ error: 'Failed to download file' });
+    // Create zip archive and stream to response
+    const archive = archiver('zip', { zlib: { level: 6 } });
+
+    archive.on('error', (err) => {
+      req.log.error(
+        { action: 'downloadLogs', analysisId, err },
+        'Error creating zip archive',
+      );
+      if (!res.headersSent) {
+        return res.status(500).json({ error: 'Failed to create archive' });
       }
     });
+
+    archive.pipe(res);
+    archive.file(path.resolve(expectedLogFile), {
+      name: `${sanitizedName}.log`,
+    });
+    archive.finalize();
   }
 
   /**
-   * Handle download of filtered log file by time range
-   * Creates temporary filtered file and streams it
+   * Handle download of filtered log file by time range as compressed zip
+   * Streams filtered content through archiver for compression
    *
    * @param {string} analysisId - Analysis UUID
    * @param {string} timeRange - Time range filter (1h, 24h, etc.)
@@ -718,57 +730,39 @@ export class AnalysisController {
       // Get analysis name for download filename
       const analysis = analysisService.getAnalysisById(analysisId);
       const analysisName = analysis?.name || analysisId;
+      const sanitizedName = sanitize(analysisName);
 
-      // Create temp file
-      const tempLogFile = path.join(
-        config.paths.analysis,
-        analysisId,
-        'logs',
-        `${sanitize(analysisName)}_${sanitize(timeRange)}_temp.log`,
-      );
-
-      const resolvedTempLogFile = path.resolve(tempLogFile);
-
-      await safeWriteFile(resolvedTempLogFile, content, config.paths.analysis);
-
-      AnalysisController.setLogDownloadHeaders(analysisName, res);
+      AnalysisController.setZipDownloadHeaders(sanitizedName, res);
 
       req.log.info(
         { action: 'downloadLogs', analysisId, timeRange },
-        'Sending filtered log file',
+        'Streaming compressed filtered log file',
       );
 
-      // Send and clean up
-      res.sendFile(resolvedTempLogFile, (err) => {
-        safeUnlink(resolvedTempLogFile, config.paths.analysis).catch(
-          (unlinkError) => {
-            req.log.error(
-              {
-                action: 'downloadLogs',
-                analysisId,
-                err: unlinkError,
-              },
-              'Error cleaning up temporary file',
-            );
-          },
-        );
+      // Create zip archive and stream to response
+      const archive = archiver('zip', { zlib: { level: 6 } });
 
-        if (err && !res.headersSent) {
-          req.log.error(
-            { action: 'downloadLogs', analysisId, err },
-            'Error sending file',
-          );
-          return res.status(500).json({ error: 'Failed to download file' });
+      archive.on('error', (err) => {
+        req.log.error(
+          { action: 'downloadLogs', analysisId, err },
+          'Error creating zip archive',
+        );
+        if (!res.headersSent) {
+          return res.status(500).json({ error: 'Failed to create archive' });
         }
       });
-    } catch (writeError) {
+
+      archive.pipe(res);
+      archive.append(content, { name: `${sanitizedName}.log` });
+      archive.finalize();
+    } catch (error) {
       req.log.error(
         {
           action: 'downloadLogs',
           analysisId,
-          err: writeError,
+          err: error,
         },
-        'Error writing temporary file',
+        'Error generating filtered logs',
       );
       return res.status(500).json({
         error: 'Failed to generate download file',
@@ -777,20 +771,19 @@ export class AnalysisController {
   }
 
   /**
-   * Set HTTP headers for log file download
-   * Configures Content-Disposition and Content-Type
+   * Set HTTP headers for zip file download
+   * Configures Content-Disposition and Content-Type for zip archives
    *
-   * @param {string} analysisName - Analysis display name (for the download filename)
+   * @param {string} sanitizedName - Sanitized analysis name (for the download filename)
    * @param {Object} res - Express response
    * @returns {void}
    */
-  static setLogDownloadHeaders(analysisName, res) {
-    const downloadFilename = `${sanitize(analysisName)}.log`;
+  static setZipDownloadHeaders(sanitizedName, res) {
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="${downloadFilename}"`,
+      `attachment; filename="${sanitizedName}_logs.zip"`,
     );
-    res.setHeader('Content-Type', 'text/plain');
+    res.setHeader('Content-Type', 'application/zip');
   }
 
   /**

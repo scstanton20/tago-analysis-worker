@@ -188,7 +188,7 @@ export const analysisService = {
       }
 
       const blob = await response.blob();
-      await downloadBlob(sanitize(analysisName), blob, '.log');
+      await downloadBlob(sanitize(analysisName), blob, '.zip');
       logger.info('Analysis logs downloaded successfully', {
         analysisId,
         timeRange,

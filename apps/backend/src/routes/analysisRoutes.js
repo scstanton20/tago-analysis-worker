@@ -764,7 +764,7 @@ analysisIdRouter.get(
  * /analyses/{analysisId}/logs/download:
  *   get:
  *     summary: Download analysis logs
- *     description: Download logs for a specific time range as a file
+ *     description: Download logs for a specific time range as a compressed zip file
  *     tags: [Analysis Logs]
  *     parameters:
  *       - in: path
@@ -783,9 +783,9 @@ analysisIdRouter.get(
  *         description: Time range for logs to download
  *     responses:
  *       200:
- *         description: Log file downloaded successfully
+ *         description: Compressed log file downloaded successfully
  *         content:
- *           text/plain:
+ *           application/zip:
  *             schema:
  *               type: string
  *               format: binary
@@ -794,9 +794,9 @@ analysisIdRouter.get(
  *             description: Attachment filename
  *             schema:
  *               type: string
- *               example: analysis.log
+ *               example: analysis_logs.zip
  *       400:
- *         description: Invalid time range or missing fileName
+ *         description: Invalid time range
  *         content:
  *           application/json:
  *             schema:

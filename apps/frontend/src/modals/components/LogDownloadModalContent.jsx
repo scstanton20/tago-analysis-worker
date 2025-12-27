@@ -80,7 +80,7 @@ const LogDownloadModalContent = ({ id, innerProps }) => {
   return (
     <Stack>
       <Text size="sm" c="dimmed">
-        Download the logs for this analysis in a .log file.
+        Download the logs for this analysis in a .zip file.
       </Text>
 
       <Select

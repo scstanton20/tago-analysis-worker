@@ -305,7 +305,7 @@ export async function handleResponse(response, originalUrl, originalOptions) {
  * Download a file from a blob response
  * @param {string} fileName - Name for the downloaded file
  * @param {Blob} blob - Blob data to download
- * @param {string} extension - File extension (e.g., '.js', '.log')
+ * @param {string} extension - File extension (e.g., '.js', '.zip')
  */
 export async function downloadBlob(fileName, blob, extension = '') {
   // Ensure extension is safe (alphanumeric + dot only)
@@ -314,7 +314,7 @@ export async function downloadBlob(fileName, blob, extension = '') {
   // Map extension to safe MIME type
   const mimeTypeMap = {
     '.js': 'application/javascript',
-    '.log': 'text/plain',
+    '.zip': 'application/zip',
   };
   const mimeType = mimeTypeMap[safeExtension];
 
