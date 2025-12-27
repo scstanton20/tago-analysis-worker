@@ -62,8 +62,8 @@ jobs:
           context: .
           file: ${{ matrix.app.dockerfile }}
           push: true
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository }}/cache:${{ matrix.app.name }}
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository }}/cache:${{ matrix.app.name }},mode=max,image-manifest=true
+          cache-from: type=gha,scope=${{ matrix.app.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app.name }}
           platforms: linux/amd64,linux/arm64/v8
           tags: |
             ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.app.name }}:latest

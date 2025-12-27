@@ -5,21 +5,11 @@ ENV PATH="$PNPM_HOME:$PATH"
 
 WORKDIR /app
 
-# Enable corepack first
-RUN corepack enable
-
-# Copy only lockfile first - this layer caches the pnpm fetch
-COPY pnpm-lock.yaml ./
-
-# Fetch dependencies based on lockfile only (cached unless lockfile changes)
-RUN pnpm fetch
-
-# Now copy package.json files
-COPY pnpm-workspace.yaml package.json ./
+# Copy package.json files for the monorepo
+COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/frontend/package.json ./apps/frontend/
 
-# Install from local store (offline, fast)
-RUN pnpm install --filter frontend --frozen-lockfile --offline
+RUN corepack enable && pnpm install --filter frontend --frozen-lockfile
 
 FROM node:23-alpine@sha256:a34e14ef1df25b58258956049ab5a71ea7f0d498e41d0b514f4b8de09af09456 AS build
 # Set up pnpm in the runtime container
