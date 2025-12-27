@@ -404,7 +404,7 @@ export function SSEConnectionProvider({ children, onMessage }) {
     };
   }, [createConnection, reconnect, isAuthenticated, serverShutdown]);
 
-  // Subscribe to analysis channels for log streaming
+  // Subscribe to analysis channels
   const subscribeToAnalysis = useCallback(
     async (analysisIds) => {
       if (!sessionId || !isAuthenticated) {

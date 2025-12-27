@@ -46,6 +46,7 @@ function MessageRouter({ children }) {
         case 'analysisUpdated':
         case 'analysisEnvironmentUpdated':
         case 'analysisMovedToTeam':
+        case 'analysisDnsStats':
         case 'log':
         case 'logsCleared':
         case 'analysisRolledBack':

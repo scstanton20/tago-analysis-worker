@@ -11,7 +11,9 @@ import {
   LoadingState,
   SecondaryButton,
 } from '../../components/global';
+import { usePermissions } from '../../hooks/usePermissions';
 import IframeLoader from './IframeLoader';
+import PropTypes from 'prop-types';
 const DNSCacheSettings = lazy(() => import('./settings/DNSCacheSettings'));
 const MetricsDashboard = lazy(() => import('./settings/MetricsDashboard'));
 const UtilsDocs = lazy(() => import('./settings/UtilsDocs'));
@@ -30,10 +32,21 @@ const MODAL_CONTENT_HEIGHT = 'calc(85vh - 60px)';
  * - Single ScrollArea wraps the content panels
  * - Individual tabs should NOT have their own ScrollAreas
  *
- * Note: This component does not accept any props.
+ * Props (via innerProps):
+ * - initialTab: Initial tab to display ('api' | 'utils' | 'metrics' | 'dns')
+ * - focusAnalysisId: Analysis ID to focus on in DNS tab
  */
-const SettingsModalContent = () => {
-  const [activeTab, setActiveTab] = useState('api');
+const SettingsModalContent = ({ innerProps }) => {
+  const { initialTab, focusAnalysisId } = innerProps || {};
+  const { isAdmin } = usePermissions();
+
+  // Validate initialTab - non-admins can't access admin-only tabs (dns, utils)
+  const adminOnlyTabs = ['dns', 'utils'];
+  const validInitialTab =
+    !isAdmin && adminOnlyTabs.includes(initialTab)
+      ? 'api'
+      : initialTab || 'api';
+  const [activeTab, setActiveTab] = useState(validInitialTab);
 
   const handleOpenApiDocs = () => {
     const apiDocsUrl = `${window.location.origin}/api/docs`;
@@ -69,15 +82,19 @@ const SettingsModalContent = () => {
             <Tabs.Tab value="api" leftSection={<IconBook size={16} />}>
               API Docs
             </Tabs.Tab>
-            <Tabs.Tab value="utils" leftSection={<IconCode size={16} />}>
-              Utils & Packages Docs
-            </Tabs.Tab>
+            {isAdmin && (
+              <Tabs.Tab value="utils" leftSection={<IconCode size={16} />}>
+                Utils & Packages Docs
+              </Tabs.Tab>
+            )}
             <Tabs.Tab value="metrics" leftSection={<IconChartBar size={16} />}>
               Metrics
             </Tabs.Tab>
-            <Tabs.Tab value="dns" leftSection={<IconTransfer size={16} />}>
-              DNS Cache
-            </Tabs.Tab>
+            {isAdmin && (
+              <Tabs.Tab value="dns" leftSection={<IconTransfer size={16} />}>
+                DNS Cache
+              </Tabs.Tab>
+            )}
           </Tabs.List>
         </Box>
 
@@ -125,17 +142,21 @@ const SettingsModalContent = () => {
             </Tabs.Panel>
 
             {/* Lazy-loaded tabs */}
-            <Tabs.Panel value="utils">
-              <UtilsDocs />
-            </Tabs.Panel>
+            {isAdmin && (
+              <Tabs.Panel value="utils">
+                <UtilsDocs />
+              </Tabs.Panel>
+            )}
 
             <Tabs.Panel value="metrics">
               <MetricsDashboard />
             </Tabs.Panel>
 
-            <Tabs.Panel value="dns">
-              <DNSCacheSettings />
-            </Tabs.Panel>
+            {isAdmin && (
+              <Tabs.Panel value="dns">
+                <DNSCacheSettings focusAnalysisId={focusAnalysisId} />
+              </Tabs.Panel>
+            )}
           </Suspense>
         </ScrollArea>
       </Box>
@@ -143,6 +164,11 @@ const SettingsModalContent = () => {
   );
 };
 
-SettingsModalContent.propTypes = {};
+SettingsModalContent.propTypes = {
+  innerProps: PropTypes.shape({
+    initialTab: PropTypes.oneOf(['api', 'utils', 'metrics', 'dns']),
+    focusAnalysisId: PropTypes.string,
+  }),
+};
 
 export default SettingsModalContent;

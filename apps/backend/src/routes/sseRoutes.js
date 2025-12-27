@@ -97,10 +97,10 @@ router.get(
  * @swagger
  * /sse/subscribe:
  *   post:
- *     summary: Subscribe to analysis channels for log streaming
+ *     summary: Subscribe to analysis channels
  *     description: |
- *       Subscribe an SSE session to receive real-time logs from specific analyses.
- *       Only logs from subscribed analyses will be sent to the session.
+ *       Subscribe an SSE session to receive real-time events from specific analyses.
+ *       Only events from subscribed analyses will be sent to the session.
  *
  *       **Permission Checking:**
  *       - Admin users can subscribe to any analysis

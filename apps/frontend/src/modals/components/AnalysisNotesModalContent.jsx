@@ -29,6 +29,8 @@ import { analysisService } from '../../services/analysisService';
 import { useAsyncMountOnce } from '../../hooks/async/useAsyncMount';
 import { useAsyncOperation } from '../../hooks/async/useAsyncOperation';
 import { CodeMirrorEditor } from '../../components/editor/CodeMirrorEditor';
+import { usePermissions } from '../../hooks/usePermissions';
+
 import Markdown from 'react-markdown';
 import PropTypes from 'prop-types';
 
@@ -41,7 +43,7 @@ function AnalysisNotesModalContent({ id, innerProps }) {
   const [content, setContent] = useState('');
   const [originalContent, setOriginalContent] = useState('');
   const [isEditing, setIsEditing] = useState(false);
-
+  const { isAdmin } = usePermissions();
   // Load notes on mount
   const {
     loading,
@@ -148,15 +150,17 @@ function AnalysisNotesModalContent({ id, innerProps }) {
             )}
           </Group>
           <Group gap="xs">
-            <SecondaryButton
-              size="xs"
-              leftSection={
-                isEditing ? <IconEye size={14} /> : <IconEdit size={14} />
-              }
-              onClick={handleToggleEdit}
-            >
-              {isEditing ? 'View' : 'Edit'}
-            </SecondaryButton>
+            {isAdmin && (
+              <SecondaryButton
+                size="xs"
+                leftSection={
+                  isEditing ? <IconEye size={14} /> : <IconEdit size={14} />
+                }
+                onClick={handleToggleEdit}
+              >
+                {isEditing ? 'View' : 'Edit'}
+              </SecondaryButton>
+            )}
             <CloseButton onClick={handleClose} size="lg" />
           </Group>
         </Group>

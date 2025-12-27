@@ -48,6 +48,12 @@ class DNSCacheService {
       errors: 0,
       evictions: 0,
     };
+    // Per-analysis stats tracking
+    // Map<analysisId, { hits, misses, errors, hostnames: Set<hostname> }>
+    this.analysisStats = new Map();
+    // Track which cache entries are used by which analyses
+    // Map<cacheKey, Set<analysisId>>
+    this.cacheKeyToAnalyses = new Map();
     this.ttlPeriodStart = Date.now();
     this.originalLookup = null;
     this.originalResolve4 = null;
@@ -392,14 +398,134 @@ class DNSCacheService {
     logger.info('DNS interceptors uninstalled');
   }
 
+  /**
+   * Get or create per-analysis stats entry
+   * @private
+   * @param {string} analysisId - Analysis identifier
+   * @returns {Object} Stats object for this analysis
+   */
+  getOrCreateAnalysisStats(analysisId) {
+    if (!analysisId) return null;
+
+    if (!this.analysisStats.has(analysisId)) {
+      this.analysisStats.set(analysisId, {
+        hits: 0,
+        misses: 0,
+        errors: 0,
+        hostnames: new Set(),
+        cacheKeys: new Set(),
+      });
+    }
+    return this.analysisStats.get(analysisId);
+  }
+
+  /**
+   * Record cache hit for both global and per-analysis stats
+   * @private
+   */
+  recordAnalysisCacheHit(analysisId, hostname, cacheKey) {
+    this.stats.hits++;
+    dnsCacheHits.inc();
+
+    if (analysisId) {
+      const analysisStats = this.getOrCreateAnalysisStats(analysisId);
+      analysisStats.hits++;
+      analysisStats.hostnames.add(hostname);
+      analysisStats.cacheKeys.add(cacheKey);
+
+      // Track which analyses use this cache key
+      if (!this.cacheKeyToAnalyses.has(cacheKey)) {
+        this.cacheKeyToAnalyses.set(cacheKey, new Set());
+      }
+      this.cacheKeyToAnalyses.get(cacheKey).add(analysisId);
+
+      // Broadcast stats update to subscribers (debounced)
+      this.scheduleBroadcast(analysisId);
+    }
+  }
+
+  /**
+   * Record cache miss for both global and per-analysis stats
+   * @private
+   */
+  recordAnalysisCacheMiss(analysisId, hostname, cacheKey) {
+    this.stats.misses++;
+    dnsCacheMisses.inc();
+
+    if (analysisId) {
+      const analysisStats = this.getOrCreateAnalysisStats(analysisId);
+      analysisStats.misses++;
+      analysisStats.hostnames.add(hostname);
+      analysisStats.cacheKeys.add(cacheKey);
+
+      // Track which analyses use this cache key
+      if (!this.cacheKeyToAnalyses.has(cacheKey)) {
+        this.cacheKeyToAnalyses.set(cacheKey, new Set());
+      }
+      this.cacheKeyToAnalyses.get(cacheKey).add(analysisId);
+
+      // Broadcast stats update to subscribers (debounced)
+      this.scheduleBroadcast(analysisId);
+    }
+  }
+
+  /**
+   * Record error for both global and per-analysis stats
+   * @private
+   */
+  recordAnalysisError(analysisId) {
+    this.stats.errors++;
+
+    if (analysisId) {
+      const analysisStats = this.getOrCreateAnalysisStats(analysisId);
+      analysisStats.errors++;
+
+      // Broadcast stats update to subscribers (debounced)
+      this.scheduleBroadcast(analysisId);
+    }
+  }
+
+  /**
+   * Schedule a debounced broadcast of DNS stats for an analysis
+   * Debounces to 500ms to avoid spamming during rapid DNS calls
+   * @private
+   */
+  scheduleBroadcast(analysisId) {
+    if (!this.pendingBroadcasts) {
+      this.pendingBroadcasts = new Map();
+    }
+
+    // Clear existing timeout for this analysis
+    if (this.pendingBroadcasts.has(analysisId)) {
+      clearTimeout(this.pendingBroadcasts.get(analysisId));
+    }
+
+    // Schedule new broadcast
+    const timeoutId = setTimeout(async () => {
+      this.pendingBroadcasts.delete(analysisId);
+      try {
+        const { sseManager } = await import('../utils/sse/SSEManager.js');
+        if (sseManager.analysisChannels.has(analysisId)) {
+          await sseManager.broadcastService.broadcastAnalysisDnsStats(
+            analysisId,
+          );
+        }
+      } catch {
+        // Ignore - SSE manager might not be ready
+      }
+    }, 500);
+
+    this.pendingBroadcasts.set(analysisId, timeoutId);
+  }
+
   // Handle IPC DNS lookup requests from child processes
-  async handleDNSLookupRequest(hostname, options = {}) {
+  async handleDNSLookupRequest(hostname, options = {}, analysisId = null) {
     // SSRF Protection: Validate hostname before resolution
     const hostnameValidation = validateHostname(hostname);
     if (!hostnameValidation.allowed) {
-      this.stats.errors++;
+      this.recordAnalysisError(analysisId);
       logger.warn(
-        { hostname, reason: hostnameValidation.reason },
+        { hostname, analysisId, reason: hostnameValidation.reason },
         'SSRF: Blocked DNS lookup from child process',
       );
       return { success: false, error: hostnameValidation.reason };
@@ -412,16 +538,17 @@ class DNSCacheService {
     const cached = this.getFromCache(cacheKey);
     if (cached) {
       this.checkAndResetTTLPeriod();
-      this.stats.hits++;
-      dnsCacheHits.inc(); // Update Prometheus metrics
-      logger.debug({ hostname, family, cached }, 'DNS cache hit (IPC)');
+      this.recordAnalysisCacheHit(analysisId, hostname, cacheKey);
+      logger.debug(
+        { hostname, family, analysisId, cached },
+        'DNS cache hit (IPC)',
+      );
       return { success: true, ...cached };
     }
 
     // Cache miss - perform actual lookup
     this.checkAndResetTTLPeriod();
-    this.stats.misses++;
-    dnsCacheMisses.inc(); // Update Prometheus metrics
+    this.recordAnalysisCacheMiss(analysisId, hostname, cacheKey);
     return new Promise((resolve) => {
       this.originalLookup.call(
         dns,
@@ -436,12 +563,13 @@ class DNSCacheService {
               family,
             );
             if (!addressValidation.allowed) {
-              this.stats.errors++;
+              this.recordAnalysisError(analysisId);
               logger.warn(
                 {
                   hostname,
                   address,
                   family,
+                  analysisId,
                   reason: addressValidation.reason,
                 },
                 'SSRF: Blocked resolved address from child process',
@@ -453,13 +581,16 @@ class DNSCacheService {
             const result = { address, family };
             this.addToCache(cacheKey, result);
             logger.debug(
-              { hostname, address, family },
+              { hostname, address, family, analysisId },
               'DNS result cached (IPC)',
             );
             resolve({ success: true, ...result });
           } else {
-            this.stats.errors++;
-            logger.debug({ hostname, error: err?.message }, 'DNS error (IPC)');
+            this.recordAnalysisError(analysisId);
+            logger.debug(
+              { hostname, analysisId, error: err?.message },
+              'DNS error (IPC)',
+            );
             resolve({ success: false, error: err?.message });
           }
         },
@@ -468,13 +599,13 @@ class DNSCacheService {
   }
 
   // Handle IPC DNS resolve4 requests
-  async handleDNSResolve4Request(hostname) {
+  async handleDNSResolve4Request(hostname, analysisId = null) {
     // SSRF Protection: Validate hostname before resolution
     const hostnameValidation = validateHostname(hostname);
     if (!hostnameValidation.allowed) {
-      this.stats.errors++;
+      this.recordAnalysisError(analysisId);
       logger.warn(
-        { hostname, reason: hostnameValidation.reason },
+        { hostname, analysisId, reason: hostnameValidation.reason },
         'SSRF: Blocked DNS resolve4 from child process',
       );
       return { success: false, error: hostnameValidation.reason };
@@ -486,16 +617,17 @@ class DNSCacheService {
     const cached = this.getFromCache(cacheKey);
     if (cached) {
       this.checkAndResetTTLPeriod();
-      this.stats.hits++;
-      dnsCacheHits.inc(); // Update Prometheus metrics
-      logger.debug({ hostname, cached }, 'DNS resolve4 cache hit (IPC)');
+      this.recordAnalysisCacheHit(analysisId, hostname, cacheKey);
+      logger.debug(
+        { hostname, analysisId, cached },
+        'DNS resolve4 cache hit (IPC)',
+      );
       return { success: true, addresses: cached.addresses };
     }
 
     try {
       this.checkAndResetTTLPeriod();
-      this.stats.misses++;
-      dnsCacheMisses.inc(); // Update Prometheus metrics
+      this.recordAnalysisCacheMiss(analysisId, hostname, cacheKey);
       const addresses = await this.originalResolve4.call(dnsPromises, hostname);
 
       // SSRF Protection: Validate resolved addresses
@@ -504,10 +636,11 @@ class DNSCacheService {
         addresses,
       );
       if (!addressesValidation.allowed) {
-        this.stats.errors++;
+        this.recordAnalysisError(analysisId);
         logger.warn(
           {
             hostname,
+            analysisId,
             addresses,
             reason: addressesValidation.reason,
           },
@@ -520,14 +653,14 @@ class DNSCacheService {
       const safeAddresses = addressesValidation.filteredAddresses || addresses;
       this.addToCache(cacheKey, { addresses: safeAddresses });
       logger.debug(
-        { hostname, addresses: safeAddresses },
+        { hostname, analysisId, addresses: safeAddresses },
         'DNS resolve4 result cached (IPC)',
       );
       return { success: true, addresses: safeAddresses };
     } catch (error) {
-      this.stats.errors++;
+      this.recordAnalysisError(analysisId);
       logger.debug(
-        { hostname, error: error.message },
+        { hostname, analysisId, error: error.message },
         'DNS resolve4 error (IPC)',
       );
       return { success: false, error: error.message };
@@ -535,13 +668,13 @@ class DNSCacheService {
   }
 
   // Handle IPC DNS resolve6 requests
-  async handleDNSResolve6Request(hostname) {
+  async handleDNSResolve6Request(hostname, analysisId = null) {
     // SSRF Protection: Validate hostname before resolution
     const hostnameValidation = validateHostname(hostname);
     if (!hostnameValidation.allowed) {
-      this.stats.errors++;
+      this.recordAnalysisError(analysisId);
       logger.warn(
-        { hostname, reason: hostnameValidation.reason },
+        { hostname, analysisId, reason: hostnameValidation.reason },
         'SSRF: Blocked DNS resolve6 from child process',
       );
       return { success: false, error: hostnameValidation.reason };
@@ -553,16 +686,17 @@ class DNSCacheService {
     const cached = this.getFromCache(cacheKey);
     if (cached) {
       this.checkAndResetTTLPeriod();
-      this.stats.hits++;
-      dnsCacheHits.inc(); // Update Prometheus metrics
-      logger.debug({ hostname, cached }, 'DNS resolve6 cache hit (IPC)');
+      this.recordAnalysisCacheHit(analysisId, hostname, cacheKey);
+      logger.debug(
+        { hostname, analysisId, cached },
+        'DNS resolve6 cache hit (IPC)',
+      );
       return { success: true, addresses: cached.addresses };
     }
 
     try {
       this.checkAndResetTTLPeriod();
-      this.stats.misses++;
-      dnsCacheMisses.inc(); // Update Prometheus metrics
+      this.recordAnalysisCacheMiss(analysisId, hostname, cacheKey);
       const addresses = await this.originalResolve6.call(dnsPromises, hostname);
 
       // SSRF Protection: Validate resolved addresses
@@ -571,10 +705,11 @@ class DNSCacheService {
         addresses,
       );
       if (!addressesValidation.allowed) {
-        this.stats.errors++;
+        this.recordAnalysisError(analysisId);
         logger.warn(
           {
             hostname,
+            analysisId,
             addresses,
             reason: addressesValidation.reason,
           },
@@ -587,14 +722,14 @@ class DNSCacheService {
       const safeAddresses = addressesValidation.filteredAddresses || addresses;
       this.addToCache(cacheKey, { addresses: safeAddresses });
       logger.debug(
-        { hostname, addresses: safeAddresses },
+        { hostname, analysisId, addresses: safeAddresses },
         'DNS resolve6 result cached (IPC)',
       );
       return { success: true, addresses: safeAddresses };
     } catch (error) {
-      this.stats.errors++;
+      this.recordAnalysisError(analysisId);
       logger.debug(
-        { hostname, error: error.message },
+        { hostname, analysisId, error: error.message },
         'DNS resolve6 error (IPC)',
       );
       return { success: false, error: error.message };
@@ -749,6 +884,127 @@ class DNSCacheService {
     };
   }
 
+  /**
+   * Get stats for a specific analysis
+   * @param {string} analysisId - Analysis identifier
+   * @returns {Object|null} Stats for this analysis or null if not found
+   */
+  getAnalysisStats(analysisId) {
+    if (!analysisId) return null;
+
+    const analysisStats = this.analysisStats.get(analysisId);
+    if (!analysisStats) {
+      return {
+        hits: 0,
+        misses: 0,
+        errors: 0,
+        hitRate: 0,
+        hostnameCount: 0,
+        hostnames: [],
+        cacheKeyCount: 0,
+      };
+    }
+
+    const total = analysisStats.hits + analysisStats.misses;
+    return {
+      hits: analysisStats.hits,
+      misses: analysisStats.misses,
+      errors: analysisStats.errors,
+      hitRate: total > 0 ? ((analysisStats.hits / total) * 100).toFixed(2) : 0,
+      hostnameCount: analysisStats.hostnames.size,
+      hostnames: Array.from(analysisStats.hostnames),
+      cacheKeyCount: analysisStats.cacheKeys.size,
+    };
+  }
+
+  /**
+   * Get all per-analysis stats
+   * @returns {Object} Map of analysisId to stats
+   */
+  getAllAnalysisStats() {
+    const result = {};
+    for (const [analysisId, stats] of this.analysisStats.entries()) {
+      const total = stats.hits + stats.misses;
+      result[analysisId] = {
+        hits: stats.hits,
+        misses: stats.misses,
+        errors: stats.errors,
+        hitRate: total > 0 ? ((stats.hits / total) * 100).toFixed(2) : 0,
+        hostnameCount: stats.hostnames.size,
+        hostnames: Array.from(stats.hostnames),
+        cacheKeyCount: stats.cacheKeys.size,
+      };
+    }
+    return result;
+  }
+
+  /**
+   * Get cache entries used by a specific analysis
+   * @param {string} analysisId - Analysis identifier
+   * @returns {Array} Cache entries used by this analysis
+   */
+  getAnalysisCacheEntries(analysisId) {
+    if (!analysisId) return [];
+
+    const analysisStats = this.analysisStats.get(analysisId);
+    if (!analysisStats) return [];
+
+    const entries = [];
+    const now = Date.now();
+
+    for (const cacheKey of analysisStats.cacheKeys) {
+      const entry = this.cache.get(cacheKey);
+      if (entry) {
+        const age = now - entry.timestamp;
+        const remainingTTL = Math.max(0, this.config.ttl - age);
+
+        entries.push({
+          key: cacheKey,
+          data: entry.data,
+          timestamp: entry.timestamp,
+          age,
+          remainingTTL,
+          expired: remainingTTL === 0,
+        });
+      }
+    }
+
+    return entries.sort((a, b) => b.timestamp - a.timestamp);
+  }
+
+  /**
+   * Reset stats for a specific analysis
+   * @param {string} analysisId - Analysis identifier
+   */
+  resetAnalysisStats(analysisId) {
+    if (analysisId) {
+      this.analysisStats.delete(analysisId);
+      logger.info({ analysisId }, 'Analysis DNS stats reset');
+    }
+  }
+
+  /**
+   * Clean up stats for analyses that no longer exist
+   * Should be called when an analysis is deleted
+   * @param {string} analysisId - Analysis identifier
+   */
+  cleanupAnalysis(analysisId) {
+    if (!analysisId) return;
+
+    // Remove from analysisStats
+    this.analysisStats.delete(analysisId);
+
+    // Remove from cacheKeyToAnalyses
+    for (const [cacheKey, analyses] of this.cacheKeyToAnalyses.entries()) {
+      analyses.delete(analysisId);
+      if (analyses.size === 0) {
+        this.cacheKeyToAnalyses.delete(cacheKey);
+      }
+    }
+
+    logger.debug({ analysisId }, 'Cleaned up DNS stats for deleted analysis');
+  }
+
   resetStats() {
     this.stats = {
       hits: 0,
@@ -756,9 +1012,12 @@ class DNSCacheService {
       errors: 0,
       evictions: 0,
     };
+    // Also reset per-analysis stats
+    this.analysisStats.clear();
+    this.cacheKeyToAnalyses.clear();
     this.ttlPeriodStart = Date.now();
     this.lastStatsSnapshot = { ...this.stats };
-    logger.info('DNS cache stats reset');
+    logger.info('DNS cache stats reset (global and per-analysis)');
   }
 
   // Stats are included in metricsService.getAllMetrics() and broadcast via metricsUpdate SSE

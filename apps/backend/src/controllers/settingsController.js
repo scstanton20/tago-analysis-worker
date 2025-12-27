@@ -250,4 +250,103 @@ export class SettingsController {
       stats,
     });
   }
+
+  /**
+   * Get DNS statistics for all analyses
+   * Returns per-analysis DNS cache usage statistics
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   */
+  static async getAllAnalysisDNSStats(req, res) {
+    req.log.info(
+      { action: 'getAllAnalysisDNSStats' },
+      'Getting all analysis DNS stats',
+    );
+
+    const analysisStats = dnsCache.getAllAnalysisStats();
+
+    req.log.info(
+      {
+        action: 'getAllAnalysisDNSStats',
+        count: Object.keys(analysisStats).length,
+      },
+      'All analysis DNS stats retrieved',
+    );
+
+    res.json({
+      analysisStats,
+    });
+  }
+
+  /**
+   * Get DNS statistics for a specific analysis
+   * Returns DNS cache usage statistics for the specified analysis
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.analysisId - Analysis identifier
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   */
+  static async getAnalysisDNSStats(req, res) {
+    const { analysisId } = req.params;
+
+    req.log.info(
+      { action: 'getAnalysisDNSStats', analysisId },
+      'Getting analysis DNS stats',
+    );
+
+    const stats = dnsCache.getAnalysisStats(analysisId);
+
+    req.log.info(
+      { action: 'getAnalysisDNSStats', analysisId, stats },
+      'Analysis DNS stats retrieved',
+    );
+
+    res.json({
+      analysisId,
+      stats,
+    });
+  }
+
+  /**
+   * Get DNS cache entries for a specific analysis
+   * Returns cache entries used by the specified analysis
+   *
+   * @param {Object} req - Express request object
+   * @param {Object} req.params - URL parameters
+   * @param {string} req.params.analysisId - Analysis identifier
+   * @param {Object} req.log - Request-scoped logger
+   * @param {Object} res - Express response object
+   * @returns {Promise<void>}
+   */
+  static async getAnalysisDNSCacheEntries(req, res) {
+    const { analysisId } = req.params;
+
+    req.log.info(
+      { action: 'getAnalysisDNSCacheEntries', analysisId },
+      'Getting analysis DNS cache entries',
+    );
+
+    const entries = dnsCache.getAnalysisCacheEntries(analysisId);
+
+    req.log.info(
+      {
+        action: 'getAnalysisDNSCacheEntries',
+        analysisId,
+        count: entries.length,
+      },
+      'Analysis DNS cache entries retrieved',
+    );
+
+    res.json({
+      analysisId,
+      entries,
+      total: entries.length,
+    });
+  }
 }

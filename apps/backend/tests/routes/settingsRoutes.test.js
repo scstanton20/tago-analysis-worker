@@ -81,6 +81,48 @@ vi.mock('../../src/controllers/settingsController.js', () => ({
         stats: { hits: 0, misses: 0, errors: 0, evictions: 0 },
       }),
     ),
+    getAllAnalysisDNSStats: vi.fn((req, res) =>
+      res.json({
+        analysisStats: {
+          'analysis-1': {
+            hits: 50,
+            misses: 10,
+            errors: 0,
+            hitRate: '83.3',
+            hostnameCount: 5,
+            hostnames: ['api.tago.io', 'google.com'],
+          },
+        },
+      }),
+    ),
+    getAnalysisDNSStats: vi.fn((req, res) =>
+      res.json({
+        analysisId: req.params.analysisId,
+        stats: {
+          hits: 50,
+          misses: 10,
+          errors: 0,
+          hitRate: '83.3',
+          hostnameCount: 5,
+          hostnames: ['api.tago.io'],
+        },
+      }),
+    ),
+    getAnalysisDNSCacheEntries: vi.fn((req, res) =>
+      res.json({
+        analysisId: req.params.analysisId,
+        entries: [
+          {
+            key: 'api.tago.io:4',
+            value: ['1.2.3.4'],
+            age: 60,
+            ttl: 240,
+            expired: false,
+          },
+        ],
+        total: 1,
+      }),
+    ),
   },
 }));
 

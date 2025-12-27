@@ -25,6 +25,7 @@ import { useUnsavedChangesGuard } from '../../hooks/modals';
 import { IconPlus, IconUser, IconCopy, IconCheck } from '@tabler/icons-react';
 import { modals } from '@mantine/modals';
 import { useAuth } from '../../hooks/useAuth';
+import { usePermissions } from '../../hooks/usePermissions';
 import { useUserManagement } from '../../hooks/user-management';
 import UserTable from './users/UserTable.jsx';
 import UserForm from './users/UserForm.jsx';
@@ -39,7 +40,8 @@ import PropTypes from 'prop-types';
  * @returns {JSX.Element} Modal content
  */
 function UserManagementModalContent({ id }) {
-  const { user: currentUser, isAdmin } = useAuth();
+  const { user: currentUser } = useAuth();
+  const { isAdmin } = usePermissions();
 
   // Use the custom hook that encapsulates all the business logic
   // All context data (currentUser, teams, permissions) are accessed internally via hooks

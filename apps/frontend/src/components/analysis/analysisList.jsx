@@ -316,7 +316,7 @@ export default function AnalysisList({
       <PaperCard title="Available Analyses" p="lg" radius="md">
         <Center py="xl">
           <Group>
-            <Loader size="sm" />
+            <Loader size="sm" color="brand" />
             <Text c="dimmed">Connecting to server...</Text>
           </Group>
         </Center>

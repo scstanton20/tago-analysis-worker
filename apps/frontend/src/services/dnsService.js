@@ -83,4 +83,43 @@ export const dnsService = {
       successMessage: 'DNS statistics reset successfully',
     },
   ),
+
+  // Get DNS stats for all analyses
+  getAllAnalysisStats: createGetMethod(
+    logger,
+    'fetch all analysis DNS stats',
+    '/settings/dns/analysis',
+    {
+      debugMessage: 'Fetching all analysis DNS stats',
+      successMessage: 'All analysis DNS stats fetched successfully',
+      getSuccessParams: (result) => ({
+        count: Object.keys(result?.analysisStats || {}).length,
+      }),
+    },
+  ),
+
+  // Get DNS stats for a specific analysis
+  getAnalysisStats: createGetMethod(
+    logger,
+    'fetch analysis DNS stats',
+    (analysisId) => `/settings/dns/analysis/${analysisId}`,
+    {
+      debugMessage: 'Fetching analysis DNS stats',
+      successMessage: 'Analysis DNS stats fetched successfully',
+      getDebugParams: (analysisId) => ({ analysisId }),
+    },
+  ),
+
+  // Get cache entries for a specific analysis
+  getAnalysisCacheEntries: createGetMethod(
+    logger,
+    'fetch analysis DNS cache entries',
+    (analysisId) => `/settings/dns/analysis/${analysisId}/entries`,
+    {
+      debugMessage: 'Fetching analysis DNS cache entries',
+      successMessage: 'Analysis DNS cache entries fetched successfully',
+      getDebugParams: (analysisId) => ({ analysisId }),
+      getSuccessParams: (result) => ({ count: result?.entries?.length }),
+    },
+  ),
 };

@@ -30,11 +30,13 @@ import {
   IconClock,
   IconTransfer,
   IconAlertCircle,
+  IconExternalLink,
 } from '@tabler/icons-react';
 import {
   FormAlert,
   SecondaryButton,
   CancelButton,
+  UtilityButton,
 } from '../../components/global';
 import { modals } from '@mantine/modals';
 import { analysisService } from '../../services/analysisService';
@@ -46,21 +48,40 @@ import {
   useTeams,
   useConnection,
 } from '../../contexts/sseContext';
+import { usePermissions } from '../../hooks/usePermissions';
 import PropTypes from 'prop-types';
 
 /**
  * Info Card component for displaying grouped metadata
  */
-function InfoCard({ icon, title, children, loading = false }) {
-  return (
-    <Paper withBorder p="sm" radius="md" h="100%">
-      <Group gap="xs" mb="xs">
-        <ThemeIcon variant="light" size="sm">
-          {icon}
-        </ThemeIcon>
-        <Text fw={600} size="sm">
-          {title}
-        </Text>
+function InfoCard({
+  icon,
+  title,
+  children,
+  loading = false,
+  onClick,
+  headerAction,
+  tooltip,
+}) {
+  const card = (
+    <Paper
+      withBorder
+      p="sm"
+      radius="md"
+      h="100%"
+      onClick={onClick}
+      style={onClick ? { cursor: 'pointer' } : undefined}
+    >
+      <Group gap="xs" mb="xs" justify="space-between">
+        <Group gap="xs">
+          <ThemeIcon color="brand" size="sm">
+            {icon}
+          </ThemeIcon>
+          <Text fw={600} size="sm">
+            {title}
+          </Text>
+        </Group>
+        {headerAction}
       </Group>
       {loading ? (
         <Stack gap={4}>
@@ -73,6 +94,16 @@ function InfoCard({ icon, title, children, loading = false }) {
       )}
     </Paper>
   );
+
+  if (tooltip) {
+    return (
+      <Tooltip label={tooltip}>
+        <Box>{card}</Box>
+      </Tooltip>
+    );
+  }
+
+  return card;
 }
 
 InfoCard.propTypes = {
@@ -80,6 +111,9 @@ InfoCard.propTypes = {
   title: PropTypes.string.isRequired,
   children: PropTypes.node,
   loading: PropTypes.bool,
+  onClick: PropTypes.func,
+  headerAction: PropTypes.node,
+  tooltip: PropTypes.string,
 };
 
 /**
@@ -147,11 +181,14 @@ function AnalysisInfoModalContent({ id, innerProps }) {
   const { analysis, onNotesUpdated } = innerProps;
 
   // SSE hooks for real-time data
-  const { getAnalysis } = useAnalyses();
-  const { metricsData, dnsCache } = useBackend();
+  const { getAnalysis, getAnalysisDnsStats } = useAnalyses();
+  const { metricsData } = useBackend();
   const { teams } = useTeams();
   const { subscribeToAnalysis, unsubscribeFromAnalysis, sessionId } =
     useConnection();
+
+  // Check admin permissions
+  const { isAdmin } = usePermissions();
 
   // Subscribe to analysis log channel for real-time log stats
   useEffect(() => {
@@ -182,17 +219,23 @@ function AnalysisInfoModalContent({ id, innerProps }) {
     return null;
   }, [processes, analysis.id]);
 
-  // Get DNS stats from SSE
+  // Get per-analysis DNS stats from SSE (pushed on channel subscription)
+  const sseDnsStats = getAnalysisDnsStats(analysis.id);
+
+  // Format DNS stats for display (SSE returns stats with enabled flag)
   const dnsStats = useMemo(() => {
-    if (!dnsCache?.stats) return null;
+    // Only show if we have stats and DNS cache is enabled
+    if (!sseDnsStats?.enabled) return null;
+
     return {
-      enabled: dnsCache.enabled ?? true,
-      cacheSize: dnsCache.stats.cacheSize || 0,
-      hits: dnsCache.stats.hits || 0,
-      misses: dnsCache.stats.misses || 0,
-      hitRate: dnsCache.stats.hitRate || 0,
+      enabled: true,
+      hits: sseDnsStats.hits || 0,
+      misses: sseDnsStats.misses || 0,
+      hitRate: sseDnsStats.hitRate || 0,
+      hostnameCount: sseDnsStats.hostnameCount || 0,
+      errors: sseDnsStats.errors || 0,
     };
-  }, [dnsCache]);
+  }, [sseDnsStats]);
 
   // Get team info from SSE
   const teamInfo = useMemo(() => {
@@ -269,13 +312,18 @@ function AnalysisInfoModalContent({ id, innerProps }) {
             {status}
           </Badge>
         </Group>
-        <SecondaryButton
-          leftSection={<IconNotes size={16} />}
-          onClick={handleEditNotes}
-          disabled={metaLoading}
-        >
-          {fileMeta?.notes?.exists ? 'View Notes' : 'Add Notes'}
-        </SecondaryButton>
+        <Group gap="xs">
+          {/* Show View Notes for everyone if notes exist, Add Notes only for admins */}
+          {(fileMeta?.notes?.exists || isAdmin) && (
+            <SecondaryButton
+              leftSection={<IconNotes size={16} />}
+              onClick={handleEditNotes}
+              disabled={metaLoading}
+            >
+              {fileMeta?.notes?.exists ? 'View Notes' : 'Add Notes'}
+            </SecondaryButton>
+          )}
+        </Group>
       </Group>
 
       <Divider />
@@ -417,19 +465,53 @@ function AnalysisInfoModalContent({ id, innerProps }) {
           </InfoCard>
         )}
 
-        {/* DNS Cache Info - from SSE (real-time) */}
+        {/* DNS Cache Info - from SSE (real-time per-analysis stats) - clickable to open DNS settings (admin only) */}
         {dnsStats?.enabled && (
-          <InfoCard icon={<IconTransfer size={14} />} title="DNS Cache">
+          <InfoCard
+            icon={<IconTransfer size={14} />}
+            title="DNS Cache"
+            tooltip={isAdmin ? 'Click to view detailed DNS stats' : undefined}
+            onClick={
+              isAdmin
+                ? () => {
+                    modals.close(id);
+                    modalService.openSettings({
+                      initialTab: 'dns',
+                      focusAnalysisId: analysis.id,
+                    });
+                  }
+                : undefined
+            }
+            headerAction={
+              isAdmin ? (
+                <Tooltip label="Open DNS Settings">
+                  <UtilityButton
+                    size="xs"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      modals.close(id);
+                      modalService.openSettings({
+                        initialTab: 'dns',
+                        focusAnalysisId: analysis.id,
+                      });
+                    }}
+                  >
+                    <IconExternalLink size={14} />
+                  </UtilityButton>
+                </Tooltip>
+              ) : undefined
+            }
+          >
             <Stack gap={4}>
-              <InfoRow label="Cache Size" value={dnsStats.cacheSize} />
               <InfoRow
                 label="Hit Rate"
-                value={`${(dnsStats.hitRate * 100).toFixed(1)}%`}
+                value={`${Number(dnsStats.hitRate).toFixed(1)}%`}
               />
               <InfoRow
                 label="Hits / Misses"
                 value={`${dnsStats.hits} / ${dnsStats.misses}`}
               />
+              <InfoRow label="Hostnames" value={dnsStats.hostnameCount} />
             </Stack>
           </InfoCard>
         )}

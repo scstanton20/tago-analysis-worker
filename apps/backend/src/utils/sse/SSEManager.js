@@ -164,12 +164,6 @@ export class SSEManager {
   }
 
   // ========================================================================
-  // Public API - Delegation to Services
-  // All public methods delegate to the appropriate service
-  // This maintains 100% backward compatibility
-  // ========================================================================
-
-  // ========================================================================
   // Session Management (delegates to SessionManager)
   // ========================================================================
 

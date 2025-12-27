@@ -90,6 +90,16 @@ export class BroadcastService {
   }
 
   /**
+   * Broadcast DNS stats to analysis subscribers
+   * Delegates to ChannelManager
+   * @param {string} analysisId - Analysis ID (UUID)
+   * @returns {Promise<void>}
+   */
+  async broadcastAnalysisDnsStats(analysisId) {
+    await this.manager.channelManager.broadcastAnalysisDnsStats(analysisId);
+  }
+
+  /**
    * Route broadcast by type (log vs non-log)
    * Extracted from sse.js lines 1372-1396
    * @param {string} type - Update type

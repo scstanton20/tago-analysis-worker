@@ -1,5 +1,4 @@
 import { useAnalyses } from '../contexts/sseContext';
-import { useAuth } from './useAuth';
 import { usePermissions } from './usePermissions';
 import { filterAnalysesByTeam } from '../utils/filterHelpers';
 
@@ -15,8 +14,7 @@ import { filterAnalysesByTeam } from '../utils/filterHelpers';
  */
 export function useFilteredAnalyses(selectedTeam) {
   const { analyses } = useAnalyses();
-  const { isAdmin } = useAuth();
-  const { isTeamMember } = usePermissions();
+  const { isAdmin, isTeamMember } = usePermissions();
 
   return filterAnalysesByTeam(analyses, selectedTeam, isAdmin, isTeamMember);
 }

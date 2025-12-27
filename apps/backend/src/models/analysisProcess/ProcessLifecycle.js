@@ -262,11 +262,13 @@ export class ProcessLifecycleManager {
     // Handle IPC messages from child process (DNS cache requests)
     this.analysisProcess.process.on('message', async (message) => {
       const dnsCache = await getDnsCache();
+      const analysisId = this.analysisProcess.analysisId;
 
       if (message.type === 'DNS_LOOKUP_REQUEST') {
         const result = await dnsCache.handleDNSLookupRequest(
           message.hostname,
           message.options,
+          analysisId,
         );
         this.analysisProcess.safeIPCSend({
           type: 'DNS_LOOKUP_RESPONSE',
@@ -276,6 +278,7 @@ export class ProcessLifecycleManager {
       } else if (message.type === 'DNS_RESOLVE4_REQUEST') {
         const result = await dnsCache.handleDNSResolve4Request(
           message.hostname,
+          analysisId,
         );
         this.analysisProcess.safeIPCSend({
           type: 'DNS_RESOLVE4_RESPONSE',
@@ -285,6 +288,7 @@ export class ProcessLifecycleManager {
       } else if (message.type === 'DNS_RESOLVE6_REQUEST') {
         const result = await dnsCache.handleDNSResolve6Request(
           message.hostname,
+          analysisId,
         );
         this.analysisProcess.safeIPCSend({
           type: 'DNS_RESOLVE6_RESPONSE',

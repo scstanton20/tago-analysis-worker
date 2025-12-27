@@ -12,6 +12,8 @@ export function SSEAnalysesProvider({ children }) {
   // Analyses keyed by analysisId (UUID)
   const [analyses, setAnalyses] = useState({});
   const [loadingAnalyses, setLoadingAnalyses] = useState(new Set());
+  // DNS stats keyed by analysisId (UUID) - populated via SSE channel subscription
+  const [analysisDnsStats, setAnalysisDnsStats] = useState({});
 
   // Log sequences keyed by analysisId
   const logSequences = useRef(new Map());
@@ -49,6 +51,13 @@ export function SSEAnalysesProvider({ children }) {
         }, {});
     },
     [analyses],
+  );
+
+  const getAnalysisDnsStats = useCallback(
+    (analysisId) => {
+      return analysisDnsStats[analysisId] || null;
+    },
+    [analysisDnsStats],
   );
 
   // Event Handlers
@@ -361,6 +370,18 @@ export function SSEAnalysesProvider({ children }) {
     }
   }, []);
 
+  const handleAnalysisDnsStats = useCallback((data) => {
+    if (data.analysisId && data.stats) {
+      setAnalysisDnsStats((prev) => ({
+        ...prev,
+        [data.analysisId]: {
+          ...data.stats,
+          enabled: data.enabled, // Include enabled flag from message
+        },
+      }));
+    }
+  }, []);
+
   // Message handler to be called by parent
   const handleMessage = useCallback(
     (data) => {
@@ -399,6 +420,9 @@ export function SSEAnalysesProvider({ children }) {
           case 'teamDeleted':
             handleTeamDeleted(data);
             break;
+          case 'analysisDnsStats':
+            handleAnalysisDnsStats(data);
+            break;
           default:
             break;
         }
@@ -420,6 +444,7 @@ export function SSEAnalysesProvider({ children }) {
       handleAnalysisRolledBack,
       handleAnalysisMovedToTeam,
       handleTeamDeleted,
+      handleAnalysisDnsStats,
     ],
   );
 
@@ -432,6 +457,7 @@ export function SSEAnalysesProvider({ children }) {
       getAnalysis,
       getAnalysisIds,
       filterAnalyses,
+      getAnalysisDnsStats,
       handleMessage,
     }),
     [
@@ -442,6 +468,7 @@ export function SSEAnalysesProvider({ children }) {
       getAnalysis,
       getAnalysisIds,
       filterAnalyses,
+      getAnalysisDnsStats,
       handleMessage,
     ],
   );

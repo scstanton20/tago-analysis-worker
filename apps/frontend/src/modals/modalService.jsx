@@ -130,9 +130,12 @@ export const modalService = {
 
   /**
    * Open Settings modal
+   * @param {Object} [options] - Optional settings
+   * @param {string} [options.initialTab] - Initial tab to open ('api' | 'utils' | 'metrics' | 'dns')
+   * @param {string} [options.focusAnalysisId] - Analysis ID to focus on in DNS tab
    * @returns {string} Modal ID
    */
-  openSettings: () => {
+  openSettings: (options = {}) => {
     const modalId = 'settings';
 
     modals.openContextModal({
@@ -142,7 +145,10 @@ export const modalService = {
       size: '95%',
       centered: true,
       closeOnEscape: false,
-      innerProps: {},
+      innerProps: {
+        initialTab: options.initialTab,
+        focusAnalysisId: options.focusAnalysisId,
+      },
     });
 
     return modalId;

@@ -106,6 +106,9 @@ export class ChannelManager {
         channel.register(session);
         session.state.subscribedChannels.add(analysisId);
         subscribed.push(analysisId);
+
+        // Push DNS stats to the newly subscribed session
+        await this.sendDnsStatsToSession(session, analysisId);
       }
 
       return {
@@ -187,6 +190,70 @@ export class ChannelManager {
       logger.error(
         { error, analysisId },
         'Error broadcasting to analysis channel',
+      );
+    }
+  }
+
+  /**
+   * Send DNS stats to a specific session (used only on subscription)
+   * @param {Object} session - SSE session
+   * @param {string} analysisId - Analysis ID (UUID)
+   * @returns {Promise<void>}
+   */
+  async sendDnsStatsToSession(session, analysisId) {
+    try {
+      const { dnsCache } = await import('../../services/dnsCache.js');
+
+      // Only send if DNS cache is enabled
+      if (!dnsCache.config.enabled) {
+        return;
+      }
+
+      const stats = dnsCache.getAnalysisStats(analysisId);
+      if (session.isConnected) {
+        await session.push({
+          type: 'analysisDnsStats',
+          analysisId,
+          stats,
+          enabled: true, // Only sent when DNS cache is enabled
+        });
+      }
+    } catch (error) {
+      logger.error({ error, analysisId }, 'Error sending DNS stats to session');
+    }
+  }
+
+  /**
+   * Broadcast DNS stats to all analysis subscribers
+   * @param {string} analysisId - Analysis ID (UUID)
+   * @returns {Promise<void>}
+   */
+  async broadcastAnalysisDnsStats(analysisId) {
+    const channel = this.manager.analysisChannels.get(analysisId);
+
+    if (!channel) {
+      return; // No subscribers
+    }
+
+    try {
+      const { dnsCache } = await import('../../services/dnsCache.js');
+
+      // Only broadcast if DNS cache is enabled
+      if (!dnsCache.config.enabled) {
+        return;
+      }
+
+      const stats = dnsCache.getAnalysisStats(analysisId);
+      channel.broadcast({
+        type: 'analysisDnsStats',
+        analysisId,
+        stats,
+        enabled: true, // Only broadcast when DNS cache is enabled
+      });
+    } catch (error) {
+      logger.error(
+        { error, analysisId },
+        'Error broadcasting DNS stats to analysis channel',
       );
     }
   }

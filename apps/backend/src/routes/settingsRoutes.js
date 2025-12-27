@@ -252,6 +252,101 @@ dnsRouter.post(
   asyncHandler(SettingsController.resetDNSStats, 'reset DNS stats'),
 );
 
+/**
+ * @swagger
+ * /settings/dns/analysis:
+ *   get:
+ *     summary: Get DNS stats for all analyses
+ *     description: Retrieve DNS cache statistics broken down by analysis
+ *     tags: [DNS Cache Settings]
+ *     responses:
+ *       200:
+ *         description: Per-analysis DNS stats retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 analysisStats:
+ *                   type: object
+ *                   additionalProperties:
+ *                     type: object
+ *                     properties:
+ *                       hits:
+ *                         type: number
+ *                       misses:
+ *                         type: number
+ *                       errors:
+ *                         type: number
+ *                       hitRate:
+ *                         type: string
+ *                       hostnameCount:
+ *                         type: number
+ *                       hostnames:
+ *                         type: array
+ *                         items:
+ *                           type: string
+ */
+dnsRouter.get(
+  '/analysis',
+  asyncHandler(
+    SettingsController.getAllAnalysisDNSStats,
+    'get all analysis DNS stats',
+  ),
+);
+
+/**
+ * @swagger
+ * /settings/dns/analysis/{analysisId}:
+ *   get:
+ *     summary: Get DNS stats for a specific analysis
+ *     description: Retrieve DNS cache statistics for a specific analysis
+ *     tags: [DNS Cache Settings]
+ *     parameters:
+ *       - in: path
+ *         name: analysisId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The analysis ID
+ *     responses:
+ *       200:
+ *         description: Analysis DNS stats retrieved successfully
+ */
+dnsRouter.get(
+  '/analysis/:analysisId',
+  asyncHandler(
+    SettingsController.getAnalysisDNSStats,
+    'get analysis DNS stats',
+  ),
+);
+
+/**
+ * @swagger
+ * /settings/dns/analysis/{analysisId}/entries:
+ *   get:
+ *     summary: Get DNS cache entries for a specific analysis
+ *     description: Retrieve DNS cache entries used by a specific analysis
+ *     tags: [DNS Cache Settings]
+ *     parameters:
+ *       - in: path
+ *         name: analysisId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The analysis ID
+ *     responses:
+ *       200:
+ *         description: Analysis DNS cache entries retrieved successfully
+ */
+dnsRouter.get(
+  '/analysis/:analysisId/entries',
+  asyncHandler(
+    SettingsController.getAnalysisDNSCacheEntries,
+    'get analysis DNS cache entries',
+  ),
+);
+
 router.use('/dns', dnsRouter);
 
 export { router as settingsRouter };

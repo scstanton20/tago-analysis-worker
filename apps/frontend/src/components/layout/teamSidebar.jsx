@@ -202,8 +202,8 @@ SortableTeamItem.propTypes = {
 // Main Team Sidebar Component
 export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
   const { hasInitialData } = useConnection();
-  const { user, logout, isAdmin } = useAuth();
-  const { isAdmin: hasAdminPerms } = usePermissions();
+  const { user, logout } = useAuth();
+  const { isAdmin } = usePermissions();
 
   // Use custom hook for visible teams and analysis counts
   const { teamsArray, getTeamAnalysisCount } = useVisibleTeams();
@@ -286,7 +286,7 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
           >
             All Analyses
           </PrimaryButton>
-          {hasAdminPerms && (
+          {isAdmin && (
             <Tooltip label="Manage teams">
               <ActionIcon
                 variant="light"
