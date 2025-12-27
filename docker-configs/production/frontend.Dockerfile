@@ -5,14 +5,14 @@ ENV PATH="$PNPM_HOME:$PATH"
 
 WORKDIR /app
 
-RUN corepack enable
-
 # Copy package.json files for the monorepo
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/frontend/package.json ./apps/frontend/
 
-# Use BuildKit cache mount for pnpm store - persists between builds
-RUN --mount=type=cache,id=pnpm-frontend,target=/pnpm/store \
+# Use BuildKit cache mounts for corepack and pnpm store
+RUN --mount=type=cache,id=corepack,target=/root/.cache/node/corepack \
+    --mount=type=cache,id=pnpm-frontend,target=/pnpm/store \
+    corepack enable && \
     pnpm install --filter frontend --frozen-lockfile
 
 FROM node:23-alpine@sha256:a34e14ef1df25b58258956049ab5a71ea7f0d498e41d0b514f4b8de09af09456 AS build
