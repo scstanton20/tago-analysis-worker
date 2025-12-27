@@ -9,10 +9,7 @@ WORKDIR /app
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/backend/package.json ./apps/backend/
 
-# Use BuildKit cache mounts for corepack and pnpm store
-RUN --mount=type=cache,id=corepack,target=/root/.cache/node/corepack \
-    --mount=type=cache,id=pnpm-backend,target=/pnpm/store \
-    corepack enable && \
+RUN corepack enable && \
     pnpm install --filter backend --frozen-lockfile --prod
  
 FROM node:23-alpine@sha256:a34e14ef1df25b58258956049ab5a71ea7f0d498e41d0b514f4b8de09af09456 AS run

@@ -259,29 +259,33 @@ describe('Status Routes - WITH REAL AUTH', () => {
   });
 
   describe('Multiple User Roles - Comprehensive Coverage', () => {
-    it('should verify all users can access status', async () => {
-      const userRoles = [
-        'admin',
-        'teamOwner',
-        'teamEditor',
-        'teamViewer',
-        'teamRunner',
-        'noAccess',
-        'multiTeamUser',
-      ];
+    it(
+      'should verify all users can access status',
+      async () => {
+        const userRoles = [
+          'admin',
+          'teamOwner',
+          'teamEditor',
+          'teamViewer',
+          'teamRunner',
+          'noAccess',
+          'multiTeamUser',
+        ];
 
-      for (const role of userRoles) {
-        const cookie = await getSessionCookie(role);
+        for (const role of userRoles) {
+          const cookie = await getSessionCookie(role);
 
-        const response = await request(app)
-          .get('/api/status')
-          .set('Cookie', cookie)
-          .expect(200);
+          const response = await request(app)
+            .get('/api/status')
+            .set('Cookie', cookie)
+            .expect(200);
 
-        expect(response.body.container_health).toBeDefined();
-        expect(response.body.tagoConnection).toBeDefined();
-      }
-    });
+          expect(response.body.container_health).toBeDefined();
+          expect(response.body.tagoConnection).toBeDefined();
+        }
+      },
+      30000,
+    ); // Extended timeout for multiple auth operations
   });
 
   describe('Response Format', () => {
