@@ -9,12 +9,11 @@ RUN corepack enable
 
 # Copy package.json files for the monorepo
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
-
-RUN pnpm fetch --prod
-
 COPY apps/backend/package.json ./apps/backend/
 
-RUN pnpm install --filter backend --frozen-lockfile --prod
+# Use BuildKit cache mount for pnpm store - persists between builds
+RUN --mount=type=cache,id=pnpm-backend,target=/pnpm/store \
+    pnpm install --filter backend --frozen-lockfile --prod
  
 FROM node:23-alpine@sha256:a34e14ef1df25b58258956049ab5a71ea7f0d498e41d0b514f4b8de09af09456 AS run
 

@@ -5,6 +5,7 @@
 
 import { createChildLogger } from '../logging/logger.js';
 import { SSE_API_VERSION } from './utils.js';
+import { getTagoSdkVersion } from '../sdkVersion.js';
 
 const logger = createChildLogger('sse:init');
 
@@ -174,8 +175,6 @@ export class InitDataService {
       const { analysisService } = await import(
         '../../services/analysisService.js'
       );
-      const { createRequire } = await import('module');
-      const require = createRequire(import.meta.url);
       const ms = (await import('ms')).default;
 
       // Get container state
@@ -193,35 +192,8 @@ export class InitDataService {
         logger.error({ error: filterError }, 'Error filtering analyses');
       }
 
-      let tagoVersion;
-      try {
-        const fs = await import('fs');
-        const path = await import('path');
-
-        // Find the SDK package.json by resolving the SDK path
-        const sdkPath = require.resolve('@tago-io/sdk');
-        let currentDir = path.dirname(sdkPath);
-
-        // Walk up directories to find the correct package.json
-        while (currentDir !== path.dirname(currentDir)) {
-          const potentialPath = path.join(currentDir, 'package.json');
-          if (fs.existsSync(potentialPath)) {
-            const pkg = JSON.parse(fs.readFileSync(potentialPath, 'utf8'));
-            if (pkg.name === '@tago-io/sdk') {
-              tagoVersion = pkg.version;
-              break;
-            }
-          }
-          currentDir = path.dirname(currentDir);
-        }
-
-        if (!tagoVersion) {
-          tagoVersion = 'unknown';
-        }
-      } catch (error) {
-        logger.error({ error }, 'Error reading tago SDK version');
-        tagoVersion = 'unknown';
-      }
+      // Get Tago SDK version from centralized utility
+      const tagoVersion = getTagoSdkVersion();
 
       const status = {
         type: 'statusUpdate',
