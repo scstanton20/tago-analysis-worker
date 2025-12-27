@@ -33,32 +33,10 @@ vi.mock('../../src/utils/responseHelpers.js', () => ({
   }),
 }));
 
-// Mock fs module - needs default export for static import
-vi.mock('fs', () => ({
-  default: {
-    existsSync: vi.fn(),
-    readFileSync: vi.fn(),
-  },
-  existsSync: vi.fn(),
-  readFileSync: vi.fn(),
-}));
-
-// Mock path module - needs default export for static import
-vi.mock('path', () => ({
-  default: {
-    dirname: vi.fn((p) => {
-      const parts = p.split('/');
-      parts.pop();
-      return parts.join('/') || '/';
-    }),
-    join: vi.fn((...args) => args.join('/')),
-  },
-  dirname: vi.fn((p) => {
-    const parts = p.split('/');
-    parts.pop();
-    return parts.join('/') || '/';
-  }),
-  join: vi.fn((...args) => args.join('/')),
+// Mock sdkVersion module directly - this is the proper way to mock it
+// since the module caches the version at import time
+vi.mock('../../src/utils/sdkVersion.js', () => ({
+  getTagoSdkVersion: vi.fn(() => '12.4.0'),
 }));
 
 // Mock ms module
@@ -72,8 +50,7 @@ vi.mock('ms', () => ({
 }));
 
 // Import after mocks
-const fsModule = await import('fs');
-const fs = fsModule.default;
+const { getTagoSdkVersion } = await import('../../src/utils/sdkVersion.js');
 const { sseManager } = await import('../../src/utils/sse/index.js');
 const { analysisService } = await import(
   '../../src/services/analysisService.js'
@@ -93,6 +70,8 @@ describe('StatusController', () => {
     vi.clearAllMocks();
     // Reset analyses map to default state for each test
     analysisService.analyses = new Map(defaultAnalysesMap);
+    // Reset SDK version mock to default
+    getTagoSdkVersion.mockReturnValue('12.4.0');
   });
 
   describe('getSystemStatus', () => {
@@ -107,14 +86,6 @@ describe('StatusController', () => {
       };
 
       sseManager.getContainerState.mockReturnValue(mockContainerState);
-
-      // Mock Tago SDK version resolution
-      const mockPackageJson = {
-        name: '@tago-io/sdk',
-        version: '12.4.0',
-      };
-      fs.existsSync.mockReturnValue(true);
-      fs.readFileSync.mockReturnValue(JSON.stringify(mockPackageJson));
 
       await StatusController.getSystemStatus(req, res);
 
@@ -149,10 +120,6 @@ describe('StatusController', () => {
       };
 
       sseManager.getContainerState.mockReturnValue(mockContainerState);
-      fs.existsSync.mockReturnValue(true);
-      fs.readFileSync.mockReturnValue(
-        JSON.stringify({ name: '@tago-io/sdk', version: '12.4.0' }),
-      );
 
       await StatusController.getSystemStatus(req, res);
 
@@ -177,10 +144,6 @@ describe('StatusController', () => {
       };
 
       sseManager.getContainerState.mockReturnValue(mockContainerState);
-      fs.existsSync.mockReturnValue(true);
-      fs.readFileSync.mockReturnValue(
-        JSON.stringify({ name: '@tago-io/sdk', version: '12.4.0' }),
-      );
 
       await StatusController.getSystemStatus(req, res);
 
@@ -197,7 +160,8 @@ describe('StatusController', () => {
         startTime: new Date(),
       });
 
-      fs.existsSync.mockReturnValue(false);
+      // Mock SDK version as unknown
+      getTagoSdkVersion.mockReturnValue('unknown');
 
       await StatusController.getSystemStatus(req, res);
 
@@ -220,11 +184,6 @@ describe('StatusController', () => {
         startTime: new Date(),
       });
 
-      fs.existsSync.mockReturnValue(true);
-      fs.readFileSync.mockReturnValue(
-        JSON.stringify({ name: '@tago-io/sdk', version: '12.4.0' }),
-      );
-
       await StatusController.getSystemStatus(req, res);
 
       expect(res.json).toHaveBeenCalledWith(
@@ -245,11 +204,6 @@ describe('StatusController', () => {
         message: null,
         startTime: null,
       });
-
-      fs.existsSync.mockReturnValue(true);
-      fs.readFileSync.mockReturnValue(
-        JSON.stringify({ name: '@tago-io/sdk', version: '12.4.0' }),
-      );
 
       await StatusController.getSystemStatus(req, res);
 
@@ -273,11 +227,6 @@ describe('StatusController', () => {
         message: 'Container is ready',
         startTime: twoHoursAgo,
       });
-
-      fs.existsSync.mockReturnValue(true);
-      fs.readFileSync.mockReturnValue(
-        JSON.stringify({ name: '@tago-io/sdk', version: '12.4.0' }),
-      );
 
       await StatusController.getSystemStatus(req, res);
 
@@ -303,11 +252,6 @@ describe('StatusController', () => {
         startTime: new Date(),
       });
 
-      fs.existsSync.mockReturnValue(true);
-      fs.readFileSync.mockReturnValue(
-        JSON.stringify({ name: '@tago-io/sdk', version: '12.4.0' }),
-      );
-
       await StatusController.getSystemStatus(req, res);
 
       expect(res.json).toHaveBeenCalledWith(
@@ -316,32 +260,6 @@ describe('StatusController', () => {
             uptime: expect.objectContaining({
               formatted: expect.any(String),
             }),
-          }),
-        }),
-      );
-    });
-
-    it('should handle package.json read errors gracefully', async () => {
-      const req = createMockRequest();
-      const res = createMockResponse();
-
-      sseManager.getContainerState.mockReturnValue({
-        status: 'ready',
-        message: 'Container is ready',
-        startTime: new Date(),
-      });
-
-      fs.existsSync.mockReturnValue(true);
-      fs.readFileSync.mockImplementation(() => {
-        throw new Error('Failed to read file');
-      });
-
-      await StatusController.getSystemStatus(req, res);
-
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          tagoConnection: expect.objectContaining({
-            sdkVersion: 'unknown',
           }),
         }),
       );
@@ -356,11 +274,6 @@ describe('StatusController', () => {
         message: 'Container is ready',
         startTime: new Date(),
       });
-
-      fs.existsSync.mockReturnValue(true);
-      fs.readFileSync.mockReturnValue(
-        JSON.stringify({ name: '@tago-io/sdk', version: '12.4.0' }),
-      );
 
       // Set analyses to null to test edge case handling
       analysisService.analyses = null;
@@ -385,11 +298,6 @@ describe('StatusController', () => {
         message: 'Container is ready',
         startTime: new Date(),
       });
-
-      fs.existsSync.mockReturnValue(true);
-      fs.readFileSync.mockReturnValue(
-        JSON.stringify({ name: '@tago-io/sdk', version: '12.4.0' }),
-      );
 
       await StatusController.getSystemStatus(req, res);
 

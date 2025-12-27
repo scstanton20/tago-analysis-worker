@@ -1,12 +1,8 @@
 // controllers/statusController.js
-import { createRequire } from 'module';
-import fs from 'fs';
-import path from 'path';
 import ms from 'ms';
 import { analysisService } from '../services/analysisService.js';
 import { sseManager } from '../utils/sse/index.js';
-
-const require = createRequire(import.meta.url);
+import { getTagoSdkVersion } from '../utils/sdkVersion.js';
 
 /**
  * Controller class for system status monitoring
@@ -53,36 +49,8 @@ export class StatusController {
       );
     }
 
-    // Get Tago SDK version from package.json
-    let tagoVersion;
-    try {
-      // Find the SDK package.json by resolving the SDK path
-      const sdkPath = require.resolve('@tago-io/sdk');
-      let currentDir = path.dirname(sdkPath);
-
-      // Walk up directories to find the correct package.json
-      while (currentDir !== path.dirname(currentDir)) {
-        const potentialPath = path.join(currentDir, 'package.json');
-        if (fs.existsSync(potentialPath)) {
-          const pkg = JSON.parse(fs.readFileSync(potentialPath, 'utf8'));
-          if (pkg.name === '@tago-io/sdk') {
-            tagoVersion = pkg.version;
-            break;
-          }
-        }
-        currentDir = path.dirname(currentDir);
-      }
-
-      if (!tagoVersion) {
-        tagoVersion = 'unknown';
-      }
-    } catch (error) {
-      req.log.warn(
-        { action: 'getSystemStatus', err: error },
-        'Failed to read Tago SDK version',
-      );
-      tagoVersion = 'unknown';
-    }
+    // Get Tago SDK version from centralized utility
+    const tagoVersion = getTagoSdkVersion();
 
     // IMPORTANT: Get current container state from SSE manager
     const currentContainerState = sseManager.getContainerState();

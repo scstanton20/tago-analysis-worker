@@ -6,7 +6,6 @@
  * by delegating to specialized service modules.
  */
 
-import { createChildLogger } from '../logging/logger.js';
 import { createChannel } from 'better-sse';
 
 import { SessionManager } from './SessionManager.js';
@@ -14,8 +13,7 @@ import { ChannelManager } from './ChannelManager.js';
 import { BroadcastService } from './BroadcastService.js';
 import { InitDataService } from './InitDataService.js';
 import { HeartbeatService } from './HeartbeatService.js';
-
-const logger = createChildLogger('sse');
+import { getTagoSdkVersion } from '../sdkVersion.js';
 
 export class SSEManager {
   /**
@@ -36,10 +34,6 @@ export class SSEManager {
     };
     this.metricsInterval = null;
     this.heartbeatInterval = null;
-    this.cachedSdkVersion = null;
-
-    // Initialize SDK version cache
-    this._initSdkVersion();
 
     // Service instances (composition pattern)
     this.sessionManager = new SessionManager(this);
@@ -50,51 +44,12 @@ export class SSEManager {
   }
 
   /**
-   * Initialize SDK version cache
-   * Extracted from sse.js lines 1010-1041
-   * @private
-   * @returns {Promise<void>}
-   */
-  async _initSdkVersion() {
-    try {
-      const { createRequire } = await import('module');
-      const require = createRequire(import.meta.url);
-      const fs = await import('fs');
-      const path = await import('path');
-
-      // Find the SDK package.json by resolving the SDK path
-      const sdkPath = require.resolve('@tago-io/sdk');
-      let currentDir = path.dirname(sdkPath);
-
-      // Walk up directories to find the correct package.json
-      while (currentDir !== path.dirname(currentDir)) {
-        const potentialPath = path.join(currentDir, 'package.json');
-        if (fs.existsSync(potentialPath)) {
-          const pkg = JSON.parse(fs.readFileSync(potentialPath, 'utf8'));
-          if (pkg.name === '@tago-io/sdk') {
-            this.cachedSdkVersion = pkg.version;
-            logger.info({ version: pkg.version }, 'Cached Tago SDK version');
-            return;
-          }
-        }
-        currentDir = path.dirname(currentDir);
-      }
-
-      this.cachedSdkVersion = 'unknown';
-      logger.warn('Could not find Tago SDK version');
-    } catch (error) {
-      logger.error({ error }, 'Error caching Tago SDK version');
-      this.cachedSdkVersion = 'unknown';
-    }
-  }
-
-  /**
    * Get cached SDK version
-   * Extracted from sse.js lines 1049-1051
+   * Uses centralized sdkVersion utility
    * @returns {string} SDK version
    */
   getSdkVersion() {
-    return this.cachedSdkVersion || 'unknown';
+    return getTagoSdkVersion();
   }
 
   /**

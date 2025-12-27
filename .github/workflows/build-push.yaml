@@ -48,6 +48,7 @@ jobs:
             echo "${{ matrix.app.name }} image ${{ steps.version.outputs.VERSION }} does not exist"
             echo "EXISTS=false" >> $GITHUB_OUTPUT
           fi
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3.7.0
 
@@ -61,8 +62,8 @@ jobs:
           context: .
           file: ${{ matrix.app.dockerfile }}
           push: true
-          cache-from: type=gha,scope=${{ matrix.app.name }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.app.name }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository }}/cache:${{ matrix.app.name }}
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository }}/cache:${{ matrix.app.name }},mode=max,image-manifest=true
           platforms: linux/amd64,linux/arm64/v8
           tags: |
             ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.app.name }}:latest
