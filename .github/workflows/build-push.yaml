@@ -48,6 +48,7 @@ jobs:
             echo "${{ matrix.app.name }} image ${{ steps.version.outputs.VERSION }} does not exist"
             echo "EXISTS=false" >> $GITHUB_OUTPUT
           fi
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3.7.0
 
