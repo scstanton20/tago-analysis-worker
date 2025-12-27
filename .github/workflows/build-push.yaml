@@ -63,7 +63,7 @@ jobs:
           file: ${{ matrix.app.dockerfile }}
           push: true
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository }}/cache:${{ matrix.app.name }}
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository }}/cache:${{ matrix.app.name }},mode=max
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository }}/cache:${{ matrix.app.name }},mode=max,image-manifest=true
           platforms: linux/amd64,linux/arm64/v8
           tags: |
             ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.app.name }}:latest
