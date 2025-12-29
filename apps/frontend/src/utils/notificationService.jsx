@@ -2,6 +2,13 @@
  * Centralized notification service using Mantine notifications.
  * For React components, prefer notificationAPI from './notificationAPI'. Use this directly in SSE contexts and auth providers.
  */
+import {
+  IconCheck,
+  IconX,
+  IconInfoCircle,
+  IconAlertTriangle,
+  IconLoader,
+} from '@tabler/icons-react';
 
 // Dynamic import to avoid circular dependencies and ensure Mantine is initialized
 let notificationsAPI = null;
@@ -16,47 +23,32 @@ const getNotificationsAPI = async () => {
 
 /**
  * Configuration for different notification types
- * @type {Object.<string, {iconName: string, color: string, defaultTitle: string, defaultAutoClose: number}>}
  */
 const NOTIFICATION_CONFIGS = {
   success: {
-    iconName: 'IconCheck',
+    icon: IconCheck,
     color: 'green',
     defaultTitle: 'Success',
     defaultAutoClose: 4000,
   },
   error: {
-    iconName: 'IconX',
+    icon: IconX,
     color: 'red',
     defaultTitle: 'Error',
     defaultAutoClose: 6000,
   },
   info: {
-    iconName: 'IconInfoCircle',
+    icon: IconInfoCircle,
     color: 'blue',
     defaultTitle: 'Info',
     defaultAutoClose: 4000,
   },
   warning: {
-    iconName: 'IconAlertTriangle',
+    icon: IconAlertTriangle,
     color: 'orange',
     defaultTitle: 'Warning',
     defaultAutoClose: 5000,
   },
-};
-
-/**
- * Map of icon names to their dynamic imports
- * This allows us to import only the specific icons we need
- * @private
- */
-const ICON_IMPORTS = {
-  IconCheck: () => import('@tabler/icons-react').then((m) => m.IconCheck),
-  IconX: () => import('@tabler/icons-react').then((m) => m.IconX),
-  IconInfoCircle: () =>
-    import('@tabler/icons-react').then((m) => m.IconInfoCircle),
-  IconAlertTriangle: () =>
-    import('@tabler/icons-react').then((m) => m.IconAlertTriangle),
 };
 
 /**
@@ -70,7 +62,7 @@ const ICON_IMPORTS = {
 const showTypedNotification = async (type, message, title, autoClose) => {
   const config = NOTIFICATION_CONFIGS[type];
   const notifications = await getNotificationsAPI();
-  const IconComponent = await ICON_IMPORTS[config.iconName]();
+  const IconComponent = config.icon;
 
   const id = `notification-${type}-${Date.now()}`;
   notifications.show({
@@ -110,7 +102,6 @@ export const showWarning = (message, title, autoClose) =>
  */
 export const showLoading = async (message, id = null, title = 'Loading') => {
   const notifications = await getNotificationsAPI();
-  const { IconLoader } = await import('@tabler/icons-react');
 
   const notificationId = id || `notification-loading-${Date.now()}`;
   notifications.show({

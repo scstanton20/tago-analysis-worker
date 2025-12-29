@@ -4,12 +4,6 @@
   "version": "2.0.0",
   "type": "module",
   "license": "Apache-2.0",
-  "engines": {
-    "node": ">=22.0.0"
-  },
-  "imports": {
-    "#utils/mqAPI": "./apps/backend/src/utils/mqAPI.js"
-  },
   "scripts": {
     "dev": "concurrently \"pnpm run dev:frontend\" \"pnpm run dev:backend\"",
     "dev:frontend": "pnpm --filter \"frontend\" run dev",
@@ -17,10 +11,13 @@
     "format": "npx prettier --write .",
     "format:check": "npx prettier --check .",
     "lint": "npx eslint .",
-    "lint:fix": "npx eslint . --fix"
+    "lint:fix": "npx eslint . --fix",
+    "build-types": "pnpm --filter \"types\" build"
   },
   "devDependencies": {
     "@eslint/js": "^9.37.0",
+    "@typescript-eslint/eslint-plugin": "^8.51.0",
+    "@typescript-eslint/parser": "^8.51.0",
     "concurrently": "^9.2.1",
     "eslint": "^9.37.0",
     "eslint-config-prettier": "^10.1.8",
@@ -36,5 +33,5 @@
     "globals": "^16.4.0",
     "prettier": "3.6.2"
   },
-  "packageManager": "pnpm@10.21.0+sha512.da3337267e400fdd3d479a6c68079ac6db01d8ca4f67572083e722775a796788a7a9956613749e000fac20d424b594f7a791a5f4e2e13581c5ef947f26968a40"
+  "packageManager": "pnpm@10.26.2+sha512.0e308ff2005fc7410366f154f625f6631ab2b16b1d2e70238444dd6ae9d630a8482d92a451144debc492416896ed16f7b114a86ec68b8404b2443869e68ffda6"
 }

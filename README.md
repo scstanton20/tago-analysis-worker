@@ -16,7 +16,7 @@ A full-stack application for managing and running Tago.io analysis scripts with 
 ## Tech Stack
 
 - **Frontend**: React 19 + Vite + Mantine 8.x
-- **Backend**: Node.js + Express.js 5.x + Server-Sent Events
+- **Backend**: Node.js + Express.js 5.x + Server-Sent Events + Typescript
 - **Package Manager**: pnpm workspaces
 - **Authentication**: Better Auth
 - **Real-time**: Server-Sent Events (SSE)
@@ -27,7 +27,7 @@ A full-stack application for managing and running Tago.io analysis scripts with 
 
 ### Prerequisites
 
-- Node.js 23+
+- Node.js 24.0.0+
 - pnpm 10.13.1+
 
 ### Installation

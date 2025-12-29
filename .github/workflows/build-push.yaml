@@ -1,8 +1,20 @@
 name: build-push
-on: workflow_dispatch
+
+on:
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: 'Target platforms'
+        required: true
+        default: 'linux/amd64,linux/arm64/v8'
+
 env:
   DOCKER_BUILDKIT: 1
   REGISTRY: ghcr.io
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build-and-push:
@@ -12,7 +24,9 @@ jobs:
       actions: read
       packages: write
       id-token: write
+
     strategy:
+      fail-fast: false
       matrix:
         app:
           - name: backend
@@ -21,9 +35,21 @@ jobs:
           - name: frontend
             dockerfile: ./docker-configs/production/frontend.Dockerfile
             path: ./apps/frontend
+
     steps:
-      - name: Check out
+      - name: Checkout code
         uses: actions/checkout@v6
+
+      # Build types BEFORE Docker - they'll be in the build context
+      - name: Setup Node.js and pnpm
+        uses: ./.github/actions/setup-node-pnpm
+        id: setup
+        with:
+          restore-types: 'true'
+
+      - name: Build types package
+        if: steps.setup.outputs.types-cache-hit != 'true'
+        run: pnpm --filter @tago-analysis-worker/types run build
 
       - name: Extract version from package.json
         id: version
@@ -41,7 +67,7 @@ jobs:
         id: image-check
         run: |
           IMAGE_NAME=${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.app.name }}:${{ steps.version.outputs.VERSION }}
-          if docker manifest inspect $IMAGE_NAME >/dev/null 2>&1; then
+          if docker manifest inspect "$IMAGE_NAME" >/dev/null 2>&1; then
             echo "${{ matrix.app.name }} image ${{ steps.version.outputs.VERSION }} already exists"
             echo "EXISTS=true" >> $GITHUB_OUTPUT
           else
@@ -50,10 +76,22 @@ jobs:
           fi
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3.7.0
+        if: steps.image-check.outputs.EXISTS == 'false'
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
+        if: steps.image-check.outputs.EXISTS == 'false'
         uses: docker/setup-buildx-action@v3
+
+      - name: Generate Docker metadata
+        if: steps.image-check.outputs.EXISTS == 'false'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.app.name }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ steps.version.outputs.VERSION }}
+            type=raw,value=latest
 
       - name: Build and push ${{ matrix.app.name }} image
         if: steps.image-check.outputs.EXISTS == 'false'
@@ -64,7 +102,6 @@ jobs:
           push: true
           cache-from: type=gha,scope=${{ matrix.app.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.app.name }}
-          platforms: linux/amd64,linux/arm64/v8
-          tags: |
-            ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.app.name }}:latest
-            ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.app.name }}:${{ steps.version.outputs.VERSION }}
+          platforms: ${{ github.event.inputs.platforms }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

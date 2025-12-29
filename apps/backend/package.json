@@ -1,29 +1,32 @@
 {
   "name": "backend",
   "private": true,
-  "version": "2.5.331",
+  "version": "2.5.4",
   "type": "module",
   "engines": {
-    "node": ">=23.0.0"
+    "node": ">=24.0.0"
   },
   "imports": {
-    "#tago-utils": "./src/utils/in-process-utils/index.js"
+    "#tago-utils": "./src/utils/in-process-utils/index.ts"
   },
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "node --watch src/server.js",
-    "test": "pnpm test:unit && pnpm test:integration",
-    "test:unit": "vitest run tests --exclude='tests/integration/**' --exclude='tests/routes/**'",
-    "test:integration": "vitest run tests/integration tests/routes",
+    "start": "node src/server.ts",
+    "dev": "node --watch src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
     "test:run": "vitest run",
     "test:watch": "vitest watch",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
-    "test:coverage:ui": "vitest --ui --coverage"
+    "test:coverage:ui": "vitest --ui --coverage",
+    "test:debug": "TEST_LOG_LEVEL=debug vitest run"
   },
   "dependencies": {
     "@better-auth/cli": "^1.4.7",
     "@better-auth/passkey": "^1.4.7",
+    "@tago-analysis-worker/types": "workspace:*",
     "@tago-io/sdk": "^12.2.1",
     "archiver": "^7.0.1",
     "better-auth": "^1.4.7",
@@ -51,10 +54,22 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@types/archiver": "^7.0.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/compression": "^1.8.1",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/express-fileupload": "^1.5.1",
+    "@types/ms": "^2.1.0",
+    "@types/node": "^24.1.0",
+    "@types/pidusage": "^2.0.5",
     "@types/supertest": "^6.0.3",
+    "@types/swagger-jsdoc": "^6.0.4",
+    "@types/swagger-ui-express": "^4.1.8",
     "@vitest/coverage-v8": "^4.0.2",
     "@vitest/ui": "^4.0.2",
     "supertest": "^7.1.4",
+    "typescript": "^5.9.3",
     "vitest": "^4.0.2"
   }
 }

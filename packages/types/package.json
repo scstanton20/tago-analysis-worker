@@ -1,0 +1,96 @@
+{
+  "name": "@tago-analysis-worker/types",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./domain": {
+      "types": "./dist/domain/index.d.ts",
+      "import": "./dist/domain/index.js"
+    },
+    "./domain/*": {
+      "types": "./dist/domain/*.d.ts",
+      "import": "./dist/domain/*.js"
+    },
+    "./sse": {
+      "types": "./dist/sse/index.d.ts",
+      "import": "./dist/sse/index.js"
+    },
+    "./api": {
+      "types": "./dist/api/index.d.ts",
+      "import": "./dist/api/index.js"
+    },
+    "./api/*": {
+      "types": "./dist/api/*.d.ts",
+      "import": "./dist/api/*.js"
+    },
+    "./auth": {
+      "types": "./dist/auth/index.d.ts",
+      "import": "./dist/auth/index.js"
+    },
+    "./validation": {
+      "types": "./dist/validation/index.d.ts",
+      "import": "./dist/validation/index.js"
+    },
+    "./guards": {
+      "types": "./dist/guards/index.d.ts",
+      "import": "./dist/guards/index.js"
+    },
+    "./guards/*": {
+      "types": "./dist/guards/*.d.ts",
+      "import": "./dist/guards/*.js"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "domain": [
+        "./dist/domain/index.d.ts"
+      ],
+      "domain/*": [
+        "./dist/domain/*.d.ts"
+      ],
+      "sse": [
+        "./dist/sse/index.d.ts"
+      ],
+      "api": [
+        "./dist/api/index.d.ts"
+      ],
+      "api/*": [
+        "./dist/api/*.d.ts"
+      ],
+      "auth": [
+        "./dist/auth/index.d.ts"
+      ],
+      "validation": [
+        "./dist/validation/index.d.ts"
+      ],
+      "guards": [
+        "./dist/guards/index.d.ts"
+      ],
+      "guards/*": [
+        "./dist/guards/*.d.ts"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "rm -rf dist tsconfig.tsbuildinfo && tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm build"
+  },
+  "dependencies": {
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

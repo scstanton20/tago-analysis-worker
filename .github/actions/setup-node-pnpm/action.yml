@@ -1,0 +1,54 @@
+name: 'Setup Node.js and pnpm'
+description: 'Sets up Node.js, pnpm, and restores caches for the monorepo'
+
+inputs:
+  node-version:
+    description: 'Node.js version to use'
+    required: false
+    default: '24.x.x'
+  restore-types:
+    description: 'Whether to restore the types dist cache'
+    required: false
+    default: 'false'
+
+outputs:
+  types-cache-hit:
+    description: 'Whether the types dist cache was hit'
+    value: ${{ steps.types-cache.outputs.cache-hit }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: pnpm
+
+    - name: Restore node_modules cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          node_modules
+          apps/*/node_modules
+          packages/*/node_modules
+        key: ${{ runner.os }}-node-modules-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-node-modules-
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile
+
+    - name: Restore types dist cache
+      if: inputs.restore-types == 'true'
+      id: types-cache
+      uses: actions/cache@v4
+      with:
+        path: packages/types/dist
+        key: ${{ runner.os }}-types-dist-${{ hashFiles('packages/types/src/**', 'packages/types/tsconfig.json', 'packages/types/package.json') }}
+        restore-keys: |
+          ${{ runner.os }}-types-dist-

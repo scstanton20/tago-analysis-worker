@@ -1,3 +1,4 @@
+import { IconCheck, IconX } from '@tabler/icons-react';
 import {
   showSuccess,
   showError,
@@ -112,7 +113,6 @@ export const createNotificationAPI = () => {
 
       // Update to success notification with icon
       try {
-        const { IconCheck } = await import('@tabler/icons-react');
         await updateNotification(id, {
           title: 'Success',
           message: success,
@@ -135,7 +135,6 @@ export const createNotificationAPI = () => {
         error || err.message || 'An unexpected error occurred';
 
       try {
-        const { IconX } = await import('@tabler/icons-react');
         await updateNotification(id, {
           title: 'Error',
           message: errorMessage,

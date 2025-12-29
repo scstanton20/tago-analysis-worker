@@ -1,14 +1,15 @@
 packages:
   - ./apps/*
+  - ./packages/*
 
 ignoredBuiltDependencies:
+  - '@prisma/client'
   - '@scarf/scarf'
   - '@tailwindcss/oxide'
 
 injectWorkspacePackages: true
 
 onlyBuiltDependencies:
-  - '@swc/core'
   - better-sqlite3
   - esbuild
 

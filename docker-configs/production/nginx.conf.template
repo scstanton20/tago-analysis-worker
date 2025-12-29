@@ -13,10 +13,10 @@ map $http_x_forwarded_host $forwarded_host {
     ''      $host;
 }
 
-# HTTPS-only server block
+# HTTPS-only server block (port 8443 for non-root operation)
 server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
+    listen 8443 ssl;
+    listen [::]:8443 ssl;
     http2 on;
     server_name localhost;
 

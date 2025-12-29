@@ -4,6 +4,7 @@
   "timezone": "America/New_York",
   "lockFileMaintenance": {
     "enabled": true,
-    "automerge": true
+    "automerge": true,
+    "schedule": ["at 12am on sunday"]
   }
 }

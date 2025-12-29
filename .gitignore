@@ -16,9 +16,12 @@ apps/backend/analyses-storage*
 apps/backend/config*
 apps/backend/dist*
 apps/backend/.dev-session-data*
-apps/backend/tsconfig*
 apps/frontend/dist*
 apps/backend/coverage*
+
+# Packages build output
+packages/*/dist*
+packages/*/tsconfig.tsbuildinfo
 
 # Development session persistence
 
