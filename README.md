@@ -106,9 +106,9 @@ Access via HTTPS: https://localhost:8443
 
 Both frontend (nginx) and backend (Node.js) support HTTPS in production:
 
-- **Frontend**: nginx with HTTP/2 on port 443
+- **Frontend**: nginx-unprivileged with HTTP/2 on port 8443 (non-root)
 - **Backend**: Express.js with HTTPS on port 3443
-- **Auto-generated certificates**: Self-signed RSA 2048-bit certificates
+- **Auto-generated certificates**: Self-signed RSA 2048-bit certificates (10-year validity)
 - **Production-only**: HTTP is disabled in production for security
 
 ### Custom SSL Certificates
@@ -120,20 +120,22 @@ You can provide your own SSL certificates by mounting them and setting the HTTPS
 services:
   frontend:
     environment:
-      NGINX_CERT_FILE: /custom/certs/frontend.crt
-      NGINX_CERT_KEYFILE: /custom/certs/frontend.key
+      NGINX_CERT_FILE: /etc/nginx/certs/custom.crt
+      NGINX_CERT_KEYFILE: /etc/nginx/certs/custom.key
     volumes:
-      - /host/path/to/certs:/custom/certs:ro
+      - /host/path/to/certs/custom.crt:/etc/nginx/certs/custom.crt:ro
+      - /host/path/to/certs/custom.key:/etc/nginx/certs/custom.key:ro
 
   backend:
     environment:
-      CERT_FILE: /custom/certs/backend.crt
-      CERT_KEYFILE: /custom/certs/backend.key
+      CERT_FILE: /app/certs/custom.crt
+      CERT_KEYFILE: /app/certs/custom.key
     volumes:
-      - /host/path/to/certs:/custom/certs:ro
+      - /host/path/to/certs/custom.crt:/app/certs/custom.crt:ro
+      - /host/path/to/certs/custom.key:/app/certs/custom.key:ro
 ```
 
-**Note**: Custom certificates override the auto-generated ones. Containers will fail to start if specified certificate files don't exist.
+**Note**: Custom certificates override the auto-generated ones. The nginx entrypoint script validates that certificate files exist before starting—containers will fail to start if specified files are missing.
 
 ## Authentication System
 
@@ -187,12 +189,12 @@ STORAGE_BASE=./analyses-storage        # Storage path (optional)
 ```bash
 # Backend HTTPS Settings
 CERT_FILE=/app/certs/backend.crt       # Backend SSL certificate path
-CERT_KEYFILE=/app/certs/backend.key        # Backend SSL private key path
+CERT_KEYFILE=/app/certs/backend.key    # Backend SSL private key path
 HTTPS_PORT=3443                        # Backend HTTPS port (optional, defaults to 3443)
 
-# Frontend HTTPS Settings
-NGINX_CERT_FILE=/etc/ssl/certs/tago-worker.crt    # Frontend SSL certificate path
-NGINX_CERT_KEYFILE=/etc/ssl/private/tago-worker.key   # Frontend SSL private key path
+# Frontend HTTPS Settings (nginx-unprivileged)
+NGINX_CERT_FILE=/etc/nginx/certs/tago-worker.crt    # Frontend SSL certificate path
+NGINX_CERT_KEYFILE=/etc/nginx/certs/tago-worker.key # Frontend SSL private key path
 ```
 
 **Note**: HTTPS is automatically enabled when both certificate and key paths are provided. In production (`NODE_ENV=production`), only HTTPS is available for security.
