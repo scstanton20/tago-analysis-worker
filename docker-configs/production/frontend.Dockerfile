@@ -36,8 +36,8 @@ COPY apps/frontend/tsconfig.json ./
 # Copy pre-built shared types package (built by CI before Docker)
 COPY packages/types/dist ./node_modules/@tago-analysis-worker/types/dist
 
-# Copy tsconfig.base.json for TypeScript resolution
-COPY tsconfig.base.json ./
+# Copy tsconfig.base.json where the relative path expects it (../../tsconfig.base.json from /deploy)
+COPY tsconfig.base.json /tsconfig.base.json
 
 # Build for production
 ENV NODE_ENV=production
