@@ -1,0 +1,122 @@
+// controllers/statusController.ts
+import type { Request, Response } from 'express';
+import type { Logger } from 'pino';
+import ms from 'ms';
+import { analysisService } from '../services/analysisService.ts';
+import { sseManager } from '../utils/sse/index.ts';
+import { getTagoSdkVersion } from '../utils/sdkVersion.ts';
+
+/** Express request with request-scoped logger */
+interface RequestWithLogger extends Request {
+  log: Logger;
+}
+
+/** System status response */
+interface SystemStatusResponse {
+  container_health: {
+    status: 'healthy' | 'initializing';
+    message: string;
+    uptime: {
+      seconds: number;
+      formatted: string;
+    };
+  };
+  tagoConnection: {
+    sdkVersion: string;
+    runningAnalyses: number;
+  };
+  serverTime: string;
+}
+
+/**
+ * Controller class for system status monitoring
+ * Provides health check endpoints with container status, service information, and uptime metrics.
+ *
+ * All methods are static and follow Express route handler pattern (req, res).
+ * Request-scoped logging is available via req.log.
+ */
+export class StatusController {
+  /**
+   * Get comprehensive system status
+   * Returns container health, running analyses count, Tago SDK version, and uptime
+   *
+   * HTTP Status Codes:
+   * - 200: Container is ready and healthy
+   * - 203: Container is initializing (Non-Authoritative Information)
+   * - 500: Container has an error
+   */
+  static async getSystemStatus(
+    req: RequestWithLogger,
+    res: Response,
+  ): Promise<void> {
+    req.log.debug({ action: 'getSystemStatus' }, 'Getting system status');
+
+    // Get running analyses count from service
+    const runningAnalysesCount =
+      analysisService?.getRunningAnalysesCount() ?? 0;
+
+    // Get Tago SDK version from centralized utility
+    const tagoVersion = getTagoSdkVersion();
+
+    // IMPORTANT: Get current container state from SSE manager
+    const currentContainerState = sseManager.getContainerState();
+
+    // Safely calculate uptime with proper null checks
+    const startTime = currentContainerState.startTime || new Date();
+    const uptimeMs =
+      new Date().getTime() - new Date(startTime as string | Date).getTime();
+    const uptimeSeconds = Math.floor(uptimeMs / 1000);
+
+    let formattedUptime = 'unknown';
+    try {
+      // Only call ms() if we have a valid positive number
+      if (uptimeMs > 0) {
+        formattedUptime = ms(uptimeMs, { long: true });
+      } else {
+        formattedUptime = '0 seconds';
+      }
+    } catch (msError) {
+      req.log.warn(
+        { action: 'getSystemStatus', err: msError },
+        'Failed to format uptime',
+      );
+      formattedUptime = `${uptimeSeconds} seconds`;
+    }
+
+    const status: SystemStatusResponse = {
+      container_health: {
+        status:
+          currentContainerState.status === 'ready' ? 'healthy' : 'initializing',
+        message: currentContainerState.message || 'Container status unknown',
+        uptime: {
+          seconds: uptimeSeconds,
+          formatted: formattedUptime,
+        },
+      },
+      tagoConnection: {
+        sdkVersion: tagoVersion,
+        runningAnalyses: runningAnalysesCount,
+      },
+      serverTime: new Date().toString(),
+    };
+
+    req.log.debug(
+      {
+        action: 'getSystemStatus',
+        containerStatus: currentContainerState.status,
+        runningAnalyses: runningAnalysesCount,
+      },
+      'System status retrieved',
+    );
+
+    // Return appropriate HTTP status code based on container state
+    const httpStatus =
+      currentContainerState.status === 'ready'
+        ? 200
+        : currentContainerState.status === 'error'
+          ? 500
+          : 203; // 203 = Non-Authoritative Information
+
+    res.status(httpStatus).json(status);
+  }
+}

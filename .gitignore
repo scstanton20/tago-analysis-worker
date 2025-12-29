@@ -20,6 +20,9 @@ apps/backend/tsconfig*
 apps/frontend/dist*
 apps/backend/coverage*
 
+# Packages build output
+packages/*/dist*
+
 # Development session persistence
 
 claude*

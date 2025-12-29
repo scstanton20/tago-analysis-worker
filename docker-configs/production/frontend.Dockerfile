@@ -8,8 +8,17 @@ WORKDIR /app
 # Copy package.json files for the monorepo
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/frontend/package.json ./apps/frontend/
+COPY packages/types/package.json ./packages/types/
 
-RUN corepack enable && pnpm install --filter frontend --frozen-lockfile
+RUN corepack enable
+
+# Use BuildKit cache mount for pnpm store - persists across builds
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm install --filter frontend --filter @tago-analysis-worker/types --frozen-lockfile
+
+# Copy and build shared types package
+COPY packages/types ./packages/types
+RUN pnpm --filter @tago-analysis-worker/types run build
 
 FROM node:23-alpine@sha256:a34e14ef1df25b58258956049ab5a71ea7f0d498e41d0b514f4b8de09af09456 AS build
 # Set up pnpm in the runtime container
@@ -22,10 +31,15 @@ WORKDIR /app
 # Copy the package files needed for pnpm to run correctly
 COPY --chown=nginx:nginx package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY --chown=nginx:nginx apps/frontend/package.json ./apps/frontend/
+COPY --chown=nginx:nginx packages/types/package.json ./packages/types/
 
 # Copy dependencies from the deps stage
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/frontend/node_modules ./apps/frontend/node_modules
+COPY --from=deps /app/packages/types/node_modules ./packages/types/node_modules
+
+# Copy built shared types package
+COPY --from=deps /app/packages/types/dist ./packages/types/dist
 
 # Copy source code
 COPY --chown=nginx:nginx apps/frontend ./apps/frontend

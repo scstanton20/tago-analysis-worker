@@ -1,54 +1,138 @@
-# .github/workflows/ci.yml
 name: CI
 
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
+  # Build types package with content-aware caching
+  build-types:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
-
-    strategy:
-      matrix:
-        node-version: [23.x]
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - uses: pnpm/action-setup@v4
-
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v6
+      - name: Setup Node.js and pnpm
+        uses: ./.github/actions/setup-node-pnpm
+        id: setup
         with:
-          node-version: ${{ matrix.node-version }}
+          restore-types: 'true'
 
-      - name: Get pnpm store directory
-        id: pnpm-cache
-        shell: bash
-        run: echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+      - name: Build types package
+        if: steps.setup.outputs.types-cache-hit != 'true'
+        run: pnpm --filter @tago-analysis-worker/types run build
 
-      - name: Setup pnpm cache
-        uses: actions/cache@v4
+      # Save types cache for other jobs
+      - name: Save types dist cache
+        if: steps.setup.outputs.types-cache-hit != 'true'
+        uses: actions/cache/save@v4
         with:
-          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
+          path: packages/types/dist
+          key: ${{ runner.os }}-types-dist-${{ hashFiles('packages/types/src/**', 'packages/types/tsconfig.json', 'packages/types/package.json') }}
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+  # Format check - runs in parallel with build-types
+  format-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
-      - name: Run tests
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js and pnpm
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Check code formatting
+        run: pnpm format:check
+
+  # Lint check - runs in parallel with build-types
+  lint:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js and pnpm
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Run linter
+        run: pnpm lint
+
+  # Backend tests - runs after types are built
+  test-backend:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    needs: build-types
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js and pnpm
+        uses: ./.github/actions/setup-node-pnpm
+        with:
+          restore-types: 'true'
+
+      - name: Run backend tests with coverage
         working-directory: apps/backend
         run: pnpm test:coverage
 
-      - name: 'Report Coverage'
+      - name: Report coverage
         if: always()
         uses: davelosert/vitest-coverage-report-action@v2
         with:
           working-directory: ./apps/backend
+
+  # Frontend build verification - runs after types are built
+  build-frontend:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    needs: build-types
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js and pnpm
+        uses: ./.github/actions/setup-node-pnpm
+        with:
+          restore-types: 'true'
+
+      - name: Build frontend
+        run: pnpm --filter frontend run build
+
+  # Final status check - all required jobs must pass
+  ci-status:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    if: always()
+    needs: [format-check, lint, test-backend, build-frontend]
+
+    steps:
+      - name: Check CI status
+        run: |
+          if [[ "${{ needs.format-check.result }}" != "success" ]] || \
+             [[ "${{ needs.lint.result }}" != "success" ]] || \
+             [[ "${{ needs.test-backend.result }}" != "success" ]] || \
+             [[ "${{ needs.build-frontend.result }}" != "success" ]]; then
+            echo "CI checks failed!"
+            exit 1
+          fi
+          echo "All CI checks passed!"

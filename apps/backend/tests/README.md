@@ -63,58 +63,58 @@ pnpm test:coverage:ui
 
 ```
 tests/
-├── setup.js                        # Global test setup
+├── setup.ts                        # Global test setup
 ├── README.md                       # This file
 ├── utils/                          # Test utilities
-│   └── testHelpers.js             # Helper functions for tests
+│   └── testHelpers.ts             # Helper functions for tests
 ├── mocks/                          # Mock implementations
-│   └── fsMocks.js                 # File system mocks
+│   └── fsMocks.ts                 # File system mocks
 ├── controllers/                    # Controller tests
-│   ├── analysisController.test.js
-│   ├── settingsController.test.js
-│   ├── statusController.test.js
-│   ├── teamController.test.js
-│   └── userController.test.js
+│   ├── analysisController.test.ts
+│   ├── settingsController.test.ts
+│   ├── statusController.test.ts
+│   ├── teamController.test.ts
+│   └── userController.test.ts
 ├── services/                       # Service tests
-│   ├── analysisService.test.js
-│   ├── metricsService.test.js
-│   ├── teamService.test.js
-│   └── dnsCache.test.js
+│   ├── analysisService.test.ts
+│   ├── metricsService.test.ts
+│   ├── teamService.test.ts
+│   └── dnsCache.test.ts
 ├── models/                         # Model tests
-│   └── analysisProcess.test.js
+│   └── analysisProcess.test.ts
 ├── utils/                          # Utility tests
-│   ├── cryptoUtils.test.js
-│   ├── safePath.test.js
-│   ├── storage.test.js
-│   ├── sse.test.js
-│   ├── responseHelpers.test.js
-│   ├── asyncHandler.test.js
-│   ├── analysisWrapper.test.js
-│   ├── sharedDNSCache.test.js
-│   ├── ssrfProtection.test.js
-│   ├── mqAPI.test.js
-│   ├── logger.test.js
-│   ├── metrics-enhanced.test.js
-│   └── authDatabase.test.js
+│   ├── cryptoUtils.test.ts
+│   ├── safePath.test.ts
+│   ├── storage.test.ts
+│   ├── sse.test.ts
+│   ├── responseHelpers.test.ts
+│   ├── asyncHandler.test.ts
+│   ├── analysisWrapper.test.ts
+│   ├── sharedDNSCache.test.ts
+│   ├── ssrfProtection.test.ts
+│   ├── mqAPI.test.ts
+│   ├── logger.test.ts
+│   ├── metrics-enhanced.test.ts
+│   └── authDatabase.test.ts
 ├── middleware/                     # Middleware tests
-│   ├── errorHandler.test.js
-│   ├── validateRequest.test.js
-│   ├── rateLimiter.test.js
-│   └── betterAuthMiddleware.test.js
+│   ├── errorHandler.test.ts
+│   ├── validateRequest.test.ts
+│   ├── rateLimiter.test.ts
+│   └── betterAuthMiddleware.test.ts
 ├── validation/                     # Validation tests
-│   ├── analysisSchemas.test.js
-│   ├── settingsSchemas.test.js
-│   ├── teamSchemas.test.js
-│   └── userSchemas.test.js
+│   ├── analysisSchemas.test.ts
+│   ├── settingsSchemas.test.ts
+│   ├── teamSchemas.test.ts
+│   └── userSchemas.test.ts
 └── routes/                         # Route tests
-    ├── analysisRoutes.test.js
-    ├── authRoutes.test.js
-    ├── metricsRoutes.test.js
-    ├── settingsRoutes.test.js
-    ├── sseRoutes.test.js
-    ├── statusRoutes.test.js
-    ├── teamRoutes.test.js
-    └── userRoutes.test.js
+    ├── analysisRoutes.test.ts
+    ├── authRoutes.test.ts
+    ├── metricsRoutes.test.ts
+    ├── settingsRoutes.test.ts
+    ├── sseRoutes.test.ts
+    ├── statusRoutes.test.ts
+    ├── teamRoutes.test.ts
+    └── userRoutes.test.ts
 ```
 
 ## Writing Tests
@@ -154,7 +154,7 @@ describe('ModuleName', () => {
 
 ### Test Helpers
 
-Use the provided test helpers from `tests/utils/testHelpers.js`:
+Use the provided test helpers from `tests/utils/testHelpers.ts`:
 
 ```javascript
 import {
@@ -165,7 +165,7 @@ import {
   createMockSSEManager,
   createMockChildProcess,
   createMockAnalysisProcess,
-} from '../utils/testHelpers.js';
+} from '../utils/testHelpers.ts';
 
 // Create mock objects
 const req = createMockRequest({ params: { id: '123' } });
@@ -182,13 +182,13 @@ const next = createMockNext();
 
 Excluded from coverage:
 
-- `src/server.js` (main entry point)
+- `src/server.ts` (main entry point)
 - `src/migrations/**`
 - `src/docs/**`
 - `src/config/**`
-- `src/constants.js`
-- `src/lib/auth.js`
-- `src/routes/index.js`
+- `src/constants.ts`
+- `src/lib/auth.ts`
+- `src/routes/index.ts`
 
 ## Test Patterns and Examples
 
@@ -196,17 +196,17 @@ Excluded from coverage:
 
 ```javascript
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createMockRequest, createMockResponse } from '../utils/testHelpers.js';
+import { createMockRequest, createMockResponse } from '../utils/testHelpers.ts';
 
 // Mock dependencies
-vi.mock('../../src/services/myService.js', () => ({
+vi.mock('../../src/services/myService.ts', () => ({
   myService: {
     doSomething: vi.fn(),
   },
 }));
 
-const { myService } = await import('../../src/services/myService.js');
-const MyController = (await import('../../src/controllers/myController.js'))
+const { myService } = await import('../../src/services/myService.ts');
+const MyController = (await import('../../src/controllers/myController.ts'))
   .default;
 
 describe('MyController', () => {
@@ -247,7 +247,7 @@ describe('MyController', () => {
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock dependencies
-vi.mock('../../src/utils/safePath.js', () => ({
+vi.mock('../../src/utils/safePath.ts', () => ({
   safeReadFile: vi.fn().mockResolvedValue('mock data'),
   safeWriteFile: vi.fn().mockResolvedValue(undefined),
 }));
@@ -257,7 +257,7 @@ describe('MyService', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    const module = await import('../../src/services/myService.js');
+    const module = await import('../../src/services/myService.ts');
     myService = module.myService;
   });
 
@@ -283,7 +283,7 @@ import {
   createMockRequest,
   createMockResponse,
   createMockNext,
-} from '../utils/testHelpers.js';
+} from '../utils/testHelpers.ts';
 
 describe('myMiddleware', () => {
   let middleware;
@@ -291,7 +291,7 @@ describe('myMiddleware', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    const module = await import('../../src/middleware/myMiddleware.js');
+    const module = await import('../../src/middleware/myMiddleware.ts');
     middleware = module.default;
 
     req = createMockRequest();
@@ -325,7 +325,7 @@ describe('mySchemas', () => {
   let schemas;
 
   beforeEach(async () => {
-    const module = await import('../../src/validation/mySchemas.js');
+    const module = await import('../../src/validation/mySchemas.ts');
     schemas = module;
   });
 
@@ -357,7 +357,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 
-vi.mock('../../src/middleware/betterAuthMiddleware.js', () => ({
+vi.mock('../../src/middleware/betterAuthMiddleware.ts', () => ({
   requireAuth: (req, res, next) => {
     req.user = { id: 'test-user', role: 'admin' };
     next();
@@ -373,7 +373,7 @@ describe('My Routes', () => {
     app = express();
     app.use(express.json());
 
-    const routesModule = await import('../../src/routes/myRoutes.js');
+    const routesModule = await import('../../src/routes/myRoutes.ts');
     app.use('/api/my-endpoint', routesModule.default);
   });
 
@@ -418,7 +418,7 @@ describe('My Routes', () => {
 
 ```bash
 # Run specific test file
-pnpm test tests/controllers/teamController.test.js
+pnpm test tests/controllers/teamController.test.ts
 
 # Run tests matching pattern
 pnpm test team

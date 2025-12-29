@@ -9,7 +9,17 @@ WORKDIR /app
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/backend/package.json ./apps/backend/
 
-RUN corepack enable && pnpm install --filter backend --frozen-lockfile --prod
+COPY packages/types/package.json ./packages/types/
+
+RUN corepack enable
+
+# Use BuildKit cache mount for pnpm store - persists across builds
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm install --filter backend --filter @tago-analysis-worker/types --frozen-lockfile
+
+# Copy and build shared types package
+COPY packages/types ./packages/types
+RUN pnpm --filter @tago-analysis-worker/types run build
 
 FROM node:23-alpine@sha256:a34e14ef1df25b58258956049ab5a71ea7f0d498e41d0b514f4b8de09af09456 AS run
 
@@ -21,12 +31,17 @@ WORKDIR /app
 # Copy package files for Node.js module resolution
 COPY --chown=node:node package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY --chown=node:node apps/backend/package.json ./apps/backend/
+COPY --chown=node:node packages/types/package.json ./packages/types/
 # Copy backend package.json to root for ESM import map resolution
 COPY --chown=node:node apps/backend/package.json ./package.json
 
 # Copy dependencies from the deps stage
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/backend/node_modules ./apps/backend/node_modules
+COPY --from=deps /app/packages/types/node_modules ./packages/types/node_modules
+
+# Copy built shared types package
+COPY --from=deps /app/packages/types/dist ./packages/types/dist
 
 # Copy source code
 COPY --chown=node:node apps/backend/src ./apps/backend/src
@@ -59,4 +74,4 @@ VOLUME [ "/app/apps/backend/analyses-storage" ]
 USER node
 EXPOSE 3443
 # Start in production mode from backend directory
-CMD ["node", "src/server.js"]
+CMD ["node", "src/server.ts"]
