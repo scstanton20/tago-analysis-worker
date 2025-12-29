@@ -90,7 +90,6 @@ describe('sharedDNSCache', () => {
 
       initializeSharedDNSCache();
 
-      // eslint-disable-next-line require-atomic-updates
       process.send = savedSend;
       expect(true).toBe(true); // Should not throw
     });

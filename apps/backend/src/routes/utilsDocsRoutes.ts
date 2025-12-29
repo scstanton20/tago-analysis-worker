@@ -4,6 +4,7 @@ import {
   authMiddleware,
   requireAdmin,
 } from '../middleware/betterAuthMiddleware.ts';
+import { asyncHandler } from '../utils/asyncHandler.ts';
 
 const router = express.Router();
 
@@ -57,7 +58,7 @@ router.use(requireAdmin);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/', UtilsDocsController.getOverview);
+router.get('/', asyncHandler(UtilsDocsController.getOverview, 'get overview'));
 
 /**
  * @swagger
@@ -94,7 +95,10 @@ router.get('/', UtilsDocsController.getOverview);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/packages', UtilsDocsController.getPackages);
+router.get(
+  '/packages',
+  asyncHandler(UtilsDocsController.getPackages, 'get packages'),
+);
 
 /**
  * @swagger
@@ -127,6 +131,9 @@ router.get('/packages', UtilsDocsController.getPackages);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/utilities', UtilsDocsController.getUtilities);
+router.get(
+  '/utilities',
+  asyncHandler(UtilsDocsController.getUtilities, 'get utilities'),
+);
 
 export default router;

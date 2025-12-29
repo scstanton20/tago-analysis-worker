@@ -823,8 +823,8 @@ describe('AnalysisProcess', () => {
 
       // Simulate IPC message from child process
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const ipcHandler = mockProcess.on.mock.calls.find(
-        (call: any) => call[0] === 'message',
+      const ipcHandler = (mockProcess.on.mock.calls as any[]).find(
+        (call) => call[0] === 'message',
       )?.[1] as (msg: unknown) => Promise<void>;
 
       await ipcHandler({
@@ -854,8 +854,8 @@ describe('AnalysisProcess', () => {
 
       // Get the IPC message handler
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const ipcHandler = mockProcess.on.mock.calls.find(
-        (call: any) => call[0] === 'message',
+      const ipcHandler = (mockProcess.on.mock.calls as any[]).find(
+        (call) => call[0] === 'message',
       )?.[1] as (msg: unknown) => Promise<void>;
 
       // Create a promise that will kill the process during DNS lookup
@@ -892,8 +892,8 @@ describe('AnalysisProcess', () => {
       await analysis.start();
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const ipcHandler = mockProcess.on.mock.calls.find(
-        (call: any) => call[0] === 'message',
+      const ipcHandler = (mockProcess.on.mock.calls as any[]).find(
+        (call) => call[0] === 'message',
       )?.[1] as (msg: unknown) => Promise<void>;
 
       // Should not crash on send error

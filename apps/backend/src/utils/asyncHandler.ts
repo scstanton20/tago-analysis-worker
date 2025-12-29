@@ -11,15 +11,25 @@ type RequestWithLogger = Request & {
 };
 
 /**
+ * Type for controller handler functions that may use extended request types.
+ * Controllers define their own request types; we use type assertion for flexibility.
+ */
+type ControllerHandler = (
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  req: any,
+  res: Response,
+  next: NextFunction,
+) => Promise<void>;
+
+/**
  * Enhanced async handler wrapper for Express route handlers
  * Catches promise rejections and handles errors with consistent logging and HTTP status codes
  *
- * Note: Uses permissive typing to allow controller functions with extended request types.
+ * Note: Controller functions with extended request types are compatible via type assertion.
  * Type safety is maintained at the controller level.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const asyncHandler = (
-  fn: (req: any, res: Response, next: NextFunction) => Promise<void>,
+  fn: ControllerHandler,
   operation?: string,
 ): RequestHandler => {
   return async (

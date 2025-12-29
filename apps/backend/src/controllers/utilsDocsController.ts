@@ -17,100 +17,74 @@ type RequestWithLogger = Request & {
  *
  * All methods are static and follow Express route handler pattern (req, res).
  * Request-scoped logging is available via req.log.
+ * Error handling is delegated to asyncHandler wrapper in routes.
  */
 export class UtilsDocsController {
   /**
    * Retrieve overview of available packages and utilities
    * Returns simple lists without detailed OpenAPI specs
    */
-  static getOverview(req: RequestWithLogger, res: Response): void {
+  static async getOverview(
+    req: RequestWithLogger,
+    res: Response,
+  ): Promise<void> {
     req.log?.info({ action: 'getOverview' }, 'Getting utils overview');
 
-    try {
-      const packages = getAvailablePackages();
-      const utilities = getAvailableUtilities();
+    const packages = getAvailablePackages();
+    const utilities = getAvailableUtilities();
 
-      req.log?.info(
-        {
-          action: 'getOverview',
-          packageCount: packages.length,
-          utilityCount: utilities.length,
-        },
-        'Utils overview retrieved',
-      );
+    req.log?.info(
+      {
+        action: 'getOverview',
+        packageCount: packages.length,
+        utilityCount: utilities.length,
+      },
+      'Utils overview retrieved',
+    );
 
-      res.json({ packages, utilities });
-    } catch (error) {
-      req.log?.error(
-        { err: error, action: 'getOverview' },
-        'Failed to get utils overview',
-      );
-
-      res.status(500).json({
-        error: 'Failed to retrieve utils overview',
-        message: (error as Error).message,
-      });
-    }
+    res.json({ packages, utilities });
   }
 
   /**
    * Retrieve list of available packages for analysis scripts
    * Returns packages that can be imported directly in analysis code
    */
-  static getPackages(req: RequestWithLogger, res: Response): void {
+  static async getPackages(
+    req: RequestWithLogger,
+    res: Response,
+  ): Promise<void> {
     req.log?.info({ action: 'getPackages' }, 'Getting available packages');
 
-    try {
-      const packages = getAvailablePackages();
+    const packages = getAvailablePackages();
 
-      req.log?.info(
-        { action: 'getPackages', count: packages.length },
-        'Available packages retrieved',
-      );
+    req.log?.info(
+      { action: 'getPackages', count: packages.length },
+      'Available packages retrieved',
+    );
 
-      res.json(packages);
-    } catch (error) {
-      req.log?.error(
-        { err: error, action: 'getPackages' },
-        'Failed to get available packages',
-      );
-
-      res.status(500).json({
-        error: 'Failed to retrieve available packages',
-        message: (error as Error).message,
-      });
-    }
+    res.json(packages);
   }
 
   /**
    * Retrieve OpenAPI specification for all in-process utilities
    * Returns complete Swagger/OpenAPI documentation for utility functions
    */
-  static getUtilities(req: RequestWithLogger, res: Response): void {
+  static async getUtilities(
+    req: RequestWithLogger,
+    res: Response,
+  ): Promise<void> {
     req.log?.info({ action: 'getUtilities' }, 'Getting utility documentation');
 
-    try {
-      const specs = getUtilsSpecs() as { paths?: Record<string, unknown> };
+    const specs = getUtilsSpecs() as { paths?: Record<string, unknown> };
 
-      // Count paths for logging
-      const pathCount = Object.keys(specs.paths || {}).length;
+    // Count paths for logging
+    const pathCount = Object.keys(specs.paths || {}).length;
 
-      req.log?.info(
-        { action: 'getUtilities', pathCount },
-        'Utility documentation retrieved',
-      );
+    req.log?.info(
+      { action: 'getUtilities', pathCount },
+      'Utility documentation retrieved',
+    );
 
-      res.json(specs);
-    } catch (error) {
-      req.log?.error(
-        { err: error, action: 'getUtilities' },
-        'Failed to generate utility documentation',
-      );
-
-      res.status(500).json({
-        error: 'Failed to retrieve utility documentation',
-        message: (error as Error).message,
-      });
-    }
+    res.json(specs);
   }
 }

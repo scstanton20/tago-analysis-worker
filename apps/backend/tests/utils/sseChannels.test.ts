@@ -269,7 +269,6 @@ describe('SSE Channel-Based Subscription Management', () => {
 
     // Import SSE module once (don't reset modules - it breaks mocks for dynamic imports)
     if (!sse) {
-      // eslint-disable-next-line require-atomic-updates
       sse = (await import(
         '../../src/utils/sse/index.ts'
       )) as unknown as SSEModule;
@@ -642,8 +641,8 @@ describe('SSE Channel-Based Subscription Management', () => {
 
         // Simulate disconnect
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const disconnectHandler = mockReq.on.mock.calls.find(
-          (call: any) => call[0] === 'close',
+        const disconnectHandler = (mockReq.on.mock.calls as any[]).find(
+          (call) => call[0] === 'close',
         )?.[1];
         await disconnectHandler();
 
@@ -664,8 +663,8 @@ describe('SSE Channel-Based Subscription Management', () => {
         );
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const disconnectHandler = mockReq.on.mock.calls.find(
-          (call: any) => call[0] === 'close',
+        const disconnectHandler = (mockReq.on.mock.calls as any[]).find(
+          (call) => call[0] === 'close',
         )?.[1];
         await disconnectHandler();
 
@@ -1783,7 +1782,6 @@ describe('SSE Channel-Based Subscription Management', () => {
           mockReq,
         );
 
-        // eslint-disable-next-line require-atomic-updates
         mockReq.body = {
           sessionId: session.id,
           analyses: ['analysis-1', 'analysis-2'],
@@ -1844,7 +1842,6 @@ describe('SSE Channel-Based Subscription Management', () => {
           'user-123',
         );
 
-        // eslint-disable-next-line require-atomic-updates
         mockReq.body = {
           sessionId: session.id,
           analyses: ['analysis-1'],

@@ -419,11 +419,11 @@ export function asResponse<T>(res: MockResponse): T {
  * Create a mock request that can be used with any controller method.
  * Returns a type that's compatible with controller request expectations.
  * @param overrides - Properties to override
- * @returns Mock request cast to any for flexible controller testing
+ * @returns Mock request cast for flexible controller testing
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function createControllerRequest(
   overrides: Partial<MockRequest> = {},
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): any {
   return createMockRequest(overrides);
 }
@@ -431,7 +431,7 @@ export function createControllerRequest(
 /**
  * Create a mock response that can be used with any controller method.
  * Returns a type that's compatible with controller response expectations.
- * @returns Mock response cast to any for flexible controller testing
+ * @returns Mock response cast for flexible controller testing
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function createControllerResponse(): any {

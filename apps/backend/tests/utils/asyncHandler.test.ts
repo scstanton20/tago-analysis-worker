@@ -1,14 +1,8 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import type { Request, Response } from 'express';
 
-// Mock logger
-vi.mock('../../src/utils/logging/logger.ts', () => ({
-  createChildLogger: vi.fn(() => ({
-    error: vi.fn(),
-    warn: vi.fn(),
-    debug: vi.fn(),
-  })),
-}));
+// No need to mock logger - tests verify response behavior, not logging
+// The real logger will be silent or output to console (acceptable in tests)
 
 interface MockRequest {
   log?: { error: Mock };

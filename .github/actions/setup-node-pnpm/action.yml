@@ -5,7 +5,7 @@ inputs:
   node-version:
     description: 'Node.js version to use'
     required: false
-    default: '24.3.x'
+    default: '24.x.x'
   restore-types:
     description: 'Whether to restore the types dist cache'
     required: false

@@ -11,9 +11,46 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Detect which paths changed to conditionally run jobs
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      types: ${{ steps.filter.outputs.types }}
+      shared: ${{ steps.filter.outputs.shared }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'apps/backend/**'
+            frontend:
+              - 'apps/frontend/**'
+            types:
+              - 'packages/types/**'
+            shared:
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - '.github/**'
+              - 'eslint.config.js'
+              - '.prettierrc'
+
   # Build types package with content-aware caching
   build-types:
     runs-on: ubuntu-latest
+    needs: changes
+    if: |
+      needs.changes.outputs.types == 'true' ||
+      needs.changes.outputs.backend == 'true' ||
+      needs.changes.outputs.frontend == 'true' ||
+      needs.changes.outputs.shared == 'true'
     permissions:
       contents: read
 
@@ -42,6 +79,12 @@ jobs:
   # Format check - runs in parallel with build-types
   format-check:
     runs-on: ubuntu-latest
+    needs: changes
+    if: |
+      needs.changes.outputs.types == 'true' ||
+      needs.changes.outputs.backend == 'true' ||
+      needs.changes.outputs.frontend == 'true' ||
+      needs.changes.outputs.shared == 'true'
     permissions:
       contents: read
 
@@ -58,6 +101,12 @@ jobs:
   # Lint check - runs in parallel with build-types
   lint:
     runs-on: ubuntu-latest
+    needs: changes
+    if: |
+      needs.changes.outputs.types == 'true' ||
+      needs.changes.outputs.backend == 'true' ||
+      needs.changes.outputs.frontend == 'true' ||
+      needs.changes.outputs.shared == 'true'
     permissions:
       contents: read
 
@@ -71,13 +120,45 @@ jobs:
       - name: Run linter
         run: pnpm lint
 
+  # Backend typecheck - runs after types are built
+  typecheck-backend:
+    runs-on: ubuntu-latest
+    needs: [changes, build-types]
+    if: |
+      always() &&
+      (needs.build-types.result == 'success' || needs.build-types.result == 'skipped') &&
+      (needs.changes.outputs.backend == 'true' ||
+       needs.changes.outputs.types == 'true' ||
+       needs.changes.outputs.shared == 'true')
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js and pnpm
+        uses: ./.github/actions/setup-node-pnpm
+        with:
+          restore-types: 'true'
+
+      - name: Typecheck backend
+        working-directory: apps/backend
+        run: pnpm typecheck
+
   # Backend tests - runs after types are built
   test-backend:
     runs-on: ubuntu-latest
+    needs: [changes, build-types]
+    if: |
+      always() &&
+      (needs.build-types.result == 'success' || needs.build-types.result == 'skipped') &&
+      (needs.changes.outputs.backend == 'true' ||
+       needs.changes.outputs.types == 'true' ||
+       needs.changes.outputs.shared == 'true')
     permissions:
       contents: read
       pull-requests: write
-    needs: build-types
 
     steps:
       - name: Checkout code
@@ -101,9 +182,15 @@ jobs:
   # Frontend build verification - runs after types are built
   build-frontend:
     runs-on: ubuntu-latest
+    needs: [changes, build-types]
+    if: |
+      always() &&
+      (needs.build-types.result == 'success' || needs.build-types.result == 'skipped') &&
+      (needs.changes.outputs.frontend == 'true' ||
+       needs.changes.outputs.types == 'true' ||
+       needs.changes.outputs.shared == 'true')
     permissions:
       contents: read
-    needs: build-types
 
     steps:
       - name: Checkout code
@@ -117,21 +204,44 @@ jobs:
       - name: Build frontend
         run: pnpm --filter frontend run build
 
-  # Final status check - all required jobs must pass
+  # Final status check - all required jobs must pass (or be skipped)
   ci-status:
     runs-on: ubuntu-latest
     permissions:
       contents: read
     if: always()
-    needs: [format-check, lint, test-backend, build-frontend]
+    needs:
+      [
+        changes,
+        format-check,
+        lint,
+        typecheck-backend,
+        test-backend,
+        build-frontend,
+      ]
 
     steps:
       - name: Check CI status
         run: |
-          if [[ "${{ needs.format-check.result }}" != "success" ]] || \
-             [[ "${{ needs.lint.result }}" != "success" ]] || \
-             [[ "${{ needs.test-backend.result }}" != "success" ]] || \
-             [[ "${{ needs.build-frontend.result }}" != "success" ]]; then
+          echo "Job results:"
+          echo "  changes: ${{ needs.changes.result }}"
+          echo "  format-check: ${{ needs.format-check.result }}"
+          echo "  lint: ${{ needs.lint.result }}"
+          echo "  typecheck-backend: ${{ needs.typecheck-backend.result }}"
+          echo "  test-backend: ${{ needs.test-backend.result }}"
+          echo "  build-frontend: ${{ needs.build-frontend.result }}"
+
+          # Helper function to check if result is acceptable
+          check_result() {
+            [[ "$1" == "success" ]] || [[ "$1" == "skipped" ]]
+          }
+
+          if ! check_result "${{ needs.changes.result }}" || \
+             ! check_result "${{ needs.format-check.result }}" || \
+             ! check_result "${{ needs.lint.result }}" || \
+             ! check_result "${{ needs.typecheck-backend.result }}" || \
+             ! check_result "${{ needs.test-backend.result }}" || \
+             ! check_result "${{ needs.build-frontend.result }}"; then
             echo "CI checks failed!"
             exit 1
           fi
