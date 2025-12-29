@@ -9,7 +9,7 @@
 
 import path from 'path';
 import { createLogger } from './logging/sandboxLogger.ts';
-import './sharedDNSCache.js'; // This auto-initializes shared DNS cache if enabled
+import './sharedDNSCache.ts'; // This auto-initializes shared DNS cache if enabled
 
 const logger = createLogger('analysis-wrapper');
 

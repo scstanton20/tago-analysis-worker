@@ -271,7 +271,7 @@ async function startServer(): Promise<void> {
     serverLogger.info('✓ Settings routes mounted');
 
     app.use(`${API_PREFIX}/utils-docs`, routes.utilsDocsRoutes);
-    serverLogger.info('✓ Utils documentation routes mounted');
+    serverLogger.info('✓ Utilities documentation routes mounted');
 
     // SSE routes
     app.use(`${API_PREFIX}/sse`, routes.sseRoutes);

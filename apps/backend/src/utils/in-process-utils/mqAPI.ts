@@ -1,4 +1,39 @@
 /**
+ * @swagger
+ * components:
+ *   schemas:
+ *     MQToken:
+ *       type: string
+ *       description: Bearer token for MachineQ API authentication
+ *       example: "Bearer eyJhbGciOiJSUzI1NiIs..."
+ *     MQVersion:
+ *       type: object
+ *       properties:
+ *         Semantic:
+ *           type: string
+ *           example: "1.0.0"
+ *         Major:
+ *           type: string
+ *           example: "1"
+ *         Minor:
+ *           type: string
+ *           example: "0"
+ *         Patch:
+ *           type: string
+ *           example: "0"
+ *     MQResponse:
+ *       type: object
+ *       properties:
+ *         status:
+ *           type: number
+ *           example: 200
+ *         data:
+ *           type: object
+ *         error:
+ *           type: string
+ */
+
+/**
  * MachineQ API Module
  * Core functionality for interacting with MachineQ API
  */
@@ -56,10 +91,35 @@ interface DeviceConfig {
 }
 
 /**
- * Login via OAuth to get access token
- * @param clientId - OAuth client ID from MachineQ
- * @param clientSecret - OAuth client secret from MachineQ
- * @returns Bearer token for API authentication
+ * @swagger
+ * /mqAPI/getToken:
+ *   get:
+ *     description: Login via OAuth to get access token
+ *     parameters:
+ *       - name: clientId
+ *         in: query
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: OAuth client ID from MachineQ
+ *       - name: clientSecret
+ *         in: query
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: OAuth client secret from MachineQ
+ *     responses:
+ *       '200':
+ *         description: Bearer token for API authentication
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MQToken'
+ *     x-code-samples:
+ *       - lang: JavaScript
+ *         source: |
+ *           const token = await mqAPI.getToken('myClientId', 'mySecret');
+ *           // Returns: 'Bearer eyJhbGc...'
  */
 async function getToken(
   clientId: string,
@@ -95,8 +155,22 @@ async function getToken(
 }
 
 /**
- * Get MachineQ API version information
- * @returns Version object with Semantic, Major, Minor, and Patch properties
+ * @swagger
+ * /mqAPI/getAPIVersion:
+ *   get:
+ *     description: Get MachineQ API version information
+ *     responses:
+ *       '200':
+ *         description: Version object with Semantic, Major, Minor, and Patch properties
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MQVersion'
+ *     x-code-samples:
+ *       - lang: JavaScript
+ *         source: |
+ *           const version = await mqAPI.getAPIVersion();
+ *           // Returns: { Semantic: '1.0.0', Major: '1', Minor: '0', Patch: '0' }
  */
 async function getAPIVersion(): Promise<MQVersion> {
   const verUrl = `${MQ_CONFIG.apiUrl}/version`;
@@ -115,11 +189,38 @@ async function getAPIVersion(): Promise<MQVersion> {
   }
 }
 
+//* GET Functions
 /**
- * Generic function for API GET calls
- * @param endpoint - API endpoint path (without base URL)
- * @param token - Bearer token for authorization
- * @returns Response object with status and data or error
+ * @swagger
+ * /mqAPI/getAPICall:
+ *   get:
+ *     description: Generic function for API GET calls
+ *     parameters:
+ *       - name: endpoint
+ *         in: query
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: API endpoint path (without base URL)
+ *         example: "devices"
+ *       - name: token
+ *         in: query
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Bearer token for authorization
+ *     responses:
+ *       '200':
+ *         description: Response object with status and data or error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MQResponse'
+ *     x-code-samples:
+ *       - lang: JavaScript
+ *         source: |
+ *           const result = await mqAPI.getAPICall('devices', token);
+ *           // Returns: { status: 200, data: [...] }
  */
 async function getAPICall<T = unknown>(
   endpoint: string,
@@ -145,37 +246,130 @@ async function getAPICall<T = unknown>(
 }
 
 /**
- * Get all devices from MachineQ
- * @param token - Bearer token for authorization
- * @returns Response object with devices data
+ * @swagger
+ * /mqAPI/getDevices:
+ *   get:
+ *     description: Get all devices from MachineQ
+ *     parameters:
+ *       - name: token
+ *         in: query
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Bearer token for authorization
+ *     responses:
+ *       '200':
+ *         description: Response object with devices data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MQResponse'
+ *     x-code-samples:
+ *       - lang: JavaScript
+ *         source: |
+ *           const result = await mqAPI.getDevices(token);
+ *           // Returns: { status: 200, data: [...devices] }
  */
 async function getDevices(token: string): Promise<MQResponse> {
   return getAPICall('devices', token);
 }
 
 /**
- * Get all gateways from MachineQ
- * @param token - Bearer token for authorization
- * @returns Response object with gateways data
+ * @swagger
+ * /mqAPI/getGateways:
+ *   get:
+ *     description: Get all gateways from MachineQ
+ *     parameters:
+ *       - name: token
+ *         in: query
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Bearer token for authorization
+ *     responses:
+ *       '200':
+ *         description: Response object with gateways data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MQResponse'
+ *     x-code-samples:
+ *       - lang: JavaScript
+ *         source: |
+ *           const result = await mqAPI.getGateways(token);
+ *           // Returns: { status: 200, data: [...gateways] }
  */
 async function getGateways(token: string): Promise<MQResponse> {
   return getAPICall('gateways', token);
 }
 
 /**
- * Get account information from MachineQ
- * @param token - Bearer token for authorization
- * @returns Response object with account data
+ * @swagger
+ * /mqAPI/getAccount:
+ *   get:
+ *     description: Get account information from MachineQ
+ *     parameters:
+ *       - name: token
+ *         in: query
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Bearer token for authorization
+ *     responses:
+ *       '200':
+ *         description: Response object with account data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MQResponse'
+ *     x-code-samples:
+ *       - lang: JavaScript
+ *         source: |
+ *           const result = await mqAPI.getAccount(token);
+ *           // Returns: { status: 200, data: { ...account info } }
  */
 async function getAccount(token: string): Promise<MQResponse> {
   return getAPICall('account', token);
 }
 
+//* POST Functions
 /**
- * Create a new device in MachineQ
- * @param token - Bearer token for authorization
- * @param deviceData - Device configuration object
- * @returns Response object with created device data or error
+ * @swagger
+ * /mqAPI/createDevice:
+ *   post:
+ *     description: Create a new device in MachineQ
+ *     parameters:
+ *       - name: token
+ *         in: query
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Bearer token for authorization
+ *       - name: deviceData
+ *         in: query
+ *         required: true
+ *         schema:
+ *           type: object
+ *           properties:
+ *             Name:
+ *               type: string
+ *             DevEUI:
+ *               type: string
+ *         description: Device configuration object
+ *     responses:
+ *       '200':
+ *         description: Response object with created device data or error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/MQResponse'
+ *     x-code-samples:
+ *       - lang: JavaScript
+ *         source: |
+ *           const newDevice = await mqAPI.createDevice(token, {
+ *             Name: 'MyDevice',
+ *             DevEUI: '0000000000000001'
+ *           });
  */
 async function createDevice(
   token: string,

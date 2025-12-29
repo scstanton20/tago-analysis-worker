@@ -12,57 +12,40 @@ import { utilsDocsService } from '../../../services/utilsDocsService';
 import { useAsyncMountOnce } from '../../../hooks/async';
 
 /**
- * Available packages that can be imported in analysis scripts
- * Each package has a name, import example, description, and documentation link
- */
-const AVAILABLE_PACKAGES = [
-  {
-    name: '@tago-io/sdk',
-    import: "import { Analysis } from '@tago-io/sdk';",
-    description:
-      'Official TagoIO SDK for interacting with the TagoIO platform - manage devices, send data, and more.',
-    docsUrl: 'https://js.sdk.tago.io/',
-  },
-  {
-    name: 'archiver',
-    import: "import archiver from 'archiver';",
-    description:
-      'A streaming interface for archive generation, supporting ZIP and TAR formats.',
-    docsUrl: 'https://www.archiverjs.com/docs/archiver',
-  },
-];
-
-/**
  * UtilsDocs Component
  *
  * Displays documentation for in-process utility modules available to analysis scripts.
  * Shows OpenAPI specification with function signatures, parameters, and examples.
  */
 function UtilsDocs() {
-  const [docs, setDocs] = useState(null);
-  const [activeTab, setActiveTab] = useState('packages'); // Default to packages tab
+  const [packages, setPackages] = useState([]);
+  const [utilities, setUtilities] = useState([]);
+  const [openApiDocs, setOpenApiDocs] = useState(null);
+  const [activeTab, setActiveTab] = useState('packages');
   const [selectedUtility, setSelectedUtility] = useState(null);
 
-  // Load documentation on component mount
-  const loadDocsOperation = useAsyncMountOnce(async () => {
-    const response = await utilsDocsService.getDocs();
-    setDocs(response);
-
+  // Load overview (packages + utilities lists)
+  const loadOverviewOperation = useAsyncMountOnce(async () => {
+    const response = await utilsDocsService.getOverview();
+    setPackages(response.packages || []);
+    setUtilities(response.utilities || []);
     // Set the first utility as selected if available
-    if (response?.paths) {
-      const firstPath = Object.keys(response.paths)[0];
-      if (firstPath) {
-        const fileName = firstPath.split('/')[1];
-        setSelectedUtility(fileName);
-      }
+    if (response.utilities?.length > 0) {
+      setSelectedUtility(response.utilities[0].name);
     }
-
     return response;
   });
 
-  // Group paths by file name
-  const groupedPaths = docs?.paths
-    ? Object.entries(docs.paths).reduce((acc, [path, methods]) => {
+  // Load OpenAPI documentation for utilities
+  const loadDocsOperation = useAsyncMountOnce(async () => {
+    const response = await utilsDocsService.getUtilities();
+    setOpenApiDocs(response);
+    return response;
+  });
+
+  // Group paths by file name (utility name)
+  const groupedPaths = openApiDocs?.paths
+    ? Object.entries(openApiDocs.paths).reduce((acc, [path, methods]) => {
         const fileName = path.split('/')[1]; // Extract file name from /fileName/functionName
         if (!acc[fileName]) {
           acc[fileName] = [];
@@ -72,18 +55,22 @@ function UtilsDocs() {
       }, {})
     : {};
 
-  // Get utility names for dropdown
-  const utilityOptions = Object.keys(groupedPaths).map((name) => ({
-    value: name,
-    label: name,
+  // Get utility names for dropdown from utilities list
+  const utilityOptions = utilities.map((util) => ({
+    value: util.name,
+    label: util.name,
   }));
 
-  if (loadDocsOperation.error) {
+  const hasError = loadOverviewOperation.error || loadDocsOperation.error;
+
+  if (hasError) {
     return (
       <FormAlert
         type="error"
         message={
-          loadDocsOperation.error.message || 'Failed to load documentation'
+          loadOverviewOperation.error?.message ||
+          loadDocsOperation.error?.message ||
+          'Failed to load documentation'
         }
       />
     );
@@ -146,48 +133,55 @@ function UtilsDocs() {
       )}
 
       {activeTab === 'packages' && (
-        <Stack gap="md">
-          {AVAILABLE_PACKAGES.map((pkg) => (
-            <PaperCard key={pkg.name} withBorder>
-              <Stack gap="sm">
-                <Group justify="space-between">
-                  <Text size="md" fw={600}>
-                    <IconPackage
-                      size={16}
-                      style={{ verticalAlign: 'middle', marginRight: 6 }}
-                    />
-                    {pkg.name}
+        <LoadingState
+          loading={loadOverviewOperation.loading}
+          skeleton
+          pattern="content"
+          skeletonCount={2}
+        >
+          <Stack gap="md">
+            {packages.map((pkg) => (
+              <PaperCard key={pkg.name} withBorder>
+                <Stack gap="sm">
+                  <Group justify="space-between">
+                    <Text size="md" fw={600}>
+                      <IconPackage
+                        size={16}
+                        style={{ verticalAlign: 'middle', marginRight: 6 }}
+                      />
+                      {pkg.name}
+                    </Text>
+                    <Anchor
+                      href={pkg.docsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      size="sm"
+                    >
+                      <Group gap={4}>
+                        Documentation
+                        <IconExternalLink size={14} />
+                      </Group>
+                    </Anchor>
+                  </Group>
+                  <Text size="sm" c="dimmed">
+                    {pkg.description}
                   </Text>
-                  <Anchor
-                    href={pkg.docsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    size="sm"
-                  >
-                    <Group gap={4}>
-                      Documentation
-                      <IconExternalLink size={14} />
-                    </Group>
-                  </Anchor>
-                </Group>
-                <Text size="sm" c="dimmed">
-                  {pkg.description}
-                </Text>
-                <Code block>{pkg.import}</Code>
-              </Stack>
-            </PaperCard>
-          ))}
-        </Stack>
+                  <Code block>{pkg.import}</Code>
+                </Stack>
+              </PaperCard>
+            ))}
+          </Stack>
+        </LoadingState>
       )}
 
       {activeTab === 'utilities' && (
         <LoadingState
-          loading={loadDocsOperation.loading}
+          loading={loadOverviewOperation.loading || loadDocsOperation.loading}
           skeleton
           pattern="content"
           skeletonCount={4}
         >
-          {docs && selectedUtility && groupedPaths[selectedUtility] && (
+          {openApiDocs && selectedUtility && groupedPaths[selectedUtility] && (
             <Stack gap="lg">
               {groupedPaths[selectedUtility].map(([path, methods]) => (
                 <PaperCard key={path} withBorder>
