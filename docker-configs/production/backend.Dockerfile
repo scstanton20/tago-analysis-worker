@@ -1,5 +1,8 @@
 FROM node:23-alpine@sha256:a34e14ef1df25b58258956049ab5a71ea7f0d498e41d0b514f4b8de09af09456 AS deps
 
+# Declare BuildKit platform ARG for cache mount
+ARG TARGETPLATFORM
+
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 
@@ -11,10 +14,13 @@ COPY apps/backend/package.json ./apps/backend/
 
 COPY packages/types/package.json ./packages/types/
 
-RUN corepack enable
+# Use BuildKit cache mounts for corepack and pnpm store
+# corepack reads pnpm version from packageManager field in package.json
+RUN --mount=type=cache,id=corepack-$TARGETPLATFORM,target=/root/.cache/node/corepack \
+    corepack enable && corepack prepare --activate
 
-# Use BuildKit cache mount for pnpm store - persists across builds
-RUN --mount=type=cache,id=pnpm-$TARGETPLATFORM,target=/pnpm/store \
+RUN --mount=type=cache,id=corepack-$TARGETPLATFORM,target=/root/.cache/node/corepack \
+    --mount=type=cache,id=pnpm-$TARGETPLATFORM,target=/pnpm/store \
     pnpm install --filter backend --filter @tago-analysis-worker/types --frozen-lockfile
 
 # Copy pre-built shared types package (built by CI before Docker)

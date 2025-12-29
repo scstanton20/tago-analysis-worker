@@ -106,8 +106,3 @@ jobs:
           platforms: ${{ github.event.inputs.platforms }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-
-      - name: Image build skipped
-        if: steps.image-check.outputs.EXISTS == 'true'
-        run: |
-          echo "::notice::Image ${{ matrix.app.name }}:${{ steps.version.outputs.VERSION }} already exists in registry - skipping build"

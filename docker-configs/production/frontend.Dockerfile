@@ -1,5 +1,8 @@
 FROM node:23-alpine@sha256:a34e14ef1df25b58258956049ab5a71ea7f0d498e41d0b514f4b8de09af09456 AS deps
 
+# Declare BuildKit platform ARG for cache mount
+ARG TARGETPLATFORM
+
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 
@@ -10,16 +13,23 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/frontend/package.json ./apps/frontend/
 COPY packages/types/package.json ./packages/types/
 
-RUN corepack enable
+# Use BuildKit cache mounts for corepack and pnpm store
+# corepack reads pnpm version from packageManager field in package.json
+RUN --mount=type=cache,id=corepack-$TARGETPLATFORM,target=/root/.cache/node/corepack \
+    corepack enable && corepack prepare --activate
 
-# Use BuildKit cache mount for pnpm store - persists across builds
-RUN --mount=type=cache,id=pnpm-$TARGETPLATFORM,target=/pnpm/store \
+RUN --mount=type=cache,id=corepack-$TARGETPLATFORM,target=/root/.cache/node/corepack \
+    --mount=type=cache,id=pnpm-$TARGETPLATFORM,target=/pnpm/store \
     pnpm install --filter frontend --filter @tago-analysis-worker/types --frozen-lockfile
 
 # Copy pre-built shared types package (built by CI before Docker)
 COPY packages/types/dist ./packages/types/dist
 
 FROM node:23-alpine@sha256:a34e14ef1df25b58258956049ab5a71ea7f0d498e41d0b514f4b8de09af09456 AS build
+
+# Declare BuildKit platform ARG for cache mount
+ARG TARGETPLATFORM
+
 # Set up pnpm in the runtime container
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
@@ -40,18 +50,19 @@ COPY --from=deps /app/packages/types/node_modules ./packages/types/node_modules
 # Copy built shared types package
 COPY --from=deps /app/packages/types/dist ./packages/types/dist
 
+# Copy tsconfig.base.json for TypeScript resolution
+COPY --chown=nginx:nginx tsconfig.base.json ./
+
 # Copy source code
 COPY --chown=nginx:nginx apps/frontend ./apps/frontend
 
 # Set production environment
 ENV NODE_ENV=production
 
-# Install corepack
-RUN corepack enable
-
-# Build for production
+# Build for production using cached corepack
 WORKDIR /app/apps/frontend
-RUN pnpm build
+RUN --mount=type=cache,id=corepack-$TARGETPLATFORM,target=/root/.cache/node/corepack \
+    corepack enable && corepack prepare --activate && pnpm build
 
 # Production stage - Frontend
 FROM nginx:alpine@sha256:8491795299c8e739b7fcc6285d531d9812ce2666e07bd3dd8db00020ad132295 AS frontend
