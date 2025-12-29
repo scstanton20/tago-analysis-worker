@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM node:24.3-alpine AS deps
+FROM node:24-alpine AS deps
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
@@ -18,7 +18,7 @@ RUN corepack enable && \
     pnpm --filter frontend deploy /deploy
 
 # Stage 2: Build the frontend
-FROM node:24.3-alpine AS build
+FROM node:24-alpine AS build
 
 WORKDIR /deploy
 
@@ -44,7 +44,7 @@ ENV NODE_ENV=production
 RUN npx vite build
 
 # Production stage - nginx-unprivileged runs as non-root by default (uid 101)
-FROM nginxinc/nginx-unprivileged:alpine AS frontend
+FROM nginxinc/nginx-unprivileged:mainline-alpine AS frontend
 
 # Switch to root temporarily to install openssl and generate certs
 USER root

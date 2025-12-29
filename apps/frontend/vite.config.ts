@@ -48,6 +48,21 @@ export default defineConfig({
       },
     },
   },
+  optimizeDeps: {
+    // Pre-bundle these at dev server start to avoid runtime optimization messages
+    include: [
+      '@tabler/icons-react',
+      '@mantine/core',
+      '@mantine/hooks',
+      '@mantine/form',
+      '@mantine/notifications',
+      '@mantine/modals',
+      '@mantine/dropzone',
+      'react',
+      'react-dom',
+      'better-auth/react',
+    ],
+  },
   build: {
     rollupOptions: {
       output: {

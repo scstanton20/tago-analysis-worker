@@ -27,7 +27,7 @@ A full-stack application for managing and running Tago.io analysis scripts with 
 
 ### Prerequisites
 
-- Node.js 24.3.0+
+- Node.js 24.0.0+
 - pnpm 10.13.1+
 
 ### Installation

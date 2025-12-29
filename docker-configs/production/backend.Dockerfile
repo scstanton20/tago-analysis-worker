@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM node:24.3-alpine AS deps
+FROM node:24-alpine AS deps
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
@@ -22,7 +22,7 @@ COPY packages/types/dist /deploy/node_modules/@tago-analysis-worker/types/dist
 # Copy backend source code to deploy directory
 COPY apps/backend/src /deploy/src
 
-FROM node:24.3-alpine AS run
+FROM node:24-alpine AS run
 
 # Install openssl for certificate generation
 RUN apk add --no-cache openssl
