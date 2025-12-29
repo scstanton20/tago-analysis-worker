@@ -273,6 +273,9 @@ importers:
       eslint-linter-browserify:
         specifier: ^9.37.0
         version: 9.39.2
+      globals:
+        specifier: ^16.4.0
+        version: 16.5.0
       prettier:
         specifier: 3.6.2
         version: 3.6.2
@@ -5714,10 +5717,10 @@ packages:
       }
     engines: { node: '>= 0.8.0' }
 
-  prettier-linter-helpers@1.0.0:
+  prettier-linter-helpers@1.0.1:
     resolution:
       {
-        integrity: sha512-GbK2cP9nraSSUF9N2XwUwqfzlAFlMNYYl+ShE/V+H8a9uNl/oUqB1w2EL54Jh0OlyRSd8RfWYJ3coVS4TROP2w==,
+        integrity: sha512-SxToR7P8Y2lWmv/kTzVLC1t/GDI2WGjMwNhLLE9qtH8Q13C+aEmuRlzDst4Up4s0Wc8sF2M+J57iB3cMLqftfg==,
       }
     engines: { node: '>=6.0.0' }
 
@@ -9477,7 +9480,7 @@ snapshots:
     dependencies:
       eslint: 9.39.2(jiti@2.6.1)
       prettier: 3.6.2
-      prettier-linter-helpers: 1.0.0
+      prettier-linter-helpers: 1.0.1
       synckit: 0.11.11
     optionalDependencies:
       eslint-config-prettier: 10.1.8(eslint@9.39.2(jiti@2.6.1))
@@ -10875,7 +10878,7 @@ snapshots:
 
   prelude-ls@1.2.1: {}
 
-  prettier-linter-helpers@1.0.0:
+  prettier-linter-helpers@1.0.1:
     dependencies:
       fast-diff: 1.3.0
 

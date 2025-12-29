@@ -125,10 +125,9 @@ function buildSandboxExecArgv(
     path.resolve(BACKEND_SRC, 'utils/'),
     // Backend constants.js (needed by logging utilities)
     path.resolve(BACKEND_SRC, 'constants.ts'),
-    // Backend node_modules (direct dependencies like pino, @tago-io/sdk)
+    // node_modules (includes .pnpm/ with actual packages and symlinks)
+    // With pnpm deploy, all dependencies are within this single node_modules
     path.resolve(BACKEND_ROOT, 'node_modules/'),
-    // Root node_modules/.pnpm (pnpm's shared store for symlinked packages)
-    path.resolve(BACKEND_ROOT, '..', '..', 'node_modules/'),
   ];
 
   // Add each path as a separate --allow-fs-read flag

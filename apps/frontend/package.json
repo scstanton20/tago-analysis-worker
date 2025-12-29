@@ -36,6 +36,7 @@
     "better-auth": "^1.4.7",
     "codemirror": "^6.0.2",
     "eslint-linter-browserify": "^9.37.0",
+    "globals": "^16.4.0",
     "prettier": "3.6.2",
     "prop-types": "^15.8.1",
     "react": "^19.2.0",

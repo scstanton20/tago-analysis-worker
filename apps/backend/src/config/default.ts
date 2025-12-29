@@ -13,7 +13,7 @@ function determineStorageBase(): string {
 
   // In both development and production, use analyses-storage relative to current working directory
   // - Development: cwd is apps/backend, so it becomes apps/backend/analyses-storage
-  // - Production Docker: cwd is /app/apps/backend, so it becomes /app/apps/backend/analyses-storage
+  // - Production Docker: cwd is /app, so it becomes /app/analyses-storage
   return path.join(process.cwd(), 'analyses-storage');
 }
 

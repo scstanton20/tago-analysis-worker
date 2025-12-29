@@ -1,9 +1,9 @@
 #!/bin/sh
 set -e
 
-# Default certificate paths (generated certificates)
-DEFAULT_CERT_FILE="/etc/ssl/certs/tago-worker.crt"
-DEFAULT_CERT_KEYFILE="/etc/ssl/private/tago-worker.key"
+# Default certificate paths (generated certificates in nginx-writable location)
+DEFAULT_CERT_FILE="/etc/nginx/certs/tago-worker.crt"
+DEFAULT_CERT_KEYFILE="/etc/nginx/certs/tago-worker.key"
 
 # Environment variables for custom certificate paths
 NGINX_CERT_FILE="${NGINX_CERT_FILE:-$DEFAULT_CERT_FILE}"

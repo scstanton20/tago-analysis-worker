@@ -8,8 +8,8 @@ services:
       - traefik-public
       - backend
     #ports:
-    #- 80:80
-    #- 8443:443
+    #- 8080:8080
+    #- 8443:8443
     restart: unless-stopped
     env_file: stack.env
     depends_on:
@@ -21,6 +21,7 @@ services:
       traefik.http.routers.tago-worker.middlewares: 'secured@file'
       traefik.http.routers.tago-worker.entrypoints: 'https'
       traefik.http.services.tago-worker.loadbalancer.server.url: 'https://tago-worker-frontend'
+      traefik.http.services.tago-worker.loadbalancer.server.port: '8443'
       traefik.http.routers.tago-worker.tls: 'true'
       traefik.docker.network: 'traefik-public'
 
@@ -29,7 +30,7 @@ services:
     container_name: tago-worker-backend
     restart: unless-stopped
     volumes:
-      - analysis-data:/app/apps/backend/analyses-storage
+      - analysis-data:/app/analyses-storage
     networks:
       - backend
     env_file: stack.env
