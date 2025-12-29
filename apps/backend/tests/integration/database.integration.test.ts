@@ -10,7 +10,7 @@ import {
   createTestDatabase,
   createSeededTestDatabase,
   type TestDatabase,
-} from '../fixtures';
+} from '../fixtures/index.ts';
 
 describe('Database Integration', () => {
   let testDb: TestDatabase;
@@ -29,7 +29,7 @@ describe('Database Integration', () => {
         "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name",
       );
 
-      const tableNames = tables.map((t) => t.name);
+      const tableNames = tables.map((t: { name: string }) => t.name);
 
       expect(tableNames).toContain('user');
       expect(tableNames).toContain('session');
@@ -45,7 +45,7 @@ describe('Database Integration', () => {
         "SELECT name FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'",
       );
 
-      const indexNames = indexes.map((i) => i.name);
+      const indexNames = indexes.map((i: { name: string }) => i.name);
 
       expect(indexNames).toContain('idx_session_userId');
       expect(indexNames).toContain('idx_member_organizationId');

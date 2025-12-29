@@ -20,6 +20,7 @@ export default [
       'node_modules/',
       'apps/**/node_modules/',
       'apps/backend/build/',
+      'packages/types/dist/',
       '.pnpm',
       'apps/backend/analyses-storage/',
     ],

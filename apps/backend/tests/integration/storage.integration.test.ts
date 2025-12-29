@@ -12,7 +12,7 @@ import {
   createTempStorage,
   createTempStorageWithAnalyses,
   type TempStorage,
-} from '../fixtures';
+} from '../fixtures/index.js';
 
 describe('Storage Integration', () => {
   let storage: TempStorage;

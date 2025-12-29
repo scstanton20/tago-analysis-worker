@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM node:23-alpine@sha256:a34e14ef1df25b58258956049ab5a71ea7f0d498e41d0b514f4b8de09af09456 AS deps
+FROM node:24-alpine@sha256:eb7e57db68d1b59e87cb22ae943d2826aa6b0d3a4175a23ca965f49526a1a664 AS deps
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
@@ -17,7 +17,7 @@ RUN corepack enable && pnpm install --filter frontend --filter @tago-analysis-wo
 # Copy pre-built shared types package (built by CI before Docker)
 COPY packages/types/dist ./packages/types/dist
 
-FROM node:23-alpine@sha256:a34e14ef1df25b58258956049ab5a71ea7f0d498e41d0b514f4b8de09af09456 AS build
+FROM node:24-alpine@sha256:eb7e57db68d1b59e87cb22ae943d2826aa6b0d3a4175a23ca965f49526a1a664 AS build
 
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"

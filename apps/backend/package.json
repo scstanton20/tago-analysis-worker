@@ -4,7 +4,7 @@
   "version": "2.5.4-ts1",
   "type": "module",
   "engines": {
-    "node": ">=23.0.0"
+    "node": ">=24.3.0"
   },
   "imports": {
     "#tago-utils": "./src/utils/in-process-utils/index.ts"

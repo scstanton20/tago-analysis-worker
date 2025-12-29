@@ -6,7 +6,7 @@ import https from 'https';
 import cors from 'cors';
 import helmet from 'helmet';
 import fileUpload from 'express-fileupload';
-import pinoHttp from 'pino-http';
+import { pinoHttp } from 'pino-http';
 import { config } from './config/default.ts';
 import { safeReadFileSync } from './utils/safePath.ts';
 import { sseManager } from './utils/sse/index.ts';

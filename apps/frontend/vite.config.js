@@ -18,7 +18,18 @@ export default defineConfig({
   plugins: [
     react({
       babel: {
-        plugins: ['babel-plugin-react-compiler'],
+        plugins: [
+          'babel-plugin-react-compiler',
+          [
+            'transform-imports',
+            {
+              '@tabler/icons-react': {
+                transform: '@tabler/icons-react/dist/esm/icons/${member}.mjs',
+                preventFullImport: true,
+              },
+            },
+          ],
+        ],
       },
     }),
   ],
@@ -30,11 +41,6 @@ export default defineConfig({
         target: backendUrl,
         changeOrigin: true,
       },
-    },
-  },
-  resolve: {
-    alias: {
-      '@tabler/icons-react': '@tabler/icons-react/dist/esm/icons/index.mjs',
     },
   },
   build: {
