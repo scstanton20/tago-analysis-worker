@@ -1,6 +1,6 @@
 {
   "name": "@tago-analysis-worker/types",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -51,15 +51,33 @@
   },
   "typesVersions": {
     "*": {
-      "domain": ["./dist/domain/index.d.ts"],
-      "domain/*": ["./dist/domain/*.d.ts"],
-      "sse": ["./dist/sse/index.d.ts"],
-      "api": ["./dist/api/index.d.ts"],
-      "api/*": ["./dist/api/*.d.ts"],
-      "auth": ["./dist/auth/index.d.ts"],
-      "validation": ["./dist/validation/index.d.ts"],
-      "guards": ["./dist/guards/index.d.ts"],
-      "guards/*": ["./dist/guards/*.d.ts"]
+      "domain": [
+        "./dist/domain/index.d.ts"
+      ],
+      "domain/*": [
+        "./dist/domain/*.d.ts"
+      ],
+      "sse": [
+        "./dist/sse/index.d.ts"
+      ],
+      "api": [
+        "./dist/api/index.d.ts"
+      ],
+      "api/*": [
+        "./dist/api/*.d.ts"
+      ],
+      "auth": [
+        "./dist/auth/index.d.ts"
+      ],
+      "validation": [
+        "./dist/validation/index.d.ts"
+      ],
+      "guards": [
+        "./dist/guards/index.d.ts"
+      ],
+      "guards/*": [
+        "./dist/guards/*.d.ts"
+      ]
     }
   },
   "scripts": {
