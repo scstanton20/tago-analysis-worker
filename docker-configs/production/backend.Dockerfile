@@ -14,12 +14,11 @@ COPY packages/types/package.json ./packages/types/
 RUN corepack enable
 
 # Use BuildKit cache mount for pnpm store - persists across builds
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+RUN --mount=type=cache,id=pnpm-$TARGETPLATFORM,target=/pnpm/store \
     pnpm install --filter backend --filter @tago-analysis-worker/types --frozen-lockfile
 
-# Copy and build shared types package
-COPY packages/types ./packages/types
-RUN pnpm --filter @tago-analysis-worker/types run build
+# Copy pre-built shared types package (built by CI before Docker)
+COPY packages/types/dist ./packages/types/dist
 
 FROM node:23-alpine@sha256:a34e14ef1df25b58258956049ab5a71ea7f0d498e41d0b514f4b8de09af09456 AS run
 

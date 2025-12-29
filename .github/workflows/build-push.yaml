@@ -17,28 +17,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Pre-build types to ensure cache is warm for Docker builds
-  build-types:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Setup Node.js and pnpm
-        uses: ./.github/actions/setup-node-pnpm
-        id: setup
-        with:
-          restore-types: 'true'
-
-      - name: Build types package
-        if: steps.setup.outputs.types-cache-hit != 'true'
-        run: pnpm --filter @tago-analysis-worker/types run build
-
   build-and-push:
-    needs: build-types
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -60,6 +39,17 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+
+      # Build types BEFORE Docker - they'll be in the build context
+      - name: Setup Node.js and pnpm
+        uses: ./.github/actions/setup-node-pnpm
+        id: setup
+        with:
+          restore-types: 'true'
+
+      - name: Build types package
+        if: steps.setup.outputs.types-cache-hit != 'true'
+        run: pnpm --filter @tago-analysis-worker/types run build
 
       - name: Extract version from package.json
         id: version
