@@ -91,7 +91,6 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.app.name }}
           tags: |
             type=semver,pattern={{version}},value=${{ steps.version.outputs.VERSION }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ steps.version.outputs.VERSION }}
             type=raw,value=latest
 
       - name: Build and push ${{ matrix.app.name }} image
