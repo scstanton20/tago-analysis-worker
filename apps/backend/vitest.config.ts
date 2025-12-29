@@ -9,7 +9,10 @@ const __dirname = path.dirname(__filename);
 // Shared resolve configuration
 const sharedResolve = {
   alias: {
-    '#tago-utils': path.resolve(__dirname, 'src/utils/in-process-utils/index.ts'),
+    '#tago-utils': path.resolve(
+      __dirname,
+      'src/utils/in-process-utils/index.ts',
+    ),
   },
 };
 

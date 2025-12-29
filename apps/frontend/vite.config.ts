@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 import fs from 'fs';
 
 // Docker detection
-const isDocker = (() => {
+const isDocker = ((): boolean => {
   try {
     return fs.existsSync('/.dockerenv');
   } catch {
@@ -19,7 +19,6 @@ export default defineConfig({
     react({
       babel: {
         plugins: [
-          'babel-plugin-react-compiler',
           [
             'transform-imports',
             {
@@ -29,10 +28,16 @@ export default defineConfig({
               },
             },
           ],
+          'babel-plugin-react-compiler',
         ],
       },
     }),
   ],
+  resolve: {
+    alias: {
+      '@': '/src',
+    },
+  },
   server: {
     host: true,
     port: 5173,
