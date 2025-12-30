@@ -10,10 +10,8 @@ Comprehensive test suite for the Tago Analysis Runner backend application using 
 - [Test Structure](#test-structure)
 - [Writing Tests](#writing-tests)
 - [Coverage Goals](#coverage-goals)
-- [Completed Tests](#completed-tests)
-- [Remaining Tests to Implement](#remaining-tests-to-implement)
 - [Test Patterns and Examples](#test-patterns-and-examples)
-- [Best Practices](#best-practices)
+- [Running Specific Tests](#running-specific-tests)
 
 ## Overview
 
@@ -22,12 +20,15 @@ This test suite provides comprehensive coverage for the backend application, inc
 - **Controllers**: HTTP request handlers
 - **Services**: Business logic layer
 - **Models**: Data models and process management
-- **Utilities**: Helper functions and shared utilities
+- **Utilities**: Helper functions and shared utilities (including SSE and logging)
 - **Middleware**: Express middleware functions
 - **Validation**: Zod schema validations
 - **Routes**: API endpoint definitions
+- **Integration**: End-to-end integration tests
 
+**Current Stats**: 64 test files, 2,485+ tests
 **Target Coverage**: >80% for lines, functions, branches, and statements
+**Current Coverage**: ~82% branches (as of December 2025)
 
 ## Setup
 
@@ -65,7 +66,8 @@ pnpm test:coverage:ui
 tests/
 ├── setup.ts                        # Global test setup
 ├── README.md                       # This file
-├── utils/                          # Test utilities
+├── TEMPLATE.test.ts               # Template for new tests
+├── fixtures/                       # Test fixtures
 │   └── testHelpers.ts             # Helper functions for tests
 ├── mocks/                          # Mock implementations
 │   └── fsMocks.ts                 # File system mocks
@@ -74,47 +76,75 @@ tests/
 │   ├── settingsController.test.ts
 │   ├── statusController.test.ts
 │   ├── teamController.test.ts
-│   └── userController.test.ts
+│   ├── userController.test.ts
+│   └── utilsDocsController.test.ts
 ├── services/                       # Service tests
+│   ├── analysisInfoService.test.ts
 │   ├── analysisService.test.ts
+│   ├── dnsCache.test.ts
 │   ├── metricsService.test.ts
-│   ├── teamService.test.ts
-│   └── dnsCache.test.ts
+│   └── teamService.test.ts
 ├── models/                         # Model tests
-│   └── analysisProcess.test.ts
+│   ├── analysisProcess.test.ts
+│   ├── logManagement.test.ts
+│   └── processCleanup.test.ts
 ├── utils/                          # Utility tests
-│   ├── cryptoUtils.test.ts
-│   ├── safePath.test.ts
-│   ├── storage.test.ts
-│   ├── sse.test.ts
-│   ├── responseHelpers.test.ts
-│   ├── asyncHandler.test.ts
 │   ├── analysisWrapper.test.ts
-│   ├── sharedDNSCache.test.ts
-│   ├── ssrfProtection.test.ts
-│   ├── mqAPI.test.ts
+│   ├── asyncHandler.test.ts
+│   ├── authDatabase.test.ts
+│   ├── cryptoUtils.test.ts
+│   ├── databaseHelpers.test.ts
 │   ├── logger.test.ts
 │   ├── metrics-enhanced.test.ts
-│   └── authDatabase.test.ts
+│   ├── mqAPI.test.ts
+│   ├── responseHelpers.test.ts
+│   ├── safePath.test.ts
+│   ├── sdkVersion.test.ts
+│   ├── sharedDNSCache.test.ts
+│   ├── sseChannels.test.ts
+│   ├── ssrfProtection.test.ts
+│   ├── storage.test.ts
+│   ├── logging/                   # Logging utility tests
+│   │   ├── lokiTransport.test.ts
+│   │   ├── sandboxLogger.test.ts
+│   │   └── streamFactories.test.ts
+│   └── sse/                       # SSE utility tests
+│       ├── broadcastService.test.ts
+│       ├── ChannelManager.test.ts
+│       ├── heartbeatService.test.ts
+│       ├── initDataService.test.ts
+│       ├── sessionManager.test.ts
+│       ├── SSEManager.test.ts
+│       └── utils.test.ts
 ├── middleware/                     # Middleware tests
+│   ├── betterAuthMiddleware.test.ts
+│   ├── compression.test.ts
 │   ├── errorHandler.test.ts
-│   ├── validateRequest.test.ts
 │   ├── rateLimiter.test.ts
-│   └── betterAuthMiddleware.test.ts
+│   ├── sanitizeParams.test.ts
+│   └── validateRequest.test.ts
 ├── validation/                     # Validation tests
 │   ├── analysisSchemas.test.ts
+│   ├── metricsSchemas.test.ts
 │   ├── settingsSchemas.test.ts
+│   ├── shared.test.ts
+│   ├── sseSchemas.test.ts
+│   ├── statusSchemas.test.ts
 │   ├── teamSchemas.test.ts
 │   └── userSchemas.test.ts
-└── routes/                         # Route tests
-    ├── analysisRoutes.test.ts
-    ├── authRoutes.test.ts
-    ├── metricsRoutes.test.ts
-    ├── settingsRoutes.test.ts
-    ├── sseRoutes.test.ts
-    ├── statusRoutes.test.ts
-    ├── teamRoutes.test.ts
-    └── userRoutes.test.ts
+├── routes/                         # Route tests
+│   ├── analysisRoutes.test.ts
+│   ├── authRoutes.test.ts
+│   ├── metricsRoutes.test.ts
+│   ├── settingsRoutes.test.ts
+│   ├── sseRoutes.test.ts
+│   ├── statusRoutes.test.ts
+│   ├── teamRoutes.test.ts
+│   └── userRoutes.test.ts
+└── integration/                    # Integration tests
+    ├── authInfrastructure.test.ts
+    ├── database.integration.test.ts
+    └── storage.integration.test.ts
 ```
 
 ## Writing Tests

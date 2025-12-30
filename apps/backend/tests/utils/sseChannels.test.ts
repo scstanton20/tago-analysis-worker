@@ -640,7 +640,7 @@ describe('SSE Channel-Based Subscription Management', () => {
         );
 
         // Simulate disconnect
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         const disconnectHandler = (mockReq.on.mock.calls as any[]).find(
           (call) => call[0] === 'close',
         )?.[1];
@@ -662,7 +662,6 @@ describe('SSE Channel-Based Subscription Management', () => {
           'user-123',
         );
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const disconnectHandler = (mockReq.on.mock.calls as any[]).find(
           (call) => call[0] === 'close',
         )?.[1];

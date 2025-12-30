@@ -18,7 +18,6 @@ vi.mock('../../src/utils/sse/index.ts', () => ({
 }));
 
 vi.mock('../../src/utils/responseHelpers.ts', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   handleError: vi.fn((res: any, error: Error) => {
     res.status(500).json({ error: error.message });
   }),

@@ -22,6 +22,29 @@ import { constants as zlibConstants } from 'zlib';
 import type { Request, Response, RequestHandler } from 'express';
 
 /**
+ * Compression filter function for SSE endpoints
+ * Exported separately for testability
+ *
+ * @param req - Express request object
+ * @param res - Express response object
+ * @returns true if response should be compressed
+ */
+export function sseCompressionFilter(req: Request, res: Response): boolean {
+  // Handle null/undefined request
+  if (!req) {
+    return compression.filter(req, res);
+  }
+
+  // Check if this is an SSE endpoint
+  if (req.path && req.path.includes('/sse/')) {
+    return true;
+  }
+
+  // For non-SSE paths, use default compression filter
+  return compression.filter(req, res);
+}
+
+/**
  * Create compression middleware optimized for SSE endpoints
  *
  * @returns Express middleware function
@@ -42,21 +65,7 @@ import type { Request, Response, RequestHandler } from 'express';
  */
 export function sseCompression(): RequestHandler {
   return compression({
-    // Always compress SSE responses
-    filter: (req: Request, res: Response): boolean => {
-      // Handle null/undefined request
-      if (!req) {
-        return compression.filter(req, res);
-      }
-
-      // Check if this is an SSE endpoint
-      if (req.path && req.path.includes('/sse/')) {
-        return true;
-      }
-
-      // For non-SSE paths, use default compression filter
-      return compression.filter(req, res);
-    },
+    filter: sseCompressionFilter,
 
     // Compress everything, even small messages
     // SSE sends many small messages, so we want to compress all of them

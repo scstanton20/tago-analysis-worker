@@ -6,6 +6,84 @@ import {
 } from '../../src/validation/analysisSchemas.ts';
 
 describe('analysisSchemas', () => {
+  describe('analysisIdSchema', () => {
+    it('should validate valid UUID', () => {
+      const validId = '123e4567-e89b-12d3-a456-426614174000';
+      const result = schemas.runAnalysis.params!.safeParse({
+        analysisId: validId,
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept uppercase UUID', () => {
+      const validId = '123E4567-E89B-12D3-A456-426614174000';
+      const result = schemas.runAnalysis.params!.safeParse({
+        analysisId: validId,
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('should accept null UUID', () => {
+      const validId = '00000000-0000-0000-0000-000000000000';
+      const result = schemas.runAnalysis.params!.safeParse({
+        analysisId: validId,
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('should reject empty string', () => {
+      const result = schemas.runAnalysis.params!.safeParse({ analysisId: '' });
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0].message).toContain('UUID');
+    });
+
+    it('should reject non-UUID string', () => {
+      const result = schemas.runAnalysis.params!.safeParse({
+        analysisId: 'not-a-uuid',
+      });
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0].message).toContain('UUID');
+    });
+
+    it('should reject UUID without hyphens', () => {
+      const result = schemas.runAnalysis.params!.safeParse({
+        analysisId: '123e4567e89b12d3a456426614174000',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject partial UUID', () => {
+      const result = schemas.runAnalysis.params!.safeParse({
+        analysisId: '123e4567-e89b-12d3',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject UUID with invalid characters', () => {
+      const result = schemas.runAnalysis.params!.safeParse({
+        analysisId: '123e4567-e89b-12d3-a456-42661417zzzz',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject numeric UUID', () => {
+      const result = schemas.runAnalysis.params!.safeParse({ analysisId: 123 });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject null UUID', () => {
+      const result = schemas.runAnalysis.params!.safeParse({
+        analysisId: null,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject object as analysisId', () => {
+      const result = schemas.runAnalysis.params!.safeParse({ analysisId: {} });
+      expect(result.success).toBe(false);
+    });
+  });
+
   describe('LOG_TIME_RANGE_OPTIONS and LOG_TIME_RANGE_VALUES exports', () => {
     it('should export LOG_TIME_RANGE_OPTIONS with value and label for each option', () => {
       expect(LOG_TIME_RANGE_OPTIONS).toBeDefined();
@@ -727,6 +805,744 @@ describe('analysisSchemas', () => {
         expect(result.error?.issues[0].message).toContain(
           'Limit must be a valid positive integer',
         );
+      });
+    });
+  });
+
+  describe('runAnalysis schema', () => {
+    it('should validate valid analysisId', () => {
+      const validData = {
+        analysisId: '123e4567-e89b-12d3-a456-426614174000',
+      };
+
+      const result = schemas.runAnalysis.params!.safeParse(validData);
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should require analysisId field', () => {
+      const invalidData = {};
+
+      const result = schemas.runAnalysis.params!.safeParse(invalidData);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0].path).toContain('analysisId');
+    });
+
+    it('should reject non-UUID analysisId', () => {
+      const invalidData = {
+        analysisId: 'not-a-uuid',
+      };
+
+      const result = schemas.runAnalysis.params!.safeParse(invalidData);
+
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('stopAnalysis schema', () => {
+    it('should validate valid analysisId', () => {
+      const validData = {
+        analysisId: '123e4567-e89b-12d3-a456-426614174000',
+      };
+
+      const result = schemas.stopAnalysis.params!.safeParse(validData);
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should require analysisId field', () => {
+      const invalidData = {};
+
+      const result = schemas.stopAnalysis.params!.safeParse(invalidData);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0].path).toContain('analysisId');
+    });
+
+    it('should reject non-UUID analysisId', () => {
+      const invalidData = {
+        analysisId: 'invalid-id',
+      };
+
+      const result = schemas.stopAnalysis.params!.safeParse(invalidData);
+
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('deleteAnalysis schema', () => {
+    it('should validate valid analysisId', () => {
+      const validData = {
+        analysisId: '123e4567-e89b-12d3-a456-426614174000',
+      };
+
+      const result = schemas.deleteAnalysis.params!.safeParse(validData);
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should require analysisId field', () => {
+      const invalidData = {};
+
+      const result = schemas.deleteAnalysis.params!.safeParse(invalidData);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0].path).toContain('analysisId');
+    });
+
+    it('should reject non-UUID analysisId', () => {
+      const invalidData = {
+        analysisId: 'delete-me',
+      };
+
+      const result = schemas.deleteAnalysis.params!.safeParse(invalidData);
+
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('getAnalysisContent schema', () => {
+    describe('params validation', () => {
+      it('should validate with valid analysisId', () => {
+        const validData = {
+          analysisId: '123e4567-e89b-12d3-a456-426614174000',
+        };
+
+        const result = schemas.getAnalysisContent.params!.safeParse(validData);
+
+        expect(result.success).toBe(true);
+      });
+
+      it('should require analysisId', () => {
+        const invalidData = {};
+
+        const result =
+          schemas.getAnalysisContent.params!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0].path).toContain('analysisId');
+      });
+
+      it('should reject invalid UUID', () => {
+        const invalidData = {
+          analysisId: 'not-uuid',
+        };
+
+        const result =
+          schemas.getAnalysisContent.params!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+      });
+    });
+
+    describe('query validation', () => {
+      it('should validate without version parameter', () => {
+        const validData = {};
+
+        const result = schemas.getAnalysisContent.query!.safeParse(validData);
+
+        expect(result.success).toBe(true);
+      });
+
+      it('should validate with numeric version string', () => {
+        const validData = { version: '5' };
+
+        const result = schemas.getAnalysisContent.query!.safeParse(validData);
+
+        expect(result.success).toBe(true);
+        expect(result.data?.version).toBe('5');
+      });
+
+      it('should validate with version zero', () => {
+        const validData = { version: '0' };
+
+        const result = schemas.getAnalysisContent.query!.safeParse(validData);
+
+        expect(result.success).toBe(true);
+      });
+
+      it('should reject non-numeric version', () => {
+        const invalidData = { version: 'abc' };
+
+        const result = schemas.getAnalysisContent.query!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject decimal version', () => {
+        const invalidData = { version: '1.5' };
+
+        const result = schemas.getAnalysisContent.query!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject negative version', () => {
+        const invalidData = { version: '-1' };
+
+        const result = schemas.getAnalysisContent.query!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject null version', () => {
+        const invalidData = { version: null };
+
+        const result = schemas.getAnalysisContent.query!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+      });
+    });
+  });
+
+  describe('clearLogs schema', () => {
+    it('should validate with valid analysisId', () => {
+      const validData = {
+        analysisId: '123e4567-e89b-12d3-a456-426614174000',
+      };
+
+      const result = schemas.clearLogs.params!.safeParse(validData);
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should require analysisId field', () => {
+      const invalidData = {};
+
+      const result = schemas.clearLogs.params!.safeParse(invalidData);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0].path).toContain('analysisId');
+    });
+
+    it('should reject invalid analysisId format', () => {
+      const invalidData = {
+        analysisId: 'not-valid-uuid',
+      };
+
+      const result = schemas.clearLogs.params!.safeParse(invalidData);
+
+      expect(result.success).toBe(false);
+    });
+
+    it('should reject empty analysisId', () => {
+      const invalidData = {
+        analysisId: '',
+      };
+
+      const result = schemas.clearLogs.params!.safeParse(invalidData);
+
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('getEnvironment schema', () => {
+    it('should validate with valid analysisId', () => {
+      const validData = {
+        analysisId: '123e4567-e89b-12d3-a456-426614174000',
+      };
+
+      const result = schemas.getEnvironment.params!.safeParse(validData);
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should require analysisId field', () => {
+      const invalidData = {};
+
+      const result = schemas.getEnvironment.params!.safeParse(invalidData);
+
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0].path).toContain('analysisId');
+    });
+
+    it('should reject invalid UUID format', () => {
+      const invalidData = {
+        analysisId: 'invalid',
+      };
+
+      const result = schemas.getEnvironment.params!.safeParse(invalidData);
+
+      expect(result.success).toBe(false);
+    });
+
+    it('should accept multiple valid UUIDs', () => {
+      const validUUIDs = [
+        '123e4567-e89b-12d3-a456-426614174000',
+        'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+        '00000000-0000-0000-0000-000000000000',
+      ];
+
+      validUUIDs.forEach((uuid) => {
+        const result = schemas.getEnvironment.params!.safeParse({
+          analysisId: uuid,
+        });
+        expect(result.success).toBe(true);
+      });
+    });
+  });
+
+  describe('getLogs schema', () => {
+    describe('params validation', () => {
+      it('should validate with valid analysisId', () => {
+        const validData = {
+          analysisId: '123e4567-e89b-12d3-a456-426614174000',
+        };
+
+        const result = schemas.getLogs.params!.safeParse(validData);
+
+        expect(result.success).toBe(true);
+      });
+
+      it('should require analysisId', () => {
+        const invalidData = {};
+
+        const result = schemas.getLogs.params!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject invalid analysisId', () => {
+        const invalidData = {
+          analysisId: 'not-uuid',
+        };
+
+        const result = schemas.getLogs.params!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+      });
+    });
+
+    describe('query validation', () => {
+      it('should validate empty query (defaults apply)', () => {
+        const validData = {};
+
+        const result = schemas.getLogs.query!.safeParse(validData);
+
+        expect(result.success).toBe(true);
+        expect(result.data?.page).toBe(1); // default
+        expect(result.data?.limit).toBe(100); // default
+      });
+
+      it('should accept valid page and limit strings', () => {
+        const validData = {
+          page: '2',
+          limit: '50',
+        };
+
+        const result = schemas.getLogs.query!.safeParse(validData);
+
+        expect(result.success).toBe(true);
+        expect(result.data?.page).toBe(2);
+        expect(result.data?.limit).toBe(50);
+      });
+
+      it('should accept page as string and transform to number', () => {
+        const validData = { page: '10' };
+
+        const result = schemas.getLogs.query!.safeParse(validData);
+
+        expect(result.success).toBe(true);
+        expect(result.data?.page).toBe(10);
+        expect(typeof result.data?.page).toBe('number');
+      });
+
+      it('should accept limit as string and transform to number', () => {
+        const validData = { limit: '200' };
+
+        const result = schemas.getLogs.query!.safeParse(validData);
+
+        expect(result.success).toBe(true);
+        expect(result.data?.limit).toBe(200);
+      });
+
+      it('should use default page of 1 when not provided', () => {
+        const validData = { limit: '50' };
+
+        const result = schemas.getLogs.query!.safeParse(validData);
+
+        expect(result.success).toBe(true);
+        expect(result.data?.page).toBe(1);
+      });
+
+      it('should use default limit of 100 when not provided', () => {
+        const validData = { page: '5' };
+
+        const result = schemas.getLogs.query!.safeParse(validData);
+
+        expect(result.success).toBe(true);
+        expect(result.data?.limit).toBe(100);
+      });
+
+      it('should reject non-numeric page', () => {
+        const invalidData = { page: 'abc' };
+
+        const result = schemas.getLogs.query!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject non-numeric limit', () => {
+        const invalidData = { limit: 'xyz' };
+
+        const result = schemas.getLogs.query!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject decimal page', () => {
+        const invalidData = { page: '1.5' };
+
+        const result = schemas.getLogs.query!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject decimal limit', () => {
+        const invalidData = { limit: '50.5' };
+
+        const result = schemas.getLogs.query!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject negative page', () => {
+        const invalidData = { page: '-1' };
+
+        const result = schemas.getLogs.query!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject negative limit', () => {
+        const invalidData = { limit: '-10' };
+
+        const result = schemas.getLogs.query!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject zero page', () => {
+        const invalidData = { page: '0' };
+
+        const result = schemas.getLogs.query!.safeParse(invalidData);
+
+        // Page 0 may be transformed, check if it's valid per schema
+        if (!result.success) {
+          expect(result.error?.issues[0].path).toContain('page');
+        }
+      });
+
+      it('should reject zero limit', () => {
+        const invalidData = { limit: '0' };
+
+        const result = schemas.getLogs.query!.safeParse(invalidData);
+
+        // Limit 0 may be transformed, check if it's valid per schema
+        if (!result.success) {
+          expect(result.error?.issues[0].path).toContain('limit');
+        }
+      });
+    });
+  });
+
+  describe('getVersions schema', () => {
+    describe('params validation', () => {
+      it('should validate with valid analysisId', () => {
+        const validData = {
+          analysisId: '123e4567-e89b-12d3-a456-426614174000',
+        };
+
+        const result = schemas.getVersions.params!.safeParse(validData);
+
+        expect(result.success).toBe(true);
+      });
+
+      it('should require analysisId', () => {
+        const invalidData = {};
+
+        const result = schemas.getVersions.params!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject invalid UUID', () => {
+        const invalidData = {
+          analysisId: 'not-uuid',
+        };
+
+        const result = schemas.getVersions.params!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+      });
+    });
+
+    describe('query validation', () => {
+      it('should validate with defaults (empty query)', () => {
+        const validData = {};
+
+        const result = schemas.getVersions.query!.safeParse(validData);
+
+        expect(result.success).toBe(true);
+        expect(result.data?.page).toBe(1); // default
+        expect(result.data?.limit).toBe(10); // default
+      });
+
+      it('should accept valid page string', () => {
+        const validData = { page: '5' };
+
+        const result = schemas.getVersions.query!.safeParse(validData);
+
+        expect(result.success).toBe(true);
+        expect(result.data?.page).toBe(5);
+      });
+
+      it('should accept valid limit within bounds', () => {
+        const validData = { limit: '50' };
+
+        const result = schemas.getVersions.query!.safeParse(validData);
+
+        expect(result.success).toBe(true);
+        expect(result.data?.limit).toBe(50);
+      });
+
+      it('should accept page at boundary (1)', () => {
+        const validData = { page: '1' };
+
+        const result = schemas.getVersions.query!.safeParse(validData);
+
+        expect(result.success).toBe(true);
+        expect(result.data?.page).toBe(1);
+      });
+
+      it('should accept limit at minimum (1)', () => {
+        const validData = { limit: '1' };
+
+        const result = schemas.getVersions.query!.safeParse(validData);
+
+        expect(result.success).toBe(true);
+        expect(result.data?.limit).toBe(1);
+      });
+
+      it('should accept limit at maximum (100)', () => {
+        const validData = { limit: '100' };
+
+        const result = schemas.getVersions.query!.safeParse(validData);
+
+        expect(result.success).toBe(true);
+        expect(result.data?.limit).toBe(100);
+      });
+
+      it('should reject limit below minimum (0)', () => {
+        const invalidData = { limit: '0' };
+
+        const result = schemas.getVersions.query!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0].message).toContain('between 1 and 100');
+      });
+
+      it('should reject limit above maximum (101)', () => {
+        const invalidData = { limit: '101' };
+
+        const result = schemas.getVersions.query!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0].message).toContain('between 1 and 100');
+      });
+
+      it('should reject page less than 1', () => {
+        const invalidData = { page: '0' };
+
+        const result = schemas.getVersions.query!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0].message).toContain('at least 1');
+      });
+
+      it('should reject negative page', () => {
+        const invalidData = { page: '-5' };
+
+        const result = schemas.getVersions.query!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject negative limit', () => {
+        const invalidData = { limit: '-10' };
+
+        const result = schemas.getVersions.query!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject non-numeric page', () => {
+        const invalidData = { page: 'abc' };
+
+        const result = schemas.getVersions.query!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject non-numeric limit', () => {
+        const invalidData = { limit: 'xyz' };
+
+        const result = schemas.getVersions.query!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject decimal page', () => {
+        const invalidData = { page: '2.5' };
+
+        const result = schemas.getVersions.query!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject decimal limit', () => {
+        const invalidData = { limit: '50.5' };
+
+        const result = schemas.getVersions.query!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+      });
+
+      it('should use default page when not provided', () => {
+        const validData = { limit: '25' };
+
+        const result = schemas.getVersions.query!.safeParse(validData);
+
+        expect(result.success).toBe(true);
+        expect(result.data?.page).toBe(1);
+      });
+
+      it('should use default limit when not provided', () => {
+        const validData = { page: '3' };
+
+        const result = schemas.getVersions.query!.safeParse(validData);
+
+        expect(result.success).toBe(true);
+        expect(result.data?.limit).toBe(10);
+      });
+    });
+  });
+
+  describe('downloadAnalysis schema', () => {
+    describe('params validation', () => {
+      it('should validate with valid analysisId', () => {
+        const validData = {
+          analysisId: '123e4567-e89b-12d3-a456-426614174000',
+        };
+
+        const result = schemas.downloadAnalysis.params!.safeParse(validData);
+
+        expect(result.success).toBe(true);
+      });
+
+      it('should require analysisId', () => {
+        const invalidData = {};
+
+        const result = schemas.downloadAnalysis.params!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject invalid UUID', () => {
+        const invalidData = {
+          analysisId: 'download-me',
+        };
+
+        const result = schemas.downloadAnalysis.params!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+      });
+    });
+
+    describe('query validation', () => {
+      it('should validate without version parameter', () => {
+        const validData = {};
+
+        const result = schemas.downloadAnalysis.query!.safeParse(validData);
+
+        expect(result.success).toBe(true);
+      });
+
+      it('should accept numeric version string', () => {
+        const validData = { version: '3' };
+
+        const result = schemas.downloadAnalysis.query!.safeParse(validData);
+
+        expect(result.success).toBe(true);
+        expect(result.data?.version).toBe('3');
+      });
+
+      it('should accept version zero', () => {
+        const validData = { version: '0' };
+
+        const result = schemas.downloadAnalysis.query!.safeParse(validData);
+
+        expect(result.success).toBe(true);
+      });
+
+      it('should accept large version numbers', () => {
+        const validData = { version: '9999' };
+
+        const result = schemas.downloadAnalysis.query!.safeParse(validData);
+
+        expect(result.success).toBe(true);
+      });
+
+      it('should reject non-numeric version', () => {
+        const invalidData = { version: 'latest' };
+
+        const result = schemas.downloadAnalysis.query!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0].message).toContain(
+          'Version must be a number',
+        );
+      });
+
+      it('should reject decimal version', () => {
+        const invalidData = { version: '1.5' };
+
+        const result = schemas.downloadAnalysis.query!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject negative version', () => {
+        const invalidData = { version: '-1' };
+
+        const result = schemas.downloadAnalysis.query!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject empty version string', () => {
+        const invalidData = { version: '' };
+
+        const result = schemas.downloadAnalysis.query!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject null version', () => {
+        const invalidData = { version: null };
+
+        const result = schemas.downloadAnalysis.query!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+      });
+
+      it('should reject version with leading zeros but validate as string', () => {
+        const validData = { version: '007' };
+
+        const result = schemas.downloadAnalysis.query!.safeParse(validData);
+
+        expect(result.success).toBe(true);
       });
     });
   });

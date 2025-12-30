@@ -423,7 +423,6 @@ export function asResponse<T>(res: MockResponse): T {
  */
 export function createControllerRequest(
   overrides: Partial<MockRequest> = {},
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): any {
   return createMockRequest(overrides);
 }
@@ -433,7 +432,7 @@ export function createControllerRequest(
  * Returns a type that's compatible with controller response expectations.
  * @returns Mock response cast for flexible controller testing
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 export function createControllerResponse(): any {
   return createMockResponse();
 }

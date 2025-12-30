@@ -158,8 +158,12 @@ interface AnalysisServiceType {
   }>;
   updateAnalysis: (
     analysisId: string,
-    data: { content: string },
-  ) => Promise<{ success: boolean; restarted?: string }>;
+    data: { content?: string; teamId?: string },
+  ) => Promise<{
+    success: boolean;
+    restarted?: boolean;
+    savedVersion?: number | null;
+  }>;
   updateEnvironment: (
     analysisId: string,
     env: Record<string, string>,
@@ -698,6 +702,42 @@ describe('AnalysisService', () => {
         analysisService.updateAnalysis('nonexistent', { content: 'new' }),
       ).rejects.toThrow('Analysis nonexistent not found');
     });
+
+    it('should update teamId when provided', async () => {
+      const analysis = createMockAnalysisProcess({
+        status: 'stopped',
+      });
+      analysisService.analyses.set('test-analysis', analysis);
+
+      // Mock team lookup to succeed
+      teamService.getTeam.mockResolvedValue({
+        id: 'new-team',
+        name: 'New Team',
+      });
+
+      const result = await analysisService.updateAnalysis('test-analysis', {
+        teamId: 'new-team',
+      });
+
+      expect(result.success).toBe(true);
+      expect(teamService.getTeam).toHaveBeenCalledWith('new-team');
+    });
+
+    it('should throw error if team not found when updating teamId', async () => {
+      const analysis = createMockAnalysisProcess({
+        status: 'stopped',
+      });
+      analysisService.analyses.set('test-analysis', analysis);
+
+      // Mock team lookup to return null
+      teamService.getTeam.mockResolvedValue(null);
+
+      await expect(
+        analysisService.updateAnalysis('test-analysis', {
+          teamId: 'nonexistent-team',
+        }),
+      ).rejects.toThrow('Team nonexistent-team not found');
+    });
   });
 
   describe('environment management', () => {
@@ -995,6 +1035,57 @@ describe('AnalysisService', () => {
       );
     });
 
+    it('should throw error if analysis not found when getting logs', async () => {
+      await expect(
+        analysisService.getLogs('nonexistent', 1, 100),
+      ).rejects.toThrow('Analysis not found');
+    });
+
+    it('should fall back to file when no memory logs available', async () => {
+      const analysis = createMockAnalysisProcess();
+      analysis.getMemoryLogs.mockReturnValue({
+        logs: [],
+        hasMore: false,
+        totalCount: 0,
+        totalInMemory: 0,
+      });
+      analysisService.analyses.set('test-analysis', analysis);
+
+      // Mock fs.access to throw ENOENT (file doesn't exist)
+      const fsMock = await import('fs');
+      vi.mocked(fsMock.promises.access).mockRejectedValue(
+        Object.assign(new Error('File not found'), { code: 'ENOENT' }),
+      );
+
+      const logs = await analysisService.getLogs('test-analysis', 1, 100);
+
+      expect(logs.logs).toHaveLength(0);
+      expect(logs.source).toBe('file');
+    });
+
+    it('should use file for page 2+', async () => {
+      const analysis = createMockAnalysisProcess();
+      analysis.getMemoryLogs.mockReturnValue({
+        logs: [],
+        hasMore: false,
+        totalCount: 0,
+        totalInMemory: 0,
+      });
+      analysisService.analyses.set('test-analysis', analysis);
+
+      // Mock fs.access to throw ENOENT (file doesn't exist)
+      const fsMock = await import('fs');
+      vi.mocked(fsMock.promises.access).mockRejectedValue(
+        Object.assign(new Error('File not found'), { code: 'ENOENT' }),
+      );
+
+      const logs = await analysisService.getLogs('test-analysis', 2, 100);
+
+      // Page 2+ always goes to file (even if file doesn't exist)
+      expect(logs.logs).toHaveLength(0);
+      expect(logs.source).toBe('file');
+    });
+
     it('should throw error if analysis not found when clearing logs', async () => {
       await expect(analysisService.clearLogs('nonexistent')).rejects.toThrow(
         'Analysis not found',
@@ -1072,6 +1163,115 @@ describe('AnalysisService', () => {
       expect(analysis.status).toBe('stopped');
       expect(analysis.intendedState).toBe('running');
       expect(analysis.teamId).toBe('team-123');
+    });
+
+    it('should add new analyses from config', async () => {
+      analysisService.analyses.clear();
+
+      const newConfig = {
+        version: '5.0',
+        analyses: {
+          'new-analysis-id': {
+            id: 'new-analysis-id',
+            name: 'new-analysis',
+            enabled: true,
+            intendedState: 'running',
+            lastStartTime: null,
+            teamId: 'team-1',
+          },
+        },
+        teamStructure: {},
+      };
+
+      await analysisService.updateConfig(newConfig);
+
+      expect(analysisService.analyses.has('new-analysis-id')).toBe(true);
+      const newAnalysis = analysisService.analyses.get('new-analysis-id');
+      expect(newAnalysis?.analysisName).toBe('new-analysis');
+      expect(newAnalysis?.enabled).toBe(true);
+      expect(newAnalysis?.intendedState).toBe('running');
+    });
+
+    it('should remove analyses that no longer exist in config', async () => {
+      const { AnalysisProcess } = await import(
+        '../../src/models/analysisProcess/index.ts'
+      );
+
+      const analysis = new AnalysisProcess(
+        'analysis-to-remove',
+        'old-analysis',
+        analysisService,
+      ) as unknown as MockAnalysisProcess;
+      analysisService.analyses.set('analysis-to-remove', analysis);
+
+      // Config without the analysis
+      const newConfig = {
+        version: '5.0',
+        analyses: {},
+        teamStructure: {},
+      };
+
+      await analysisService.updateConfig(newConfig);
+
+      expect(analysisService.analyses.has('analysis-to-remove')).toBe(false);
+    });
+
+    it('should update analysis name when changed in config', async () => {
+      const analysisId = 'test-analysis-rename';
+
+      const { AnalysisProcess } = await import(
+        '../../src/models/analysisProcess/index.ts'
+      );
+
+      const analysis = new AnalysisProcess(
+        analysisId,
+        'old-name',
+        analysisService,
+      ) as unknown as MockAnalysisProcess;
+      analysisService.analyses.set(analysisId, analysis);
+
+      const newConfig = {
+        version: '5.0',
+        analyses: {
+          [analysisId]: {
+            id: analysisId,
+            name: 'new-name',
+            enabled: true,
+            intendedState: 'stopped',
+            lastStartTime: null,
+            teamId: null,
+          },
+        },
+        teamStructure: {},
+      };
+
+      await analysisService.updateConfig(newConfig);
+
+      expect(analysis.analysisName).toBe('new-name');
+    });
+
+    it('should default intendedState to stopped when not provided', async () => {
+      analysisService.analyses.clear();
+
+      const newConfig = {
+        version: '5.0',
+        analyses: {
+          'test-analysis': {
+            id: 'test-analysis',
+            name: 'test',
+            enabled: true,
+            // intendedState not provided
+            lastStartTime: null,
+            teamId: null,
+          },
+        },
+        teamStructure: {},
+      };
+
+      await analysisService.updateConfig(newConfig);
+
+      const analysis = analysisService.analyses.get('test-analysis');
+      expect(analysis?.intendedState).toBe('stopped');
     });
   });
 

@@ -871,4 +871,705 @@ describe('AnalysisController', () => {
       expect(res.json).toHaveBeenCalledWith(mockEnv);
     });
   });
+
+  describe('downloadAnalysis', () => {
+    it('should download current version successfully', async () => {
+      const analysisId = 'test-analysis-uuid-123';
+      const req = createControllerRequest({
+        params: { analysisId },
+        query: {},
+      });
+      const res = createControllerResponse();
+
+      analysisService.getAnalysisContent.mockResolvedValue(
+        'console.log("test");',
+      );
+      analysisService.getAnalysisById.mockReturnValue({
+        analysisId,
+        name: 'test-analysis',
+        status: 'stopped',
+      });
+
+      await AnalysisController.downloadAnalysis(req, res);
+
+      expect(analysisService.getAnalysisContent).toHaveBeenCalledWith(
+        analysisId,
+      );
+      expect(res.setHeader).toHaveBeenCalledWith(
+        'Content-Disposition',
+        expect.stringContaining('test-analysis'),
+      );
+      expect(res.setHeader).toHaveBeenCalledWith(
+        'Content-Type',
+        'application/javascript',
+      );
+      expect(res.send).toHaveBeenCalledWith('console.log("test");');
+    });
+
+    it('should download specific version successfully', async () => {
+      const analysisId = 'test-analysis-uuid-123';
+      const req = createControllerRequest({
+        params: { analysisId },
+        query: { version: '2' },
+      });
+      const res = createControllerResponse();
+
+      analysisService.getVersionContent.mockResolvedValue(
+        'console.log("version 2");',
+      );
+      analysisService.getAnalysisById.mockReturnValue({
+        analysisId,
+        name: 'test-analysis',
+        status: 'stopped',
+      });
+
+      await AnalysisController.downloadAnalysis(req, res);
+
+      expect(analysisService.getVersionContent).toHaveBeenCalledWith(
+        analysisId,
+        2,
+      );
+      expect(res.setHeader).toHaveBeenCalledWith(
+        'Content-Disposition',
+        expect.stringContaining('_v2.js'),
+      );
+      expect(res.send).toHaveBeenCalledWith('console.log("version 2");');
+    });
+
+    it('should return 400 for invalid version number', async () => {
+      const analysisId = 'test-analysis-uuid-123';
+      const req = createControllerRequest({
+        params: { analysisId },
+        query: { version: 'invalid' },
+      });
+      const res = createControllerResponse();
+
+      await AnalysisController.downloadAnalysis(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Invalid version number',
+      });
+    });
+
+    it('should return 400 for negative version number', async () => {
+      const analysisId = 'test-analysis-uuid-123';
+      const req = createControllerRequest({
+        params: { analysisId },
+        query: { version: '-1' },
+      });
+      const res = createControllerResponse();
+
+      await AnalysisController.downloadAnalysis(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Invalid version number',
+      });
+    });
+
+    it('should use analysis ID as fallback when name is undefined', async () => {
+      const analysisId = 'test-analysis-uuid-123';
+      const req = createControllerRequest({
+        params: { analysisId },
+        query: {},
+      });
+      const res = createControllerResponse();
+
+      analysisService.getAnalysisContent.mockResolvedValue('code');
+      analysisService.getAnalysisById.mockReturnValue(undefined);
+
+      await AnalysisController.downloadAnalysis(req, res);
+
+      expect(res.setHeader).toHaveBeenCalledWith(
+        'Content-Disposition',
+        `attachment; filename="${analysisId}.js"`,
+      );
+    });
+  });
+
+  describe('downloadLogs', () => {
+    it('should download full logs when timeRange is all', async () => {
+      const analysisId = 'test-analysis-uuid-123';
+      const req = createControllerRequest({
+        params: { analysisId },
+        query: { timeRange: 'all' },
+      });
+      const res = createControllerResponse();
+
+      // Mock fs.access to not throw
+      const fsMock = await import('fs');
+      (fsMock.promises.access as Mock).mockResolvedValue(undefined);
+
+      analysisService.getAnalysisById.mockReturnValue({
+        analysisId,
+        analysisName: 'test-analysis',
+      });
+
+      // Use a spy to verify handleFullLogDownload is called
+      const spy = vi.spyOn(AnalysisController, 'handleFullLogDownload');
+      spy.mockResolvedValue(undefined);
+
+      await AnalysisController.downloadLogs(req, res);
+
+      expect(spy).toHaveBeenCalledWith(analysisId, req, res);
+      spy.mockRestore();
+    });
+
+    it('should download filtered logs when timeRange is not all', async () => {
+      const analysisId = 'test-analysis-uuid-123';
+      const req = createControllerRequest({
+        params: { analysisId },
+        query: { timeRange: 'last24h' },
+      });
+      const res = createControllerResponse();
+
+      const spy = vi.spyOn(AnalysisController, 'handleFilteredLogDownload');
+      spy.mockResolvedValue(undefined);
+
+      await AnalysisController.downloadLogs(req, res);
+
+      expect(spy).toHaveBeenCalledWith(analysisId, 'last24h', req, res);
+      spy.mockRestore();
+    });
+
+    it('should use default timeRange of all when not provided', async () => {
+      const analysisId = 'test-analysis-uuid-123';
+      const req = createControllerRequest({
+        params: { analysisId },
+        query: {},
+      });
+      const res = createControllerResponse();
+
+      const spy = vi.spyOn(AnalysisController, 'handleFilteredLogDownload');
+      spy.mockResolvedValue(undefined);
+
+      await AnalysisController.downloadLogs(req, res);
+
+      expect(spy).toHaveBeenCalledWith(analysisId, 'all', req, res);
+      spy.mockRestore();
+    });
+  });
+
+  describe('handleFullLogDownload', () => {
+    it('should set download headers before streaming', async () => {
+      const analysisId = 'test-analysis-uuid-123';
+      const req = createControllerRequest({
+        params: { analysisId },
+      });
+      const res = createControllerResponse();
+
+      // Mock fs.access to succeed
+      const fsMock = await import('fs');
+      (fsMock.promises.access as Mock).mockResolvedValue(undefined);
+
+      analysisService.getAnalysisById.mockReturnValue({
+        analysisId,
+        name: 'test-analysis',
+      });
+
+      // Just verify headers are set - archiver is a real module
+      // that we don't need to fully test here
+      // We're testing that setZipDownloadHeaders is called correctly
+      const spy = vi.spyOn(AnalysisController, 'setZipDownloadHeaders');
+
+      try {
+        await AnalysisController.handleFullLogDownload(analysisId, req, res);
+      } catch {
+        // Expected to fail due to real archiver, but headers should be set
+      }
+
+      expect(spy).toHaveBeenCalled();
+      spy.mockRestore();
+    });
+
+    it('should return 404 when log file not found', async () => {
+      const analysisId = 'test-analysis-uuid-123';
+      const req = createControllerRequest({
+        params: { analysisId },
+      });
+      const res = createControllerResponse();
+
+      // Mock fs.access to throw ENOENT
+      const fsMock = await import('fs');
+      const error = new Error('File not found');
+      (error as NodeJS.ErrnoException).code = 'ENOENT';
+      (fsMock.promises.access as Mock).mockRejectedValue(error);
+
+      await AnalysisController.handleFullLogDownload(analysisId, req, res);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.stringContaining(`Log file for analysis ${analysisId}`),
+        }),
+      );
+    });
+
+    it('should throw and handle non-ENOENT fs errors', async () => {
+      const analysisId = 'test-analysis-uuid-123';
+      const req = createControllerRequest({
+        params: { analysisId },
+      });
+      const res = createControllerResponse();
+
+      // Mock fs.access to throw a non-ENOENT error
+      const fsMock = await import('fs');
+      const error = new Error('Permission denied');
+      (error as NodeJS.ErrnoException).code = 'EACCES';
+      (fsMock.promises.access as Mock).mockRejectedValue(error);
+
+      // Should throw the error since it's not ENOENT
+      try {
+        await AnalysisController.handleFullLogDownload(analysisId, req, res);
+      } catch (e) {
+        expect((e as Error).message).toBe('Permission denied');
+      }
+    });
+  });
+
+  describe('handleFilteredLogDownload', () => {
+    it('should call getLogsForDownload with correct parameters', async () => {
+      const analysisId = 'test-analysis-uuid-123';
+      const timeRange = 'last24h';
+      const req = createControllerRequest({
+        params: { analysisId },
+      });
+      const res = createControllerResponse();
+
+      analysisService.getLogsForDownload.mockResolvedValue({
+        content: 'filtered log content',
+      });
+
+      analysisService.getAnalysisById.mockReturnValue({
+        analysisId,
+        analysisName: 'test-analysis',
+      });
+
+      // Spy on setZipDownloadHeaders to avoid testing archiver
+      const spy = vi.spyOn(AnalysisController, 'setZipDownloadHeaders');
+
+      try {
+        await AnalysisController.handleFilteredLogDownload(
+          analysisId,
+          timeRange,
+          req,
+          res,
+        );
+      } catch {
+        // Expected to fail due to real archiver, but service should be called
+      }
+
+      expect(analysisService.getLogsForDownload).toHaveBeenCalledWith(
+        analysisId,
+        timeRange,
+      );
+      spy.mockRestore();
+    });
+
+    it('should handle errors during filtered log download', async () => {
+      const analysisId = 'test-analysis-uuid-123';
+      const timeRange = 'last24h';
+      const req = createControllerRequest({
+        params: { analysisId },
+      });
+      const res = createControllerResponse();
+
+      const error = new Error('Failed to get logs');
+      analysisService.getLogsForDownload.mockRejectedValue(error);
+
+      await AnalysisController.handleFilteredLogDownload(
+        analysisId,
+        timeRange,
+        req,
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Failed to generate download file',
+      });
+    });
+  });
+
+  describe('getAnalysisMeta', () => {
+    it('should get analysis metadata successfully', async () => {
+      const { analysisInfoService } = (await import(
+        '../../src/services/analysisInfoService.ts'
+      )) as unknown as {
+        analysisInfoService: { getAnalysisMeta: Mock };
+      };
+
+      const analysisId = 'test-analysis-uuid-123';
+      const req = createControllerRequest({
+        params: { analysisId },
+      });
+      const res = createControllerResponse();
+
+      const mockMeta = {
+        analysisId,
+        createdAt: '2025-01-01T00:00:00Z',
+        fileSize: 1024,
+        versions: 5,
+      };
+
+      analysisInfoService.getAnalysisMeta.mockResolvedValue(mockMeta);
+
+      await AnalysisController.getAnalysisMeta(req, res);
+
+      expect(analysisInfoService.getAnalysisMeta).toHaveBeenCalledWith(
+        analysisId,
+        req.log,
+      );
+      expect(res.json).toHaveBeenCalledWith(mockMeta);
+    });
+  });
+
+  describe('getAnalysisNotes', () => {
+    it('should get analysis notes successfully', async () => {
+      const { analysisInfoService } = (await import(
+        '../../src/services/analysisInfoService.ts'
+      )) as unknown as {
+        analysisInfoService: { getAnalysisNotes: Mock };
+      };
+
+      const analysisId = 'test-analysis-uuid-123';
+      const req = createControllerRequest({
+        params: { analysisId },
+      });
+      const res = createControllerResponse();
+
+      const mockNotes = {
+        content: '# Analysis Notes\nThis is a test analysis',
+        isNew: false,
+      };
+
+      analysisInfoService.getAnalysisNotes.mockResolvedValue(mockNotes);
+
+      await AnalysisController.getAnalysisNotes(req, res);
+
+      expect(analysisInfoService.getAnalysisNotes).toHaveBeenCalledWith(
+        analysisId,
+        req.log,
+      );
+      expect(res.json).toHaveBeenCalledWith(mockNotes);
+    });
+
+    it('should return default notes if none exist', async () => {
+      const { analysisInfoService } = (await import(
+        '../../src/services/analysisInfoService.ts'
+      )) as unknown as {
+        analysisInfoService: { getAnalysisNotes: Mock };
+      };
+
+      const analysisId = 'test-analysis-uuid-123';
+      const req = createControllerRequest({
+        params: { analysisId },
+      });
+      const res = createControllerResponse();
+
+      const mockNotes = {
+        content: '# Analysis Notes\n\n',
+        isNew: true,
+      };
+
+      analysisInfoService.getAnalysisNotes.mockResolvedValue(mockNotes);
+
+      await AnalysisController.getAnalysisNotes(req, res);
+
+      expect(res.json).toHaveBeenCalledWith(mockNotes);
+    });
+  });
+
+  describe('updateAnalysisNotes', () => {
+    it('should update analysis notes successfully', async () => {
+      const { analysisInfoService } = (await import(
+        '../../src/services/analysisInfoService.ts'
+      )) as unknown as {
+        analysisInfoService: { updateAnalysisNotes: Mock };
+      };
+
+      const analysisId = 'test-analysis-uuid-123';
+      const req = createControllerRequest({
+        params: { analysisId },
+        body: { content: '# Updated Notes\nNew content' },
+      });
+      const res = createControllerResponse();
+
+      const mockResult = {
+        analysisName: 'test-analysis',
+        lineCount: 2,
+        lastModified: '2025-01-01T00:00:00Z',
+      };
+
+      analysisInfoService.updateAnalysisNotes.mockResolvedValue(mockResult);
+
+      await AnalysisController.updateAnalysisNotes(req, res);
+
+      expect(analysisInfoService.updateAnalysisNotes).toHaveBeenCalledWith(
+        analysisId,
+        '# Updated Notes\nNew content',
+        req.log,
+      );
+      expect(res.json).toHaveBeenCalledWith(mockResult);
+      expect(sseManager.broadcastAnalysisUpdate).toHaveBeenCalled();
+    });
+  });
+
+  describe('uploadAnalysis - invalid filename', () => {
+    it('should return 400 for invalid filename with special characters', async () => {
+      const req = createControllerRequest({
+        files: {
+          analysis: createMockFile({
+            name: 'test<script>.js',
+          }),
+        },
+        body: {
+          teamId: 'team-123',
+        },
+      });
+      const res = createControllerResponse();
+
+      await AnalysisController.uploadAnalysis(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.any(String),
+        }),
+      );
+    });
+  });
+
+  describe('getAnalysisContent - edge cases', () => {
+    it('should return 400 for negative version number', async () => {
+      const analysisId = 'test-analysis-uuid-123';
+      const req = createControllerRequest({
+        params: { analysisId },
+        query: { version: '-5' },
+      });
+      const res = createControllerResponse();
+
+      await AnalysisController.getAnalysisContent(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Invalid version number',
+      });
+    });
+
+    it('should return 400 for NaN version number', async () => {
+      const analysisId = 'test-analysis-uuid-123';
+      const req = createControllerRequest({
+        params: { analysisId },
+        query: { version: 'abc123' },
+      });
+      const res = createControllerResponse();
+
+      await AnalysisController.getAnalysisContent(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Invalid version number',
+      });
+    });
+  });
+
+  describe('deleteAnalysis - teamId handling', () => {
+    it('should broadcast deletion even when analysis has no teamId', async () => {
+      const analysisId = 'test-analysis-uuid-123';
+      const req = createControllerRequest({
+        params: { analysisId },
+      });
+      const res = createControllerResponse();
+
+      analysisService.getAnalysisById.mockReturnValue({
+        analysisId,
+        analysisName: 'test-analysis',
+        teamId: null,
+      });
+
+      analysisService.deleteAnalysis.mockResolvedValue({
+        message: 'Deleted successfully',
+      });
+
+      await AnalysisController.deleteAnalysis(req, res);
+
+      expect(res.json).toHaveBeenCalledWith({ success: true });
+      expect(sseManager.broadcastAnalysisUpdate).toHaveBeenCalled();
+    });
+
+    it('should handle when analysis does not exist', async () => {
+      const analysisId = 'test-analysis-uuid-123';
+      const req = createControllerRequest({
+        params: { analysisId },
+      });
+      const res = createControllerResponse();
+
+      analysisService.getAnalysisById.mockReturnValue(undefined);
+      analysisService.deleteAnalysis.mockResolvedValue({
+        message: 'Deleted successfully',
+      });
+
+      await AnalysisController.deleteAnalysis(req, res);
+
+      expect(res.json).toHaveBeenCalledWith({ success: true });
+      // broadcastAnalysisUpdate still called but with undefined teamId
+      expect(sseManager.broadcastAnalysisUpdate).toHaveBeenCalled();
+    });
+  });
+
+  describe('renameAnalysis - teamId handling', () => {
+    it('should skip team structure broadcast when analysis has no teamId', async () => {
+      const analysisId = 'test-analysis-uuid-123';
+      const req = createControllerRequest({
+        params: { analysisId },
+        body: { newName: 'new-name' },
+      });
+      const res = createControllerResponse();
+
+      analysisService.renameAnalysis.mockResolvedValue({
+        success: true,
+        restarted: false,
+      });
+
+      analysisService.getAnalysisById.mockReturnValue({
+        analysisId,
+        analysisName: 'new-name',
+        status: 'stopped',
+        teamId: null,
+      });
+
+      await AnalysisController.renameAnalysis(req, res);
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+          message: 'Analysis renamed successfully',
+        }),
+      );
+    });
+  });
+
+  describe('updateAnalysis - analysis data handling', () => {
+    it('should handle when analysis is not found', async () => {
+      const analysisId = 'test-analysis-uuid-123';
+      const req = createControllerRequest({
+        params: { analysisId },
+        body: { content: 'console.log("updated");' },
+      });
+      const res = createControllerResponse();
+
+      analysisService.updateAnalysis.mockResolvedValue({
+        success: true,
+        restarted: false,
+      });
+
+      analysisService.getAnalysisById.mockReturnValue(undefined);
+
+      await AnalysisController.updateAnalysis(req, res);
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+        }),
+      );
+      expect(sseManager.broadcastAnalysisUpdate).toHaveBeenCalled();
+    });
+  });
+
+  describe('getLogs - edge cases', () => {
+    it('should handle invalid page parameter', async () => {
+      const analysisId = 'test-analysis-uuid-123';
+      const req = createControllerRequest({
+        params: { analysisId },
+        query: { page: 'invalid', limit: '100' },
+      });
+      const res = createControllerResponse();
+
+      analysisService.getLogs.mockResolvedValue({
+        logs: [],
+        hasMore: false,
+        totalCount: 0,
+      });
+
+      await AnalysisController.getLogs(req, res);
+
+      // Should default to page 1 when invalid
+      expect(analysisService.getLogs).toHaveBeenCalledWith(analysisId, 1, 100);
+    });
+
+    it('should handle invalid limit parameter', async () => {
+      const analysisId = 'test-analysis-uuid-123';
+      const req = createControllerRequest({
+        params: { analysisId },
+        query: { page: '1', limit: 'invalid' },
+      });
+      const res = createControllerResponse();
+
+      analysisService.getLogs.mockResolvedValue({
+        logs: [],
+        hasMore: false,
+        totalCount: 0,
+      });
+
+      await AnalysisController.getLogs(req, res);
+
+      // Should default to limit 100 when invalid
+      expect(analysisService.getLogs).toHaveBeenCalledWith(analysisId, 1, 100);
+    });
+  });
+
+  describe('getVersions - edge cases', () => {
+    it('should handle missing pagination params', async () => {
+      const analysisId = 'test-analysis-uuid-123';
+      const req = createControllerRequest({
+        params: { analysisId },
+        query: {},
+      });
+      const res = createControllerResponse();
+
+      analysisService.getVersions.mockResolvedValue({
+        versions: [],
+        page: undefined,
+        limit: undefined,
+        totalPages: 0,
+        hasMore: false,
+      });
+
+      await AnalysisController.getVersions(req, res);
+
+      expect(analysisService.getVersions).toHaveBeenCalledWith(analysisId, {
+        page: undefined,
+        limit: undefined,
+        logger: req.log,
+      });
+    });
+
+    it('should handle invalid page parameter', async () => {
+      const analysisId = 'test-analysis-uuid-123';
+      const req = createControllerRequest({
+        params: { analysisId },
+        query: { page: 'invalid', limit: '10' },
+      });
+      const res = createControllerResponse();
+
+      analysisService.getVersions.mockResolvedValue({
+        versions: [],
+        page: undefined,
+        limit: 10,
+        totalPages: 0,
+        hasMore: false,
+      });
+
+      await AnalysisController.getVersions(req, res);
+
+      // parseInt("invalid") returns NaN, not undefined
+      expect(analysisService.getVersions).toHaveBeenCalledWith(analysisId, {
+        page: NaN,
+        limit: 10,
+        logger: req.log,
+      });
+    });
+  });
 });

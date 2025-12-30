@@ -89,6 +89,15 @@ interface CacheEntry<T = unknown> {
 // Use shared types from @tago-analysis-worker/types
 type DNSCacheStats = DNSCacheExtendedStats;
 
+/** Per-analysis stats tracking (internal) */
+interface AnalysisStatsEntry {
+  hits: number;
+  misses: number;
+  errors: number;
+  hostnames: Set<string>;
+  cacheKeys: Set<string>;
+}
+
 interface DNSCacheType {
   cache: Map<string, CacheEntry>;
   config: DNSCacheConfig;
@@ -98,6 +107,8 @@ interface DNSCacheType {
   originalResolve4: Mock | null;
   originalResolve6: Mock | null;
   statsBroadcastTimer: NodeJS.Timeout | null;
+  analysisStats: Map<string, AnalysisStatsEntry>;
+  cacheKeyToAnalyses: Map<string, Set<string>>;
   lastStatsSnapshot: {
     hits: number;
     misses: number;
@@ -194,6 +205,8 @@ describe('DNSCacheService', () => {
     dnsCache.originalLookup = null;
     dnsCache.originalResolve4 = null;
     dnsCache.originalResolve6 = null;
+    dnsCache.analysisStats.clear();
+    dnsCache.cacheKeyToAnalyses.clear();
 
     // Mock SSRF validation to allow by default
     validateHostname.mockReturnValue({ allowed: true });
@@ -672,6 +685,134 @@ describe('DNSCacheService', () => {
         expect(result.success).toBe(false);
         expect(result.error).toBe('Private IP address blocked');
       });
+
+      it('should handle DNS lookup errors', async () => {
+        dnsCache.config.enabled = true;
+        dnsCache.installInterceptors();
+
+        const dnsError = new Error('ENOTFOUND') as NodeJS.ErrnoException;
+        dnsError.code = 'ENOTFOUND';
+
+        dnsCache.originalLookup = vi
+          .fn()
+          .mockImplementation(
+            (
+              _hostname: string,
+              _options: unknown,
+              callback: (
+                err: Error | null,
+                address: string,
+                family: number,
+              ) => void,
+            ) => {
+              callback(dnsError, '', 0);
+            },
+          );
+
+        const result = await dnsCache.handleDNSLookupRequest(
+          'nonexistent.example.com',
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('ENOTFOUND');
+        expect(dnsCache.stats.errors).toBe(1);
+      });
+
+      it('should track stats with analysisId on cache hit', async () => {
+        dnsCache.config.enabled = true;
+        dnsCache.installInterceptors();
+        dnsCache.addToCache('example.com:4', { address: '1.2.3.4', family: 4 });
+
+        const result = await (
+          dnsCache as unknown as {
+            handleDNSLookupRequest: (
+              hostname: string,
+              options: { family?: number },
+              analysisId: string | null,
+            ) => Promise<{
+              success: boolean;
+              address?: string;
+              family?: number;
+            }>;
+          }
+        ).handleDNSLookupRequest(
+          'example.com',
+          { family: 4 },
+          'test-analysis-1',
+        );
+
+        expect(result.success).toBe(true);
+        expect(result.address).toBe('1.2.3.4');
+        expect(dnsCache.analysisStats.has('test-analysis-1')).toBe(true);
+        expect(dnsCache.analysisStats.get('test-analysis-1')!.hits).toBe(1);
+      });
+
+      it('should track stats with analysisId on cache miss', async () => {
+        dnsCache.config.enabled = true;
+        dnsCache.installInterceptors();
+
+        dnsCache.originalLookup = vi
+          .fn()
+          .mockImplementation(
+            (
+              _hostname: string,
+              _options: unknown,
+              callback: (
+                err: Error | null,
+                address: string,
+                family: number,
+              ) => void,
+            ) => {
+              callback(null, '1.2.3.4', 4);
+            },
+          );
+
+        const result = await (
+          dnsCache as unknown as {
+            handleDNSLookupRequest: (
+              hostname: string,
+              options: { family?: number },
+              analysisId: string | null,
+            ) => Promise<{
+              success: boolean;
+              address?: string;
+              family?: number;
+            }>;
+          }
+        ).handleDNSLookupRequest(
+          'example.com',
+          { family: 4 },
+          'test-analysis-2',
+        );
+
+        expect(result.success).toBe(true);
+        expect(dnsCache.analysisStats.has('test-analysis-2')).toBe(true);
+        expect(dnsCache.analysisStats.get('test-analysis-2')!.misses).toBe(1);
+      });
+
+      it('should track errors with analysisId', async () => {
+        dnsCache.config.enabled = true;
+        dnsCache.installInterceptors();
+
+        validateHostname.mockReturnValue({
+          allowed: false,
+          reason: 'Private hostname blocked',
+        });
+
+        const result = await (
+          dnsCache as unknown as {
+            handleDNSLookupRequest: (
+              hostname: string,
+              options: { family?: number },
+              analysisId: string | null,
+            ) => Promise<{ success: boolean; error?: string }>;
+          }
+        ).handleDNSLookupRequest('localhost', {}, 'test-analysis-3');
+
+        expect(result.success).toBe(false);
+        expect(dnsCache.analysisStats.has('test-analysis-3')).toBe(true);
+        expect(dnsCache.analysisStats.get('test-analysis-3')!.errors).toBe(1);
+      });
     });
 
     describe('handleDNSResolve4Request', () => {
@@ -716,6 +857,167 @@ describe('DNSCacheService', () => {
         expect(result.success).toBe(false);
         expect(result.error).toBe('Private hostname blocked');
       });
+
+      it('should block resolved private addresses', async () => {
+        dnsCache.config.enabled = true;
+        dnsCache.installInterceptors();
+
+        validateHostname.mockReturnValue({
+          allowed: true,
+          hostname: 'example.com',
+        });
+        validateResolvedAddresses.mockReturnValue({
+          allowed: false,
+          reason: 'Private IPv4 address blocked',
+        });
+
+        dnsCache.originalResolve4 = vi.fn().mockResolvedValue(['127.0.0.1']);
+
+        const result = await dnsCache.handleDNSResolve4Request('example.com');
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Private IPv4 address blocked');
+        expect(dnsCache.stats.errors).toBe(1);
+      });
+
+      it('should handle resolution errors', async () => {
+        dnsCache.config.enabled = true;
+        dnsCache.installInterceptors();
+
+        dnsCache.originalResolve4 = vi
+          .fn()
+          .mockRejectedValue(new Error('ENOTFOUND'));
+
+        const result = await dnsCache.handleDNSResolve4Request('example.com');
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('ENOTFOUND');
+        expect(dnsCache.stats.errors).toBe(1);
+      });
+
+      it('should track stats with analysisId on cache hit', async () => {
+        dnsCache.config.enabled = true;
+        dnsCache.installInterceptors();
+        dnsCache.addToCache('resolve4:example.com', { addresses: ['1.2.3.4'] });
+
+        const result = await (
+          dnsCache as unknown as {
+            handleDNSResolve4Request: (
+              hostname: string,
+              analysisId: string | null,
+            ) => Promise<{ success: boolean; addresses?: string[] }>;
+          }
+        ).handleDNSResolve4Request('example.com', 'test-analysis-r4-1');
+
+        expect(result.success).toBe(true);
+        expect(dnsCache.analysisStats.has('test-analysis-r4-1')).toBe(true);
+        expect(dnsCache.analysisStats.get('test-analysis-r4-1')!.hits).toBe(1);
+      });
+
+      it('should track stats with analysisId on cache miss', async () => {
+        dnsCache.config.enabled = true;
+        dnsCache.installInterceptors();
+
+        dnsCache.originalResolve4 = vi.fn().mockResolvedValue(['1.2.3.4']);
+
+        const result = await (
+          dnsCache as unknown as {
+            handleDNSResolve4Request: (
+              hostname: string,
+              analysisId: string | null,
+            ) => Promise<{ success: boolean; addresses?: string[] }>;
+          }
+        ).handleDNSResolve4Request('example.com', 'test-analysis-r4-2');
+
+        expect(result.success).toBe(true);
+        expect(dnsCache.analysisStats.has('test-analysis-r4-2')).toBe(true);
+        expect(dnsCache.analysisStats.get('test-analysis-r4-2')!.misses).toBe(
+          1,
+        );
+      });
+
+      it('should track errors with analysisId on SSRF block', async () => {
+        dnsCache.config.enabled = true;
+        dnsCache.installInterceptors();
+
+        validateHostname.mockReturnValue({
+          allowed: false,
+          reason: 'Private hostname blocked',
+        });
+
+        const result = await (
+          dnsCache as unknown as {
+            handleDNSResolve4Request: (
+              hostname: string,
+              analysisId: string | null,
+            ) => Promise<{ success: boolean; error?: string }>;
+          }
+        ).handleDNSResolve4Request('localhost', 'test-analysis-r4-3');
+
+        expect(result.success).toBe(false);
+        expect(dnsCache.analysisStats.has('test-analysis-r4-3')).toBe(true);
+        expect(dnsCache.analysisStats.get('test-analysis-r4-3')!.errors).toBe(
+          1,
+        );
+      });
+
+      it('should track errors with analysisId on resolution failure', async () => {
+        dnsCache.config.enabled = true;
+        dnsCache.installInterceptors();
+
+        dnsCache.originalResolve4 = vi
+          .fn()
+          .mockRejectedValue(new Error('ENOTFOUND'));
+
+        const result = await (
+          dnsCache as unknown as {
+            handleDNSResolve4Request: (
+              hostname: string,
+              analysisId: string | null,
+            ) => Promise<{ success: boolean; error?: string }>;
+          }
+        ).handleDNSResolve4Request(
+          'nonexistent.example.com',
+          'test-analysis-r4-4',
+        );
+
+        expect(result.success).toBe(false);
+        expect(dnsCache.analysisStats.has('test-analysis-r4-4')).toBe(true);
+        expect(dnsCache.analysisStats.get('test-analysis-r4-4')!.errors).toBe(
+          1,
+        );
+      });
+
+      it('should track errors with analysisId on SSRF resolved address block', async () => {
+        dnsCache.config.enabled = true;
+        dnsCache.installInterceptors();
+
+        validateHostname.mockReturnValue({
+          allowed: true,
+          hostname: 'example.com',
+        });
+        validateResolvedAddresses.mockReturnValue({
+          allowed: false,
+          reason: 'Private IPv4 address blocked',
+        });
+
+        dnsCache.originalResolve4 = vi.fn().mockResolvedValue(['127.0.0.1']);
+
+        const result = await (
+          dnsCache as unknown as {
+            handleDNSResolve4Request: (
+              hostname: string,
+              analysisId: string | null,
+            ) => Promise<{ success: boolean; error?: string }>;
+          }
+        ).handleDNSResolve4Request('example.com', 'test-analysis-r4-5');
+
+        expect(result.success).toBe(false);
+        expect(dnsCache.analysisStats.has('test-analysis-r4-5')).toBe(true);
+        expect(dnsCache.analysisStats.get('test-analysis-r4-5')!.errors).toBe(
+          1,
+        );
+      });
     });
 
     describe('handleDNSResolve6Request', () => {
@@ -759,6 +1061,169 @@ describe('DNSCacheService', () => {
         expect(result.success).toBe(false);
         expect(result.error).toBe('ENOTFOUND');
         expect(dnsCache.stats.errors).toBe(1);
+      });
+
+      it('should block SSRF attempts', async () => {
+        dnsCache.config.enabled = true;
+        dnsCache.installInterceptors();
+
+        const ssrfMock = await import('../../src/utils/ssrfProtection.ts');
+        vi.mocked(ssrfMock.validateHostname).mockReturnValue({
+          allowed: false,
+          reason: 'Private hostname blocked',
+        });
+
+        const result = await dnsCache.handleDNSResolve6Request('localhost');
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Private hostname blocked');
+      });
+
+      it('should block resolved private addresses', async () => {
+        dnsCache.config.enabled = true;
+        dnsCache.installInterceptors();
+
+        const ssrfMock = await import('../../src/utils/ssrfProtection.ts');
+        vi.mocked(ssrfMock.validateHostname).mockReturnValue({
+          allowed: true,
+        });
+        vi.mocked(ssrfMock.validateResolvedAddresses).mockReturnValue({
+          allowed: false,
+          reason: 'Private IPv6 address blocked',
+        });
+
+        dnsCache.originalResolve6 = vi.fn().mockResolvedValue(['::1']);
+
+        const result = await dnsCache.handleDNSResolve6Request('example.com');
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Private IPv6 address blocked');
+      });
+
+      it('should track stats with analysisId on cache hit', async () => {
+        dnsCache.config.enabled = true;
+        dnsCache.installInterceptors();
+        dnsCache.addToCache('resolve6:example.com', {
+          addresses: ['2001:db8::1'],
+        });
+
+        const result = await (
+          dnsCache as unknown as {
+            handleDNSResolve6Request: (
+              hostname: string,
+              analysisId: string | null,
+            ) => Promise<{ success: boolean; addresses?: string[] }>;
+          }
+        ).handleDNSResolve6Request('example.com', 'test-analysis-r6-1');
+
+        expect(result.success).toBe(true);
+        expect(dnsCache.analysisStats.has('test-analysis-r6-1')).toBe(true);
+        expect(dnsCache.analysisStats.get('test-analysis-r6-1')!.hits).toBe(1);
+      });
+
+      it('should track stats with analysisId on cache miss', async () => {
+        dnsCache.config.enabled = true;
+        dnsCache.installInterceptors();
+
+        dnsCache.originalResolve6 = vi.fn().mockResolvedValue(['2001:db8::1']);
+
+        const result = await (
+          dnsCache as unknown as {
+            handleDNSResolve6Request: (
+              hostname: string,
+              analysisId: string | null,
+            ) => Promise<{ success: boolean; addresses?: string[] }>;
+          }
+        ).handleDNSResolve6Request('example.com', 'test-analysis-r6-2');
+
+        expect(result.success).toBe(true);
+        expect(dnsCache.analysisStats.has('test-analysis-r6-2')).toBe(true);
+        expect(dnsCache.analysisStats.get('test-analysis-r6-2')!.misses).toBe(
+          1,
+        );
+      });
+
+      it('should track errors with analysisId on SSRF block', async () => {
+        dnsCache.config.enabled = true;
+        dnsCache.installInterceptors();
+
+        validateHostname.mockReturnValue({
+          allowed: false,
+          reason: 'Private hostname blocked',
+        });
+
+        const result = await (
+          dnsCache as unknown as {
+            handleDNSResolve6Request: (
+              hostname: string,
+              analysisId: string | null,
+            ) => Promise<{ success: boolean; error?: string }>;
+          }
+        ).handleDNSResolve6Request('localhost', 'test-analysis-r6-3');
+
+        expect(result.success).toBe(false);
+        expect(dnsCache.analysisStats.has('test-analysis-r6-3')).toBe(true);
+        expect(dnsCache.analysisStats.get('test-analysis-r6-3')!.errors).toBe(
+          1,
+        );
+      });
+
+      it('should track errors with analysisId on resolution failure', async () => {
+        dnsCache.config.enabled = true;
+        dnsCache.installInterceptors();
+
+        dnsCache.originalResolve6 = vi
+          .fn()
+          .mockRejectedValue(new Error('ENOTFOUND'));
+
+        const result = await (
+          dnsCache as unknown as {
+            handleDNSResolve6Request: (
+              hostname: string,
+              analysisId: string | null,
+            ) => Promise<{ success: boolean; error?: string }>;
+          }
+        ).handleDNSResolve6Request(
+          'nonexistent.example.com',
+          'test-analysis-r6-4',
+        );
+
+        expect(result.success).toBe(false);
+        expect(dnsCache.analysisStats.has('test-analysis-r6-4')).toBe(true);
+        expect(dnsCache.analysisStats.get('test-analysis-r6-4')!.errors).toBe(
+          1,
+        );
+      });
+
+      it('should track errors with analysisId on SSRF resolved address block', async () => {
+        dnsCache.config.enabled = true;
+        dnsCache.installInterceptors();
+
+        validateHostname.mockReturnValue({
+          allowed: true,
+          hostname: 'example.com',
+        });
+        validateResolvedAddresses.mockReturnValue({
+          allowed: false,
+          reason: 'Private IPv6 address blocked',
+        });
+
+        dnsCache.originalResolve6 = vi.fn().mockResolvedValue(['::1']);
+
+        const result = await (
+          dnsCache as unknown as {
+            handleDNSResolve6Request: (
+              hostname: string,
+              analysisId: string | null,
+            ) => Promise<{ success: boolean; error?: string }>;
+          }
+        ).handleDNSResolve6Request('example.com', 'test-analysis-r6-5');
+
+        expect(result.success).toBe(false);
+        expect(dnsCache.analysisStats.has('test-analysis-r6-5')).toBe(true);
+        expect(dnsCache.analysisStats.get('test-analysis-r6-5')!.errors).toBe(
+          1,
+        );
       });
     });
   });
@@ -865,4 +1330,350 @@ describe('DNSCacheService', () => {
 
   // Note: updateStatsSnapshot was removed from the service
   // DNS stats are now available via getStats() and broadcast via metricsUpdate SSE
+
+  describe('per-analysis statistics', () => {
+    describe('deleteCacheEntry', () => {
+      it('should delete an existing cache entry', () => {
+        dnsCache.addToCache('test-key', { value: 1 });
+        expect(dnsCache.cache.has('test-key')).toBe(true);
+
+        const result = (
+          dnsCache as unknown as { deleteCacheEntry: (key: string) => boolean }
+        ).deleteCacheEntry('test-key');
+
+        expect(result).toBe(true);
+        expect(dnsCache.cache.has('test-key')).toBe(false);
+      });
+
+      it('should return false for non-existent cache entry', () => {
+        const result = (
+          dnsCache as unknown as { deleteCacheEntry: (key: string) => boolean }
+        ).deleteCacheEntry('non-existent');
+
+        expect(result).toBe(false);
+      });
+    });
+
+    describe('getAnalysisStats', () => {
+      it('should return null for empty analysisId', () => {
+        const result = (
+          dnsCache as unknown as {
+            getAnalysisStats: (id: string) => unknown | null;
+          }
+        ).getAnalysisStats('');
+
+        expect(result).toBeNull();
+      });
+
+      it('should return default stats for unknown analysis', () => {
+        const result = (
+          dnsCache as unknown as {
+            getAnalysisStats: (id: string) => {
+              hits: number;
+              misses: number;
+              errors: number;
+              hitRate: number;
+              hostnameCount: number;
+              hostnames: string[];
+              cacheKeyCount: number;
+            } | null;
+          }
+        ).getAnalysisStats('unknown-analysis');
+
+        expect(result).toEqual({
+          hits: 0,
+          misses: 0,
+          errors: 0,
+          hitRate: 0,
+          hostnameCount: 0,
+          hostnames: [],
+          cacheKeyCount: 0,
+        });
+      });
+
+      it('should return stats for tracked analysis', () => {
+        // Add analysis stats directly
+        (
+          dnsCache as unknown as {
+            analysisStats: Map<
+              string,
+              {
+                hits: number;
+                misses: number;
+                errors: number;
+                hostnames: Set<string>;
+                cacheKeys: Set<string>;
+              }
+            >;
+          }
+        ).analysisStats.set('test-analysis', {
+          hits: 10,
+          misses: 5,
+          errors: 2,
+          hostnames: new Set(['example.com', 'test.com']),
+          cacheKeys: new Set(['example.com:4', 'test.com:4']),
+        });
+
+        const result = (
+          dnsCache as unknown as {
+            getAnalysisStats: (id: string) => {
+              hits: number;
+              misses: number;
+              errors: number;
+              hitRate: string | number;
+              hostnameCount: number;
+              hostnames: string[];
+              cacheKeyCount: number;
+            } | null;
+          }
+        ).getAnalysisStats('test-analysis');
+
+        expect(result).not.toBeNull();
+        expect(result!.hits).toBe(10);
+        expect(result!.misses).toBe(5);
+        expect(result!.errors).toBe(2);
+        expect(result!.hostnameCount).toBe(2);
+        expect(result!.hostnames).toContain('example.com');
+        expect(result!.cacheKeyCount).toBe(2);
+        expect(result!.hitRate).toBe('66.67');
+      });
+    });
+
+    describe('getAllAnalysisStats', () => {
+      it('should return empty object when no analysis stats exist', () => {
+        const result = (
+          dnsCache as unknown as {
+            getAllAnalysisStats: () => Record<string, unknown>;
+          }
+        ).getAllAnalysisStats();
+
+        expect(result).toEqual({});
+      });
+
+      it('should return stats for all tracked analyses', () => {
+        const analysisStats = (
+          dnsCache as unknown as {
+            analysisStats: Map<
+              string,
+              {
+                hits: number;
+                misses: number;
+                errors: number;
+                hostnames: Set<string>;
+                cacheKeys: Set<string>;
+              }
+            >;
+          }
+        ).analysisStats;
+
+        analysisStats.set('analysis-1', {
+          hits: 10,
+          misses: 5,
+          errors: 0,
+          hostnames: new Set(['a.com']),
+          cacheKeys: new Set(['a.com:4']),
+        });
+        analysisStats.set('analysis-2', {
+          hits: 0,
+          misses: 0,
+          errors: 1,
+          hostnames: new Set(),
+          cacheKeys: new Set(),
+        });
+
+        const result = (
+          dnsCache as unknown as {
+            getAllAnalysisStats: () => Record<
+              string,
+              { hits: number; misses: number; errors: number; hitRate: unknown }
+            >;
+          }
+        ).getAllAnalysisStats();
+
+        expect(Object.keys(result)).toHaveLength(2);
+        expect(result['analysis-1'].hits).toBe(10);
+        expect(result['analysis-2'].errors).toBe(1);
+        expect(result['analysis-2'].hitRate).toBe(0);
+      });
+    });
+
+    describe('getAnalysisCacheEntries', () => {
+      it('should return empty array for empty analysisId', () => {
+        const result = (
+          dnsCache as unknown as {
+            getAnalysisCacheEntries: (id: string) => unknown[];
+          }
+        ).getAnalysisCacheEntries('');
+
+        expect(result).toEqual([]);
+      });
+
+      it('should return empty array for unknown analysis', () => {
+        const result = (
+          dnsCache as unknown as {
+            getAnalysisCacheEntries: (id: string) => unknown[];
+          }
+        ).getAnalysisCacheEntries('unknown');
+
+        expect(result).toEqual([]);
+      });
+
+      it('should return cache entries for tracked analysis', () => {
+        // Add cache entry
+        dnsCache.addToCache('example.com:4', { address: '1.2.3.4', family: 4 });
+
+        // Add analysis stats with cache key
+        (
+          dnsCache as unknown as {
+            analysisStats: Map<
+              string,
+              {
+                hits: number;
+                misses: number;
+                errors: number;
+                hostnames: Set<string>;
+                cacheKeys: Set<string>;
+              }
+            >;
+          }
+        ).analysisStats.set('test-analysis', {
+          hits: 1,
+          misses: 0,
+          errors: 0,
+          hostnames: new Set(['example.com']),
+          cacheKeys: new Set(['example.com:4']),
+        });
+
+        const result = (
+          dnsCache as unknown as {
+            getAnalysisCacheEntries: (id: string) => Array<{
+              key: string;
+              data: unknown;
+            }>;
+          }
+        ).getAnalysisCacheEntries('test-analysis');
+
+        expect(result).toHaveLength(1);
+        expect(result[0].key).toBe('example.com:4');
+        expect(result[0].data).toEqual({ address: '1.2.3.4', family: 4 });
+      });
+    });
+
+    describe('resetAnalysisStats', () => {
+      it('should not throw for empty analysisId', () => {
+        expect(() =>
+          (
+            dnsCache as unknown as { resetAnalysisStats: (id: string) => void }
+          ).resetAnalysisStats(''),
+        ).not.toThrow();
+      });
+
+      it('should reset stats for specific analysis', () => {
+        const analysisStats = (
+          dnsCache as unknown as {
+            analysisStats: Map<string, unknown>;
+          }
+        ).analysisStats;
+
+        analysisStats.set('test-analysis', {
+          hits: 10,
+          misses: 5,
+          errors: 0,
+          hostnames: new Set(['example.com']),
+          cacheKeys: new Set(['example.com:4']),
+        });
+
+        expect(analysisStats.has('test-analysis')).toBe(true);
+
+        (
+          dnsCache as unknown as { resetAnalysisStats: (id: string) => void }
+        ).resetAnalysisStats('test-analysis');
+
+        expect(analysisStats.has('test-analysis')).toBe(false);
+      });
+    });
+
+    describe('cleanupAnalysis', () => {
+      it('should not throw for empty analysisId', () => {
+        expect(() =>
+          (
+            dnsCache as unknown as { cleanupAnalysis: (id: string) => void }
+          ).cleanupAnalysis(''),
+        ).not.toThrow();
+      });
+
+      it('should cleanup analysis stats and cache key mappings', () => {
+        const analysisStats = (
+          dnsCache as unknown as {
+            analysisStats: Map<string, unknown>;
+          }
+        ).analysisStats;
+
+        const cacheKeyToAnalyses = (
+          dnsCache as unknown as {
+            cacheKeyToAnalyses: Map<string, Set<string>>;
+          }
+        ).cacheKeyToAnalyses;
+
+        // Set up analysis stats
+        analysisStats.set('test-analysis', {
+          hits: 10,
+          misses: 5,
+          errors: 0,
+          hostnames: new Set(['example.com']),
+          cacheKeys: new Set(['example.com:4']),
+        });
+
+        // Set up cache key to analyses mapping
+        cacheKeyToAnalyses.set(
+          'example.com:4',
+          new Set(['test-analysis', 'other-analysis']),
+        );
+
+        (
+          dnsCache as unknown as { cleanupAnalysis: (id: string) => void }
+        ).cleanupAnalysis('test-analysis');
+
+        expect(analysisStats.has('test-analysis')).toBe(false);
+        expect(
+          cacheKeyToAnalyses.get('example.com:4')?.has('test-analysis'),
+        ).toBe(false);
+        expect(
+          cacheKeyToAnalyses.get('example.com:4')?.has('other-analysis'),
+        ).toBe(true);
+      });
+
+      it('should delete cache key mapping when no analyses remain', () => {
+        const analysisStats = (
+          dnsCache as unknown as {
+            analysisStats: Map<string, unknown>;
+          }
+        ).analysisStats;
+
+        const cacheKeyToAnalyses = (
+          dnsCache as unknown as {
+            cacheKeyToAnalyses: Map<string, Set<string>>;
+          }
+        ).cacheKeyToAnalyses;
+
+        // Set up analysis stats
+        analysisStats.set('only-analysis', {
+          hits: 10,
+          misses: 5,
+          errors: 0,
+          hostnames: new Set(['example.com']),
+          cacheKeys: new Set(['example.com:4']),
+        });
+
+        // Set up cache key to analyses mapping with only one analysis
+        cacheKeyToAnalyses.set('example.com:4', new Set(['only-analysis']));
+
+        (
+          dnsCache as unknown as { cleanupAnalysis: (id: string) => void }
+        ).cleanupAnalysis('only-analysis');
+
+        expect(cacheKeyToAnalyses.has('example.com:4')).toBe(false);
+      });
+    });
+  });
 });

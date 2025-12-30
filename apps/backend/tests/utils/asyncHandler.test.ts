@@ -15,7 +15,6 @@ interface MockResponse {
 }
 
 describe('asyncHandler', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let asyncHandler: any;
 
   beforeEach(async () => {

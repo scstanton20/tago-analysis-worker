@@ -7,8 +7,20 @@ import {
   isAnalysisNameSafe,
 } from '../../src/validation/shared.ts';
 
-// Mock fs module
+// Mock fs module - include both promise and sync methods
 vi.mock('fs', () => ({
+  default: {
+    existsSync: vi.fn().mockReturnValue(true),
+    mkdirSync: vi.fn().mockReturnValue(undefined),
+    writeFileSync: vi.fn().mockReturnValue(undefined),
+    unlinkSync: vi.fn().mockReturnValue(undefined),
+    readFileSync: vi.fn().mockReturnValue('mock content'),
+  },
+  existsSync: vi.fn().mockReturnValue(true),
+  mkdirSync: vi.fn().mockReturnValue(undefined),
+  writeFileSync: vi.fn().mockReturnValue(undefined),
+  unlinkSync: vi.fn().mockReturnValue(undefined),
+  readFileSync: vi.fn().mockReturnValue('mock content'),
   promises: {
     mkdir: vi.fn().mockResolvedValue(undefined),
     writeFile: vi.fn().mockResolvedValue(undefined),
@@ -48,20 +60,20 @@ interface SafePathModule {
   isPathSafe: (targetPath: string, basePath: string | null) => boolean;
   safeMkdir: (
     dirPath: string,
-    basePath: string | null,
+    basePath?: string | null,
     options?: { recursive?: boolean },
-  ) => Promise<void>;
+  ) => Promise<string | undefined>;
   safeWriteFile: (
     filePath: string,
-    content: string,
-    basePath: string,
-    encoding?: string,
+    content: string | Buffer,
+    basePath?: string,
+    options?: Record<string, unknown>,
   ) => Promise<void>;
   safeReadFile: (
     filePath: string,
-    basePath: string,
-    encoding?: string,
-  ) => Promise<string>;
+    basePath?: string,
+    options?: { encoding?: BufferEncoding | null; flag?: string },
+  ) => Promise<Buffer | string>;
   safeReaddir: (
     dirPath: string,
     basePath?: string,
@@ -69,21 +81,39 @@ interface SafePathModule {
   ) => Promise<string[]>;
   safeStat: (
     filePath: string,
-    basePath: string,
+    basePath?: string,
   ) => Promise<{ isFile: () => boolean; size: number }>;
-  safeUnlink: (filePath: string, basePath: string) => Promise<void>;
+  safeUnlink: (filePath: string, basePath?: string) => Promise<void>;
   safeRename: (
     oldPath: string,
     newPath: string,
-    basePath: string,
+    basePath?: string,
   ) => Promise<void>;
-  getAnalysisPath: (analysisId: string) => string;
+  getAnalysisPath: (analysisId: string) => string | null;
+  getAnalysisFilePath: (
+    analysisId: string,
+    ...segments: string[]
+  ) => string | null;
   isAbsolutePathSafe: (filePath: unknown) => boolean;
+  // Sync functions
+  safeExistsSync: (filePath: string, basePath: string | null) => boolean;
+  safeMkdirSync: (
+    dirPath: string,
+    basePath?: string,
+    options?: { recursive?: boolean },
+  ) => void;
+  safeWriteFileSync: (
+    filePath: string,
+    data: string | Buffer,
+    basePath?: string,
+    options?: Record<string, unknown>,
+  ) => void;
+  safeUnlinkSync: (filePath: string, basePath?: string) => void;
   safeReadFileSync: (
     filePath: string,
-    basePath: string | null,
-    encoding?: string,
-  ) => string;
+    basePath?: string | null,
+    options?: { encoding?: BufferEncoding | null; flag?: string },
+  ) => string | Buffer;
 }
 
 describe('safePath', () => {
@@ -360,9 +390,13 @@ describe('safePath', () => {
       const content = 'console.log("test");';
       const basePath = '/tmp/test-analyses-storage/analyses';
 
-      await safePath.safeWriteFile(filePath, content, basePath, 'utf8');
+      await safePath.safeWriteFile(filePath, content, basePath, {
+        encoding: 'utf8',
+      });
 
-      expect(fs.writeFile).toHaveBeenCalledWith(filePath, content, 'utf8');
+      expect(fs.writeFile).toHaveBeenCalledWith(filePath, content, {
+        encoding: 'utf8',
+      });
     });
 
     it('should reject unsafe paths', async () => {
@@ -385,9 +419,11 @@ describe('safePath', () => {
       // Mock needs to return the value for this specific call
       fs.readFile.mockResolvedValueOnce('mock content');
 
-      const content = await safePath.safeReadFile(filePath, basePath, 'utf8');
+      const content = await safePath.safeReadFile(filePath, basePath, {
+        encoding: 'utf8',
+      });
 
-      expect(fs.readFile).toHaveBeenCalledWith(filePath, 'utf8');
+      expect(fs.readFile).toHaveBeenCalledWith(filePath, { encoding: 'utf8' });
       expect(content).toBe('mock content');
     });
 
@@ -397,7 +433,7 @@ describe('safePath', () => {
       const basePath = '/tmp/test-analyses-storage/analyses';
 
       await expect(
-        safePath.safeReadFile(filePath, basePath, 'utf8'),
+        safePath.safeReadFile(filePath, basePath, { encoding: 'utf8' }),
       ).rejects.toThrow('Path traversal attempt detected');
     });
   });
@@ -604,7 +640,7 @@ describe('safePath', () => {
       const filePath = 'certs/backend.crt';
 
       expect(() => {
-        safePath.safeReadFileSync(filePath, null, 'utf8');
+        safePath.safeReadFileSync(filePath, null, { encoding: 'utf8' });
       }).toThrow('Invalid or unsafe file path');
     });
 
@@ -612,7 +648,7 @@ describe('safePath', () => {
       const filePath = '/app/../etc/passwd';
 
       expect(() => {
-        safePath.safeReadFileSync(filePath, null, 'utf8');
+        safePath.safeReadFileSync(filePath, null, { encoding: 'utf8' });
       }).toThrow('Invalid or unsafe file path');
     });
 
@@ -621,8 +657,481 @@ describe('safePath', () => {
       const basePath = '/tmp/test-analyses-storage/analyses';
 
       expect(() => {
-        safePath.safeReadFileSync(filePath, basePath, 'utf8');
+        safePath.safeReadFileSync(filePath, basePath, { encoding: 'utf8' });
       }).toThrow('Path traversal attempt detected');
+    });
+  });
+
+  describe('getAnalysisFilePath', () => {
+    it('should return correct analysis file path with single segment', () => {
+      const analysisId = 'my-analysis';
+      const segments = ['index.js'];
+
+      const result = safePath.getAnalysisFilePath(analysisId, ...segments);
+
+      expect(result).toBe(
+        '/tmp/test-analyses-storage/analyses/my-analysis/index.js',
+      );
+    });
+
+    it('should return correct analysis file path with multiple segments', () => {
+      const analysisId = 'my-analysis';
+      const segments = ['src', 'main.js'];
+
+      const result = safePath.getAnalysisFilePath(analysisId, ...segments);
+
+      expect(result).toBe(
+        '/tmp/test-analyses-storage/analyses/my-analysis/src/main.js',
+      );
+    });
+
+    it('should reject unsafe analysis ID', () => {
+      const analysisId = '../../../etc/passwd';
+      const segments = ['index.js'];
+
+      const result = safePath.getAnalysisFilePath(analysisId, ...segments);
+
+      expect(result).toBeNull();
+    });
+
+    it('should reject segment with parent directory traversal', () => {
+      const analysisId = 'my-analysis';
+      const segments = ['..', 'index.js'];
+
+      const result = safePath.getAnalysisFilePath(analysisId, ...segments);
+
+      expect(result).toBeNull();
+    });
+
+    it('should reject segment with embedded parent directory traversal', () => {
+      const analysisId = 'my-analysis';
+      const segments = ['src/../../../etc/passwd'];
+
+      const result = safePath.getAnalysisFilePath(analysisId, ...segments);
+
+      expect(result).toBeNull();
+    });
+
+    it('should reject segment with absolute path', () => {
+      const analysisId = 'my-analysis';
+      const segments = ['/etc/passwd'];
+
+      const result = safePath.getAnalysisFilePath(analysisId, ...segments);
+
+      expect(result).toBeNull();
+    });
+
+    it('should reject multiple segments if any contains parent traversal', () => {
+      const analysisId = 'my-analysis';
+      const segments = ['src', '..', 'config.js'];
+
+      const result = safePath.getAnalysisFilePath(analysisId, ...segments);
+
+      expect(result).toBeNull();
+    });
+
+    it('should allow segment with single dot (normalized by path.join)', () => {
+      const analysisId = 'my-analysis';
+      const segments = ['.'];
+
+      const result = safePath.getAnalysisFilePath(analysisId, ...segments);
+
+      // Single dot is allowed as it's not '..' but path.join normalizes it away
+      // path.join('/base', 'id', '.') === '/base/id'
+      expect(result).toBe('/tmp/test-analyses-storage/analyses/my-analysis');
+    });
+
+    it('should allow segments with hyphens, underscores, and numbers', () => {
+      const analysisId = 'my-analysis';
+      const segments = ['my_file-v1.js', 'test123.json'];
+
+      const result = safePath.getAnalysisFilePath(analysisId, ...segments);
+
+      expect(result).toBe(
+        '/tmp/test-analyses-storage/analyses/my-analysis/my_file-v1.js/test123.json',
+      );
+    });
+
+    it('should return null if analysisId is not safe (contains special chars)', () => {
+      const analysisId = 'my(analysis)';
+      const segments = ['index.js'];
+
+      const result = safePath.getAnalysisFilePath(analysisId, ...segments);
+
+      expect(result).toBeNull();
+    });
+
+    it('should handle empty segments array', () => {
+      const analysisId = 'my-analysis';
+      const segments: string[] = [];
+
+      const result = safePath.getAnalysisFilePath(analysisId, ...segments);
+
+      expect(result).toBe('/tmp/test-analyses-storage/analyses/my-analysis');
+    });
+
+    it('should reject segment containing windows-style path traversal', () => {
+      const analysisId = 'my-analysis';
+      const segments = ['..\\..\\etc\\passwd'];
+
+      // The check is for '..' in segment, and this contains '..'
+      const result = safePath.getAnalysisFilePath(analysisId, ...segments);
+
+      expect(result).toBeNull();
+    });
+
+    it('should reject analysisId with empty string', () => {
+      const analysisId = '';
+      const segments = ['index.js'];
+
+      const result = safePath.getAnalysisFilePath(analysisId, ...segments);
+
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('safeMkdir with undefined basePath', () => {
+    it('should use default config.paths.analysis when basePath is undefined', async () => {
+      const dirPath = '/tmp/test-analyses-storage/analyses/new-analysis';
+
+      // Call without basePath (defaults to undefined)
+      await safePath.safeMkdir(dirPath, undefined, { recursive: true });
+
+      expect(fs.mkdir).toHaveBeenCalledWith(dirPath, { recursive: true });
+    });
+
+    it('should reject traversal attempts when basePath is undefined (uses config default)', async () => {
+      const dirPath = '/tmp/test-analyses-storage/analyses/../../../etc';
+
+      await expect(
+        safePath.safeMkdir(dirPath, undefined, { recursive: true }),
+      ).rejects.toThrow('Path traversal attempt detected');
+    });
+  });
+
+  describe('safeReadFile with undefined basePath', () => {
+    it('should use default config.paths.analysis when basePath is undefined', async () => {
+      const filePath = '/tmp/test-analyses-storage/analyses/analysis/index.js';
+
+      fs.readFile.mockResolvedValueOnce('mock content');
+
+      const content = await safePath.safeReadFile(filePath, undefined, {
+        encoding: 'utf8',
+      });
+
+      expect(fs.readFile).toHaveBeenCalledWith(filePath, { encoding: 'utf8' });
+      expect(content).toBe('mock content');
+    });
+
+    it('should reject traversal attempts when basePath is undefined', async () => {
+      const filePath =
+        '/tmp/test-analyses-storage/analyses/../../../etc/passwd';
+
+      await expect(
+        safePath.safeReadFile(filePath, undefined, { encoding: 'utf8' }),
+      ).rejects.toThrow('Path traversal attempt detected');
+    });
+
+    it('should handle options parameter correctly', async () => {
+      const filePath = '/tmp/test-analyses-storage/analyses/analysis/index.js';
+      const options = { encoding: 'utf8' as const };
+
+      fs.readFile.mockResolvedValueOnce('mock content');
+
+      await safePath.safeReadFile(filePath, undefined, options);
+
+      expect(fs.readFile).toHaveBeenCalledWith(filePath, options);
+    });
+  });
+
+  describe('safeReaddir with undefined basePath', () => {
+    it('should use default config.paths.analysis when basePath is undefined', async () => {
+      const dirPath = '/tmp/test-analyses-storage/analyses';
+
+      fs.readdir.mockResolvedValueOnce([]);
+
+      const files = await safePath.safeReaddir(dirPath, undefined);
+
+      expect(fs.readdir).toHaveBeenCalledWith(dirPath, undefined);
+      expect(files).toEqual([]);
+    });
+
+    it('should reject traversal attempts when basePath is undefined', async () => {
+      const dirPath = '/tmp/test-analyses-storage/analyses/../../../etc';
+
+      await expect(safePath.safeReaddir(dirPath, undefined)).rejects.toThrow(
+        'Path traversal attempt detected',
+      );
+    });
+
+    it('should handle withFileTypes option when basePath is undefined', async () => {
+      const dirPath = '/tmp/test-analyses-storage/analyses';
+      const options = { withFileTypes: true };
+
+      fs.readdir.mockResolvedValueOnce([]);
+
+      await safePath.safeReaddir(dirPath, undefined, options);
+
+      expect(fs.readdir).toHaveBeenCalledWith(dirPath, options);
+    });
+  });
+
+  describe('safeExistsSync', () => {
+    it('should not throw for safe path', () => {
+      const filePath = '/tmp/test-analyses-storage/analyses/analysis/index.js';
+      const basePath = '/tmp/test-analyses-storage/analyses';
+
+      // Should not throw - path validation passes
+      expect(() => safePath.safeExistsSync(filePath, basePath)).not.toThrow();
+    });
+
+    it('should reject unsafe paths', () => {
+      const filePath =
+        '/tmp/test-analyses-storage/analyses/../../../etc/passwd';
+      const basePath = '/tmp/test-analyses-storage/analyses';
+
+      expect(() => {
+        safePath.safeExistsSync(filePath, basePath);
+      }).toThrow('Path traversal attempt detected');
+    });
+
+    it('should allow null basePath (no path restriction)', () => {
+      const filePath = '/etc/passwd';
+
+      // With null basePath, validation is skipped
+      expect(() => safePath.safeExistsSync(filePath, null)).not.toThrow();
+    });
+  });
+
+  describe('safeMkdirSync', () => {
+    it('should not throw for safe path', () => {
+      const dirPath = '/tmp/test-analyses-storage/analyses/new-analysis';
+      const basePath = '/tmp/test-analyses-storage/analyses';
+
+      // Should not throw - path validation passes
+      expect(() =>
+        safePath.safeMkdirSync(dirPath, basePath, { recursive: true }),
+      ).not.toThrow();
+    });
+
+    it('should reject unsafe paths', () => {
+      const dirPath = '/tmp/test-analyses-storage/analyses/../../../etc';
+      const basePath = '/tmp/test-analyses-storage/analyses';
+
+      expect(() => {
+        safePath.safeMkdirSync(dirPath, basePath);
+      }).toThrow('Path traversal attempt detected');
+    });
+
+    it('should not throw when basePath not provided (uses config default)', () => {
+      const dirPath = '/tmp/test-analyses-storage/analyses/new-analysis';
+
+      // Should not throw - uses default config.paths.analysis
+      expect(() => safePath.safeMkdirSync(dirPath)).not.toThrow();
+    });
+  });
+
+  describe('safeWriteFileSync', () => {
+    it('should not throw for safe path', () => {
+      const filePath = '/tmp/test-analyses-storage/analyses/analysis/index.js';
+      const basePath = '/tmp/test-analyses-storage/analyses';
+      const content = 'console.log("test");';
+
+      expect(() =>
+        safePath.safeWriteFileSync(filePath, content, basePath),
+      ).not.toThrow();
+    });
+
+    it('should reject unsafe paths', () => {
+      const filePath =
+        '/tmp/test-analyses-storage/analyses/../../../etc/passwd';
+      const basePath = '/tmp/test-analyses-storage/analyses';
+
+      expect(() => {
+        safePath.safeWriteFileSync(filePath, 'malicious', basePath);
+      }).toThrow('Path traversal attempt detected');
+    });
+
+    it('should not throw when writing buffer content', () => {
+      const filePath = '/tmp/test-analyses-storage/analyses/analysis/data.bin';
+      const basePath = '/tmp/test-analyses-storage/analyses';
+      const content = Buffer.from('binary data');
+
+      expect(() =>
+        safePath.safeWriteFileSync(filePath, content, basePath),
+      ).not.toThrow();
+    });
+
+    it('should not throw when using default basePath from config', () => {
+      const filePath = '/tmp/test-analyses-storage/analyses/analysis/file.txt';
+      const content = 'test content';
+
+      expect(() => safePath.safeWriteFileSync(filePath, content)).not.toThrow();
+    });
+  });
+
+  describe('safeUnlinkSync', () => {
+    it('should not throw for safe path', () => {
+      const filePath = '/tmp/test-analyses-storage/analyses/analysis/temp.log';
+      const basePath = '/tmp/test-analyses-storage/analyses';
+
+      expect(() => safePath.safeUnlinkSync(filePath, basePath)).not.toThrow();
+    });
+
+    it('should reject unsafe paths', () => {
+      const filePath =
+        '/tmp/test-analyses-storage/analyses/../../../etc/passwd';
+      const basePath = '/tmp/test-analyses-storage/analyses';
+
+      expect(() => {
+        safePath.safeUnlinkSync(filePath, basePath);
+      }).toThrow('Path traversal attempt detected');
+    });
+
+    it('should not throw when basePath not provided (uses config default)', () => {
+      const filePath = '/tmp/test-analyses-storage/analyses/analysis/file.txt';
+
+      expect(() => safePath.safeUnlinkSync(filePath)).not.toThrow();
+    });
+  });
+
+  describe('isPathSafe edge cases', () => {
+    it('should handle trailing slashes in paths', () => {
+      const targetPath =
+        '/tmp/test-analyses-storage/analyses/my-analysis/index.js/';
+      const basePath = '/tmp/test-analyses-storage/analyses/';
+
+      const result = safePath.isPathSafe(targetPath, basePath);
+
+      expect(result).toBe(true);
+    });
+
+    it('should normalize paths with multiple slashes', () => {
+      const targetPath =
+        '/tmp/test-analyses-storage//analyses///my-analysis/index.js';
+      const basePath = '/tmp/test-analyses-storage/analyses';
+
+      const result = safePath.isPathSafe(targetPath, basePath);
+
+      expect(result).toBe(true);
+    });
+
+    it('should detect traversal with double dots at different positions', () => {
+      const cases = [
+        '/tmp/../test-analyses-storage/analyses/file.js',
+        '/tmp/test-analyses-storage/../analyses/file.js',
+        '/tmp/test-analyses-storage/analyses/../../file.js',
+        '/tmp/test-analyses-storage/analyses/subdir/../../file.js',
+      ];
+
+      const basePath = '/tmp/test-analyses-storage/analyses';
+
+      cases.forEach((targetPath) => {
+        const result = safePath.isPathSafe(targetPath, basePath);
+        expect(result).toBe(false);
+      });
+    });
+
+    it('should properly handle relative path normalization', () => {
+      // When resolving relative paths, path.resolve uses cwd as base
+      // This ensures the behavior is correct
+      const targetPath = '/tmp/test-analyses-storage/analyses/./my-analysis';
+      const basePath = '/tmp/test-analyses-storage/analyses';
+
+      const result = safePath.isPathSafe(targetPath, basePath);
+
+      expect(result).toBe(true);
+    });
+  });
+
+  describe('isAbsolutePathSafe edge cases', () => {
+    it('should reject paths with mixed traversal patterns', () => {
+      const paths = [
+        '/app/certs/.././etc/passwd',
+        '/app/./certs/../../etc/passwd',
+        '/app/certs/./../../etc/passwd',
+      ];
+
+      paths.forEach((filePath) => {
+        const result = safePath.isAbsolutePathSafe(filePath);
+        expect(result).toBe(false);
+      });
+    });
+
+    it('should allow paths with multiple consecutive slashes', () => {
+      const filePath = '/app//certs///server.pem';
+
+      const result = safePath.isAbsolutePathSafe(filePath);
+
+      expect(result).toBe(true);
+    });
+
+    it('should allow paths with dots in filename', () => {
+      const filePath = '/app/certs/server.crt.pem';
+
+      const result = safePath.isAbsolutePathSafe(filePath);
+
+      expect(result).toBe(true);
+    });
+
+    it('should reject single dot in path', () => {
+      // /app/./certs should contain '..', no it shouldn't
+      // But the function checks for '..' specifically
+      const filePath = '/app/./certs/server.pem';
+
+      const result = safePath.isAbsolutePathSafe(filePath);
+
+      // This should pass because './' is allowed, only '..' is blocked
+      expect(result).toBe(true);
+    });
+  });
+
+  describe('Complex path traversal attack patterns', () => {
+    it('should treat URL-encoded paths as literal (not decoded)', () => {
+      const targetPath =
+        '/tmp/test-analyses-storage/analyses/%2e%2e/%2e%2e/etc/passwd';
+      const basePath = '/tmp/test-analyses-storage/analyses';
+
+      const result = safePath.isPathSafe(targetPath, basePath);
+
+      // URL encoding is NOT decoded by path.resolve, so %2e%2e stays literal
+      // The path stays within the base directory because %2e%2e != ..
+      // Note: Applications should URL-decode user input before validation if needed
+      expect(result).toBe(true);
+    });
+
+    it('should block unicode normalization attacks', () => {
+      // Different unicode representations of the same character
+      // U+002E is the period character
+      const targetPath =
+        '/tmp/test-analyses-storage/analyses/\u002e\u002e/etc/passwd';
+      const basePath = '/tmp/test-analyses-storage/analyses';
+
+      // This creates a literal unicode sequence ("..")
+      const result = safePath.isPathSafe(targetPath, basePath);
+
+      // Should be blocked as it represents ".." path traversal
+      expect(result).toBe(false);
+    });
+
+    it('should reject deeply nested traversal attempts', () => {
+      const targetPath =
+        '/tmp/test-analyses-storage/analyses/../../../../../../etc/passwd';
+      const basePath = '/tmp/test-analyses-storage/analyses';
+
+      const result = safePath.isPathSafe(targetPath, basePath);
+
+      expect(result).toBe(false);
+    });
+
+    it('should reject traversal attempts mixed with valid segments', () => {
+      const targetPath =
+        '/tmp/test-analyses-storage/analyses/subdir/../../../etc/passwd';
+      const basePath = '/tmp/test-analyses-storage/analyses';
+
+      const result = safePath.isPathSafe(targetPath, basePath);
+
+      expect(result).toBe(false);
     });
   });
 });

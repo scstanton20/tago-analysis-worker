@@ -426,7 +426,6 @@ describe('AnalysisProcess', () => {
       // If fileLogger is null (can't write to disk in test), logFileSize will be 0
       // This is acceptable behavior - the test verifies the broadcast happens
       const broadcastCall = sseManager.broadcastUpdate.mock.calls.find(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (call: any) =>
           call[0] === 'log' && call[1].analysisId === 'test-analysis-id',
       );
@@ -545,7 +544,7 @@ describe('AnalysisProcess', () => {
 
       // Store the exit callback when once('exit') is called
       let exitCallback: ((code: number) => void) | null = null;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       mockProcess.once.mockImplementation((event: any, callback: any) => {
         if (event === 'exit') {
           exitCallback = callback;
@@ -597,7 +596,7 @@ describe('AnalysisProcess', () => {
       let exitCallback: ((code: number) => void) | null = null;
 
       // Capture the exit callback but don't call it immediately
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       mockProcess.once.mockImplementation((event: any, callback: any) => {
         if (event === 'exit') {
           exitCallback = callback;
@@ -626,7 +625,7 @@ describe('AnalysisProcess', () => {
       expect(mockProcess.kill).toHaveBeenCalledWith('SIGKILL');
 
       // Now trigger the exit to let the promise resolve
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       (exitCallback as any)?.(0);
 
       await stopPromise;
@@ -822,7 +821,7 @@ describe('AnalysisProcess', () => {
       await analysis.start();
 
       // Simulate IPC message from child process
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       const ipcHandler = (mockProcess.on.mock.calls as any[]).find(
         (call) => call[0] === 'message',
       )?.[1] as (msg: unknown) => Promise<void>;
@@ -853,7 +852,7 @@ describe('AnalysisProcess', () => {
       await analysis.start();
 
       // Get the IPC message handler
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       const ipcHandler = (mockProcess.on.mock.calls as any[]).find(
         (call) => call[0] === 'message',
       )?.[1] as (msg: unknown) => Promise<void>;
@@ -891,7 +890,6 @@ describe('AnalysisProcess', () => {
       );
       await analysis.start();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ipcHandler = (mockProcess.on.mock.calls as any[]).find(
         (call) => call[0] === 'message',
       )?.[1] as (msg: unknown) => Promise<void>;
