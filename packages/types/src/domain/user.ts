@@ -12,17 +12,17 @@ export type OrganizationRole = 'owner' | 'admin' | 'member';
 export type UserRole = 'admin' | 'user';
 
 /** Base user properties */
-export interface UserBase {
+export type UserBase = {
   /** Unique user ID */
   id: string;
   /** User email address */
   email: string;
   /** Display name */
   name: string;
-}
+};
 
 /** Full user entity */
-export interface User extends UserBase {
+export type User = UserBase & {
   /** Username for login */
   username?: string;
   /** Global role (admin has full access) */
@@ -37,17 +37,17 @@ export interface User extends UserBase {
   updatedAt?: string;
   /** Whether user must change password on next login */
   requiresPasswordChange?: boolean;
-}
+};
 
 /** User with organization membership info */
-export interface UserWithMembership extends User {
+export type UserWithMembership = User & {
   /** Role in the organization */
   organizationRole: OrganizationRole;
   /** Organization ID */
   organizationId: string;
   /** Whether this user is the organization owner */
   isOwner?: boolean;
-}
+};
 
 /** Team permission types */
 export type TeamPermission =
@@ -59,15 +59,15 @@ export type TeamPermission =
   | 'delete_analyses';
 
 /** Team assignment with permissions */
-export interface TeamAssignment {
+export type TeamAssignment = {
   /** Team ID */
   teamId: string;
   /** Granted permissions for this team */
-  permissions: TeamPermission[];
-}
+  permissions: Array<TeamPermission>;
+};
 
 /** User's team memberships (from session) */
-export interface UserTeam {
+export type UserTeam = {
   /** Team ID */
   id: string;
   /** Team name */
@@ -79,5 +79,5 @@ export interface UserTeam {
   /** Order index */
   orderIndex?: number;
   /** Permissions for this team */
-  permissions: TeamPermission[];
-}
+  permissions: Array<TeamPermission>;
+};

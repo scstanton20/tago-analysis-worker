@@ -88,4 +88,4 @@ export const userValidationSchemas = {
       reason: z.string().default('Your session has been terminated'),
     }),
   },
-};
+} as const;

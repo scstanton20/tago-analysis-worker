@@ -10,11 +10,11 @@ import {
 } from '../utils/testHelpers.ts';
 
 // Define schema types for validateRequest
-interface ValidationSchema {
+type ValidationSchema = {
   body?: z.ZodType | { safeParse: (data: unknown) => unknown };
   query?: z.ZodType;
   params?: z.ZodType;
-}
+};
 
 // Define validateRequest function type
 type ValidateRequestFn = (

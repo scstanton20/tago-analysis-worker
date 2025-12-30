@@ -133,6 +133,7 @@ export default [
       'docker-compose*.yaml',
       'pnpm-lock.yaml',
       'pnpm-workspace.yaml',
+      'style-guide/',
     ],
   },
 

@@ -17,148 +17,148 @@ import type {
 // ============================================================================
 
 /** Create user request */
-export interface CreateUserRequest {
+export type CreateUserRequest = {
   email: string;
   name: string;
   username?: string;
   password: string;
   role?: UserRole;
   organizationRole?: OrganizationRole;
-  teamAssignments?: TeamAssignment[];
-}
+  teamAssignments?: Array<TeamAssignment>;
+};
 
 /** Create user response */
-export interface CreateUserResponse {
+export type CreateUserResponse = {
   user: User;
   message: string;
-}
+};
 
 /** Update user request */
-export interface UpdateUserRequest {
+export type UpdateUserRequest = {
   name?: string;
   email?: string;
   username?: string;
   role?: UserRole;
   organizationRole?: OrganizationRole;
-}
+};
 
 /** Update user response */
-export interface UpdateUserResponse {
+export type UpdateUserResponse = {
   user: User;
-}
+};
 
 /** Delete user response */
-export interface DeleteUserResponse {
+export type DeleteUserResponse = {
   message: string;
   userId: string;
-}
+};
 
 /** List users response */
-export interface ListUsersResponse {
-  users: UserWithMembership[];
-}
+export type ListUsersResponse = {
+  users: Array<UserWithMembership>;
+};
 
 /** Get user response */
-export interface GetUserResponse {
+export type GetUserResponse = {
   user: UserWithMembership;
-}
+};
 
 // ============================================================================
 // PASSWORD MANAGEMENT
 // ============================================================================
 
 /** Change password request */
-export interface ChangePasswordRequest {
+export type ChangePasswordRequest = {
   currentPassword: string;
   newPassword: string;
-}
+};
 
 /** Change password response */
-export interface ChangePasswordResponse {
+export type ChangePasswordResponse = {
   message: string;
-}
+};
 
 /** Reset password request (admin) */
-export interface ResetPasswordRequest {
+export type ResetPasswordRequest = {
   userId: string;
   newPassword: string;
   requireChange?: boolean;
-}
+};
 
 /** Reset password response */
-export interface ResetPasswordResponse {
+export type ResetPasswordResponse = {
   message: string;
   requiresChange: boolean;
-}
+};
 
 // ============================================================================
 // TEAM ASSIGNMENTS
 // ============================================================================
 
 /** Update team assignments request */
-export interface UpdateTeamAssignmentsRequest {
-  teamAssignments: TeamAssignment[];
-}
+export type UpdateTeamAssignmentsRequest = {
+  teamAssignments: Array<TeamAssignment>;
+};
 
 /** Update team assignments response */
-export interface UpdateTeamAssignmentsResponse {
+export type UpdateTeamAssignmentsResponse = {
   message: string;
-  teamAssignments: TeamAssignment[];
-}
+  teamAssignments: Array<TeamAssignment>;
+};
 
 /** Get user teams response */
-export interface GetUserTeamsResponse {
+export type GetUserTeamsResponse = {
   teams: Array<{
     id: string;
     name: string;
     color: string;
-    permissions: string[];
+    permissions: Array<string>;
   }>;
-}
+};
 
 // ============================================================================
 // PASSKEY MANAGEMENT
 // ============================================================================
 
 /** List passkeys response */
-export interface ListPasskeysResponse {
+export type ListPasskeysResponse = {
   passkeys: Array<{
     id: string;
     name: string;
     createdAt: string;
     lastUsed?: string;
   }>;
-}
+};
 
 /** Register passkey options response */
-export interface RegisterPasskeyOptionsResponse {
+export type RegisterPasskeyOptionsResponse = {
   options: PublicKeyCredentialCreationOptions;
-}
+};
 
 /** Register passkey request */
-export interface RegisterPasskeyRequest {
+export type RegisterPasskeyRequest = {
   name: string;
   credential: PublicKeyCredential;
-}
+};
 
 /** Register passkey response */
-export interface RegisterPasskeyResponse {
+export type RegisterPasskeyResponse = {
   message: string;
   passkeyId: string;
-}
+};
 
 /** Delete passkey response */
-export interface DeletePasskeyResponse {
+export type DeletePasskeyResponse = {
   message: string;
   passkeyId: string;
-}
+};
 
 // ============================================================================
 // SESSION MANAGEMENT
 // ============================================================================
 
 /** List sessions response */
-export interface ListSessionsResponse {
+export type ListSessionsResponse = {
   sessions: Array<{
     id: string;
     userAgent?: string;
@@ -167,79 +167,79 @@ export interface ListSessionsResponse {
     expiresAt: string;
     isCurrent: boolean;
   }>;
-}
+};
 
 /** Revoke session response */
-export interface RevokeSessionResponse {
+export type RevokeSessionResponse = {
   message: string;
   sessionId: string;
-}
+};
 
 /** Revoke all sessions response */
-export interface RevokeAllSessionsResponse {
+export type RevokeAllSessionsResponse = {
   message: string;
   count: number;
-}
+};
 
 // ============================================================================
 // ORGANIZATION MANAGEMENT
 // ============================================================================
 
 /** Add user to organization request */
-export interface AddUserToOrganizationRequest {
+export type AddUserToOrganizationRequest = {
   userId: string;
   organizationId: string;
   role?: OrganizationRole;
-}
+};
 
 /** Add user to organization response */
-export interface AddUserToOrganizationResponse {
+export type AddUserToOrganizationResponse = {
   success: boolean;
   message: string;
   userId: string;
   organizationId: string;
-}
+};
 
 /** Update user organization role request */
-export interface UpdateUserOrganizationRoleRequest {
+export type UpdateUserOrganizationRoleRequest = {
   organizationId?: string;
   role: OrganizationRole;
-}
+};
 
 /** Update user organization role response */
-export interface UpdateUserOrganizationRoleResponse {
+export type UpdateUserOrganizationRoleResponse = {
   success: boolean;
   message: string;
   userId: string;
   role: OrganizationRole;
-}
+};
 
 /** Remove user from organization request */
-export interface RemoveUserFromOrganizationRequest {
+export type RemoveUserFromOrganizationRequest = {
   organizationId?: string | null;
-}
+};
 
 /** Remove user from organization response */
-export interface RemoveUserFromOrganizationResponse {
+export type RemoveUserFromOrganizationResponse = {
   success: boolean;
   message: string;
   userId: string;
-}
+};
 
 // ============================================================================
 // TEAM ASSIGNMENT OPERATIONS
 // ============================================================================
 
 /** Assign user to teams request */
-export interface AssignUserToTeamsRequest {
+export type AssignUserToTeamsRequest = {
   userId: string;
-  teamAssignments: TeamAssignment[];
-}
+  teamAssignments: Array<TeamAssignment>;
+};
 
 /** Assignment operation result */
-export interface AssignmentResult {
+export type AssignmentResult = {
   teamId: string;
-  permissions: string[] | undefined;
+  permissions: Array<string> | undefined;
   status:
     | 'added'
     | 'updated'
@@ -248,51 +248,51 @@ export interface AssignmentResult {
     | 'updated_permissions'
     | 'success';
   error?: string;
-}
+};
 
 /** Assign user to teams response */
-export interface AssignUserToTeamsResponse {
+export type AssignUserToTeamsResponse = {
   success: boolean;
   data: {
-    assignments: AssignmentResult[];
-    errors: string[] | null;
+    assignments: Array<AssignmentResult>;
+    errors: Array<string> | null;
   };
-}
+};
 
 /** Get user teams for editing response */
-export interface GetUserTeamsForEditResponse {
+export type GetUserTeamsForEditResponse = {
   success: boolean;
   data: {
     teams: Array<{
       id: string;
       name: string;
-      permissions: string[];
+      permissions: Array<string>;
     }>;
   };
-}
+};
 
 /** Update user team assignments response */
-export interface UpdateUserTeamAssignmentsResponse {
+export type UpdateUserTeamAssignmentsResponse = {
   success: boolean;
   data: {
-    assignments: AssignmentResult[];
-    errors: string[] | null;
+    assignments: Array<AssignmentResult>;
+    errors: Array<string> | null;
   };
-}
+};
 
 // ============================================================================
 // FORCE LOGOUT
 // ============================================================================
 
 /** Force logout request */
-export interface ForceLogoutRequest {
+export type ForceLogoutRequest = {
   reason?: string;
-}
+};
 
 /** Force logout response */
-export interface ForceLogoutResponse {
+export type ForceLogoutResponse = {
   success: boolean;
   data: {
     closedConnections: number;
   };
-}
+};

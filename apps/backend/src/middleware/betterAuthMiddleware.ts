@@ -8,45 +8,45 @@ import { createChildLogger } from '../utils/logging/logger.ts';
 const moduleLogger = createChildLogger('auth-middleware');
 
 /** User attached to request by auth middleware */
-interface AuthUser {
+type AuthUser = {
   id: string;
   email?: string;
   name?: string;
   role?: string;
   requiresPasswordChange?: boolean;
-}
+};
 
 /** Session attached to request by auth middleware */
-interface AuthSession {
+type AuthSession = {
   id: string;
   userId: string;
   expiresAt: Date;
   activeOrganizationId?: string;
-}
+};
 
 /** Extended request with auth properties */
-interface AuthenticatedRequest extends Omit<Request, 'log'> {
+type AuthenticatedRequest = Omit<Request, 'log'> & {
   user?: AuthUser;
   session?: AuthSession;
   analysisTeamId?: string;
   log?: Logger;
-}
+};
 
 /** Team membership from database */
-interface TeamMembership {
+type TeamMembership = {
   teamId: string;
   permissions: string | null;
-}
+};
 
 /** Permission-only row */
-interface PermissionRow {
+type PermissionRow = {
   permissions: string | null;
-}
+};
 
 /** User ID row */
-interface UserIdRow {
+type UserIdRow = {
   id: string;
-}
+};
 
 // Authentication middleware using Better Auth
 export const authMiddleware: RequestHandler = async (

@@ -40,19 +40,19 @@ vi.mock('ms', () => ({
 }));
 
 // Type definitions for mocked services
-interface ContainerState {
+type ContainerState = {
   status: string | null;
   message: string | null;
   startTime: Date | null;
-}
+};
 
-interface MockSSEManager {
+type MockSSEManager = {
   getContainerState: Mock<() => ContainerState>;
-}
+};
 
-interface MockAnalysisService {
+type MockAnalysisService = {
   getRunningAnalysesCount: Mock<() => number>;
-}
+};
 
 // Import after mocks
 const { getTagoSdkVersion } = (await import(

@@ -20,12 +20,12 @@ const logger = createChildLogger('dns-cache');
 const DNS_CONFIG_FILE = path.join(config.paths.config, 'dns-cache-config.json');
 
 /** DNS lookup options */
-interface LookupOptions {
+type LookupOptions = {
   family?: number;
   hints?: number;
   all?: boolean;
   verbatim?: boolean;
-}
+};
 
 /** DNS lookup callback */
 type LookupCallback = (
@@ -73,19 +73,19 @@ type AnalysisStatsResponse = AnalysisDNSStatsResponse;
 type FullStatsResponse = DNSCacheFullStats;
 
 /** Per-analysis stats tracking (internal, includes Set types) */
-interface AnalysisStatsEntry {
+type AnalysisStatsEntry = {
   hits: number;
   misses: number;
   errors: number;
   hostnames: Set<string>;
   cacheKeys: Set<string>;
-}
+};
 
 /** Cache entry wrapper (internal) */
-interface CacheEntry<T> {
+type CacheEntry<T> = {
   data: T;
   timestamp: number;
-}
+};
 
 class DNSCacheService {
   private cache: Map<string, CacheEntry<LookupCacheData | ResolveCacheData>>;

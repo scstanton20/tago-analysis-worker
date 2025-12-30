@@ -5,7 +5,7 @@
  */
 
 import type { Team, TeamWithPermissions } from '../domain/team.js';
-import type { TeamStructure, TeamStructureItem } from '../domain/folder.js';
+import type { TeamStructureItem } from '../domain/folder.js';
 import type { TeamPermission } from '../domain/user.js';
 
 // ============================================================================
@@ -13,216 +13,216 @@ import type { TeamPermission } from '../domain/user.js';
 // ============================================================================
 
 /** Create team request */
-export interface CreateTeamRequest {
+export type CreateTeamRequest = {
   name: string;
   color?: string;
-}
+};
 
 /** Create team response */
-export interface CreateTeamResponse {
+export type CreateTeamResponse = {
   team: Team;
   message: string;
-}
+};
 
 /** Update team request */
-export interface UpdateTeamRequest {
+export type UpdateTeamRequest = {
   name?: string;
   color?: string;
-}
+};
 
 /** Update team response */
-export interface UpdateTeamResponse {
+export type UpdateTeamResponse = {
   team: Team;
-}
+};
 
 /** Delete team response */
-export interface DeleteTeamResponse {
+export type DeleteTeamResponse = {
   message: string;
   teamId: string;
-}
+};
 
 /** List teams response */
-export interface ListTeamsResponse {
-  teams: Team[];
-}
+export type ListTeamsResponse = {
+  teams: Array<Team>;
+};
 
 /** Get team response */
-export interface GetTeamResponse {
+export type GetTeamResponse = {
   team: TeamWithPermissions;
-}
+};
 
 // ============================================================================
 // TEAM REORDERING
 // ============================================================================
 
 /** Reorder teams request */
-export interface ReorderTeamsRequest {
-  order: string[];
-}
+export type ReorderTeamsRequest = {
+  order: Array<string>;
+};
 
 /** Reorder teams response */
-export interface ReorderTeamsResponse {
+export type ReorderTeamsResponse = {
   message: string;
-}
+};
 
 // ============================================================================
 // FOLDER OPERATIONS
 // ============================================================================
 
 /** Create folder request */
-export interface CreateFolderRequest {
+export type CreateFolderRequest = {
   teamId: string;
   name: string;
   parentId?: string | null;
-}
+};
 
 /** Create folder response */
-export interface CreateFolderResponse {
+export type CreateFolderResponse = {
   folder: {
     id: string;
     name: string;
     parentId?: string | null;
   };
   message: string;
-}
+};
 
 /** Rename folder request */
-export interface RenameFolderRequest {
+export type RenameFolderRequest = {
   name: string;
-}
+};
 
 /** Rename folder response */
-export interface RenameFolderResponse {
+export type RenameFolderResponse = {
   message: string;
   folderId: string;
   name: string;
-}
+};
 
 /** Delete folder response */
-export interface DeleteFolderResponse {
+export type DeleteFolderResponse = {
   message: string;
   folderId: string;
   childrenMoved: number;
-}
+};
 
 /** Get team structure response */
-export interface GetTeamStructureResponse {
+export type GetTeamStructureResponse = {
   teamId: string;
-  items: TeamStructureItem[];
+  items: Array<TeamStructureItem>;
   version?: number;
-}
+};
 
 /** Update team structure request */
-export interface UpdateTeamStructureRequest {
-  items: TeamStructureItem[];
-}
+export type UpdateTeamStructureRequest = {
+  items: Array<TeamStructureItem>;
+};
 
 /** Update team structure response */
-export interface UpdateTeamStructureResponse {
+export type UpdateTeamStructureResponse = {
   message: string;
   version: number;
-}
+};
 
 // ============================================================================
 // TEAM MEMBERS
 // ============================================================================
 
 /** Add team member request */
-export interface AddTeamMemberRequest {
+export type AddTeamMemberRequest = {
   userId: string;
-  permissions: TeamPermission[];
-}
+  permissions: Array<TeamPermission>;
+};
 
 /** Add team member response */
-export interface AddTeamMemberResponse {
+export type AddTeamMemberResponse = {
   message: string;
   userId: string;
   teamId: string;
-}
+};
 
 /** Update team member request */
-export interface UpdateTeamMemberRequest {
-  permissions: TeamPermission[];
-}
+export type UpdateTeamMemberRequest = {
+  permissions: Array<TeamPermission>;
+};
 
 /** Update team member response */
-export interface UpdateTeamMemberResponse {
+export type UpdateTeamMemberResponse = {
   message: string;
   userId: string;
-  permissions: TeamPermission[];
-}
+  permissions: Array<TeamPermission>;
+};
 
 /** Remove team member response */
-export interface RemoveTeamMemberResponse {
+export type RemoveTeamMemberResponse = {
   message: string;
   userId: string;
   teamId: string;
-}
+};
 
 /** List team members response */
-export interface ListTeamMembersResponse {
+export type ListTeamMembersResponse = {
   members: Array<{
     userId: string;
     name: string;
     email: string;
-    permissions: TeamPermission[];
+    permissions: Array<TeamPermission>;
   }>;
-}
+};
 
 // ============================================================================
 // ANALYSIS MOVEMENT WITHIN TEAMS
 // ============================================================================
 
 /** Move analysis to team request */
-export interface MoveAnalysisToTeamRequest {
+export type MoveAnalysisToTeamRequest = {
   teamId: string | null;
-}
+};
 
 /** Move analysis to team response */
-export interface MoveAnalysisToTeamResponse {
+export type MoveAnalysisToTeamResponse = {
   success: boolean;
   message: string;
   analysisId: string;
   fromTeamId: string | null;
   toTeamId: string | null;
-}
+};
 
 /** Update folder request (with collapse support) */
-export interface UpdateFolderRequest {
+export type UpdateFolderRequest = {
   name?: string;
   collapsed?: boolean;
-}
+};
 
 /** Move item within team structure request */
-export interface MoveItemRequest {
+export type MoveItemRequest = {
   itemId: string;
   newParentId: string | null;
   newIndex: number;
-}
+};
 
 /** Move item response */
-export interface MoveItemResponse {
+export type MoveItemResponse = {
   success: boolean;
   message: string;
-}
+};
 
 /** Team analysis count response */
-export interface TeamAnalysisCountResponse {
+export type TeamAnalysisCountResponse = {
   count: number;
-}
+};
 
 /** Delete team result (with analysis handling) */
-export interface DeleteTeamResult {
+export type DeleteTeamResult = {
   success: boolean;
   message: string;
   deletedTeamId: string;
   movedAnalysesCount: number;
-}
+};
 
 /** Delete folder result */
-export interface DeleteFolderResult {
+export type DeleteFolderResult = {
   success: boolean;
   message: string;
   deletedFolderId: string;
   childrenMoved: number;
-}
+};

@@ -34,7 +34,7 @@ import {
   getSessionCookie,
 } from '../utils/authHelpers.ts';
 
-interface TeamControllerType {
+type TeamControllerType = {
   getAllTeams: Mock;
   createTeam: Mock;
   reorderTeams: Mock;
@@ -46,7 +46,7 @@ interface TeamControllerType {
   updateFolder: Mock;
   deleteFolder: Mock;
   moveItem: Mock;
-}
+};
 
 // Mock only external dependencies
 vi.mock('../../src/utils/asyncHandler.ts', () => ({
@@ -130,7 +130,7 @@ vi.mock('../../src/controllers/teamController.ts', () => ({
   TeamController: TeamController,
 }));
 
-interface RequestWithLog {
+type RequestWithLog = {
   log: {
     info: Mock;
     error: Mock;
@@ -138,7 +138,7 @@ interface RequestWithLog {
     debug: Mock;
     child: Mock;
   };
-}
+};
 
 // Logging middleware mock - provides req.log
 const attachRequestLogger = (

@@ -19,8 +19,8 @@ vi.mock('../../src/constants.ts', () => ({
   },
 }));
 
-// Define interface for rate limiters module
-interface RateLimitersModule {
+// Define type for rate limiters module
+type RateLimitersModule = {
   fileOperationLimiter: RequestHandler;
   uploadLimiter: RequestHandler;
   analysisRunLimiter: RequestHandler;
@@ -29,7 +29,7 @@ interface RateLimitersModule {
   teamOperationLimiter: RequestHandler;
   userOperationLimiter: RequestHandler;
   settingsOperationLimiter: RequestHandler;
-}
+};
 
 describe('rateLimiter middleware', () => {
   let rateLimiters: RateLimitersModule;

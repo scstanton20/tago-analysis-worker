@@ -46,7 +46,7 @@ vi.mock('../../src/config/default.ts', () => ({
   },
 }));
 
-interface FSPromises {
+type FSPromises = {
   mkdir: Mock;
   writeFile: Mock;
   readFile: Mock;
@@ -54,9 +54,9 @@ interface FSPromises {
   stat: Mock;
   unlink: Mock;
   rename: Mock;
-}
+};
 
-interface SafePathModule {
+type SafePathModule = {
   isPathSafe: (targetPath: string, basePath: string | null) => boolean;
   safeMkdir: (
     dirPath: string,
@@ -114,7 +114,7 @@ interface SafePathModule {
     basePath?: string | null,
     options?: { encoding?: BufferEncoding | null; flag?: string },
   ) => string | Buffer;
-}
+};
 
 describe('safePath', () => {
   let safePath: SafePathModule;

@@ -4,15 +4,15 @@ import type { Request, Response } from 'express';
 // No need to mock logger - tests verify response behavior, not logging
 // The real logger will be silent or output to console (acceptable in tests)
 
-interface MockRequest {
+type MockRequest = {
   log?: { error: Mock };
   logger?: { error: Mock };
-}
+};
 
-interface MockResponse {
+type MockResponse = {
   status: Mock;
   json: Mock;
-}
+};
 
 describe('asyncHandler', () => {
   let asyncHandler: any;

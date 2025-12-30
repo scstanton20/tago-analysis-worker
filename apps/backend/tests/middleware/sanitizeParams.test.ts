@@ -5,16 +5,16 @@ import {
   sanitizeFilenameParams,
 } from '../../src/middleware/sanitizeParams.ts';
 
-// Define interfaces for the mock objects
-interface MockRequest {
+// Define types for the mock objects
+type MockRequest = {
   params: Record<string, string | number | null | undefined>;
   path: string;
-}
+};
 
-interface MockResponse {
+type MockResponse = {
   status: Mock<(code: number) => MockResponse>;
   json: Mock<(data: unknown) => MockResponse>;
-}
+};
 
 describe('sanitizeParams Middleware', () => {
   let req: MockRequest;

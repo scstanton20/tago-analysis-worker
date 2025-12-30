@@ -18,7 +18,7 @@ import type {
 // ============================================================================
 
 /** Health check response */
-export interface HealthCheckResponse {
+export type HealthCheckResponse = {
   status: 'healthy' | 'degraded' | 'unhealthy';
   timestamp: string;
   uptime: {
@@ -26,79 +26,79 @@ export interface HealthCheckResponse {
     formatted: string;
   };
   version: string;
-}
+};
 
 // ============================================================================
 // STATUS
 // ============================================================================
 
 /** Full status response */
-export interface StatusResponse {
+export type StatusResponse = {
   container: ContainerHealth;
   tago: TagoConnectionStatus;
   serverTime: string;
-}
+};
 
 // ============================================================================
 // METRICS
 // ============================================================================
 
 /** Metrics response */
-export interface MetricsResponse {
-  processes: ProcessMetrics[];
+export type MetricsResponse = {
+  processes: Array<ProcessMetrics>;
   children: ChildrenMetrics;
   container: ContainerMetrics;
   container_health: ContainerHealth;
   tagoConnection: TagoConnectionStatus;
-}
+};
 
 /** Process metrics for single analysis */
-export interface AnalysisMetricsResponse {
+export type AnalysisMetricsResponse = {
   analysisId: string;
   pid?: number;
   cpu: number;
   memory: number;
   status: AnalysisStatus;
   uptime?: number;
-}
+};
 
 // ============================================================================
 // SSE CONNECTION
 // ============================================================================
 
 /** SSE connection info */
-export interface SSEConnectionInfo {
+export type SSEConnectionInfo = {
   sessionId: string;
   connectedAt: string;
-  subscriptions: string[];
-}
+  subscriptions: Array<string>;
+};
 
 /** Subscribe to channels request */
-export interface SubscribeChannelsRequest {
-  analyses: string[];
-}
+export type SubscribeChannelsRequest = {
+  analyses: Array<string>;
+};
 
 /** Subscribe response */
-export interface SubscribeChannelsResponse {
-  subscriptions: string[];
-}
+export type SubscribeChannelsResponse = {
+  subscriptions: Array<string>;
+};
 
 /** Unsubscribe from channels request */
-export interface UnsubscribeChannelsRequest {
-  analyses: string[];
-}
+export type UnsubscribeChannelsRequest = {
+  analyses: Array<string>;
+};
 
 /** Unsubscribe response */
-export interface UnsubscribeChannelsResponse {
-  subscriptions: string[];
-}
+export type UnsubscribeChannelsResponse = {
+  subscriptions: Array<string>;
+};
 
 // ============================================================================
 // SYSTEM METRICS
 // ============================================================================
 
 /** System-level metrics from the host */
-export interface SystemMetrics {
+export type SystemMetrics = {
   hostname: string;
   platform: string;
   arch: string;
@@ -107,14 +107,14 @@ export interface SystemMetrics {
   totalMemory: number;
   freeMemory: number;
   memoryUsedPercent: number;
-  loadAverage: number[];
+  loadAverage: Array<number>;
   uptime: number;
   nodeVersion: string;
-}
+};
 
 /** Extended metrics response with system info */
-export interface AllMetricsResponse {
-  processes: ProcessMetrics[];
+export type AllMetricsResponse = {
+  processes: Array<ProcessMetrics>;
   system: SystemMetrics;
   tagoConnection: TagoConnectionStatus;
-}
+};

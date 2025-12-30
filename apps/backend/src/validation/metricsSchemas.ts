@@ -15,4 +15,4 @@ export const metricsValidationSchemas = {
   getMetrics: {
     query: emptyStrictSchema,
   },
-};
+} as const;

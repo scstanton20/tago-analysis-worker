@@ -17,53 +17,53 @@ import type {
 export type { AnalysisStatus, AnalysisIntendedState, LogEntry };
 
 /** Service reference for environment/config management */
-export interface AnalysisServiceInterface {
-  getEnvironment(analysisId: string): Promise<Record<string, string>>;
-  saveConfig(): Promise<void>;
-}
+export type AnalysisServiceInterface = {
+  getEnvironment: (analysisId: string) => Promise<Record<string, string>>;
+  saveConfig: () => Promise<void>;
+};
 
 /** Memory logs result with pagination */
-export interface MemoryLogsResult {
-  logs: LogEntry[];
-  hasMore: boolean;
-  totalInMemory: number;
-  totalCount: number;
-}
+export type MemoryLogsResult = {
+  readonly logs: ReadonlyArray<LogEntry>;
+  readonly hasMore: boolean;
+  readonly totalInMemory: number;
+  readonly totalCount: number;
+};
 
 /** Connection status information */
-export interface ConnectionStatus {
-  isConnected: boolean;
-  reconnectionAttempts: number;
-  connectionErrorDetected: boolean;
-  graceTimerActive: boolean;
-}
+export type ConnectionStatus = {
+  readonly isConnected: boolean;
+  readonly reconnectionAttempts: number;
+  readonly connectionErrorDetected: boolean;
+  readonly graceTimerActive: boolean;
+};
 
 /** SSE Manager interface (for lazy loading) */
-export interface SSEManagerInterface {
-  broadcastUpdate(type: string, data: object): Promise<void>;
-  broadcastAnalysisUpdate(
+export type SSEManagerInterface = {
+  broadcastUpdate: (type: string, data: object) => Promise<void>;
+  broadcastAnalysisUpdate: (
     analysisId: string,
     data: object,
     teamId?: string | null,
-  ): Promise<number>;
-}
+  ) => Promise<number>;
+};
 
 /** DNS Cache interface (for lazy loading) */
-export interface DNSCacheInterface {
-  handleDNSLookupRequest(
+export type DNSCacheInterface = {
+  handleDNSLookupRequest: (
     hostname: string,
     options: object,
     analysisId: string,
-  ): Promise<object>;
-  handleDNSResolve4Request(
+  ) => Promise<object>;
+  handleDNSResolve4Request: (
     hostname: string,
     analysisId: string,
-  ): Promise<object>;
-  handleDNSResolve6Request(
+  ) => Promise<object>;
+  handleDNSResolve6Request: (
     hostname: string,
     analysisId: string,
-  ): Promise<object>;
-}
+  ) => Promise<object>;
+};
 
 /** IPC message types */
 export type IPCMessageType =
@@ -75,39 +75,39 @@ export type IPCMessageType =
   | 'DNS_RESOLVE6_RESPONSE';
 
 /** Base IPC message */
-export interface IPCMessage {
-  type: IPCMessageType;
-  requestId?: string;
-}
+export type IPCMessage = {
+  readonly type: IPCMessageType;
+  readonly requestId?: string;
+};
 
 /** DNS lookup request message */
-export interface DNSLookupRequest extends IPCMessage {
-  type: 'DNS_LOOKUP_REQUEST';
-  hostname: string;
-  options: object;
-  requestId: string;
-}
+export type DNSLookupRequest = IPCMessage & {
+  readonly type: 'DNS_LOOKUP_REQUEST';
+  readonly hostname: string;
+  readonly options: object;
+  readonly requestId: string;
+};
 
 /** DNS lookup response message */
-export interface DNSLookupResponse extends IPCMessage {
-  type: 'DNS_LOOKUP_RESPONSE';
-  requestId: string;
-  result: object;
-}
+export type DNSLookupResponse = IPCMessage & {
+  readonly type: 'DNS_LOOKUP_RESPONSE';
+  readonly requestId: string;
+  readonly result: object;
+};
 
 /** DNS resolve4 request message */
-export interface DNSResolve4Request extends IPCMessage {
-  type: 'DNS_RESOLVE4_REQUEST';
-  hostname: string;
-  requestId: string;
-}
+export type DNSResolve4Request = IPCMessage & {
+  readonly type: 'DNS_RESOLVE4_REQUEST';
+  readonly hostname: string;
+  readonly requestId: string;
+};
 
 /** DNS resolve6 request message */
-export interface DNSResolve6Request extends IPCMessage {
-  type: 'DNS_RESOLVE6_REQUEST';
-  hostname: string;
-  requestId: string;
-}
+export type DNSResolve6Request = IPCMessage & {
+  readonly type: 'DNS_RESOLVE6_REQUEST';
+  readonly hostname: string;
+  readonly requestId: string;
+};
 
 /** Union type for all DNS IPC messages */
 export type DNSIPCMessage =
@@ -116,9 +116,15 @@ export type DNSIPCMessage =
   | DNSResolve4Request
   | DNSResolve6Request;
 
-/** Forward declaration for AnalysisProcess (used by managers) */
-export interface AnalysisProcessState {
-  // Core identity
+/**
+ * Forward declaration for AnalysisProcess (used by managers)
+ *
+ * Note: Properties without `readonly` are intentionally mutable as they represent
+ * active process state that changes during the analysis lifecycle.
+ */
+export type AnalysisProcessState = {
+  // Core identity - analysisId is immutable UUID used for file paths and database keys
+  // analysisName is mutable display name that can be changed via rename
   readonly analysisId: string;
   analysisName: string;
   service: AnalysisServiceInterface;
@@ -136,8 +142,8 @@ export interface AnalysisProcessState {
   isManualStop: boolean;
   lastStartTime: string | null;
 
-  // Log management
-  logs: LogEntry[];
+  // Log management - logs array is mutable as it's actively managed
+  logs: Array<LogEntry>;
   logSequence: number;
   totalLogCount: number;
   maxMemoryLogs: number;
@@ -160,10 +166,12 @@ export interface AnalysisProcessState {
   stdoutBuffer: string;
   stderrBuffer: string;
 
-  // Exit handling
+  // Exit handling (temporary references during graceful shutdown)
+  /** Promise resolver - set during stop(), cleared after exit */
   _exitPromiseResolve?: () => void;
+  /** Promise rejector - set during stop(), cleared after exit */
   _exitPromiseReject?: (error: Error) => void;
-}
+};
 
 // Import pino types
 import type pino from 'pino';

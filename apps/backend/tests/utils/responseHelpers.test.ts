@@ -9,28 +9,28 @@ vi.mock('../../src/utils/logging/logger.ts', () => ({
   })),
 }));
 
-interface TeamStructureItem {
+type TeamStructureItem = {
   id: string;
   name: string;
-}
+};
 
-interface TeamStructure {
+type TeamStructure = {
   [key: string]: {
     items: TeamStructureItem[];
   };
-}
+};
 
-interface MockConfig {
+type MockConfig = {
   teamStructure: TeamStructure;
-}
+};
 
-interface MockSSEManager {
+type MockSSEManager = {
   broadcastToTeamUsers: Mock;
-}
+};
 
-interface MockAnalysisService {
+type MockAnalysisService = {
   getConfig: Mock;
-}
+};
 
 describe('responseHelpers', () => {
   let responseHelpers: typeof import('../../src/utils/responseHelpers.ts');

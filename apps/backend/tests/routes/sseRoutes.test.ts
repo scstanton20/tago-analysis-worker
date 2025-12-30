@@ -31,13 +31,13 @@ import {
   getSessionCookie,
 } from '../utils/authHelpers.ts';
 
-interface SSEManager {
+type SSEManager = {
   sendToUser: Mock;
   addClient: Mock;
   removeClient: Mock;
   broadcastUpdate: Mock;
   updateContainerState: Mock;
-}
+};
 
 // Mock only SSE connection handler - NOT authentication!
 vi.mock('../../src/utils/sse/index.ts', async () => {
@@ -70,7 +70,7 @@ vi.mock('../../src/utils/logging/logger.ts', () => ({
   })),
 }));
 
-interface RequestWithLog {
+type RequestWithLog = {
   log: {
     info: Mock;
     error: Mock;
@@ -78,7 +78,7 @@ interface RequestWithLog {
     debug: Mock;
     child: Mock;
   };
-}
+};
 
 // Logging middleware mock - provides req.log
 const attachRequestLogger = (

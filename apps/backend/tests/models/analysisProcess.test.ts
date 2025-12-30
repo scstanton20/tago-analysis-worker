@@ -37,20 +37,20 @@ import fs from 'fs/promises';
 const TEST_BASE_DIR = path.join(os.tmpdir(), 'analysis-process-test');
 const TEST_ANALYSES_DIR = path.join(TEST_BASE_DIR, 'analyses');
 
-// Service interface matching what AnalysisProcess expects
-interface MockService {
+// Service type matching what AnalysisProcess expects
+type MockService = {
   getEnvironment: Mock<(analysisId: string) => Promise<Record<string, string>>>;
   saveConfig: Mock<() => Promise<void>>;
-}
+};
 
-// LogManager state interface
-interface LogManagerState {
+// LogManager state type
+type LogManagerState = {
   estimatedFileSize: number;
   logsSinceLastCheck: number;
-}
+};
 
-// AnalysisProcess interface matching the actual class
-interface AnalysisProcessInstance {
+// AnalysisProcess type matching the actual class
+type AnalysisProcessInstance = {
   analysisId: string;
   analysisName: string;
   service: MockService;
@@ -87,7 +87,7 @@ interface AnalysisProcessInstance {
   handleExit: (code: number | null) => Promise<void>;
   handleOutput: (isStderr: boolean, data: Buffer) => void;
   updateStatus: (status: AnalysisStatus, enabled: boolean) => void;
-}
+};
 
 type AnalysisProcessClass = new (
   analysisId: string,

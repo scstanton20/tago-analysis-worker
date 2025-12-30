@@ -9,6 +9,12 @@ export const analysisIdSchema = z
   .string()
   .uuid('Analysis ID must be a valid UUID');
 
+/** Time range option type */
+type LogTimeRangeOption = {
+  readonly value: '1h' | '24h' | '7d' | '30d' | 'all';
+  readonly label: string;
+};
+
 /**
  * Time range options for log downloads.
  */
@@ -18,15 +24,13 @@ export const LOG_TIME_RANGE_OPTIONS = [
   { value: '7d', label: 'Last 7 Days' },
   { value: '30d', label: 'Last 30 Days' },
   { value: 'all', label: 'All Logs' },
-];
+] as const satisfies ReadonlyArray<LogTimeRangeOption>;
 
 /**
- * Valid time range values extracted from options.
- * Used for schema validation.
+ * Valid time range values for schema validation.
+ * Tuple type required for zod enum validation.
  */
-export const LOG_TIME_RANGE_VALUES = LOG_TIME_RANGE_OPTIONS.map(
-  (opt) => opt.value,
-);
+export const LOG_TIME_RANGE_VALUES = ['1h', '24h', '7d', '30d', 'all'] as const;
 
 export const analysisValidationSchemas = {
   /**
@@ -276,4 +280,4 @@ export const analysisValidationSchemas = {
       analysisId: analysisIdSchema,
     }),
   },
-};
+} as const;

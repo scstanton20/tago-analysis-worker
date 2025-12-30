@@ -9,133 +9,132 @@
 // ============================================================================
 
 /** Tago token status */
-export interface TagoTokenStatus {
+export type TagoTokenStatus = {
   configured: boolean;
   lastValidated?: string;
   error?: string;
-}
+};
 
 /** Get token status response */
-export interface GetTokenStatusResponse {
+export type GetTokenStatusResponse = {
   status: TagoTokenStatus;
-}
+};
 
 /** Set token request */
-export interface SetTokenRequest {
+export type SetTokenRequest = {
   token: string;
-}
+};
 
 /** Set token response */
-export interface SetTokenResponse {
+export type SetTokenResponse = {
   message: string;
   validated: boolean;
-}
+};
 
 /** Validate token response */
-export interface ValidateTokenResponse {
+export type ValidateTokenResponse = {
   valid: boolean;
   error?: string;
   profile?: {
     id: string;
     name: string;
   };
-}
+};
 
 // ============================================================================
 // ORGANIZATION SETTINGS
 // ============================================================================
 
 /** Organization settings */
-export interface OrganizationSettings {
+export type OrganizationSettings = {
   id: string;
   name: string;
   slug: string;
   logo?: string;
   createdAt: string;
-}
+};
 
 /** Get organization response */
-export interface GetOrganizationResponse {
+export type GetOrganizationResponse = {
   organization: OrganizationSettings;
-}
+};
 
 /** Update organization request */
-export interface UpdateOrganizationRequest {
+export type UpdateOrganizationRequest = {
   name?: string;
   slug?: string;
   logo?: string;
-}
+};
 
 /** Update organization response */
-export interface UpdateOrganizationResponse {
+export type UpdateOrganizationResponse = {
   organization: OrganizationSettings;
-}
+};
 
 // ============================================================================
 // LOGGING SETTINGS
 // ============================================================================
 
 /** Log retention settings */
-export interface LogRetentionSettings {
+export type LogRetentionSettings = {
   maxLogsPerAnalysis: number;
   retentionDays: number;
-}
+};
 
 /** Get log settings response */
-export interface GetLogSettingsResponse {
+export type GetLogSettingsResponse = {
   settings: LogRetentionSettings;
-}
+};
 
 /** Update log settings request */
-export interface UpdateLogSettingsRequest {
+export type UpdateLogSettingsRequest = {
   maxLogsPerAnalysis?: number;
   retentionDays?: number;
-}
+};
 
 /** Update log settings response */
-export interface UpdateLogSettingsResponse {
+export type UpdateLogSettingsResponse = {
   settings: LogRetentionSettings;
-}
+};
 
 // ============================================================================
 // SECURITY SETTINGS
 // ============================================================================
 
 /** Security settings */
-export interface SecuritySettings {
+export type SecuritySettings = {
   sessionTimeout: number;
   maxSessions: number;
   requirePasskey: boolean;
   allowPasswordLogin: boolean;
-}
+};
 
 /** Get security settings response */
-export interface GetSecuritySettingsResponse {
+export type GetSecuritySettingsResponse = {
   settings: SecuritySettings;
-}
+};
 
 /** Update security settings request */
-export interface UpdateSecuritySettingsRequest
-  extends Partial<SecuritySettings> {}
+export type UpdateSecuritySettingsRequest = Partial<SecuritySettings>;
 
 /** Update security settings response */
-export interface UpdateSecuritySettingsResponse {
+export type UpdateSecuritySettingsResponse = {
   settings: SecuritySettings;
-}
+};
 
 // ============================================================================
 // DNS SETTINGS (Admin only)
 // ============================================================================
 
 /** DNS cache settings */
-export interface DNSCacheSettings {
+export type DNSCacheSettings = {
   enabled: boolean;
   ttl: number;
   maxEntries: number;
-}
+};
 
 /** Get DNS settings response */
-export interface GetDNSSettingsResponse {
+export type GetDNSSettingsResponse = {
   settings: DNSCacheSettings;
   stats: {
     hits: number;
@@ -143,18 +142,18 @@ export interface GetDNSSettingsResponse {
     hitRate: number;
     entries: number;
   };
-}
+};
 
 /** Update DNS settings request */
-export interface UpdateDNSSettingsRequest extends Partial<DNSCacheSettings> {}
+export type UpdateDNSSettingsRequest = Partial<DNSCacheSettings>;
 
 /** Update DNS settings response */
-export interface UpdateDNSSettingsResponse {
+export type UpdateDNSSettingsResponse = {
   settings: DNSCacheSettings;
-}
+};
 
 /** Clear DNS cache response */
-export interface ClearDNSCacheResponse {
+export type ClearDNSCacheResponse = {
   message: string;
   entriesCleared: number;
-}
+};

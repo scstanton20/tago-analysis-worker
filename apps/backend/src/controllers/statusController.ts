@@ -7,26 +7,26 @@ import { sseManager } from '../utils/sse/index.ts';
 import { getTagoSdkVersion } from '../utils/sdkVersion.ts';
 
 /** Express request with request-scoped logger */
-interface RequestWithLogger extends Request {
+type RequestWithLogger = Request & {
   log: Logger;
-}
+};
 
 /** System status response */
-interface SystemStatusResponse {
-  container_health: {
-    status: 'healthy' | 'initializing';
-    message: string;
-    uptime: {
-      seconds: number;
-      formatted: string;
+type SystemStatusResponse = {
+  readonly container_health: {
+    readonly status: 'healthy' | 'initializing';
+    readonly message: string;
+    readonly uptime: {
+      readonly seconds: number;
+      readonly formatted: string;
     };
   };
-  tagoConnection: {
-    sdkVersion: string;
-    runningAnalyses: number;
+  readonly tagoConnection: {
+    readonly sdkVersion: string;
+    readonly runningAnalyses: number;
   };
-  serverTime: string;
-}
+  readonly serverTime: string;
+};
 
 /**
  * Controller class for system status monitoring

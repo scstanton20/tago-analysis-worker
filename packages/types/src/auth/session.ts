@@ -12,13 +12,13 @@
 import type { OrganizationRole } from '../domain/user.js';
 
 /** Active organization in session */
-export interface SessionOrganization {
+export type SessionOrganization = {
   id: string;
   name: string;
   slug: string;
   role: OrganizationRole;
   isOwner: boolean;
-}
+};
 
 /**
  * User data included in session
@@ -27,7 +27,7 @@ export interface SessionOrganization {
  * - role: from additionalFields config
  * - isOwner: injected by customSession plugin
  */
-export interface SessionUser {
+export type SessionUser = {
   id: string;
   email: string;
   name: string;
@@ -39,7 +39,7 @@ export interface SessionUser {
   createdAt: Date;
   updatedAt: Date;
   requiresPasswordChange?: boolean;
-}
+};
 
 /**
  * Session data from Better Auth
@@ -47,7 +47,7 @@ export interface SessionUser {
  * This matches Better Auth's session structure with organization plugin fields.
  * The actual type is inferred from `typeof auth.$Infer.Session` in the backend.
  */
-export interface Session {
+export type Session = {
   /** Session ID */
   id: string;
   /** Session token (for API calls) */
@@ -66,18 +66,18 @@ export interface Session {
   createdAt: Date;
   /** Session update time */
   updatedAt: Date;
-}
+};
 
 /**
  * User's team membership from customSession plugin
  *
  * Injected into the session by the customSession plugin in auth.ts
  */
-export interface SessionTeam {
+export type SessionTeam = {
   id: string;
   name: string;
-  permissions: string[];
-}
+  permissions: Array<string>;
+};
 
 /**
  * Full session response from Better Auth API
@@ -85,21 +85,21 @@ export interface SessionTeam {
  * This is what /api/auth/get-session returns.
  * Includes session, user, and teams from customSession plugin.
  */
-export interface FullSession {
+export type FullSession = {
   session: Session;
   user: SessionUser;
-  teams: SessionTeam[];
-}
+  teams: Array<SessionTeam>;
+};
 
 /**
  * Session token payload (decoded JWT)
  *
  * Used for token validation and parsing.
  */
-export interface SessionPayload {
+export type SessionPayload = {
   sub: string;
   iat: number;
   exp: number;
   sessionId: string;
   organizationId?: string;
-}
+};

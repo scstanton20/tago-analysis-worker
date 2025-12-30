@@ -30,16 +30,16 @@ import {
   getSessionCookie,
 } from '../utils/authHelpers.ts';
 
-interface ContainerState {
+type ContainerState = {
   status: string;
   startTime: Date;
   message: string;
-}
+};
 
-interface SSEManager {
+type SSEManager = {
   getContainerState: Mock<() => ContainerState>;
   updateContainerState: Mock;
-}
+};
 
 // Mock SSE manager
 vi.mock('../../src/utils/sse/index.ts', () => ({
@@ -60,7 +60,7 @@ vi.mock('../../src/services/analysisService.ts', () => ({
   },
 }));
 
-interface RequestWithLog {
+type RequestWithLog = {
   log: {
     info: Mock;
     error: Mock;
@@ -68,7 +68,7 @@ interface RequestWithLog {
     debug: Mock;
     child: Mock;
   };
-}
+};
 
 // Logging middleware mock - provides req.log
 const attachRequestLogger = (

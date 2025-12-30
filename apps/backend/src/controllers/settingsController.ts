@@ -4,16 +4,16 @@ import { dnsCache } from '../services/dnsCache.ts';
 import { sseManager } from '../utils/sse/index.ts';
 
 /** Express request with request-scoped logger */
-interface RequestWithLogger extends Request {
+type RequestWithLogger = Request & {
   log: Logger;
-}
+};
 
 /** Update DNS config request body */
-interface UpdateDNSConfigBody {
+type UpdateDNSConfigBody = {
   enabled?: boolean;
   ttl?: number;
   maxEntries?: number;
-}
+};
 
 /**
  * Controller class for managing application settings

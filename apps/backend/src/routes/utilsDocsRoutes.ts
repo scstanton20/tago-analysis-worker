@@ -136,4 +136,4 @@ router.get(
   asyncHandler(UtilsDocsController.getUtilities, 'get utilities'),
 );
 
-export default router;
+export { router as utilsDocsRouter };

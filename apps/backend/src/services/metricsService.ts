@@ -27,17 +27,17 @@ type SystemMetrics = BackendSystemMetrics;
 type ProcessMetric = AnalysisProcessMetric;
 type AllMetrics = BackendAllMetricsResponse;
 
-/** Analysis service interface for lazy loading */
-interface AnalysisService {
+/** Analysis service type for lazy loading */
+type AnalysisService = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   getAllAnalyses(): Promise<Record<string, any>>;
-}
+};
 
 /** Options for getProcessMetrics */
-interface GetProcessMetricsOptions {
+type GetProcessMetricsOptions = {
   analysisService?: AnalysisService;
   register?: Registry;
-}
+};
 
 // Lazy-loaded analysisService to avoid circular dependencies
 let analysisServiceCache: AnalysisService | null = null;

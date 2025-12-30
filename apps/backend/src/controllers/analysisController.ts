@@ -24,28 +24,28 @@ import {
 import { broadcastTeamStructureUpdate } from '../utils/responseHelpers.ts';
 
 /** Express request with request-scoped logger */
-interface RequestWithLogger extends Request {
+type RequestWithLogger = Request & {
   log: Logger;
-}
+};
 
 /** Authenticated user on request */
-interface AuthenticatedUser {
-  id: string;
-  role: string;
-}
+type AuthenticatedUser = {
+  readonly id: string;
+  readonly role: string;
+};
 
 /** Request with authenticated user */
-interface AuthenticatedRequest extends RequestWithLogger {
+type AuthenticatedRequest = RequestWithLogger & {
   user: AuthenticatedUser;
-}
+};
 
-/** Uploaded file from express-fileupload (minimal interface we need) */
-interface UploadedFileMinimal {
-  name: string;
-  size: number;
-  data: Buffer;
-  mv(path: string): Promise<void>;
-}
+/** Uploaded file from express-fileupload (minimal type we need) */
+type UploadedFileMinimal = {
+  readonly name: string;
+  readonly size: number;
+  readonly data: Buffer;
+  mv: (path: string) => Promise<void>;
+};
 
 /** Upload analysis request - uses type intersection to override files property */
 type UploadAnalysisRequest = Omit<RequestWithLogger, 'files'> & {
@@ -59,18 +59,18 @@ type UploadAnalysisRequest = Omit<RequestWithLogger, 'files'> & {
 };
 
 /** Get analyses query params (backend-specific, string values) */
-interface GetAnalysesQuery {
-  search?: string;
-  teamId?: string;
-  status?: string;
-  page?: string;
-  limit?: string;
-}
+type GetAnalysesQuery = {
+  readonly search?: string;
+  readonly teamId?: string;
+  readonly status?: string;
+  readonly page?: string;
+  readonly limit?: string;
+};
 
 /** Update analysis body */
-interface UpdateAnalysisBody {
-  content: string;
-}
+type UpdateAnalysisBody = {
+  readonly content: string;
+};
 
 // Type aliases for request body types
 type RenameAnalysisBody = RenameAnalysisRequest;

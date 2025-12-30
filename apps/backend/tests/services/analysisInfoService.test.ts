@@ -14,7 +14,7 @@ import {
   type Mock,
 } from 'vitest';
 
-interface MockAnalysis {
+type MockAnalysis = {
   analysisId: string;
   analysisName: string;
   teamId?: string | null;
@@ -26,28 +26,28 @@ interface MockAnalysis {
   isConnected?: boolean;
   reconnectionAttempts?: number;
   totalLogCount?: number;
-}
+};
 
-interface MockTeam {
+type MockTeam = {
   id: string;
   name: string;
-}
+};
 
-interface SafePathMock {
+type SafePathMock = {
   safeReadFile: Mock;
   safeWriteFile: Mock;
   safeStat: Mock;
-}
+};
 
-interface AnalysisServiceMock {
+type AnalysisServiceMock = {
   getAnalysisProcess: Mock;
-}
+};
 
-interface TeamServiceMock {
+type TeamServiceMock = {
   getTeam: Mock;
-}
+};
 
-interface AnalysisInfoServiceType {
+type AnalysisInfoServiceType = {
   getNotesPath: (analysisId: string) => string;
   countLines: (content: string | null) => number;
   formatFileSize: (bytes: number) => string;
@@ -97,7 +97,7 @@ interface AnalysisInfoServiceType {
     lastModified: Date;
   }>;
   notesExist: (analysisId: string) => Promise<boolean>;
-}
+};
 
 // Mock dependencies
 vi.mock('../../src/services/analysisService.ts', () => ({

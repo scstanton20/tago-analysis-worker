@@ -14,13 +14,13 @@ const mockFetch = vi.fn() as unknown as Mock;
 global.fetch = mockFetch;
 global.btoa = (str: string) => Buffer.from(str).toString('base64');
 
-interface APIResponse {
+type APIResponse = {
   status: number;
   data?: unknown;
   error?: unknown;
-}
+};
 
-interface MQAPIModule {
+type MQAPIModule = {
   default: {
     getToken: (clientId: string, clientSecret: string) => Promise<string>;
     getAPIVersion: () => Promise<{
@@ -39,7 +39,7 @@ interface MQAPIModule {
     ) => Promise<APIResponse>;
     config: { tokenUrl: string; apiUrl: string };
   };
-}
+};
 
 describe('mqAPI', () => {
   let mqAPI: MQAPIModule['default'];

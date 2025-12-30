@@ -30,9 +30,9 @@ vi.mock('pidusage', () => ({
   default: vi.fn().mockResolvedValue({ cpu: 25.5, memory: 104857600 }),
 }));
 
-interface RegisterMock {
+type RegisterMock = {
   metrics: Mock;
-}
+};
 
 // Use shared types with Partial for test flexibility (not all fields required in test mocks)
 type ChildrenMetrics = Partial<BackendSystemMetrics> & {
@@ -42,7 +42,7 @@ type ChildrenMetrics = Partial<BackendSystemMetrics> & {
 };
 type ContainerMetrics = BackendSystemMetrics;
 
-interface MetricsServiceType {
+type MetricsServiceType = {
   lastValues: Map<string, unknown>;
   parsePrometheusMetrics: (metricsString: string) => MetricsMap;
   getMetricsByName: (metricsMap: MetricsMap, name: string) => ParsedMetric[];
@@ -75,7 +75,7 @@ interface MetricsServiceType {
   >;
   getAllMetrics: () => Promise<BackendAllMetricsResponse>;
   getDefaultSystemMetrics: () => BackendSystemMetrics;
-}
+};
 
 const { register } = (await import(
   '../../src/utils/metrics-enhanced.ts'

@@ -8,7 +8,7 @@
 export type LogLevel = 'log' | 'info' | 'warn' | 'error' | 'debug';
 
 /** Log entry as stored/transmitted */
-export interface LogEntry {
+export type LogEntry = {
   /** Sequential log number within analysis */
   sequence: number;
   /** Formatted timestamp string */
@@ -19,34 +19,34 @@ export interface LogEntry {
   level?: LogLevel;
   /** Unix timestamp in milliseconds for sorting */
   createdAt?: number;
-}
+};
 
 /** Log response with pagination info */
-export interface LogsResponse {
+export type LogsResponse = {
   /** Array of log entries */
-  logs: LogEntry[];
+  logs: Array<LogEntry>;
   /** Whether more logs exist */
   hasMore: boolean;
   /** Total log count */
   totalCount: number;
   /** Data source indicator */
   source?: 'memory' | 'file' | 'file-stream';
-}
+};
 
 /** Time range options for log downloads */
 export type LogTimeRange = '1h' | '24h' | '7d' | '30d' | 'all';
 
 /** Log time range option with label */
-export interface LogTimeRangeOption {
+export type LogTimeRangeOption = {
   value: LogTimeRange;
   label: string;
-}
+};
 
 /** Log time range options */
-export const LOG_TIME_RANGE_OPTIONS: LogTimeRangeOption[] = [
+export const LOG_TIME_RANGE_OPTIONS = [
   { value: '1h', label: 'Last Hour' },
   { value: '24h', label: 'Last 24 Hours' },
   { value: '7d', label: 'Last 7 Days' },
   { value: '30d', label: 'Last 30 Days' },
   { value: 'all', label: 'All Logs' },
-];
+] as const satisfies ReadonlyArray<LogTimeRangeOption>;

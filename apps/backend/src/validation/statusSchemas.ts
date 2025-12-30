@@ -15,4 +15,4 @@ export const statusValidationSchemas = {
   getSystemStatus: {
     query: emptyStrictSchema,
   },
-};
+} as const;

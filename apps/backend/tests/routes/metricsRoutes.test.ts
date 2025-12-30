@@ -31,10 +31,10 @@ import {
   getSessionCookie,
 } from '../utils/authHelpers.ts';
 
-interface MetricsRegister {
+type MetricsRegister = {
   contentType: string;
   metrics: Mock<() => Promise<string>>;
-}
+};
 
 // Mock only external dependencies - NO AUTH MOCKS!
 vi.mock('../../src/utils/metrics-enhanced.ts', () => ({
@@ -48,7 +48,7 @@ vi.mock('../../src/utils/metrics-enhanced.ts', () => ({
   },
 }));
 
-interface RequestWithLog {
+type RequestWithLog = {
   log: {
     info: Mock;
     error: Mock;
@@ -56,7 +56,7 @@ interface RequestWithLog {
     debug: Mock;
     child: Mock;
   };
-}
+};
 
 // Logging middleware mock - provides req.log
 const attachRequestLogger = (

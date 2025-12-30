@@ -30,6 +30,19 @@ import type {
   PinoDestinationStream,
 } from './types.ts';
 
+/** Type for IPC messages with a type property */
+type IPCMessageWithType = {
+  readonly type: string;
+};
+
+/** Type guard to check if a message has a type property */
+function hasMessageType(message: object): message is IPCMessageWithType {
+  return (
+    'type' in message &&
+    typeof (message as { type?: unknown }).type === 'string'
+  );
+}
+
 export class AnalysisProcess {
   // Core identity
   private _analysisId: string;
@@ -154,8 +167,8 @@ export class AnalysisProcess {
 
     // Initialize managers with back-references
     this.logManager = new LogManager(this, config);
-    this.monitoringManager = new ProcessMonitor(this, config);
-    this.lifecycleManager = new ProcessLifecycleManager(this, config);
+    this.monitoringManager = new ProcessMonitor(this);
+    this.lifecycleManager = new ProcessLifecycleManager(this);
     this.cleanupManager = new ProcessCleanupManager(this);
 
     // Initialize file logger immediately
@@ -276,18 +289,20 @@ export class AnalysisProcess {
    * @param message - Message to send
    */
   safeIPCSend(message: object): void {
+    const messageType = hasMessageType(message) ? message.type : undefined;
+
     try {
       if (this.process && !this.process.killed) {
         this.process.send(message);
       } else {
         this.logger.debug(
-          { messageType: (message as { type?: string }).type },
+          { messageType },
           'Skipped IPC send - process no longer available',
         );
       }
     } catch (error) {
       this.logger.warn(
-        { err: error, messageType: (message as { type?: string }).type },
+        { err: error, messageType },
         'Failed to send IPC message to child process',
       );
     }

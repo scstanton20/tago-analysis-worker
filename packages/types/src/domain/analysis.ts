@@ -11,17 +11,17 @@ export type AnalysisStatus = 'running' | 'stopped' | 'error';
 export type AnalysisIntendedState = 'running' | 'stopped';
 
 /** Base analysis properties shared across all representations */
-export interface AnalysisBase {
+export type AnalysisBase = {
   /** Unique identifier (UUID v4) */
   id: string;
   /** Human-readable display name */
   name: string;
   /** Team this analysis belongs to */
   teamId: string | null;
-}
+};
 
 /** Analysis as stored in configuration */
-export interface AnalysisConfig extends AnalysisBase {
+export type AnalysisConfig = AnalysisBase & {
   /** Whether the analysis is enabled for execution */
   enabled: boolean;
   /** Intended running state (for auto-recovery) */
@@ -30,10 +30,10 @@ export interface AnalysisConfig extends AnalysisBase {
   lastStartTime: string | null;
   /** Parent folder ID (null for root) */
   parentFolderId: string | null;
-}
+};
 
 /** Analysis with runtime information (returned from API/SSE) */
-export interface Analysis extends AnalysisBase {
+export type Analysis = AnalysisBase & {
   /** Current execution status */
   status: AnalysisStatus;
   /** Whether the analysis is enabled */
@@ -44,10 +44,10 @@ export interface Analysis extends AnalysisBase {
   size?: string;
   /** File creation timestamp */
   created?: string;
-}
+};
 
 /** Analysis update payload for SSE broadcasts */
-export interface AnalysisUpdate {
+export type AnalysisUpdate = {
   /** Analysis UUID */
   analysisId: string;
   /** Analysis display name */
@@ -58,13 +58,13 @@ export interface AnalysisUpdate {
   enabled?: boolean;
   /** Team change (for moves) */
   teamId?: string;
-}
+};
 
 /** Map of analyses keyed by analysisId */
 export type AnalysesMap = Record<string, Analysis>;
 
 /** Analysis version metadata */
-export interface AnalysisVersion {
+export type AnalysisVersion = {
   /** Version number (1-indexed) */
   version: number;
   /** ISO timestamp when version was saved */
@@ -73,11 +73,11 @@ export interface AnalysisVersion {
   size: number;
   /** Whether this is the current version */
   isCurrent?: boolean;
-}
+};
 
 /** Version metadata response from API */
-export interface AnalysisVersionsResponse {
-  versions: AnalysisVersion[];
+export type AnalysisVersionsResponse = {
+  versions: ReadonlyArray<AnalysisVersion>;
   page: number;
   limit: number;
   totalCount: number;
@@ -85,10 +85,10 @@ export interface AnalysisVersionsResponse {
   hasMore: boolean;
   nextVersionNumber: number;
   currentVersion: number;
-}
+};
 
 /** Analysis metadata */
-export interface AnalysisMeta {
+export type AnalysisMeta = {
   id: string;
   name: string;
   created: string;
@@ -96,4 +96,4 @@ export interface AnalysisMeta {
   size: number;
   teamId: string | null;
   parentFolderId: string | null;
-}
+};

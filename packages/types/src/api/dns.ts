@@ -12,50 +12,50 @@ export type { DNSCacheStats } from '../sse/messages.js';
 // ============================================================================
 
 /** DNS cache configuration settings */
-export interface DNSCacheConfig {
+export type DNSCacheConfig = {
   enabled: boolean;
   ttl: number;
   maxEntries: number;
-}
+};
 
 // ============================================================================
 // DNS CACHE STATISTICS
 // ============================================================================
 
 /** Extended DNS cache statistics with error tracking */
-export interface DNSCacheExtendedStats {
+export type DNSCacheExtendedStats = {
   hits: number;
   misses: number;
   errors: number;
   evictions: number;
-}
+};
 
 /** Full DNS cache stats response */
-export interface DNSCacheFullStats extends DNSCacheExtendedStats {
+export type DNSCacheFullStats = DNSCacheExtendedStats & {
   cacheSize: number;
   hitRate: number | string;
   ttlPeriodAge: number;
   ttlPeriodRemaining: number;
   ttlPeriodProgress: string;
-}
+};
 
 // ============================================================================
 // DNS CACHE ENTRIES
 // ============================================================================
 
 /** DNS lookup cache data */
-export interface DNSLookupCacheData {
+export type DNSLookupCacheData = {
   address: string;
   family: number;
-}
+};
 
 /** DNS resolve cache data */
-export interface DNSResolveCacheData {
-  addresses: string[];
-}
+export type DNSResolveCacheData = {
+  addresses: Array<string>;
+};
 
 /** DNS cache entry for API response */
-export interface DNSCacheEntry {
+export type DNSCacheEntry = {
   key: string;
   data: DNSLookupCacheData | DNSResolveCacheData;
   timestamp: number;
@@ -63,48 +63,48 @@ export interface DNSCacheEntry {
   remainingTTL: number;
   expired: boolean;
   source?: string;
-}
+};
 
 // ============================================================================
 // DNS OPERATION RESULTS
 // ============================================================================
 
 /** DNS lookup operation result */
-export interface DNSLookupResult {
+export type DNSLookupResult = {
   success: boolean;
   address?: string;
   family?: number;
   error?: string;
-}
+};
 
 /** DNS resolve operation result */
-export interface DNSResolveResult {
+export type DNSResolveResult = {
   success: boolean;
-  addresses?: string[];
+  addresses?: Array<string>;
   error?: string;
-}
+};
 
 // ============================================================================
 // PER-ANALYSIS DNS STATISTICS
 // ============================================================================
 
 /** Per-analysis DNS stats response */
-export interface AnalysisDNSStatsResponse {
+export type AnalysisDNSStatsResponse = {
   hits: number;
   misses: number;
   errors: number;
   hitRate: number | string;
   hostnameCount: number;
-  hostnames: string[];
+  hostnames: Array<string>;
   cacheKeyCount: number;
-}
+};
 
 // ============================================================================
 // API RESPONSES
 // ============================================================================
 
 /** Get DNS config response */
-export interface GetDNSConfigResponse {
+export type GetDNSConfigResponse = {
   config: DNSCacheConfig;
   stats: {
     cacheSize: number;
@@ -112,17 +112,17 @@ export interface GetDNSConfigResponse {
     misses: number;
     hitRate: number;
   };
-}
+};
 
 /** Update DNS config request */
-export interface UpdateDNSConfigRequest {
+export type UpdateDNSConfigRequest = {
   enabled?: boolean;
   ttl?: number;
   maxEntries?: number;
-}
+};
 
 /** Update DNS config response */
-export interface UpdateDNSConfigResponse {
+export type UpdateDNSConfigResponse = {
   message: string;
   config: DNSCacheConfig;
   stats: {
@@ -131,24 +131,24 @@ export interface UpdateDNSConfigResponse {
     misses: number;
     hitRate: number;
   };
-}
+};
 
 /** Get DNS cache entries response */
-export interface GetDNSCacheEntriesResponse {
-  entries: DNSCacheEntry[];
+export type GetDNSCacheEntriesResponse = {
+  entries: Array<DNSCacheEntry>;
   total: number;
-}
+};
 
 /** Delete DNS cache entry response */
-export interface DeleteDNSCacheEntryResponse {
+export type DeleteDNSCacheEntryResponse = {
   message: string;
   key: string;
-}
+};
 
 // Note: ClearDNSCacheResponse is already defined in settings.ts
 
 /** Reset DNS stats response */
-export interface ResetDNSStatsResponse {
+export type ResetDNSStatsResponse = {
   message: string;
   stats: {
     cacheSize: number;
@@ -156,22 +156,22 @@ export interface ResetDNSStatsResponse {
     misses: number;
     hitRate: number;
   };
-}
+};
 
 /** Get all analysis DNS stats response */
-export interface GetAllAnalysisDNSStatsResponse {
+export type GetAllAnalysisDNSStatsResponse = {
   analysisStats: Record<string, AnalysisDNSStatsResponse>;
-}
+};
 
 /** Get single analysis DNS stats response */
-export interface GetAnalysisDNSStatsResponse {
+export type GetAnalysisDNSStatsResponse = {
   analysisId: string;
   stats: AnalysisDNSStatsResponse;
-}
+};
 
 /** Get analysis DNS cache entries response */
-export interface GetAnalysisDNSCacheEntriesResponse {
+export type GetAnalysisDNSCacheEntriesResponse = {
   analysisId: string;
-  entries: DNSCacheEntry[];
+  entries: Array<DNSCacheEntry>;
   total: number;
-}
+};

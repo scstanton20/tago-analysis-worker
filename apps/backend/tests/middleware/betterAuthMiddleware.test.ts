@@ -8,18 +8,18 @@ import {
   type MockResponse,
 } from '../utils/testHelpers.ts';
 
-// Define interface for auth session response
-interface AuthSession {
+// Define type for auth session response
+type AuthSession = {
   session: { id: string } | null;
   user: { id: string; role: string; requiresPasswordChange?: boolean } | null;
-}
+};
 
-// Define interface for team member permissions
-interface TeamMemberPermissions {
+// Define type for team member permissions
+type TeamMemberPermissions = {
   permissions: string | null;
   teamId?: string;
   userId?: string;
-}
+};
 
 // Mock the auth library
 const mockAuth = {
@@ -55,11 +55,11 @@ vi.mock('../../src/utils/authDatabase.ts', () => ({
 }));
 
 // Mock the analysisService - v5.0 uses getAnalysisById
-interface AnalysisInfo {
+type AnalysisInfo = {
   analysisId: string;
   analysisName?: string;
   teamId?: string;
-}
+};
 
 const mockAnalysisService = {
   getAllAnalyses: vi.fn() as Mock<() => AnalysisInfo[]>,
@@ -80,7 +80,7 @@ vi.mock('../../src/utils/logging/logger.ts', () => ({
 }));
 
 // Define middleware module type
-interface BetterAuthMiddlewareModule {
+type BetterAuthMiddlewareModule = {
   authMiddleware: (
     req: MockRequest,
     res: MockResponse,
@@ -112,7 +112,7 @@ interface BetterAuthMiddlewareModule {
   ) => Promise<void>;
   getUserTeamIds: (userId: string, permission: string) => string[];
   getUsersWithTeamAccess: (teamId: string, permission: string) => string[];
-}
+};
 
 describe('betterAuthMiddleware', () => {
   let middleware: BetterAuthMiddlewareModule;

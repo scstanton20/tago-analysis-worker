@@ -13,18 +13,18 @@ import { sseManager } from '../utils/sse/index.ts';
 import { broadcastTeamStructureUpdate } from '../utils/responseHelpers.ts';
 
 /** Express request with request-scoped logger */
-interface RequestWithLogger extends Request {
+type RequestWithLogger = Request & {
   log: Logger;
-}
+};
 
 // Extend shared types with backend-specific fields
-interface CreateTeamBody extends CreateTeamRequest {
-  order?: number;
-}
+type CreateTeamBody = CreateTeamRequest & {
+  readonly order?: number;
+};
 
-interface UpdateTeamBody extends UpdateTeamRequest {
-  order?: number;
-}
+type UpdateTeamBody = UpdateTeamRequest & {
+  readonly order?: number;
+};
 
 // Type aliases for request body types
 type MoveAnalysisBody = MoveAnalysisToTeamRequest;
@@ -35,9 +35,9 @@ type UpdateFolderBody = UpdateFolderRequest;
 type MoveItemBody = MoveItemRequest;
 
 /** Reorder teams request body (uses different field name than shared) */
-interface ReorderTeamsBody {
-  orderedIds: string[];
-}
+type ReorderTeamsBody = {
+  readonly orderedIds: ReadonlyArray<string>;
+};
 
 /**
  * Controller class for managing teams and team structure

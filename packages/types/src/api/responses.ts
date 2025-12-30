@@ -5,37 +5,39 @@
  */
 
 /** Standard success response */
-export interface ApiSuccessResponse<T = unknown> {
+export type ApiSuccessResponse<TData = unknown> = {
   success: true;
-  data: T;
+  data: TData;
   message?: string;
-}
+};
 
 /** Standard error response */
-export interface ApiErrorResponse {
+export type ApiErrorResponse = {
   success: false;
   error: string;
   code?: string;
   details?: Record<string, unknown>;
-}
+};
 
 /** Union of success/error responses */
-export type ApiResponse<T = unknown> = ApiSuccessResponse<T> | ApiErrorResponse;
+export type ApiResponse<TData = unknown> =
+  | ApiSuccessResponse<TData>
+  | ApiErrorResponse;
 
 /** Paginated response wrapper */
-export interface PaginatedResponse<T> {
-  items: T[];
+export type PaginatedResponse<TItem> = {
+  items: Array<TItem>;
   total: number;
   page: number;
   pageSize: number;
   hasMore: boolean;
-}
+};
 
 /** Batch operation result */
-export interface BatchOperationResult {
-  succeeded: string[];
+export type BatchOperationResult = {
+  succeeded: Array<string>;
   failed: Array<{
     id: string;
     error: string;
   }>;
-}
+};

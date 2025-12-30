@@ -24,16 +24,16 @@ import { sseManager } from '../utils/sse/index.ts';
 const logger = createChildLogger('user-controller');
 
 /** Express request with request-scoped logger */
-interface RequestWithLogger extends Request {
+type RequestWithLogger = Request & {
   log: Logger;
-}
+};
 
 /** Team membership result (backend-specific) */
-interface TeamMembership {
-  id: string;
-  name: string;
-  permissions: string[];
-}
+type TeamMembership = {
+  readonly id: string;
+  readonly name: string;
+  readonly permissions: ReadonlyArray<string>;
+};
 
 // Type aliases for request body types
 type AddToOrganizationBody = AddUserToOrganizationRequest;

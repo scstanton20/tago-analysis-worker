@@ -15,16 +15,20 @@
 
 import type { AnalysisProcessState, ConnectionStatus } from './types.ts';
 
+/** Extended AnalysisProcess type with logging method access */
+type AnalysisProcessWithLogging = AnalysisProcessState & {
+  addLog: (message: string) => Promise<void>;
+};
+
 export class ProcessMonitor {
-  private analysisProcess: AnalysisProcessState;
+  private analysisProcess: AnalysisProcessWithLogging;
 
   /**
    * Initialize process monitor
    * @param analysisProcess - Parent process reference
-   * @param _config - Application configuration (unused, reserved for future use)
    */
-  constructor(analysisProcess: AnalysisProcessState, _config: unknown) {
-    this.analysisProcess = analysisProcess;
+  constructor(analysisProcess: AnalysisProcessState) {
+    this.analysisProcess = analysisProcess as AnalysisProcessWithLogging;
   }
 
   /**
@@ -228,16 +232,11 @@ export class ProcessMonitor {
 
   /**
    * Log reconnection attempt
-   * Uses dynamic import to avoid circular dependencies
    * @private
    */
   private async logReconnectionAttempt(): Promise<void> {
-    // Access addLog from the parent through a method call
     const message = `SDK reconnecting (attempt ${this.analysisProcess.reconnectionAttempts})...`;
-    // We'll need to call this through the parent
-    await (
-      this.analysisProcess as unknown as { addLog(msg: string): Promise<void> }
-    ).addLog(message);
+    await this.analysisProcess.addLog(message);
   }
 
   /**
@@ -246,9 +245,7 @@ export class ProcessMonitor {
    */
   private async logOutput(isError: boolean, message: string): Promise<void> {
     const logMessage = isError ? `ERROR: ${message}` : message;
-    await (
-      this.analysisProcess as unknown as { addLog(msg: string): Promise<void> }
-    ).addLog(logMessage);
+    await this.analysisProcess.addLog(logMessage);
   }
 
   /**

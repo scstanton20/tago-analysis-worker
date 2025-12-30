@@ -11,9 +11,9 @@ import {
   convertSnakeCaseToCamelCaseArray,
 } from '../../src/utils/databaseHelpers.ts';
 
-interface TestInput {
+type TestInput = {
   [key: string]: unknown;
-}
+};
 
 describe('convertSQLiteBooleans', () => {
   describe('Basic functionality', () => {

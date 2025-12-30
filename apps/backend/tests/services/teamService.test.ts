@@ -54,7 +54,7 @@ vi.mock('../../src/lib/auth.ts', () => ({
   },
 }));
 
-interface MockAnalysisService {
+type MockAnalysisService = {
   getConfig: () => Promise<{
     version: string;
     analyses: Record<
@@ -67,9 +67,9 @@ interface MockAnalysisService {
     >;
   }>;
   updateConfig: (config: unknown) => Promise<void>;
-}
+};
 
-interface Team {
+type Team = {
   id: string;
   name: string;
   organizationId: string;
@@ -77,13 +77,13 @@ interface Team {
   orderIndex: number;
   isSystem: boolean;
   createdAt?: string;
-}
+};
 
 // Use shared types from @tago-analysis-worker/types
 type Folder = FolderStructureItem;
 type TreeItem = TeamStructureItem;
 
-interface TeamServiceType {
+type TeamServiceType = {
   initialized: boolean;
   analysisService: MockAnalysisService | null;
   organizationId: string | null;
@@ -153,7 +153,7 @@ interface TeamServiceType {
     teamId: string,
     analysisName: string,
   ) => Promise<void>;
-}
+};
 
 describe('TeamService', () => {
   let teamService: TeamServiceType;

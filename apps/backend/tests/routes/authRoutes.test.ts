@@ -19,11 +19,11 @@ import express, { type Express, type Router } from 'express';
 import request from 'supertest';
 import { setupTestAuth, cleanupTestAuth } from '../utils/authHelpers.ts';
 
-interface RouterLayer {
+type RouterLayer = {
   route?: {
     path: string;
   };
-}
+};
 
 describe('Auth Routes - Documentation Only', () => {
   let app: Express;

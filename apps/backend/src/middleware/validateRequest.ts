@@ -3,23 +3,23 @@ import type { Logger } from 'pino';
 import type { ZodType, ZodError, ZodIssue } from 'zod';
 
 /** Schema configuration for validation */
-interface ValidationSchema {
+type ValidationSchema = {
   body?: ZodType;
   query?: ZodType;
   params?: ZodType;
-}
+};
 
 /** Extended request with logger */
-interface RequestWithLogger extends Omit<Request, 'log'> {
+type RequestWithLogger = Omit<Request, 'log'> & {
   log?: Logger;
-}
+};
 
 /** Validation error detail */
-interface ValidationErrorDetail {
+type ValidationErrorDetail = {
   path: string;
   message: string;
   code: string;
-}
+};
 
 /**
  * Validation middleware factory

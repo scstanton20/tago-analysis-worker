@@ -15,19 +15,29 @@ import type {
 } from '../domain/user.js';
 
 /** Valid analysis statuses */
-const ANALYSIS_STATUSES: AnalysisStatus[] = ['stopped', 'running', 'error'];
+const ANALYSIS_STATUSES: ReadonlyArray<AnalysisStatus> = [
+  'stopped',
+  'running',
+  'error',
+];
 
 /** Valid log levels */
-const LOG_LEVELS: LogLevel[] = ['log', 'info', 'warn', 'error', 'debug'];
+const LOG_LEVELS: ReadonlyArray<LogLevel> = [
+  'log',
+  'info',
+  'warn',
+  'error',
+  'debug',
+];
 
 /** Valid user roles */
-const USER_ROLES: UserRole[] = ['admin', 'user'];
+const USER_ROLES: ReadonlyArray<UserRole> = ['admin', 'user'];
 
 /** Valid organization roles */
-const ORG_ROLES: OrganizationRole[] = ['owner', 'admin', 'member'];
+const ORG_ROLES: ReadonlyArray<OrganizationRole> = ['owner', 'admin', 'member'];
 
 /** Valid team permissions */
-const TEAM_PERMISSIONS: TeamPermission[] = [
+const TEAM_PERMISSIONS: ReadonlyArray<TeamPermission> = [
   'view_analyses',
   'run_analyses',
   'upload_analyses',
@@ -141,7 +151,7 @@ export function hasOrgAdminAccess(role: OrganizationRole): boolean {
 
 /** Check if permission array includes a specific permission */
 export function hasPermission(
-  permissions: TeamPermission[],
+  permissions: ReadonlyArray<TeamPermission>,
   permission: TeamPermission,
 ): boolean {
   return permissions.includes(permission);
@@ -149,16 +159,16 @@ export function hasPermission(
 
 /** Check if permission array includes any of the specified permissions */
 export function hasAnyPermission(
-  permissions: TeamPermission[],
-  required: TeamPermission[],
+  permissions: ReadonlyArray<TeamPermission>,
+  required: ReadonlyArray<TeamPermission>,
 ): boolean {
   return required.some((p) => permissions.includes(p));
 }
 
 /** Check if permission array includes all specified permissions */
 export function hasAllPermissions(
-  permissions: TeamPermission[],
-  required: TeamPermission[],
+  permissions: ReadonlyArray<TeamPermission>,
+  required: ReadonlyArray<TeamPermission>,
 ): boolean {
   return required.every((p) => permissions.includes(p));
 }

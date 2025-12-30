@@ -175,4 +175,4 @@ export const teamValidationSchemas = {
         .optional(),
     }),
   },
-};
+} as const;

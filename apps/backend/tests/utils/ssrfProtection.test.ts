@@ -8,23 +8,23 @@ vi.mock('../../src/utils/logging/logger.ts', () => ({
   })),
 }));
 
-interface ValidationResult {
+type ValidationResult = {
   allowed: boolean;
   reason?: string;
-}
+};
 
-interface FilteredValidationResult extends ValidationResult {
+type FilteredValidationResult = ValidationResult & {
   filteredAddresses?: string[];
-}
+};
 
-interface SSRFConfig {
+type SSRFConfig = {
   enabled: boolean;
   privateRanges: string[];
   blockedHostnames: string[];
   ipv6Patterns: string[];
-}
+};
 
-interface SSRFProtectionModule {
+type SSRFProtectionModule = {
   validateHostname: (hostname: string) => ValidationResult;
   validateResolvedAddress: (
     hostname: string,
@@ -36,7 +36,7 @@ interface SSRFProtectionModule {
     addresses: string[],
   ) => FilteredValidationResult;
   getSSRFConfig: () => SSRFConfig;
-}
+};
 
 describe('ssrfProtection', () => {
   let ssrfProtection: SSRFProtectionModule;

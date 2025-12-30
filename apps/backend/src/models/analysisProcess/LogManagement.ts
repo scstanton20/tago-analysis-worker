@@ -35,7 +35,12 @@ const LOG_SIZE_CHECK_INTERVAL = 100;
 // Number of recent log lines to preserve during automatic rotation (for context)
 const ROTATION_PRESERVE_LINES = 100;
 
-// Lazy-load SSE manager to avoid circular dependency
+/**
+ * Lazy-loaded SSE manager to avoid circular dependency.
+ *
+ * Direct import would create: LogManagement -> sse -> analysisService -> AnalysisProcess -> LogManagement
+ * This pattern defers loading until first use, breaking the cycle.
+ */
 let _sseManager: SSEManagerInterface | null = null;
 let _sseManagerPromise: Promise<SSEManagerInterface> | null = null;
 
@@ -51,6 +56,8 @@ async function getSseManager(): Promise<SSEManagerInterface> {
 
   _sseManagerPromise = (async () => {
     const { sseManager } = await import('../../utils/sse/index.ts');
+    // Type assertion required: dynamic import loses type info.
+    // The actual implementation matches SSEManagerInterface contract.
     _sseManager = sseManager as unknown as SSEManagerInterface;
     _sseManagerPromise = null;
     return _sseManager;
@@ -61,9 +68,25 @@ async function getSseManager(): Promise<SSEManagerInterface> {
 }
 
 /** Stats result from safeStat */
-interface FileStats {
-  size: number;
+type FileStats = {
+  readonly size: number;
+};
+
+/** Type guard for FileStats */
+function isFileStats(result: unknown): result is FileStats {
+  return (
+    typeof result === 'object' &&
+    result !== null &&
+    'size' in result &&
+    typeof (result as { size?: unknown }).size === 'number'
+  );
 }
+
+/** Parsed log entry from JSON */
+type ParsedLogEntry = {
+  readonly time?: string;
+  readonly msg?: string;
+};
 
 export class LogManager {
   private analysisProcess: AnalysisProcessState;
@@ -235,15 +258,19 @@ export class LogManager {
 
     // Verify actual file size before rotating
     try {
-      const stats = (await safeStat(
+      const result = await safeStat(
         this.analysisProcess.logFile,
         this.config.paths.analysis,
-      )) as FileStats;
+      );
+
+      if (!isFileStats(result)) {
+        return;
+      }
 
       // Update estimated size with actual size
-      this.estimatedFileSize = stats.size;
+      this.estimatedFileSize = result.size;
 
-      if (stats.size >= maxFileSize) {
+      if (result.size >= maxFileSize) {
         await this.rotateLogFile();
       }
     } catch (error) {
@@ -285,14 +312,19 @@ export class LogManager {
       });
 
       // Read last N lines before closing the stream (for context preservation)
-      let preservedLines: string[] = [];
-      let preservedLogs: LogEntry[] = [];
+      let preservedLines: Array<string> = [];
+      let preservedLogs: Array<LogEntry> = [];
       try {
-        const content = (await safeReadFile(
+        const content = await safeReadFile(
           this.analysisProcess.logFile,
           this.config.paths.analysis,
           { encoding: 'utf8' },
-        )) as string;
+        );
+
+        if (typeof content !== 'string') {
+          throw new Error('Failed to read log file as string');
+        }
+
         const allLines = content
           .trim()
           .split('\n')
@@ -305,10 +337,7 @@ export class LogManager {
         preservedLogs = preservedLines
           .map((line, index): LogEntry | null => {
             try {
-              const logEntry = JSON.parse(line) as {
-                time?: string;
-                msg?: string;
-              };
+              const logEntry = JSON.parse(line) as ParsedLogEntry;
               if (!logEntry.time || !logEntry.msg) {
                 return null;
               }
@@ -446,11 +475,15 @@ export class LogManager {
     this.estimatedFileSize = fileSize;
 
     try {
-      const content = (await safeReadFile(
+      const content = await safeReadFile(
         this.analysisProcess.logFile,
         this.config.paths.analysis,
         { encoding: 'utf8' },
-      )) as string;
+      );
+
+      if (typeof content !== 'string') {
+        throw new Error('Failed to read log file as string');
+      }
 
       const lines = content
         .trim()
@@ -465,10 +498,7 @@ export class LogManager {
       this.analysisProcess.logs = recentLines
         .map((line, index): LogEntry | null => {
           try {
-            const logEntry = JSON.parse(line) as {
-              time?: string;
-              msg?: string;
-            };
+            const logEntry = JSON.parse(line) as ParsedLogEntry;
 
             // Validate NDJSON format
             if (!logEntry.time || !logEntry.msg) {
@@ -563,17 +593,25 @@ export class LogManager {
     this.initializeFileLogger();
 
     try {
-      const stats = (await safeStat(
+      const result = await safeStat(
         this.analysisProcess.logFile,
         this.config.paths.analysis,
-      )) as FileStats;
+      );
+
+      if (!isFileStats(result)) {
+        // File doesn't exist or invalid stats, start fresh
+        this.analysisProcess.totalLogCount = 0;
+        this.analysisProcess.logSequence = 0;
+        this.analysisProcess.logs = [];
+        return;
+      }
 
       // Check if file is oversized
-      await this.handleOversizedLogFile(stats);
+      await this.handleOversizedLogFile(result);
 
       // For normal-sized files, load as usual
-      if (stats.size <= ANALYSIS_PROCESS.MAX_LOG_FILE_SIZE_BYTES) {
-        await this.loadExistingLogs(stats.size);
+      if (result.size <= ANALYSIS_PROCESS.MAX_LOG_FILE_SIZE_BYTES) {
+        await this.loadExistingLogs(result.size);
       }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {

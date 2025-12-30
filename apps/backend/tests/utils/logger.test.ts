@@ -3,11 +3,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // Unmock the logger for this test file since it's globally mocked in setup.js
 vi.unmock('../../src/utils/logging/logger.ts');
 
-interface LogParseResult {
+type LogParseResult = {
   message: string;
   time: string;
   date: Date;
-}
+};
 
 describe('logger', () => {
   let originalEnv: NodeJS.ProcessEnv;

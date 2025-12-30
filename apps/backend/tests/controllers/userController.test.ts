@@ -51,7 +51,7 @@ vi.mock('../../src/utils/responseHelpers.ts', () => ({
 }));
 
 // Type definitions for mocked services
-interface MockAuthApi {
+type MockAuthApi = {
   addMember: Mock;
   updateMemberRole: Mock;
   removeMember: Mock;
@@ -59,22 +59,22 @@ interface MockAuthApi {
   banUser: Mock;
   unbanUser: Mock;
   getUser: Mock;
-}
+};
 
-interface MockAuth {
+type MockAuth = {
   api: MockAuthApi;
   $context: Promise<{
     password: { hash: Mock };
     internalAdapter: { updatePassword: Mock };
   }>;
-}
+};
 
-interface MockSSEManager {
+type MockSSEManager = {
   sendToUser: Mock;
   refreshInitDataForUser: Mock;
   broadcastToAdminUsers: Mock;
   forceUserLogout: Mock;
-}
+};
 
 // Import after mocks
 const { auth } = (await import('../../src/lib/auth.ts')) as unknown as {

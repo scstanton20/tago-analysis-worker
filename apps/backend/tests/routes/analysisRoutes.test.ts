@@ -77,11 +77,11 @@ const TEST_ANALYSIS_IDS = {
   team2Analysis: 'aaaaaaaa-2222-4000-8000-000000000002',
 };
 
-interface AnalysisMetadata {
+type AnalysisMetadata = {
   analysisId: string;
   analysisName: string;
   teamId?: string;
-}
+};
 
 // Mock analysis service (we're testing routes, not service logic)
 const mockAnalysisService = {
@@ -163,7 +163,7 @@ vi.mock('../../src/controllers/analysisController.ts', () => ({
   AnalysisController: AnalysisController,
 }));
 
-interface RequestWithLog {
+type RequestWithLog = {
   log: {
     info: Mock;
     error: Mock;
@@ -171,7 +171,7 @@ interface RequestWithLog {
     debug: Mock;
     child: Mock;
   };
-}
+};
 
 // Logging middleware mock - provides req.log
 const attachRequestLogger = (

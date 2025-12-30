@@ -87,4 +87,4 @@ export const settingsValidationSchemas = {
         .optional(),
     }),
   },
-};
+} as const;

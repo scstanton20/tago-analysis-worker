@@ -31,7 +31,7 @@ import {
 const moduleLogger = createChildLogger('team-service');
 
 /** Internal type for team data from better-auth API */
-interface BetterAuthTeamData {
+type BetterAuthTeamData = {
   id: string;
   name: string;
   organizationId: string;
@@ -39,10 +39,10 @@ interface BetterAuthTeamData {
   color?: string;
   order_index?: number;
   is_system?: boolean | number;
-}
+};
 
 /** Team data as stored in SQLite (with snake_case and numeric booleans) */
-interface TeamRow {
+type TeamRow = {
   id: string;
   name: string;
   organizationId: string;
@@ -50,89 +50,89 @@ interface TeamRow {
   color: string;
   orderIndex: number;
   isSystem: number | boolean;
-}
+};
 
 /** Team creation input */
-interface CreateTeamInput {
+type CreateTeamInput = {
   name: string;
   color?: string;
   order?: number;
   isSystem?: boolean;
-}
+};
 
 /** Team update input */
-interface TeamUpdateInput {
+type TeamUpdateInput = {
   name?: string;
   color?: string;
   order?: number;
-}
+};
 
-/** Analysis service interface (for lazy loading) */
-interface AnalysisServiceInterface {
+/** Analysis service type (for lazy loading) */
+type AnalysisServiceInterface = {
   getConfig(): Promise<ConfigData>;
   updateConfig(config: ConfigData): Promise<void>;
-}
+};
 
 /** Config data structure */
-interface ConfigData {
+type ConfigData = {
   analyses?: Record<string, AnalysisConfig>;
   teamStructure?: Record<string, TeamStructure>;
-}
+};
 
 /** Analysis config in the config file */
-interface AnalysisConfig {
+type AnalysisConfig = {
   name: string;
   teamId?: string | null;
   lastModified?: string;
   [key: string]: unknown;
-}
+};
 
 /** New item to add to team structure */
-export interface NewStructureItem {
+export type NewStructureItem = {
   id: string;
   type: 'analysis' | 'folder';
   name?: string;
   items?: TeamStructureItem[];
-}
+};
 
 /** Folder update input */
-interface FolderUpdateInput {
+type FolderUpdateInput = {
   name?: string;
   expanded?: boolean;
-}
+};
 
 /** Result of finding an item with its parent */
-interface FindItemResult {
+type FindItemResult = {
   parent: FolderStructureItem | null;
   item: TeamStructureItem | null;
   index: number;
-}
+};
 
 /** Move analysis result */
-interface MoveAnalysisResult {
+type MoveAnalysisResult = {
   analysisId: string;
   analysisName: string;
   from: string | null | undefined;
   to: string;
-}
+};
 
 /** Delete team result */
-interface DeleteTeamResult {
+type DeleteTeamResult = {
   deleted: string;
   name: string;
-}
+};
 
 /** Delete folder result */
-interface DeleteFolderResult {
+type DeleteFolderResult = {
   deleted: string;
   childrenMoved: number;
-}
+};
 
 /** Move item result */
-interface MoveItemResult {
+type MoveItemResult = {
   moved: string;
   to: string;
-}
+};
 
 class TeamService {
   private analysisService: AnalysisServiceInterface | null;

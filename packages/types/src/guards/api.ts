@@ -59,10 +59,15 @@ export function unwrapApiResponse<T>(response: ApiResponse<T>): T {
   throw new Error(response.error);
 }
 
+/** Safe unwrap result type */
+export type SafeUnwrapResult<TData> =
+  | { data: TData; error: null }
+  | { data: null; error: string };
+
 /** Safely extract data from API response */
-export function safeUnwrapApiResponse<T>(
-  response: ApiResponse<T>,
-): { data: T; error: null } | { data: null; error: string } {
+export function safeUnwrapApiResponse<TData>(
+  response: ApiResponse<TData>,
+): SafeUnwrapResult<TData> {
   if (isApiSuccess(response)) {
     return { data: response.data, error: null };
   }

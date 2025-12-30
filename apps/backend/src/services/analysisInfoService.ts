@@ -45,11 +45,11 @@ const DEFAULT_NOTES_TEMPLATE = `# Analysis Notes
 `;
 
 /** Internal type for version metadata file */
-interface VersionsData {
+type VersionsData = {
   versions: Array<{ timestamp: string }>;
   currentVersion: number;
   nextVersionNumber: number;
-}
+};
 
 class AnalysisInfoService {
   private notesFilename: string;

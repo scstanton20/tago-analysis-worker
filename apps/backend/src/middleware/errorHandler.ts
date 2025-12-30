@@ -7,15 +7,15 @@ import type {
 import type { Logger } from 'pino';
 
 /** Extended request with logger */
-interface RequestWithLogger extends Omit<Request, 'log'> {
+type RequestWithLogger = Omit<Request, 'log'> & {
   log?: Logger;
-}
+};
 
 /** Error with additional properties */
-interface AppError extends Error {
+type AppError = Error & {
   statusCode?: number;
   code?: string;
-}
+};
 
 const errorHandler: ErrorRequestHandler = (
   err: AppError,

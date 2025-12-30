@@ -6,13 +6,13 @@ import {
 } from '../utils/testHelpers.ts';
 import type { Team } from '@tago-analysis-worker/types';
 
-// Local Folder interface for tests (not exported from types package)
-interface Folder {
+// Local Folder type for tests (not exported from types package)
+type Folder = {
   id: string;
   name: string;
   parentId: string | null;
   collapsed: boolean;
-}
+};
 
 // Mock dependencies before importing the controller
 vi.mock('../../src/services/teamService.ts', () => ({
@@ -47,7 +47,7 @@ vi.mock('../../src/utils/responseHelpers.ts', () => ({
 }));
 
 // Type definitions for mocked services
-interface MockTeamService {
+type MockTeamService = {
   getAllTeams: Mock;
   createTeam: Mock;
   updateTeam: Mock;
@@ -59,13 +59,13 @@ interface MockTeamService {
   updateFolder: Mock;
   deleteFolder: Mock;
   moveItem: Mock;
-}
+};
 
-interface MockSSEManager {
+type MockSSEManager = {
   broadcastToAdminUsers: Mock;
   broadcastAnalysisMove: Mock;
   broadcastToTeamUsers: Mock;
-}
+};
 
 // Import after mocks
 const { teamService } = (await import(

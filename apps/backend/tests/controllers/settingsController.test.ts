@@ -38,7 +38,7 @@ vi.mock('../../src/utils/responseHelpers.ts', () => ({
 }));
 
 // Type definitions for mocked services
-interface MockDNSCache {
+type MockDNSCache = {
   getConfig: Mock;
   getStats: Mock;
   updateConfig: Mock;
@@ -49,11 +49,11 @@ interface MockDNSCache {
     delete: Mock;
   };
   resetStats: Mock;
-}
+};
 
-interface MockSSEManager {
+type MockSSEManager = {
   broadcastToAdminUsers: Mock;
-}
+};
 
 // Import after mocks
 const { dnsCache } = (await import(

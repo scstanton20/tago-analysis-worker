@@ -16,14 +16,14 @@ vi.mock('../../src/docs/utilsSwagger.ts', async (importOriginal) => {
 });
 
 // Type for OpenAPI specification
-interface OpenAPISpec {
+type OpenAPISpec = {
   openapi: string;
   info?: {
     title: string;
     version: string;
   };
   paths?: Record<string, unknown>;
-}
+};
 
 // Import after mocks - use real implementations for packages/utilities
 const { getUtilsSpecs, getAvailablePackages, getAvailableUtilities } =

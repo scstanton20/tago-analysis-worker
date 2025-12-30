@@ -5,39 +5,39 @@
  */
 
 /** Subscribe to analysis log channels */
-export interface SubscribeRequest {
+export type SubscribeRequest = {
   sessionId: string;
-  analyses: string[];
-}
+  analyses: Array<string>;
+};
 
 /** Unsubscribe from analysis log channels */
-export interface UnsubscribeRequest {
+export type UnsubscribeRequest = {
   sessionId: string;
-  analyses: string[];
-}
+  analyses: Array<string>;
+};
 
 /** Channel subscription result */
-export interface SubscriptionResult {
+export type SubscriptionResult = {
   success: boolean;
-  subscribed: string[];
-  denied?: string[];
+  subscribed: Array<string>;
+  denied?: Array<string>;
   sessionId: string;
   error?: string;
-}
+};
 
 /** Channel unsubscription result */
-export interface UnsubscriptionResult {
+export type UnsubscriptionResult = {
   success: boolean;
-  unsubscribed: string[];
+  unsubscribed: Array<string>;
   sessionId: string;
-}
+};
 
 /** SSE connection statistics */
-export interface ConnectionStats {
+export type ConnectionStats = {
   totalConnections: number;
   activeSubscriptions: number;
   channelCounts: Record<string, number>;
-}
+};
 
 /** SSE connection status */
 export type ConnectionStatus =

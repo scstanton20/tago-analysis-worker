@@ -9,122 +9,122 @@ import type {
   AnalysisConfig,
   AnalysisVersion,
 } from '../domain/analysis.js';
-import type { LogEntry, LogTimeRange, LogsResponse } from '../domain/log.js';
+import type { LogsResponse } from '../domain/log.js';
 
 // ============================================================================
 // ANALYSIS CRUD
 // ============================================================================
 
 /** Create analysis request */
-export interface CreateAnalysisRequest {
+export type CreateAnalysisRequest = {
   name: string;
   teamId: string;
   folderId?: string | null;
   file: File | Blob;
-}
+};
 
 /** Create analysis response */
-export interface CreateAnalysisResponse {
+export type CreateAnalysisResponse = {
   analysis: Analysis;
   message: string;
-}
+};
 
 /** Update analysis request */
-export interface UpdateAnalysisRequest {
+export type UpdateAnalysisRequest = {
   name?: string;
   folderId?: string | null;
-}
+};
 
 /** Update analysis response */
-export interface UpdateAnalysisResponse {
+export type UpdateAnalysisResponse = {
   analysis: Analysis;
-}
+};
 
 /** Delete analysis response */
-export interface DeleteAnalysisResponse {
+export type DeleteAnalysisResponse = {
   message: string;
   analysisId: string;
-}
+};
 
 // ============================================================================
 // ANALYSIS OPERATIONS
 // ============================================================================
 
 /** Start analysis response */
-export interface StartAnalysisResponse {
+export type StartAnalysisResponse = {
   message: string;
   analysisId: string;
   status: 'running';
-}
+};
 
 /** Stop analysis response */
-export interface StopAnalysisResponse {
+export type StopAnalysisResponse = {
   message: string;
   analysisId: string;
   status: 'stopped';
-}
+};
 
 /** Restart analysis response */
-export interface RestartAnalysisResponse {
+export type RestartAnalysisResponse = {
   message: string;
   analysisId: string;
   status: 'running';
-}
+};
 
 /** Trigger analysis request */
-export interface TriggerAnalysisRequest {
+export type TriggerAnalysisRequest = {
   data?: Record<string, unknown>;
-}
+};
 
 /** Trigger analysis response */
-export interface TriggerAnalysisResponse {
+export type TriggerAnalysisResponse = {
   message: string;
   analysisId: string;
   triggered: boolean;
-}
+};
 
 // ============================================================================
 // ANALYSIS CONFIG
 // ============================================================================
 
 /** Get config response */
-export interface GetConfigResponse {
+export type GetConfigResponse = {
   config: AnalysisConfig;
-}
+};
 
 /** Update config request */
-export interface UpdateConfigRequest {
+export type UpdateConfigRequest = {
   config: Partial<AnalysisConfig>;
-}
+};
 
 /** Update config response */
-export interface UpdateConfigResponse {
+export type UpdateConfigResponse = {
   config: AnalysisConfig;
   restarted: boolean;
-}
+};
 
 // ============================================================================
 // ANALYSIS LOGS
 // ============================================================================
 
 /** Get logs request query params */
-export interface GetLogsQuery {
+export type GetLogsQuery = {
   limit?: number;
   before?: number;
   after?: number;
   level?: string;
   search?: string;
-}
+};
 
 /** Get logs response */
-export interface GetLogsResponse extends LogsResponse {}
+export type GetLogsResponse = LogsResponse;
 
 /** Clear logs response */
-export interface ClearLogsResponse {
+export type ClearLogsResponse = {
   message: string;
   analysisId: string;
   cleared: number;
-}
+};
 
 /** Download logs response is a file stream */
 export type DownloadLogsResponse = Blob;
@@ -134,131 +134,131 @@ export type DownloadLogsResponse = Blob;
 // ============================================================================
 
 /** List versions response */
-export interface ListVersionsResponse {
-  versions: AnalysisVersion[];
+export type ListVersionsResponse = {
+  versions: Array<AnalysisVersion>;
   current: number;
-}
+};
 
 /** Rollback version request */
-export interface RollbackVersionRequest {
+export type RollbackVersionRequest = {
   version: number;
   restart?: boolean;
-}
+};
 
 /** Rollback version response */
-export interface RollbackVersionResponse {
+export type RollbackVersionResponse = {
   message: string;
   version: number;
   restarted: boolean;
-}
+};
 
 /** Delete version response */
-export interface DeleteVersionResponse {
+export type DeleteVersionResponse = {
   message: string;
   version: number;
-}
+};
 
 // ============================================================================
 // ANALYSIS MOVEMENT
 // ============================================================================
 
 /** Move analysis request */
-export interface MoveAnalysisRequest {
+export type MoveAnalysisRequest = {
   teamId: string;
   folderId?: string | null;
-}
+};
 
 /** Move analysis response */
-export interface MoveAnalysisResponse {
+export type MoveAnalysisResponse = {
   message: string;
   analysis: Analysis;
-}
+};
 
 /** Reorder analyses request */
-export interface ReorderAnalysesRequest {
+export type ReorderAnalysesRequest = {
   teamId: string;
   folderId?: string | null;
-  order: string[];
-}
+  order: Array<string>;
+};
 
 /** Reorder analyses response */
-export interface ReorderAnalysesResponse {
+export type ReorderAnalysesResponse = {
   message: string;
-}
+};
 
 // ============================================================================
 // BATCH OPERATIONS
 // ============================================================================
 
 /** Batch start request */
-export interface BatchStartRequest {
-  analysisIds: string[];
-}
+export type BatchStartRequest = {
+  analysisIds: Array<string>;
+};
 
 /** Batch stop request */
-export interface BatchStopRequest {
-  analysisIds: string[];
-}
+export type BatchStopRequest = {
+  analysisIds: Array<string>;
+};
 
 /** Batch restart request */
-export interface BatchRestartRequest {
-  analysisIds: string[];
-}
+export type BatchRestartRequest = {
+  analysisIds: Array<string>;
+};
 
 /** Batch operation response */
-export interface BatchOperationResponse {
-  succeeded: string[];
+export type BatchOperationResponse = {
+  succeeded: Array<string>;
   failed: Array<{
     id: string;
     error: string;
   }>;
-}
+};
 
 // ============================================================================
 // ANALYSIS INFO (Detailed Metadata)
 // ============================================================================
 
 /** File statistics for analysis code */
-export interface AnalysisFileStats {
+export type AnalysisFileStats = {
   size: number;
   sizeFormatted: string;
   lineCount: number;
   created: string | null;
   modified: string | null;
-}
+};
 
 /** Environment file statistics */
-export interface AnalysisEnvironmentStats {
+export type AnalysisEnvironmentStats = {
   size: number;
   sizeFormatted: string;
   lineCount: number;
   variableCount: number;
-}
+};
 
 /** Log file statistics */
-export interface AnalysisLogStats {
+export type AnalysisLogStats = {
   size: number;
   sizeFormatted: string;
   totalCount: number;
-}
+};
 
 /** Version history statistics */
-export interface AnalysisVersionStats {
+export type AnalysisVersionStats = {
   count: number;
   currentVersion: number;
   nextVersion: number;
   firstVersionDate: string | null;
   lastVersionDate: string | null;
-}
+};
 
 /** Team info for analysis */
-export interface AnalysisTeamInfo {
+export type AnalysisTeamInfo = {
   id: string | null;
   name: string;
-}
+};
 
 /** Process runtime state */
-export interface AnalysisProcessState {
+export type AnalysisProcessState = {
   status: string;
   enabled: boolean;
   intendedState: string;
@@ -266,32 +266,32 @@ export interface AnalysisProcessState {
   restartAttempts: number;
   isConnected: boolean;
   reconnectionAttempts: number;
-}
+};
 
 /** Process resource metrics */
-export interface AnalysisProcessMetrics {
+export type AnalysisProcessMetrics = {
   cpu: number;
   memory: number;
   uptime: number;
-}
+};
 
 /** DNS cache usage statistics */
-export interface AnalysisDnsUsage {
+export type AnalysisDnsUsage = {
   enabled: boolean;
   cacheSize: number;
   hits: number;
   misses: number;
   hitRate: string | number;
-}
+};
 
 /** Notes file info */
-export interface AnalysisNotesInfo {
+export type AnalysisNotesInfo = {
   exists: boolean;
   path: string;
-}
+};
 
 /** Comprehensive analysis metadata response */
-export interface AnalysisInfoResponse {
+export type AnalysisInfoResponse = {
   analysisId: string;
   analysisName: string;
   file: AnalysisFileStats;
@@ -303,10 +303,10 @@ export interface AnalysisInfoResponse {
   metrics: AnalysisProcessMetrics | null;
   dns: AnalysisDnsUsage;
   notes: AnalysisNotesInfo;
-}
+};
 
 /** Analysis notes content response */
-export interface AnalysisNotesResponse {
+export type AnalysisNotesResponse = {
   analysisId: string;
   analysisName: string;
   content: string;
@@ -315,15 +315,15 @@ export interface AnalysisNotesResponse {
   size: number;
   sizeFormatted: string;
   lastModified: string | null;
-}
+};
 
 /** Update notes request */
-export interface UpdateAnalysisNotesRequest {
+export type UpdateAnalysisNotesRequest = {
   content: string;
-}
+};
 
 /** Update notes response */
-export interface UpdateAnalysisNotesResponse {
+export type UpdateAnalysisNotesResponse = {
   success: boolean;
   analysisId: string;
   analysisName: string;
@@ -331,75 +331,75 @@ export interface UpdateAnalysisNotesResponse {
   size: number;
   sizeFormatted: string;
   lastModified: string | null;
-}
+};
 
 // ============================================================================
 // ANALYSIS RENAME
 // ============================================================================
 
 /** Rename analysis request */
-export interface RenameAnalysisRequest {
+export type RenameAnalysisRequest = {
   newName: string;
-}
+};
 
 /** Rename analysis response */
-export interface RenameAnalysisResponse {
+export type RenameAnalysisResponse = {
   success: boolean;
   message: string;
   analysis: Analysis;
   oldName: string;
   newName: string;
   restarted: boolean;
-}
+};
 
 // ============================================================================
 // ANALYSIS ENVIRONMENT
 // ============================================================================
 
 /** Update environment variables request */
-export interface UpdateEnvironmentRequest {
+export type UpdateEnvironmentRequest = {
   env: Record<string, string>;
-}
+};
 
 /** Update environment variables response */
-export interface UpdateEnvironmentResponse {
+export type UpdateEnvironmentResponse = {
   success: boolean;
   message: string;
   restarted: boolean;
-}
+};
 
 // ============================================================================
 // ANALYSIS LISTING
 // ============================================================================
 
 /** Get analyses query params */
-export interface GetAnalysesQuery {
+export type GetAnalysesQuery = {
   search?: string;
   teamId?: string;
   status?: string;
   page?: number;
   limit?: number;
-}
+};
 
 /** Paginated analyses response */
-export interface PaginatedAnalysesResponse {
-  analyses: Analysis[];
+export type PaginatedAnalysesResponse = {
+  analyses: Array<Analysis>;
   page: number;
   limit: number;
   totalCount: number;
   totalPages: number;
   hasMore: boolean;
-}
+};
 
 // ============================================================================
 // SYSTEM VERIFICATION
 // ============================================================================
 
 /** Verify intended state result (startup/recovery) */
-export interface VerifyIntendedStateResult {
+export type VerifyIntendedStateResult = {
   succeeded: number;
   failed: number;
-  errors: string[];
-  startedAnalyses: string[];
-  failedAnalyses: string[];
-}
+  errors: Array<string>;
+  startedAnalyses: Array<string>;
+  failedAnalyses: Array<string>;
+};

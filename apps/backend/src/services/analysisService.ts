@@ -27,11 +27,11 @@ import { LOG_TIME_RANGE_VALUES } from '../validation/analysisSchemas.ts';
 import { AnalysisProcess } from '../models/analysisProcess/index.ts';
 import { teamService, type NewStructureItem } from './teamService.ts';
 
-/** Simple interface for uploaded file (from express-fileupload) */
-interface UploadedFile {
-  name: string;
-  mv(path: string): Promise<void>;
-}
+/** Simple type for uploaded file (from express-fileupload) */
+type UploadedFile = {
+  readonly name: string;
+  mv: (path: string) => Promise<void>;
+};
 import { createChildLogger, parseLogLine } from '../utils/logging/logger.ts';
 import { collectChildProcessMetrics } from '../utils/metrics-enhanced.ts';
 import { FILE_SIZE, ANALYSIS_SERVICE } from '../constants.ts';
@@ -48,176 +48,176 @@ const moduleLogger = createChildLogger('analysis-service');
 // ============================================================================
 
 /** Config entry for a single analysis */
-interface AnalysisConfigEntry {
+type AnalysisConfigEntry = {
   id: string;
   name: string;
   enabled: boolean;
   intendedState: AnalysisIntendedState;
   lastStartTime: string | null;
   teamId: string | null;
-}
+};
 
 /** Full configuration structure */
-interface AnalysesConfig {
+type AnalysesConfig = {
   version: string;
   analyses: Record<string, AnalysisConfigEntry>;
   teamStructure: Record<string, TeamStructureEntry>;
-}
+};
 
 /** Team structure entry in config */
-interface TeamStructureEntry {
-  items: NewStructureItem[];
-}
+type TeamStructureEntry = {
+  items: Array<NewStructureItem>;
+};
 
 /** Options for getAllAnalyses */
-interface GetAllAnalysesOptions {
-  allowedTeamIds?: string[] | null;
-  search?: string;
-  status?: AnalysisStatus | null;
-  teamId?: string | null;
-  page?: number | null;
-  limit?: number | null;
-}
+type GetAllAnalysesOptions = {
+  readonly allowedTeamIds?: ReadonlyArray<string> | null;
+  readonly search?: string;
+  readonly status?: AnalysisStatus | null;
+  readonly teamId?: string | null;
+  readonly page?: number | null;
+  readonly limit?: number | null;
+};
 
 /** Paginated analyses response */
-interface PaginatedAnalysesResponse {
-  analyses: AnalysesMap;
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-    hasMore: boolean;
+type PaginatedAnalysesResponse = {
+  readonly analyses: AnalysesMap;
+  readonly pagination: {
+    readonly page: number;
+    readonly limit: number;
+    readonly total: number;
+    readonly totalPages: number;
+    readonly hasMore: boolean;
   };
-}
+};
 
 /** Upload result */
-interface UploadResult {
-  analysisId: string;
-  analysisName: string;
-}
+type UploadResult = {
+  readonly analysisId: string;
+  readonly analysisName: string;
+};
 
 /** Rename result */
-interface RenameResult {
-  success: boolean;
-  restarted: boolean;
-  oldName: string;
-  newName: string;
-}
+type RenameResult = {
+  readonly success: boolean;
+  readonly restarted: boolean;
+  readonly oldName: string;
+  readonly newName: string;
+};
 
 /** Logs response */
-interface LogsResult {
-  logs: LogEntry[];
-  hasMore: boolean;
-  totalCount: number;
-  source: string;
-}
+type LogsResult = {
+  logs: Array<LogEntry>;
+  readonly hasMore: boolean;
+  readonly totalCount: number;
+  readonly source: string;
+};
 
 /** Log entry structure */
-interface LogEntry {
-  sequence: number;
-  timestamp: string;
-  message: string;
-  createdAt?: number;
-}
+type LogEntry = {
+  readonly sequence: number;
+  readonly timestamp: string;
+  readonly message: string;
+  readonly createdAt?: number;
+};
 
 /** Initial logs response */
-interface InitialLogsResult {
-  logs: LogEntry[];
-  totalCount: number;
-}
+type InitialLogsResult = {
+  logs: Array<LogEntry>;
+  readonly totalCount: number;
+};
 
 /** Clear logs result */
-interface ClearLogsResult {
-  success: boolean;
-  message: string;
-}
+type ClearLogsResult = {
+  readonly success: boolean;
+  readonly message: string;
+};
 
 /** Run analysis result */
-interface RunAnalysisResult {
-  success: boolean;
-  status: AnalysisStatus;
-  logs: LogEntry[];
-  alreadyRunning?: boolean;
-}
+type RunAnalysisResult = {
+  readonly success: boolean;
+  readonly status: AnalysisStatus;
+  logs: Array<LogEntry>;
+  readonly alreadyRunning?: boolean;
+};
 
 /** Stop analysis result */
-interface StopAnalysisResult {
-  success: boolean;
-}
+type StopAnalysisResult = {
+  readonly success: boolean;
+};
 
 /** Delete analysis result */
-interface DeleteAnalysisResult {
-  message: string;
-}
+type DeleteAnalysisResult = {
+  readonly message: string;
+};
 
 /** Update analysis options */
-interface UpdateAnalysisOptions {
+type UpdateAnalysisOptions = {
   content?: string;
   teamId?: string;
   [key: string]: unknown;
-}
+};
 
 /** Update analysis result */
-interface UpdateAnalysisResult {
-  success: boolean;
-  restarted: boolean;
-  savedVersion: number | null;
-}
+type UpdateAnalysisResult = {
+  readonly success: boolean;
+  readonly restarted: boolean;
+  readonly savedVersion: number | null;
+};
 
 /** Rollback result */
-interface RollbackResult {
-  success: boolean;
-  restarted: boolean;
-  version: number;
-}
+type RollbackResult = {
+  readonly success: boolean;
+  readonly restarted: boolean;
+  readonly version: number;
+};
 
 /** Version metadata file structure */
-interface VersionMetadata {
-  versions: AnalysisVersion[];
+type VersionMetadata = {
+  versions: Array<AnalysisVersion>;
   nextVersionNumber: number;
   currentVersion: number;
-}
+};
 
 /** Download logs result */
-interface DownloadLogsResult {
-  logFile: string;
-  content: string;
-}
+type DownloadLogsResult = {
+  readonly logFile: string;
+  readonly content: string;
+};
 
 /** Environment variables map */
 type EnvironmentVariables = Record<string, string>;
 
 /** Update environment result */
-interface UpdateEnvironmentResult {
-  success: boolean;
-  restarted: boolean;
-}
+type UpdateEnvironmentResult = {
+  readonly success: boolean;
+  readonly restarted: boolean;
+};
 
-/** Verify intended state result */
-interface VerifyIntendedStateResult {
+/** Verify intended state result - arrays are mutable during construction */
+type VerifyIntendedStateResult = {
   shouldBeRunning: number;
-  attempted: string[];
-  succeeded: string[];
+  attempted: Array<string>;
+  succeeded: Array<string>;
   failed: Array<{ analysisId: string; error: string }>;
-  alreadyRunning: string[];
-  connected: string[];
-  connectionTimeouts: string[];
-}
+  alreadyRunning: Array<string>;
+  connected: Array<string>;
+  connectionTimeouts: Array<string>;
+};
 
 /** Analysis to start entry */
-interface AnalysisToStart {
-  analysisId: string;
-  analysis: AnalysisProcess;
-}
+type AnalysisToStart = {
+  readonly analysisId: string;
+  readonly analysis: AnalysisProcess;
+};
 
 /** Start analysis result */
-interface StartAnalysisWithLoggingResult {
-  analysisId: string;
-  analysis: AnalysisProcess;
-  started: boolean;
-  error?: Error;
-}
+type StartAnalysisWithLoggingResult = {
+  readonly analysisId: string;
+  readonly analysis: AnalysisProcess;
+  readonly started: boolean;
+  readonly error?: Error;
+};
 
 // ============================================================================
 // UTILITY FUNCTIONS
@@ -274,8 +274,10 @@ class AnalysisService {
     return this.analyses;
   }
 
-  validateTimeRange(timeRange: string): boolean {
-    return LOG_TIME_RANGE_VALUES.includes(timeRange);
+  validateTimeRange(
+    timeRange: string,
+  ): timeRange is (typeof LOG_TIME_RANGE_VALUES)[number] {
+    return (LOG_TIME_RANGE_VALUES as readonly string[]).includes(timeRange);
   }
 
   async getConfig(): Promise<AnalysesConfig> {
@@ -760,7 +762,7 @@ class AnalysisService {
 
     const result = analysis.getMemoryLogs(1, limit);
     return {
-      logs: result.logs,
+      logs: [...result.logs],
       totalCount: result.totalCount,
     };
   }
@@ -936,7 +938,7 @@ class AnalysisService {
       const memoryResult = analysis.getMemoryLogs(page, limit);
       if (memoryResult.logs.length > 0) {
         return {
-          logs: memoryResult.logs,
+          logs: [...memoryResult.logs],
           hasMore: memoryResult.totalCount > limit,
           totalCount: memoryResult.totalCount,
           source: 'memory',
@@ -1617,7 +1619,7 @@ class AnalysisService {
                   'metadata.json',
                 );
                 const updatedMetadata: VersionMetadata = {
-                  versions: metadata.versions,
+                  versions: [...metadata.versions],
                   nextVersionNumber: metadata.nextVersionNumber,
                   currentVersion: version.version,
                 };

@@ -52,12 +52,12 @@ vi.mock('../../src/utils/logging/logger.ts', () => ({
   })),
 }));
 
-interface AnalysisProcess {
+type AnalysisProcess = {
   status: string;
   process?: { pid: number };
-}
+};
 
-interface MetricsModule {
+type MetricsModule = {
   metricsMiddleware: (req: unknown, res: { on: Mock }, next: Mock) => void;
   collectChildProcessMetrics: (
     processes: Map<string, AnalysisProcess>,
@@ -81,7 +81,7 @@ interface MetricsModule {
   analysisDNSCacheHits: unknown;
   analysisDNSCacheMisses: unknown;
   sseConnections: unknown;
-}
+};
 
 describe('metrics-enhanced', () => {
   let metrics: MetricsModule;

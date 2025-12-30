@@ -31,7 +31,7 @@ import {
   getSessionCookie,
 } from '../utils/authHelpers.ts';
 
-interface SettingsControllerType {
+type SettingsControllerType = {
   getDNSConfig: Mock;
   updateDNSConfig: Mock;
   getDNSCacheEntries: Mock;
@@ -41,7 +41,7 @@ interface SettingsControllerType {
   getAllAnalysisDNSStats: Mock;
   getAnalysisDNSStats: Mock;
   getAnalysisDNSCacheEntries: Mock;
-}
+};
 
 // Mock only external dependencies - NO AUTH MOCKS!
 vi.mock('../../src/middleware/rateLimiter.ts', () => ({
@@ -153,7 +153,7 @@ vi.mock('../../src/utils/asyncHandler.ts', () => ({
   asyncHandler: <T extends (...args: unknown[]) => unknown>(fn: T) => fn,
 }));
 
-interface RequestWithLog {
+type RequestWithLog = {
   log: {
     info: Mock;
     error: Mock;
@@ -161,7 +161,7 @@ interface RequestWithLog {
     debug: Mock;
     child: Mock;
   };
-}
+};
 
 // Logging middleware mock - provides req.log
 const attachRequestLogger = (

@@ -107,7 +107,7 @@ vi.mock('../../src/middleware/betterAuthMiddleware.ts', () => ({
 }));
 
 // Type definitions for mocked services
-interface MockAnalysisService {
+type MockAnalysisService = {
   uploadAnalysis: Mock;
   getAllAnalyses: Mock;
   getAnalysisById: Mock;
@@ -127,12 +127,12 @@ interface MockAnalysisService {
   updateEnvironment: Mock;
   getEnvironment: Mock;
   getConfig: Mock;
-}
+};
 
-interface MockSSEManager {
+type MockSSEManager = {
   broadcastAnalysisUpdate: Mock;
   broadcastToTeamUsers: Mock;
-}
+};
 
 // Import after mocks
 const { analysisService } = (await import(

@@ -9,14 +9,14 @@
 // ============================================================================
 
 /** Sign in with password request */
-export interface SignInWithPasswordRequest {
+export type SignInWithPasswordRequest = {
   email: string;
   password: string;
   rememberMe?: boolean;
-}
+};
 
 /** Sign in response */
-export interface SignInResponse {
+export type SignInResponse = {
   token: string;
   user: {
     id: string;
@@ -24,71 +24,71 @@ export interface SignInResponse {
     name: string;
   };
   requiresPasswordChange?: boolean;
-}
+};
 
 /** Sign up request */
-export interface SignUpRequest {
+export type SignUpRequest = {
   email: string;
   password: string;
   name: string;
   username?: string;
-}
+};
 
 /** Sign up response */
-export interface SignUpResponse {
+export type SignUpResponse = {
   token: string;
   user: {
     id: string;
     email: string;
     name: string;
   };
-}
+};
 
 // ============================================================================
 // PASSKEY AUTH
 // ============================================================================
 
 /** Start passkey authentication request */
-export interface StartPasskeyAuthRequest {
+export type StartPasskeyAuthRequest = {
   email?: string;
-}
+};
 
 /** Start passkey authentication response */
-export interface StartPasskeyAuthResponse {
+export type StartPasskeyAuthResponse = {
   options: PublicKeyCredentialRequestOptions;
-}
+};
 
 /** Complete passkey authentication request */
-export interface CompletePasskeyAuthRequest {
+export type CompletePasskeyAuthRequest = {
   credential: PublicKeyCredential;
-}
+};
 
 /** Complete passkey authentication response */
-export interface CompletePasskeyAuthResponse {
+export type CompletePasskeyAuthResponse = {
   token: string;
   user: {
     id: string;
     email: string;
     name: string;
   };
-}
+};
 
 // ============================================================================
 // SESSION
 // ============================================================================
 
 /** Refresh token request */
-export interface RefreshTokenRequest {
+export type RefreshTokenRequest = {
   refreshToken: string;
-}
+};
 
 /** Refresh token response */
-export interface RefreshTokenResponse {
+export type RefreshTokenResponse = {
   token: string;
   expiresAt: string;
-}
+};
 
 /** Sign out response */
-export interface SignOutResponse {
+export type SignOutResponse = {
   message: string;
-}
+};

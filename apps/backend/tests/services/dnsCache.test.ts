@@ -70,35 +70,35 @@ vi.mock('../../src/utils/logging/logger.ts', () => ({
   })),
 }));
 
-interface SafePathMock {
+type SafePathMock = {
   safeReadFile: Mock;
   safeWriteFile: Mock;
-}
+};
 
-interface SSRFProtectionMock {
+type SSRFProtectionMock = {
   validateHostname: Mock;
   validateResolvedAddress: Mock;
   validateResolvedAddresses: Mock;
-}
+};
 
-interface CacheEntry<T = unknown> {
+type CacheEntry<T = unknown> = {
   data: T;
   timestamp: number;
-}
+};
 
 // Use shared types from @tago-analysis-worker/types
 type DNSCacheStats = DNSCacheExtendedStats;
 
 /** Per-analysis stats tracking (internal) */
-interface AnalysisStatsEntry {
+type AnalysisStatsEntry = {
   hits: number;
   misses: number;
   errors: number;
   hostnames: Set<string>;
   cacheKeys: Set<string>;
-}
+};
 
-interface DNSCacheType {
+type DNSCacheType = {
   cache: Map<string, CacheEntry>;
   config: DNSCacheConfig;
   stats: DNSCacheStats;
@@ -163,7 +163,7 @@ interface DNSCacheType {
   handleDNSResolve6Request: (
     hostname: string,
   ) => Promise<{ success: boolean; addresses?: string[]; error?: string }>;
-}
+};
 
 const { safeReadFile, safeWriteFile } = (await import(
   '../../src/utils/safePath.ts'

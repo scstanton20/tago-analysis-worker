@@ -28,7 +28,12 @@ import type {
   DNSResolve6Request,
 } from './types.ts';
 
-// Lazy-load SSE manager
+/**
+ * Lazy-loaded SSE manager to avoid circular dependency.
+ *
+ * Direct import would create: ProcessLifecycle -> sse -> analysisService -> AnalysisProcess -> ProcessLifecycle
+ * This pattern defers loading until first use, breaking the cycle.
+ */
 let _sseManager: SSEManagerInterface | null = null;
 let _sseManagerPromise: Promise<SSEManagerInterface> | null = null;
 
@@ -44,6 +49,8 @@ async function getSseManager(): Promise<SSEManagerInterface> {
 
   _sseManagerPromise = (async () => {
     const { sseManager } = await import('../../utils/sse/index.ts');
+    // Type assertion required: dynamic import loses type info.
+    // The actual implementation matches SSEManagerInterface contract.
     _sseManager = sseManager as unknown as SSEManagerInterface;
     _sseManagerPromise = null;
     return _sseManager;
@@ -53,7 +60,12 @@ async function getSseManager(): Promise<SSEManagerInterface> {
   return _sseManager!;
 }
 
-// Lazy-load DNS cache
+/**
+ * Lazy-loaded DNS cache to avoid circular dependency.
+ *
+ * Direct import would create: ProcessLifecycle -> dnsCache -> analysisService -> AnalysisProcess -> ProcessLifecycle
+ * This pattern defers loading until first use, breaking the cycle.
+ */
 let _dnsCache: DNSCacheInterface | null = null;
 let _dnsCachePromise: Promise<DNSCacheInterface> | null = null;
 
@@ -69,6 +81,8 @@ async function getDnsCache(): Promise<DNSCacheInterface> {
 
   _dnsCachePromise = (async () => {
     const { dnsCache } = await import('../../services/dnsCache.ts');
+    // Type assertion required: dynamic import loses type info.
+    // The actual implementation matches DNSCacheInterface contract.
     _dnsCache = dnsCache as unknown as DNSCacheInterface;
     _dnsCachePromise = null;
     return _dnsCache;
@@ -91,12 +105,12 @@ const WRAPPER_SCRIPT = path.resolve(
 const BACKEND_SRC = path.resolve(__dirname, '..', '..');
 const BACKEND_ROOT = path.resolve(BACKEND_SRC, '..');
 
-/** Sandbox configuration interface */
-interface SandboxConfig {
-  enabled: boolean;
-  allowChildProcess: boolean;
-  allowWorkerThreads: boolean;
-}
+/** Sandbox configuration type */
+type SandboxConfig = {
+  readonly enabled: boolean;
+  readonly allowChildProcess: boolean;
+  readonly allowWorkerThreads: boolean;
+};
 
 /**
  * Build execArgv array with permission flags for sandboxed execution
@@ -149,18 +163,18 @@ function buildSandboxExecArgv(
 }
 
 /** Extended AnalysisProcess with method access */
-interface AnalysisProcessWithMethods extends AnalysisProcessState {
-  addLog(message: string): Promise<void>;
-  saveConfig(): Promise<void>;
+type AnalysisProcessWithMethods = AnalysisProcessState & {
+  addLog: (message: string) => Promise<void>;
+  saveConfig: () => Promise<void>;
   monitoringManager: {
     handleOutput: (isError: boolean, data: Buffer) => void;
   };
   logManager: {
-    initializeLogState(): Promise<void>;
+    initializeLogState: () => Promise<void>;
   };
-  safeIPCSend(message: object): void;
-  start(): Promise<void>;
-}
+  safeIPCSend: (message: object) => void;
+  start: () => Promise<void>;
+};
 
 export class ProcessLifecycleManager {
   private analysisProcess: AnalysisProcessWithMethods;
@@ -168,9 +182,8 @@ export class ProcessLifecycleManager {
   /**
    * Initialize lifecycle manager
    * @param analysisProcess - Parent process reference
-   * @param _config - Application configuration (unused, uses imported config)
    */
-  constructor(analysisProcess: AnalysisProcessState, _config: unknown) {
+  constructor(analysisProcess: AnalysisProcessState) {
     this.analysisProcess = analysisProcess as AnalysisProcessWithMethods;
   }
 

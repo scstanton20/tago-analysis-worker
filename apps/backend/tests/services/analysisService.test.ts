@@ -112,23 +112,23 @@ vi.mock('fs', () => ({
   },
 }));
 
-interface SafePathMock {
+type SafePathMock = {
   safeMkdir: Mock;
   safeWriteFile: Mock;
   safeReadFile: Mock;
   safeReaddir: Mock;
   safeStat: Mock;
-}
+};
 
-interface TeamServiceMock {
+type TeamServiceMock = {
   initialize: Mock;
   addItemToTeamStructure: Mock;
   ensureAnalysisHasTeam: Mock;
   getAllTeams: Mock;
   getTeam: Mock;
-}
+};
 
-interface AnalysisServiceType {
+type AnalysisServiceType = {
   analyses: Map<string, MockAnalysisProcess>;
   configCache: unknown;
   startLocks: Map<string, Promise<unknown>>;
@@ -240,7 +240,7 @@ interface AnalysisServiceType {
   >;
   getProcessStatus: (analysisId: string) => string;
   getAnalysesThatShouldBeRunning: () => string[];
-}
+};
 
 const { safeMkdir, safeWriteFile, safeReadFile, safeReaddir } = (await import(
   '../../src/utils/safePath.ts'
