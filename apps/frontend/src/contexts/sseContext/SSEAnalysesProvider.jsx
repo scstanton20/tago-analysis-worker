@@ -1,12 +1,19 @@
-import { useState, useCallback, useRef, useMemo } from 'react';
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import PropTypes from 'prop-types';
-import { AnalysesContext } from './contexts/AnalysesContext.js';
-import logger from '../../utils/logger';
+import logger from '@/utils/logger';
 import {
   showSuccess,
   showError,
   showInfo,
-} from '../../utils/notificationService.jsx';
+} from '@/utils/notificationService.jsx';
+// Web worker for log processing (deduplication, sequence tracking)
+import {
+  processLog as workerProcessLog,
+  clearSequences as workerClearSequences,
+  initSequences as workerInitSequences,
+  terminateWorker,
+} from '@/workers/sseWorkerClient';
+import { AnalysesContext } from './contexts/AnalysesContext.js';
 
 export function SSEAnalysesProvider({ children }) {
   // Analyses keyed by analysisId (UUID)
@@ -15,8 +22,12 @@ export function SSEAnalysesProvider({ children }) {
   // DNS stats keyed by analysisId (UUID) - populated via SSE channel subscription
   const [analysisDnsStats, setAnalysisDnsStats] = useState({});
 
-  // Log sequences keyed by analysisId
-  const logSequences = useRef(new Map());
+  // Cleanup worker on unmount
+  useEffect(() => {
+    return () => {
+      terminateWorker();
+    };
+  }, []);
 
   const addLoadingAnalysis = useCallback((analysisId) => {
     setLoadingAnalyses((prev) => new Set([...prev, analysisId]));
@@ -90,14 +101,13 @@ export function SSEAnalysesProvider({ children }) {
 
     setAnalyses(analysesObj);
 
-    // Initialize log sequences tracking by analysisId
-    Object.keys(analysesObj).forEach((analysisId) => {
-      if (!logSequences.current.has(analysisId)) {
-        logSequences.current.set(analysisId, new Set());
-      }
+    // Initialize log sequences tracking in worker (fire-and-forget)
+    const analysisIdList = Object.keys(analysesObj);
+    workerInitSequences(analysisIdList).catch((err) => {
+      logger.error('Failed to init sequences in worker:', err);
     });
 
-    const analysisIds = new Set(Object.keys(analysesObj));
+    const analysisIds = new Set(analysisIdList);
     setLoadingAnalyses((prev) => {
       const updatedLoadingSet = new Set();
       prev.forEach((loadingId) => {
@@ -133,7 +143,10 @@ export function SSEAnalysesProvider({ children }) {
           data.update.status === 'stopped' &&
           data.update.exitCode !== undefined
         ) {
-          logSequences.current.delete(analysisId);
+          // Clear log sequences in worker (fire-and-forget)
+          workerClearSequences(analysisId).catch((err) => {
+            logger.error('Failed to clear sequences in worker:', err);
+          });
 
           // Analysis stopped
           if (data.update.exitCode === 0) {
@@ -156,7 +169,10 @@ export function SSEAnalysesProvider({ children }) {
   const handleAnalysisCreated = useCallback((data) => {
     if (data.data?.analysisId) {
       const { analysisId, analysisName, teamId, analysisData } = data.data;
-      logSequences.current.set(analysisId, new Set());
+      // Initialize sequences for new analysis in worker (fire-and-forget)
+      workerInitSequences([analysisId]).catch((err) => {
+        logger.error('Failed to init sequences for new analysis:', err);
+      });
 
       if (analysisData) {
         const newAnalysis = {
@@ -188,7 +204,10 @@ export function SSEAnalysesProvider({ children }) {
         newSet.delete(analysisId);
         return newSet;
       });
-      logSequences.current.delete(analysisId);
+      // Clear sequences for deleted analysis in worker (fire-and-forget)
+      workerClearSequences(analysisId).catch((err) => {
+        logger.error('Failed to clear sequences for deleted analysis:', err);
+      });
       setAnalyses((prev) => {
         const newAnalyses = { ...prev };
         delete newAnalyses[analysisId];
@@ -231,36 +250,38 @@ export function SSEAnalysesProvider({ children }) {
     [removeLoadingAnalysis],
   );
 
-  // Maximum sequences to track per analysis to prevent memory leaks
-  const MAX_SEQUENCES_PER_ANALYSIS = 10000;
+  // Track seen sequences locally for fast synchronous duplicate check
+  // Worker handles long-term tracking and cleanup
+  const recentSequences = useRef(new Map());
 
   const handleLog = useCallback((data) => {
     if (data.data?.analysisId && data.data?.log) {
       const { analysisId, log, totalCount, logFileSize } = data.data;
 
-      // Check for duplicate using sequence number
-      const sequences = logSequences.current.get(analysisId) || new Set();
-      if (log.sequence && sequences.has(log.sequence)) {
-        return;
-      }
-
-      // Add sequence to tracking
+      // Fast synchronous duplicate check using local cache
       if (log.sequence) {
-        sequences.add(log.sequence);
+        const analysisSeqs = recentSequences.current.get(analysisId);
+        if (analysisSeqs?.has(log.sequence)) {
+          return; // Skip duplicate
+        }
 
-        // Cleanup: Keep only recent sequences to prevent memory leaks
-        // When we exceed the limit, clear old sequences (they won't be duplicated anymore anyway)
-        if (sequences.size > MAX_SEQUENCES_PER_ANALYSIS) {
-          // Convert to array, sort descending, keep most recent
-          const sequencesArray = Array.from(sequences).sort((a, b) => b - a);
-          const trimmedSequences = new Set(
-            sequencesArray.slice(0, MAX_SEQUENCES_PER_ANALYSIS),
-          );
-          logSequences.current.set(analysisId, trimmedSequences);
+        // Track locally
+        if (!analysisSeqs) {
+          recentSequences.current.set(analysisId, new Set([log.sequence]));
         } else {
-          logSequences.current.set(analysisId, sequences);
+          analysisSeqs.add(log.sequence);
+          // Keep local cache small (last 100 sequences per analysis)
+          if (analysisSeqs.size > 100) {
+            const arr = Array.from(analysisSeqs);
+            recentSequences.current.set(analysisId, new Set(arr.slice(-100)));
+          }
         }
       }
+
+      // Track in worker for cross-session deduplication (fire-and-forget)
+      workerProcessLog(analysisId, log).catch(() => {
+        // Ignore worker errors for log processing
+      });
 
       setAnalyses((prev) => {
         if (!prev[analysisId]) return prev;
@@ -282,7 +303,10 @@ export function SSEAnalysesProvider({ children }) {
       const { analysisId, analysisName, clearMessage } = data.data;
       logger.log(`Clearing logs for ${analysisName || analysisId}`);
 
-      logSequences.current.set(analysisId, new Set());
+      // Clear local sequence cache
+      recentSequences.current.delete(analysisId);
+      // Clear worker sequences (fire-and-forget)
+      workerClearSequences(analysisId).catch(() => {});
 
       // If clearMessage is provided, show it as the only log entry
       const clearedLogs = clearMessage ? [clearMessage] : [];
@@ -309,7 +333,8 @@ export function SSEAnalysesProvider({ children }) {
         data.data;
 
       // Clear log sequences for fresh start
-      logSequences.current.set(analysisId, new Set());
+      recentSequences.current.delete(analysisId);
+      workerClearSequences(analysisId).catch(() => {});
 
       // Update analysis with rollback information
       setAnalyses((prev) => {

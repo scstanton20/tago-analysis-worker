@@ -15,8 +15,6 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useConnection } from '../../contexts/sseContext/index';
-import { useVisibleTeams } from '../../hooks/useVisibleTeams';
 import {
   Box,
   Stack,
@@ -29,7 +27,6 @@ import {
   NavLink,
   Tooltip,
 } from '@mantine/core';
-import { EmptyState, PrimaryButton } from '../global';
 import {
   IconBrandAsana,
   IconGripVertical,
@@ -37,11 +34,14 @@ import {
   IconUserPlus,
   IconUserEdit,
 } from '@tabler/icons-react';
-import { teamService } from '../../services/teamService';
-import { useAuth } from '../../hooks/useAuth';
-import { usePermissions } from '../../hooks/usePermissions';
-import logger from '../../utils/logger';
-import { modalService } from '../../modals/modalService';
+import { useVisibleTeams } from '@/features/teams/hooks/useVisibleTeams';
+import { useConnection } from '@/contexts/sseContext/index';
+import { teamService } from '@/features/teams/api/teamService';
+import { useAuth } from '@/features/auth/hooks/useAuth';
+import { usePermissions } from '@/features/auth/hooks/usePermissions';
+import logger from '@/utils/logger';
+import { modalService } from '@/modals/modalService';
+import { EmptyState, PrimaryButton } from '../global';
 
 // Sortable Team Item
 const SortableTeamItem = ({

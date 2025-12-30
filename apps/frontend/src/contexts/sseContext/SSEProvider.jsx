@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
+import logger from '@/utils/logger.js';
+import { showSuccess } from '@/utils/notificationService.jsx';
 import { SSEConnectionProvider } from './SSEConnectionProvider.jsx';
 import { SSEAnalysesProvider } from './SSEAnalysesProvider.jsx';
 import { SSETeamsProvider } from './SSETeamsProvider.jsx';
@@ -7,8 +9,6 @@ import { SSEBackendProvider } from './SSEBackendProvider.jsx';
 import { useAnalyses } from './hooks/useAnalyses.js';
 import { useTeams } from './hooks/useTeams.js';
 import { useBackend } from './hooks/useBackend.js';
-import logger from '../../utils/logger.js';
-import { showSuccess } from '../../utils/notificationService.jsx';
 
 // Message router component that distributes messages to appropriate contexts
 function MessageRouter({ children }) {

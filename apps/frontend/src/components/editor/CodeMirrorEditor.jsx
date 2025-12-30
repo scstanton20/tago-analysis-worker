@@ -15,17 +15,18 @@ import { EditorView } from '@codemirror/view';
 import { EditorState, Compartment } from '@codemirror/state';
 import { javascript } from '@codemirror/lang-javascript';
 import { markdown } from '@codemirror/lang-markdown';
-import { lintGutter } from '@codemirror/lint';
+import { linter, lintGutter } from '@codemirror/lint';
 import { unifiedMergeView } from '@codemirror/merge';
 import { useMantineColorScheme } from '@mantine/core';
 import { vsCodeDark } from '@fsegurai/codemirror-theme-vscode-dark';
 import { vsCodeLight } from '@fsegurai/codemirror-theme-vscode-light';
+// Light utilities (no heavy deps)
+import { readOnlySetup, editorKeymap } from '@/utils/codemirror/setup';
+// Web worker client for CPU-intensive operations
 import {
-  readOnlySetup,
-  editorKeymap,
-  createJavaScriptLinter,
-  formatCode,
-} from '../../utils/codeMirrorUtils';
+  lintCode as workerLintCode,
+  formatCode as workerFormatCode,
+} from '@/workers/codeWorkerClient';
 
 /**
  * CodeMirror Editor Component
@@ -46,6 +47,7 @@ export function CodeMirrorEditor({
   const editorRef = useRef(null);
   const viewRef = useRef(null);
   const themeCompartmentRef = useRef(new Compartment());
+  const linterCompartmentRef = useRef(new Compartment());
   const currentDiffValueRef = useRef(null);
   const currentDiffOriginalRef = useRef(null);
   const { colorScheme } = useMantineColorScheme();
@@ -150,7 +152,8 @@ export function CodeMirrorEditor({
         if (!currentReadOnly) {
           extensions.push(editorKeymap);
           extensions.push(lintGutter());
-          extensions.push(createJavaScriptLinter(handleDiagnosticsChange));
+          // Add linter compartment (empty initially, will be loaded async)
+          extensions.push(linterCompartmentRef.current.of([]));
         }
       } else if (currentLanguage === 'markdown') {
         // Remove HTML parsers to avoid MixedParse crash when typing near HTML comments
@@ -177,18 +180,83 @@ export function CodeMirrorEditor({
       viewRef.current = view;
     }
 
-    // Expose format function to parent component
+    // Expose view to parent component
+    if (viewRef.current) {
+      handleViewReady(viewRef.current);
+    }
+
+    // Set up worker-based linting and formatting for editable JavaScript editors
     if (
       !currentReadOnly &&
       currentLanguage === 'javascript' &&
       !currentDiffMode
     ) {
-      handleFormatReady(() => formatCode(viewRef.current));
-    }
+      // Create linter that uses web worker
+      const workerLinter = linter(async (view) => {
+        const code = view.state.doc.toString();
+        const result = await workerLintCode(code);
 
-    // Expose view to parent component
-    if (viewRef.current) {
-      handleViewReady(viewRef.current);
+        if (!result.success) {
+          return [];
+        }
+
+        // Convert worker diagnostics to CodeMirror format
+        const diagnostics = result.diagnostics.map((d) => {
+          const line = view.state.doc.line(d.line);
+          const from = line.from + (d.column - 1);
+          const to = d.endLine
+            ? view.state.doc.line(d.endLine).from + (d.endColumn - 1)
+            : from + 1;
+
+          return {
+            from,
+            to,
+            severity: d.severity,
+            message: d.message,
+            source: d.source,
+          };
+        });
+
+        // Notify parent of diagnostic changes
+        handleDiagnosticsChange(
+          diagnostics.map((d) => ({
+            ...d,
+            line: result.diagnostics.find((rd) => rd.message === d.message)
+              ?.line,
+          })),
+        );
+
+        return diagnostics;
+      });
+
+      // Add linter to editor
+      viewRef.current.dispatch({
+        effects: linterCompartmentRef.current.reconfigure(workerLinter),
+      });
+
+      // Expose worker-based format function to parent component
+      handleFormatReady(async () => {
+        if (!viewRef.current) return false;
+
+        const code = viewRef.current.state.doc.toString();
+        const result = await workerFormatCode(code);
+
+        if (!result.success) {
+          console.error('Format error:', result.error);
+          return false;
+        }
+
+        // Replace entire document with formatted code
+        viewRef.current.dispatch({
+          changes: {
+            from: 0,
+            to: viewRef.current.state.doc.length,
+            insert: result.formatted,
+          },
+        });
+
+        return true;
+      });
     }
 
     return () => {

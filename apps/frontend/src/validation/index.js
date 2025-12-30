@@ -25,7 +25,7 @@ export {
   validateUserName,
   validateUserRole,
   createEmailValidator,
-} from './userValidation';
+} from '@/features/users/validation/userValidation';
 
 // Re-export all async validators
 export {

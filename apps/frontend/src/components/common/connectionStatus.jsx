@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useConnection, useBackend } from '../../contexts/sseContext';
 import {
   ActionIcon,
   Popover,
@@ -11,7 +10,8 @@ import {
   Indicator,
 } from '@mantine/core';
 import { IconRefresh, IconSettings } from '@tabler/icons-react';
-import { modalService } from '../../modals/modalService';
+import { useConnection, useBackend } from '@/contexts/sseContext';
+import { modalService } from '@/modals/modalService';
 import { PrimaryButton, SecondaryButton } from '../global';
 
 const ConnectionStatus = () => {

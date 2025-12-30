@@ -5,8 +5,8 @@
  * This is a core utility with minimal dependencies for optimal performance
  * @module utils/apiUtils
  */
-import logger from './logger';
 import sanitize from 'sanitize-filename';
+import logger from './logger';
 
 // Get environment variables directly from Vite (no env.js dependency)
 const isDevelopment = import.meta.env.DEV;

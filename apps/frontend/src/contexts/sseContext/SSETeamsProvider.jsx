@@ -1,8 +1,8 @@
 import { useState, useCallback, useMemo } from 'react';
 import PropTypes from 'prop-types';
+import logger from '@/utils/logger';
+import { showInfo } from '@/utils/notificationService.jsx';
 import { TeamsContext } from './contexts/TeamsContext.js';
-import logger from '../../utils/logger';
-import { showInfo } from '../../utils/notificationService.jsx';
 
 export function SSETeamsProvider({ children }) {
   const [teams, setTeams] = useState({});

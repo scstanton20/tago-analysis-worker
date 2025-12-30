@@ -3,8 +3,8 @@
  * @module validation/asyncValidators
  */
 
-import { validateUsernameFormat } from './userValidation';
-import logger from '../utils/logger.js';
+import { validateUsernameFormat } from '@/features/users/validation/userValidation';
+import logger from '@/utils/logger.js';
 
 /**
  * Create a username validator function with async availability check

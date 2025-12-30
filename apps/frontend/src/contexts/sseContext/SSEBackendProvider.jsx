@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import PropTypes from 'prop-types';
+import { createLogger } from '@/utils/logger.js';
 import { BackendContext } from './contexts/BackendContext.js';
-import { createLogger } from '../../utils/logger.js';
 
 const logger = createLogger('SSEBackend');
 

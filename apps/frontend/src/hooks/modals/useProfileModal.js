@@ -6,10 +6,10 @@
  */
 
 import { useState, useCallback } from 'react';
-import { useAuth } from '../useAuth';
-import { usePasswordManagement } from '../usePasswordManagement';
-import { useProfileEditing } from '../useProfileEditing';
-import { usePasskeyManagement } from '../usePasskeyManagement';
+import { useAuth } from '@/features/auth/hooks/useAuth';
+import { usePasswordManagement } from '@/features/users/hooks/usePasswordManagement';
+import { useProfileEditing } from '@/features/users/hooks/useProfileEditing';
+import { usePasskeyManagement } from '@/features/users/hooks/usePasskeyManagement';
 
 /**
  * Orchestrator hook for managing profile modal

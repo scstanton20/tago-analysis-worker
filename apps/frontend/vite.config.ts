@@ -1,6 +1,6 @@
+import fs from 'fs';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import fs from 'fs';
 
 // Docker detection
 const isDocker = ((): boolean => {
@@ -37,6 +37,9 @@ export default defineConfig({
     alias: {
       '@': '/src',
     },
+  },
+  worker: {
+    format: 'es', // Use ES modules for workers to support code splitting
   },
   server: {
     host: true,

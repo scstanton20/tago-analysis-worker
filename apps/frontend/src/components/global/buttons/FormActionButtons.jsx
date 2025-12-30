@@ -4,7 +4,7 @@ import { PrimaryButton } from './PrimaryButton';
 import { SuccessButton } from './SuccessButton';
 import { DangerButton } from './DangerButton';
 import { CancelButton } from './CancelButton';
-import { createLogger } from '../../../utils/logger.js';
+import { createLogger } from '@/utils/logger.js';
 
 const logger = createLogger('FormActionButtons');
 

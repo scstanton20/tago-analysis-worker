@@ -13,6 +13,7 @@ import prettierPlugin from 'eslint-plugin-prettier';
 import prettierConfig from 'eslint-config-prettier';
 import tseslint from '@typescript-eslint/eslint-plugin';
 import tsparser from '@typescript-eslint/parser';
+import importPlugin from 'eslint-plugin-import';
 
 // Shared rule sets
 const baseRules = {
@@ -209,10 +210,38 @@ export default [
       'react-refresh': reactRefresh,
       'react-compiler': reactCompiler,
       'jsx-a11y': jsxA11y,
+      import: importPlugin,
+    },
+    settings: {
+      'import/resolver': {
+        alias: {
+          map: [['@', './apps/frontend/src']],
+          extensions: ['.js', '.jsx', '.ts', '.tsx'],
+        },
+      },
     },
     rules: {
       ...reactRules,
       ...mantineRestrictions,
+      'import/order': [
+        'warn',
+        {
+          groups: [
+            'builtin',
+            'external',
+            'internal',
+            ['parent', 'sibling', 'index'],
+          ],
+          pathGroups: [
+            { pattern: 'react', group: 'external', position: 'before' },
+            { pattern: '@/**', group: 'internal', position: 'before' },
+          ],
+          pathGroupsExcludedImportTypes: ['react'],
+          'newlines-between': 'never',
+        },
+      ],
+      // Note: Feature internal imports use relative paths (../api/), so no @/ restriction needed
+      // The @ alias is primarily for cross-cutting imports like @/components/global
     },
   },
 

@@ -1,7 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { CombinedAuthProvider } from './contexts/CombinedAuthProvider';
-import { useAuth } from './hooks/useAuth';
-import LoginPage from './components/auth/LoginPage';
+import { CombinedAuthProvider, useAuth, LoginPage } from './features/auth';
 import ErrorBoundary from './components/ErrorBoundary';
 import AppLoadingOverlay from './components/global/indicators/AppLoadingOverlay';
 

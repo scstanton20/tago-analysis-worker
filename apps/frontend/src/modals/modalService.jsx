@@ -1,5 +1,5 @@
 import { modals } from '@mantine/modals';
-import { IconHistory, IconUser, IconInfoCircle } from '@tabler/icons-react';
+import { IconHistory, IconInfoCircle } from '@tabler/icons-react';
 import { IconLabel } from '../components/global';
 
 /**

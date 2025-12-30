@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import PropTypes from 'prop-types';
+import { useAuth } from '@/features/auth/hooks/useAuth';
+import logger from '@/utils/logger';
+import { showError, showSuccess } from '@/utils/notificationService.jsx';
 import { ConnectionContext } from './contexts/ConnectionContext.js';
-import { useAuth } from '../../hooks/useAuth';
-import logger from '../../utils/logger';
-import { showError, showSuccess } from '../../utils/notificationService.jsx';
 
 // Get environment variables directly from Vite (no env.js dependency)
 const isDevelopment = import.meta.env.DEV;

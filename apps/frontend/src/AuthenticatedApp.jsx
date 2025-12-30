@@ -1,21 +1,19 @@
-import { useState, lazy, Suspense } from 'react';
+import { useState } from 'react';
 import { AppShell, Text, Burger, Group } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { ModalsProvider } from '@mantine/modals';
 import { SSEProvider, useConnection } from './contexts/sseContext';
-import { PermissionsProvider } from './contexts/PermissionsContext/index.js';
-import { useFilteredAnalyses } from './hooks/useFilteredAnalyses';
-// Import core components directly to avoid context timing issues
+import { PermissionsProvider } from './features/auth';
+import { useFilteredAnalyses } from './features/analysis';
+// Core components - always visible, no lazy loading needed
 import TeamSidebar from './components/layout/teamSidebar';
-// Lazy load heavy components that make API calls
-const AnalysisList = lazy(() => import('./components/analysis/analysisList'));
+import AnalysisList from './features/analysis/components/analysisList';
 import ConnectionStatus from './components/common/connectionStatus';
 import Logo from './components/ui/logo';
 import ImpersonationBanner from './components/layout/impersonationBanner';
 import ThemeSelector from './components/ui/themeSelector';
 import ErrorBoundary from './components/ErrorBoundary';
 import AppLoadingOverlay from './components/global/indicators/AppLoadingOverlay';
-import { LoadingState } from './components/global';
 // Import modal components registry
 import modalComponents from './modals/registry.jsx';
 
@@ -101,22 +99,11 @@ function AppContent() {
           }}
         >
           <ErrorBoundary variant="component" componentName="Analysis List">
-            <Suspense
-              fallback={
-                <LoadingState
-                  loading={true}
-                  skeleton
-                  pattern="card"
-                  skeletonCount={5}
-                />
-              }
-            >
-              <AnalysisList
-                analyses={filteredAnalyses}
-                showTeamLabels={!selectedTeam}
-                selectedTeam={selectedTeam}
-              />
-            </Suspense>
+            <AnalysisList
+              analyses={filteredAnalyses}
+              showTeamLabels={!selectedTeam}
+              selectedTeam={selectedTeam}
+            />
           </ErrorBoundary>
         </AppShell.Main>
       </AppShell>

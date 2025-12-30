@@ -1,9 +1,9 @@
 // eslint-disable-next-line no-restricted-imports -- Special case: custom-styled sticky banner with filled variant
 import { Alert, Group } from '@mantine/core';
 import { IconUserCheck, IconX } from '@tabler/icons-react';
-import { useAuth } from '../../hooks/useAuth';
+import { useAuth } from '@/features/auth/hooks/useAuth';
+import logger from '@/utils/logger';
 import { IconLabel, SecondaryButton } from '../global';
-import logger from '../../utils/logger';
 
 export default function ImpersonationBanner() {
   const { isImpersonating, user, exitImpersonation } = useAuth();
