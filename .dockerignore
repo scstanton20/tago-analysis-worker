@@ -1,4 +1,4 @@
-# Generic Docker Ignore File
+# Docker Ignore File
 
 # Git
 .git
@@ -6,13 +6,12 @@
 .gitattributes
 
 # Node modules (installed fresh in Docker)
-node_modules
 **/node_modules
 
 # Debug logs
 pnpm-debug.log
 
-# IDE
+# IDE and editors
 .vscode
 .idea
 *.swp
@@ -23,26 +22,54 @@ pnpm-debug.log
 .DS_Store
 Thumbs.db
 
-# CI/CD (not needed in container)
+# CI/CD
 .github
 
 # Documentation
 *.md
-!apps/*/README.md
 docs/
 
 # Development/Local config
 .env.local
 .env.*.local
 
-# Test files
+# Testing
 *.test.ts
 *.test.js
 *.spec.ts
 *.spec.js
 **/__tests__
-coverage/
+**/tests/
+**/coverage/
 .nyc_output
 
 # Build artifacts
 .cache/
+*.tsbuildinfo
+apps/frontend/dist/
+apps/backend/dist/
+# Note: packages/types/dist is NOT ignored - copied by Dockerfiles
+
+# Linting and formatting
+eslint.config.js
+.eslint*
+.prettier*
+.editorconfig
+
+# Project config files
+.snyk
+renovate.json
+grafana-dashboard.json
+
+# Claude Code
+.claude/
+claude*
+
+# Docker (not needed inside images)
+docker-compose*.yaml
+docker-configs/development/
+
+# Local development data
+apps/backend/analyses-storage/
+apps/backend/config/
+apps/backend/.dev-session-data/

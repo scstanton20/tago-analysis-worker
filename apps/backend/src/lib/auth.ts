@@ -532,7 +532,12 @@ export const auth = betterAuth({
     }),
   ],
   secret: process.env.SECRET_KEY || 'default-dev-secret-change-in-production',
-  trustedOrigins: ['http://localhost:5173'],
+  trustedOrigins: [
+    'http://localhost:5173',
+    ...(process.env.PRODUCTION_DOMAIN
+      ? [`https://${process.env.PRODUCTION_DOMAIN}`]
+      : []),
+  ],
 });
 
 // Export inferred types from Better Auth

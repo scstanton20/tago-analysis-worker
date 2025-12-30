@@ -124,14 +124,16 @@ app.use(
 );
 
 // CORS configuration
-if (process.env.NODE_ENV === 'development') {
-  app.use(
-    cors({
-      origin: 'http://localhost:5173',
-      credentials: true,
-    }),
-  );
+const corsOrigins: string[] = ['http://localhost:5173'];
+if (process.env.PRODUCTION_DOMAIN) {
+  corsOrigins.push(`https://${process.env.PRODUCTION_DOMAIN}`);
 }
+app.use(
+  cors({
+    origin: corsOrigins,
+    credentials: true,
+  }),
+);
 
 app.use(fileUpload());
 app.set('trust proxy', 1);
