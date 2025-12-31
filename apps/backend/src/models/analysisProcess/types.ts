@@ -63,6 +63,7 @@ export type DNSCacheInterface = {
     hostname: string,
     analysisId: string,
   ) => Promise<object>;
+  resetAnalysisStats: (analysisId: string) => void;
 };
 
 /** IPC message types */

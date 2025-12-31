@@ -9,15 +9,22 @@
 
 import type { AnalysisProcessState } from './types.ts';
 
+/** Extended AnalysisProcess with method access for cleanup operations */
+type AnalysisProcessWithMethods = AnalysisProcessState & {
+  logManager: {
+    initializeFileLogger: () => void;
+  };
+};
+
 export class ProcessCleanupManager {
-  private analysisProcess: AnalysisProcessState;
+  private analysisProcess: AnalysisProcessWithMethods;
 
   /**
    * Initialize cleanup manager
    * @param analysisProcess - Parent process reference
    */
   constructor(analysisProcess: AnalysisProcessState) {
-    this.analysisProcess = analysisProcess;
+    this.analysisProcess = analysisProcess as AnalysisProcessWithMethods;
   }
 
   /**
@@ -117,6 +124,39 @@ export class ProcessCleanupManager {
     this.analysisProcess.restartAttempts = 0;
     this.analysisProcess.isStarting = false;
     this.analysisProcess.isManualStop = false;
+  }
+
+  /**
+   * Clear runtime state after stopping an analysis
+   *
+   * Called after stop() to ensure a fresh start on next run.
+   * Clears logs, resets counters, and reinitializes file logger.
+   *
+   * Unlike cleanup(), this preserves the AnalysisProcess instance
+   * and prepares it for restart.
+   */
+  clearRuntimeState(): void {
+    this.analysisProcess.logger.debug(
+      'Clearing runtime state for fresh restart',
+    );
+
+    // Step 1: Clear in-memory logs
+    this.resetLogState();
+
+    // Step 2: Clear output buffers
+    this.resetOutputBuffers();
+
+    // Step 3: Reset connection state
+    this.resetConnectionState();
+
+    // Step 4: Clear connection grace timer
+    this.clearConnectionGracePeriod();
+
+    // Step 5: Close and reinitialize file logger for fresh log file
+    this.closeFileLogger();
+    this.analysisProcess.logManager.initializeFileLogger();
+
+    this.analysisProcess.logger.debug('Runtime state cleared successfully');
   }
 
   /**

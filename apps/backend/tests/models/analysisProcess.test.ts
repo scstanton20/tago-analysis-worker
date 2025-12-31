@@ -110,6 +110,7 @@ vi.mock('../../src/services/dnsCache.ts', () => ({
       .fn()
       .mockResolvedValue({ addresses: ['127.0.0.1'] }),
     handleDNSResolve6Request: vi.fn().mockResolvedValue({ addresses: ['::1'] }),
+    resetAnalysisStats: vi.fn(),
   },
 }));
 
@@ -166,6 +167,16 @@ const { sseManager } = (await import(
     broadcastAnalysisUpdate: Mock;
   };
 };
+const { dnsCache } = (await import(
+  '../../src/services/dnsCache.ts'
+)) as unknown as {
+  dnsCache: {
+    handleDNSLookupRequest: Mock;
+    handleDNSResolve4Request: Mock;
+    handleDNSResolve6Request: Mock;
+    resetAnalysisStats: Mock;
+  };
+};
 const { safeStat, safeReadFile } = (await import(
   '../../src/utils/safePath.ts'
 )) as unknown as {
@@ -198,6 +209,17 @@ describe('AnalysisProcess', () => {
       getEnvironment: vi.fn().mockResolvedValue({}),
       saveConfig: vi.fn().mockResolvedValue(undefined),
     };
+
+    // Reset DNS cache mock implementations (clearAllMocks doesn't reset implementations)
+    dnsCache.handleDNSLookupRequest.mockResolvedValue({
+      addresses: ['127.0.0.1'],
+    });
+    dnsCache.handleDNSResolve4Request.mockResolvedValue({
+      addresses: ['127.0.0.1'],
+    });
+    dnsCache.handleDNSResolve6Request.mockResolvedValue({
+      addresses: ['::1'],
+    });
 
     // Dynamically import to get fresh instance
     const module = (await import(

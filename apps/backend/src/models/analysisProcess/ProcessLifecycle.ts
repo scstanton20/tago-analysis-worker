@@ -172,6 +172,9 @@ type AnalysisProcessWithMethods = AnalysisProcessState & {
   logManager: {
     initializeLogState: () => Promise<void>;
   };
+  cleanupManager: {
+    clearRuntimeState: () => void;
+  };
   safeIPCSend: (message: object) => void;
   start: () => Promise<void>;
 };
@@ -542,6 +545,17 @@ export class ProcessLifecycleManager {
       delete this.analysisProcess._exitPromiseResolve;
       delete this.analysisProcess._exitPromiseReject;
     }
+
+    // Clear runtime state for fresh restart (logs, buffers, file logger)
+    this.analysisProcess.cleanupManager.clearRuntimeState();
+
+    // Clear DNS cache stats for this analysis
+    const dnsCache = await getDnsCache();
+    dnsCache.resetAnalysisStats(this.analysisProcess.analysisId);
+
+    this.analysisProcess.logger.info(
+      'Analysis stopped and runtime state cleared',
+    );
   }
 
   /**
