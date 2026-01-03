@@ -18,7 +18,7 @@ import AppLoadingOverlay from './components/global/indicators/AppLoadingOverlay'
 import modalComponents from './modals/registry.jsx';
 
 function AppContent() {
-  const { connectionStatus } = useConnection();
+  const { connectionStatus, hasInitialData } = useConnection();
 
   const [selectedTeam, setSelectedTeam] = useState(null);
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure();
@@ -29,6 +29,7 @@ function AppContent() {
 
   const connectionFailed = connectionStatus === 'failed';
 
+  // Show error state if connection failed
   if (connectionFailed) {
     return (
       <AppLoadingOverlay
@@ -38,6 +39,12 @@ function AppContent() {
         showRetry={true}
       />
     );
+  }
+
+  // Wait for SSE connection + initial data before rendering the app
+  // This prevents showing empty states while data is loading
+  if (!hasInitialData) {
+    return <AppLoadingOverlay message="Loading application..." />;
   }
 
   return (

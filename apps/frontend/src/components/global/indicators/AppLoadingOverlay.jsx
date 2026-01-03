@@ -23,12 +23,12 @@ export default function AppLoadingOverlay({
           size: 'xl',
           children: (
             <Stack align="center" gap="lg">
-              <Logo size={48} className={error ? '' : 'pulse'} />
-              <Text size="lg" fw={500} c={error ? 'red' : undefined}>
+              <Logo size={164} className={error ? '' : 'pulse'} />
+              <Text size="1.5rem" fw={600} c={error ? 'red' : undefined}>
                 {message}
               </Text>
               {submessage && (
-                <Text size="sm" c="dimmed" ta="center" maw={400}>
+                <Text size="md" c="dimmed" ta="center" maw={500}>
                   {submessage}
                 </Text>
               )}

@@ -16,7 +16,13 @@ export default function App() {
   );
 }
 
-// Router component to conditionally load authenticated vs login components
+/**
+ * Router component that manages the app loading sequence:
+ * 1. Auth verification (isLoading) - validates session
+ * 2. Code loading (Suspense) - lazy loads AuthenticatedApp bundle
+ * 3. SSE initialization - handled by AuthenticatedApp internally
+ * All states show unified "Loading application..." message for seamless UX
+ */
 function AppRouter() {
   const { isAuthenticated, isLoading, user } = useAuth();
 
@@ -31,10 +37,11 @@ function AppRouter() {
 
   // Show loading overlay during initial auth check (only when potentially authenticated)
   if (isLoading) {
-    return <AppLoadingOverlay message="Verifying authentication..." />;
+    return <AppLoadingOverlay message="Loading application..." />;
   }
 
-  // Only load SSE and heavy components when authenticated
+  // Lazy load authenticated app - Suspense handles code splitting
+  // AuthenticatedApp will continue showing loader until SSE data is ready
   return (
     <Suspense fallback={<AppLoadingOverlay message="Loading application..." />}>
       <AuthenticatedApp />

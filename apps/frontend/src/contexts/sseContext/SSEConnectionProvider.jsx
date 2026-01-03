@@ -374,7 +374,8 @@ export function SSEConnectionProvider({ children, onMessage }) {
       }
     };
 
-    const timeoutId = setTimeout(connect, 50);
+    // Start connection immediately
+    connect();
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('focus', handleFocus);
@@ -383,8 +384,6 @@ export function SSEConnectionProvider({ children, onMessage }) {
     return () => {
       logger.log('SSE client cleanup starting');
       mountedRef.current = false;
-
-      clearTimeout(timeoutId);
 
       // Clear any pending reconnection timeout
       if (reconnectTimeoutRef.current) {
