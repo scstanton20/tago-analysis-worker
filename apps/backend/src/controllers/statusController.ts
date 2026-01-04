@@ -5,6 +5,7 @@ import ms from 'ms';
 import { analysisService } from '../services/analysisService.ts';
 import { sseManager } from '../utils/sse/index.ts';
 import { getTagoSdkVersion } from '../utils/sdkVersion.ts';
+import { getServerTime } from '../utils/serverTime.ts';
 
 /** Express request with request-scoped logger */
 type RequestWithLogger = Request & {
@@ -97,7 +98,7 @@ export class StatusController {
         sdkVersion: tagoVersion,
         runningAnalyses: runningAnalysesCount,
       },
-      serverTime: new Date().toString(),
+      serverTime: getServerTime(),
     };
 
     req.log.debug(

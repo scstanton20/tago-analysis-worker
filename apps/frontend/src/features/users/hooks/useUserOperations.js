@@ -1,4 +1,3 @@
-import { useCallback } from 'react';
 import { ConfirmDialog } from '@/components/global';
 import { useUserCRUD } from './useUserCRUD';
 import { useUserActions } from './useUserActions';
@@ -30,50 +29,38 @@ export function useUserOperations({
   });
 
   // Wrap delete handler with confirmation modal
-  const handleDelete = useCallback(
-    (user) => {
-      ConfirmDialog.delete({
-        title: 'Delete User',
-        itemName: user.name || user.email,
-        onConfirm: () => crud.handleDelete(user),
-      });
-    },
-    [crud],
-  );
+  const handleDelete = (user) => {
+    ConfirmDialog.delete({
+      title: 'Delete User',
+      itemName: user.name || user.email,
+      onConfirm: () => crud.handleDelete(user),
+    });
+  };
 
   // Wrap impersonate handler with confirmation modal
-  const handleImpersonate = useCallback(
-    (user) => {
-      ConfirmDialog.info({
-        title: 'Impersonate User',
-        message: `Are you sure you want to impersonate "${user.name || user.email}"? You will be logged in as this user.`,
-        confirmLabel: 'Impersonate',
-        onConfirm: () => actions.handleImpersonate(user),
-      });
-    },
-    [actions],
-  );
+  const handleImpersonate = (user) => {
+    ConfirmDialog.info({
+      title: 'Impersonate User',
+      message: `Are you sure you want to impersonate "${user.name || user.email}"? You will be logged in as this user.`,
+      confirmLabel: 'Impersonate',
+      onConfirm: () => actions.handleImpersonate(user),
+    });
+  };
 
   // Wrap ban handler with confirmation modal
-  const handleBanUser = useCallback(
-    (user) => {
-      ConfirmDialog.destructive({
-        title: 'Ban User',
-        message: `Are you sure you want to ban "${user.name || user.email}"? This will immediately log them out and prevent them from signing in.`,
-        confirmLabel: 'Ban User',
-        onConfirm: () => actions.handleBanUser(user),
-      });
-    },
-    [actions],
-  );
+  const handleBanUser = (user) => {
+    ConfirmDialog.destructive({
+      title: 'Ban User',
+      message: `Are you sure you want to ban "${user.name || user.email}"? This will immediately log them out and prevent them from signing in.`,
+      confirmLabel: 'Ban User',
+      onConfirm: () => actions.handleBanUser(user),
+    });
+  };
 
-  // Wrap unban handler with confirmation modal (no confirmation needed for unban)
-  const handleUnbanUser = useCallback(
-    (user) => {
-      actions.handleUnbanUser(user);
-    },
-    [actions],
-  );
+  // Unban handler (no confirmation needed for unban)
+  const handleUnbanUser = (user) => {
+    actions.handleUnbanUser(user);
+  };
 
   // Combine loading states
   const loading = crud.loading || actions.loading;

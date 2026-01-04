@@ -77,11 +77,10 @@ export const rollbackVersionSchema = z.object({
 
 /** Get logs query schema */
 export const getLogsQuerySchema = z.object({
-  limit: z.coerce.number().int().min(1).max(1000).optional(),
-  before: z.coerce.number().int().optional(),
-  after: z.coerce.number().int().optional(),
-  level: z.enum(['log', 'info', 'warn', 'error', 'debug']).optional(),
-  search: z.string().max(200).optional(),
+  /** Page number (default: 1) */
+  page: z.coerce.number().int().min(1).optional(),
+  /** Entries per page (default: 200) */
+  limit: z.coerce.number().int().min(1).max(10000).optional(),
 });
 
 /** Batch operation request schema */

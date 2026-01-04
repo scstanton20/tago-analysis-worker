@@ -127,22 +127,26 @@ describe('Stream Factories', () => {
       expect(stream.stream).toBeDefined();
     });
 
-    it('should create stdout stream in production', () => {
+    it('should create pretty stream in production', () => {
       delete process.env.LOG_LOKI_URL;
 
       const stream = createConsoleStream('production') as StreamConfig;
 
       expect(stream.level).toBe('info');
-      expect(stream.stream).toBe(process.stdout);
+      // Pretty stream is a Transform that pipes to stdout
+      expect(stream.stream).toBeDefined();
+      expect(stream.stream).not.toBe(process.stdout);
     });
 
-    it('should create stdout stream when Loki is enabled', () => {
+    it('should create pretty stream when Loki is enabled', () => {
       process.env.LOG_LOKI_URL = 'http://localhost:3100';
 
       const stream = createConsoleStream('development') as StreamConfig;
 
       expect(stream.level).toBe('debug');
-      expect(stream.stream).toBe(process.stdout);
+      // Pretty stream is a Transform that pipes to stdout
+      expect(stream.stream).toBeDefined();
+      expect(stream.stream).not.toBe(process.stdout);
     });
 
     it('should respect LOG_LEVEL environment variable', () => {

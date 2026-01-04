@@ -14,6 +14,7 @@
  */
 
 import type { AnalysisProcessState, ConnectionStatus } from './types.ts';
+import { formatReconnectionAttempt } from '../../utils/logging/index.ts';
 
 /** Extended AnalysisProcess type with logging method access */
 type AnalysisProcessWithLogging = AnalysisProcessState & {
@@ -235,17 +236,23 @@ export class ProcessMonitor {
    * @private
    */
   private async logReconnectionAttempt(): Promise<void> {
-    const message = `SDK reconnecting (attempt ${this.analysisProcess.reconnectionAttempts})...`;
+    const message = formatReconnectionAttempt(
+      this.analysisProcess.reconnectionAttempts,
+    );
     await this.analysisProcess.addLog(message);
   }
 
   /**
    * Log output from process
+   *
+   * Note: Child process sandboxLogger already formats output with level indicators
+   * (INFO, WARN, ERROR, etc.) and ANSI colors, so we pass through as-is.
+   * The isError param is kept for potential future use (e.g., metrics).
+   *
    * @private
    */
-  private async logOutput(isError: boolean, message: string): Promise<void> {
-    const logMessage = isError ? `ERROR: ${message}` : message;
-    await this.analysisProcess.addLog(logMessage);
+  private async logOutput(_isError: boolean, message: string): Promise<void> {
+    await this.analysisProcess.addLog(message);
   }
 
   /**

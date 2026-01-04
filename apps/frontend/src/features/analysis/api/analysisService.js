@@ -154,20 +154,42 @@ export const analysisService = {
     return result;
   }, 'rename analysis'),
 
+  /**
+   * Fetch historical logs as plain text for LazyLog viewer
+   * Returns formatted log lines: "[HH:MM:SS] message"
+   * @param {string} analysisId - The analysis ID
+   * @param {Object} params - Optional pagination params
+   * @param {number} params.page - Page number (default: 1)
+   * @param {number} params.limit - Entries per page (default: 200)
+   */
   getLogs: withErrorHandling(async (analysisId, params = {}) => {
-    const { page = 1, limit = 100 } = params;
+    const { page = 1, limit = 200 } = params;
     logger.debug('Fetching analysis logs', { analysisId, page, limit });
-    const queryParams = new URLSearchParams({ page, limit }).toString();
+
+    const queryParams = new URLSearchParams({
+      page: String(page),
+      limit: String(limit),
+    }).toString();
+
     const response = await fetchWithHeaders(
       `/analyses/${analysisId}/logs?${queryParams}`,
     );
-    const result = await handleResponse(response);
+
+    if (!response.ok) {
+      const errorData = await parseErrorResponse(
+        response,
+        'Failed to fetch logs',
+      );
+      throw new Error(errorData.error);
+    }
+
+    const text = await response.text();
     logger.info('Analysis logs fetched successfully', {
       analysisId,
       page,
-      logsCount: result?.logs?.length,
+      lineCount: text.split('\n').length,
     });
-    return result;
+    return text;
   }, 'fetch analysis logs'),
 
   downloadLogs: withErrorHandling(

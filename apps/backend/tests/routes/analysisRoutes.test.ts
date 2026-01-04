@@ -143,7 +143,10 @@ const AnalysisController = {
   updateEnvironment: vi.fn((_req: Request, res: Response) =>
     res.json({ success: true }),
   ),
-  getLogs: vi.fn((_req: Request, res: Response) => res.json({ logs: [] })),
+  getLogs: vi.fn((_req: Request, res: Response) => {
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.send('[12:00:00] Test log entry');
+  }),
   downloadLogs: vi.fn((_req: Request, res: Response) => res.send('logs')),
   clearLogs: vi.fn((_req: Request, res: Response) =>
     res.json({ success: true }),

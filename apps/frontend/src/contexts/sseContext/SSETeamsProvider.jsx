@@ -20,8 +20,8 @@ export function SSETeamsProvider({ children }) {
     return Object.keys(teams);
   }, [teams]);
 
-  // Event Handlers
-  const handleInit = useCallback((data) => {
+  // Event Handlers - plain functions (React 19: no useCallback needed for internal handlers)
+  const handleInit = (data) => {
     let teamsObj = {};
     if (data.teams) {
       if (Array.isArray(data.teams)) {
@@ -41,18 +41,18 @@ export function SSETeamsProvider({ children }) {
     setTimeout(() => {
       window.dispatchEvent(new CustomEvent('auth-change'));
     }, 100); // Small delay to ensure state updates are processed
-  }, []);
+  };
 
-  const handleTeamCreatedOrUpdated = useCallback((data) => {
+  const handleTeamCreatedOrUpdated = (data) => {
     if (data.team) {
       setTeams((prev) => ({
         ...prev,
         [data.team.id]: data.team,
       }));
     }
-  }, []);
+  };
 
-  const handleTeamDeleted = useCallback((data) => {
+  const handleTeamDeleted = (data) => {
     if (data.deleted) {
       logger.log('SSE: Team deleted:', data);
       setTeams((prev) => {
@@ -61,9 +61,9 @@ export function SSETeamsProvider({ children }) {
         return newTeams;
       });
     }
-  }, []);
+  };
 
-  const handleTeamsReordered = useCallback((data) => {
+  const handleTeamsReordered = (data) => {
     if (data.teams) {
       let teamsObj = {};
       if (Array.isArray(data.teams)) {
@@ -75,9 +75,9 @@ export function SSETeamsProvider({ children }) {
       }
       setTeams(teamsObj);
     }
-  }, []);
+  };
 
-  const handleTeamStructureUpdated = useCallback((data) => {
+  const handleTeamStructureUpdated = (data) => {
     if (data.teamId && data.items) {
       setTeamStructure((prev) => ({
         ...prev,
@@ -85,9 +85,9 @@ export function SSETeamsProvider({ children }) {
       }));
       setTeamStructureVersion((v) => v + 1);
     }
-  }, []);
+  };
 
-  const handleUserTeamsUpdated = useCallback((data) => {
+  const handleUserTeamsUpdated = (data) => {
     // Show notification to user about team changes
     if (data.data?.showNotification && data.data?.message) {
       showInfo(data.data.message, 'Team Access Updated', 5000);
@@ -99,57 +99,48 @@ export function SSETeamsProvider({ children }) {
     logger.log(
       'SSE: User teams updated - new init message will arrive with updated data',
     );
-  }, []);
+  };
 
   // Message handler to be called by parent
-  const handleMessage = useCallback(
-    (data) => {
-      try {
-        switch (data.type) {
-          case 'init':
-            handleInit(data);
-            break;
-          case 'teamCreated':
-          case 'teamUpdated':
-            handleTeamCreatedOrUpdated(data);
-            break;
-          case 'teamDeleted':
-            handleTeamDeleted(data);
-            break;
-          case 'teamsReordered':
-            handleTeamsReordered(data);
-            break;
-          case 'teamStructureUpdated':
-            handleTeamStructureUpdated(data);
-            break;
-          case 'userTeamsUpdated':
-            handleUserTeamsUpdated(data);
-            break;
-          // Folder operations are handled by teamStructureUpdated
-          case 'folderCreated':
-          case 'folderUpdated':
-          case 'folderDeleted':
-            // No-op - structure updates handled by teamStructureUpdated
-            break;
-          default:
-            break;
-        }
-      } catch (error) {
-        logger.error('Error in SSETeamsProvider handleMessage:', {
-          type: data?.type,
-          error: error.message,
-        });
+  // Empty deps: all internal handlers are plain functions using only stable setters
+  const handleMessage = useCallback((data) => {
+    try {
+      switch (data.type) {
+        case 'init':
+          handleInit(data);
+          break;
+        case 'teamCreated':
+        case 'teamUpdated':
+          handleTeamCreatedOrUpdated(data);
+          break;
+        case 'teamDeleted':
+          handleTeamDeleted(data);
+          break;
+        case 'teamsReordered':
+          handleTeamsReordered(data);
+          break;
+        case 'teamStructureUpdated':
+          handleTeamStructureUpdated(data);
+          break;
+        case 'userTeamsUpdated':
+          handleUserTeamsUpdated(data);
+          break;
+        // Folder operations are handled by teamStructureUpdated
+        case 'folderCreated':
+        case 'folderUpdated':
+        case 'folderDeleted':
+          // No-op - structure updates handled by teamStructureUpdated
+          break;
+        default:
+          break;
       }
-    },
-    [
-      handleInit,
-      handleTeamCreatedOrUpdated,
-      handleTeamDeleted,
-      handleTeamsReordered,
-      handleTeamStructureUpdated,
-      handleUserTeamsUpdated,
-    ],
-  );
+    } catch (error) {
+      logger.error('Error in SSETeamsProvider handleMessage:', {
+        type: data?.type,
+        error: error.message,
+      });
+    }
+  }, []);
 
   const value = useMemo(
     () => ({

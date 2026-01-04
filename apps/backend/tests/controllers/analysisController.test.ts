@@ -648,29 +648,37 @@ describe('AnalysisController', () => {
   });
 
   describe('getLogs', () => {
-    it('should get logs successfully', async () => {
+    it('should get logs as plain text successfully', async () => {
       const analysisId = 'test-analysis-uuid-123';
       const req = createControllerRequest({
         params: { analysisId },
-        query: { page: '1', limit: '100' },
+        // After validation middleware, query params are transformed to numbers
+        query: { page: 1, limit: 200 } as unknown as Record<string, string>,
       });
       const res = createControllerResponse();
 
       const mockLogs = {
-        logs: [{ message: 'test log' }],
+        logs: [
+          { message: 'test log', createdAt: '2024-01-01T12:00:00Z' },
+          { message: 'second log', createdAt: '2024-01-01T12:00:01Z' },
+        ],
         hasMore: false,
-        totalCount: 1,
+        totalCount: 2,
       };
 
       analysisService.getLogs.mockResolvedValue(mockLogs);
 
       await AnalysisController.getLogs(req, res);
 
-      expect(analysisService.getLogs).toHaveBeenCalledWith(analysisId, 1, 100);
-      expect(res.json).toHaveBeenCalledWith(mockLogs);
+      expect(analysisService.getLogs).toHaveBeenCalledWith(analysisId, 1, 200);
+      expect(res.setHeader).toHaveBeenCalledWith(
+        'Content-Type',
+        'text/plain; charset=utf-8',
+      );
+      expect(res.send).toHaveBeenCalled();
     });
 
-    it('should use default pagination values', async () => {
+    it('should use default pagination values (page=1, limit=200)', async () => {
       const analysisId = 'test-analysis-uuid-123';
       const req = createControllerRequest({
         params: { analysisId },
@@ -686,7 +694,7 @@ describe('AnalysisController', () => {
 
       await AnalysisController.getLogs(req, res);
 
-      expect(analysisService.getLogs).toHaveBeenCalledWith(analysisId, 1, 100);
+      expect(analysisService.getLogs).toHaveBeenCalledWith(analysisId, 1, 200);
     });
   });
 
@@ -1481,11 +1489,12 @@ describe('AnalysisController', () => {
   });
 
   describe('getLogs - edge cases', () => {
-    it('should handle invalid page parameter', async () => {
+    it('should handle missing page parameter with default', async () => {
       const analysisId = 'test-analysis-uuid-123';
       const req = createControllerRequest({
         params: { analysisId },
-        query: { page: 'invalid', limit: '100' },
+        // After validation, limit is a number; page defaults to 1
+        query: { limit: 100 } as unknown as Record<string, string>,
       });
       const res = createControllerResponse();
 
@@ -1497,15 +1506,16 @@ describe('AnalysisController', () => {
 
       await AnalysisController.getLogs(req, res);
 
-      // Should default to page 1 when invalid
+      // Should default to page 1 when not provided
       expect(analysisService.getLogs).toHaveBeenCalledWith(analysisId, 1, 100);
     });
 
-    it('should handle invalid limit parameter', async () => {
+    it('should handle missing limit parameter with default', async () => {
       const analysisId = 'test-analysis-uuid-123';
       const req = createControllerRequest({
         params: { analysisId },
-        query: { page: '1', limit: 'invalid' },
+        // After validation, page is a number; limit defaults to 200
+        query: { page: 2 } as unknown as Record<string, string>,
       });
       const res = createControllerResponse();
 
@@ -1517,8 +1527,8 @@ describe('AnalysisController', () => {
 
       await AnalysisController.getLogs(req, res);
 
-      // Should default to limit 100 when invalid
-      expect(analysisService.getLogs).toHaveBeenCalledWith(analysisId, 1, 100);
+      // Should default to limit 200 when not provided
+      expect(analysisService.getLogs).toHaveBeenCalledWith(analysisId, 2, 200);
     });
   });
 

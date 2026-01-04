@@ -4,7 +4,7 @@
  * @module hooks/useDiagnostics
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 
 /**
  * Hook for managing diagnostic navigation in CodeMirror editor
@@ -24,17 +24,17 @@ export function useDiagnostics() {
   /**
    * Handle diagnostics change from linter
    */
-  const handleDiagnosticsChange = useCallback((newDiagnostics) => {
+  const handleDiagnosticsChange = (newDiagnostics) => {
     setDiagnostics(newDiagnostics);
     setCurrentDiagnosticIndex(0);
-  }, []);
+  };
 
   /**
    * Store editor view reference for scrolling
    */
-  const handleViewReady = useCallback((view) => {
+  const handleViewReady = (view) => {
     editorViewRef.current = view;
-  }, []);
+  };
 
   /**
    * Scroll to a specific diagnostic in the editor

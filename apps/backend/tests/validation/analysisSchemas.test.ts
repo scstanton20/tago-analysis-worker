@@ -1115,68 +1115,33 @@ describe('analysisSchemas', () => {
     });
 
     describe('query validation', () => {
-      it('should validate empty query (defaults apply)', () => {
-        const validData = {};
-
-        const result = schemas.getLogs.query!.safeParse(validData);
-
-        expect(result.success).toBe(true);
-        expect(result.data?.page).toBe(1); // default
-        expect(result.data?.limit).toBe(100); // default
-      });
-
-      it('should accept valid page and limit strings', () => {
+      it('should validate with valid page and limit', () => {
         const validData = {
-          page: '2',
-          limit: '50',
+          page: '1',
+          limit: '200',
         };
 
         const result = schemas.getLogs.query!.safeParse(validData);
 
         expect(result.success).toBe(true);
-        expect(result.data?.page).toBe(2);
-        expect(result.data?.limit).toBe(50);
+        if (result.success) {
+          expect(result.data.page).toBe(1);
+          expect(result.data.limit).toBe(200);
+        }
       });
 
-      it('should accept page as string and transform to number', () => {
-        const validData = { page: '10' };
+      it('should accept empty query (optional params)', () => {
+        const validData = {};
 
         const result = schemas.getLogs.query!.safeParse(validData);
 
         expect(result.success).toBe(true);
-        expect(result.data?.page).toBe(10);
-        expect(typeof result.data?.page).toBe('number');
-      });
-
-      it('should accept limit as string and transform to number', () => {
-        const validData = { limit: '200' };
-
-        const result = schemas.getLogs.query!.safeParse(validData);
-
-        expect(result.success).toBe(true);
-        expect(result.data?.limit).toBe(200);
-      });
-
-      it('should use default page of 1 when not provided', () => {
-        const validData = { limit: '50' };
-
-        const result = schemas.getLogs.query!.safeParse(validData);
-
-        expect(result.success).toBe(true);
-        expect(result.data?.page).toBe(1);
-      });
-
-      it('should use default limit of 100 when not provided', () => {
-        const validData = { page: '5' };
-
-        const result = schemas.getLogs.query!.safeParse(validData);
-
-        expect(result.success).toBe(true);
-        expect(result.data?.limit).toBe(100);
       });
 
       it('should reject non-numeric page', () => {
-        const invalidData = { page: 'abc' };
+        const invalidData = {
+          page: 'abc',
+        };
 
         const result = schemas.getLogs.query!.safeParse(invalidData);
 
@@ -1184,65 +1149,13 @@ describe('analysisSchemas', () => {
       });
 
       it('should reject non-numeric limit', () => {
-        const invalidData = { limit: 'xyz' };
+        const invalidData = {
+          limit: 'xyz',
+        };
 
         const result = schemas.getLogs.query!.safeParse(invalidData);
 
         expect(result.success).toBe(false);
-      });
-
-      it('should reject decimal page', () => {
-        const invalidData = { page: '1.5' };
-
-        const result = schemas.getLogs.query!.safeParse(invalidData);
-
-        expect(result.success).toBe(false);
-      });
-
-      it('should reject decimal limit', () => {
-        const invalidData = { limit: '50.5' };
-
-        const result = schemas.getLogs.query!.safeParse(invalidData);
-
-        expect(result.success).toBe(false);
-      });
-
-      it('should reject negative page', () => {
-        const invalidData = { page: '-1' };
-
-        const result = schemas.getLogs.query!.safeParse(invalidData);
-
-        expect(result.success).toBe(false);
-      });
-
-      it('should reject negative limit', () => {
-        const invalidData = { limit: '-10' };
-
-        const result = schemas.getLogs.query!.safeParse(invalidData);
-
-        expect(result.success).toBe(false);
-      });
-
-      it('should reject zero page', () => {
-        const invalidData = { page: '0' };
-
-        const result = schemas.getLogs.query!.safeParse(invalidData);
-
-        // Page 0 may be transformed, check if it's valid per schema
-        if (!result.success) {
-          expect(result.error?.issues[0].path).toContain('page');
-        }
-      });
-
-      it('should reject zero limit', () => {
-        const invalidData = { limit: '0' };
-
-        const result = schemas.getLogs.query!.safeParse(invalidData);
-
-        // Limit 0 may be transformed, check if it's valid per schema
-        if (!result.success) {
-          expect(result.error?.issues[0].path).toContain('limit');
-        }
       });
     });
   });

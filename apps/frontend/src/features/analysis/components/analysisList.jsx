@@ -85,9 +85,6 @@ export default function AnalysisList({
     [selectedTeam],
   );
 
-  // Use the pre-filtered analyses passed from parent (AuthenticatedApp)
-  const analysesToShow = useMemo(() => analyses || {}, [analyses]);
-
   // Create a map of team ID to sidebar order index for sorting
   const teamOrderMap = useMemo(() => {
     const map = new Map();
@@ -99,6 +96,7 @@ export default function AnalysisList({
 
   // Convert to array for rendering, sorted by sidebar team order
   const analysesArray = useMemo(() => {
+    const analysesToShow = analyses || {};
     const array = Object.values(analysesToShow).filter(
       (analysis) => analysis && analysis.id,
     );
@@ -112,7 +110,7 @@ export default function AnalysisList({
       return (a.name || '').localeCompare(b.name || '');
     });
     return array;
-  }, [analysesToShow, teamOrderMap]);
+  }, [analyses, teamOrderMap]);
 
   // Calculate total accessible analyses using consolidated hook
   const totalAccessibleAnalyses = useMemo(() => {

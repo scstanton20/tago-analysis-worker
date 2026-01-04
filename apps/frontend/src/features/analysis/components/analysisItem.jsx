@@ -25,7 +25,6 @@ import { teamService } from '@/features/teams/api/teamService';
 import { notificationAPI } from '@/utils/notificationAPI.jsx';
 import { filterByPermission } from '@/utils/filterHelpers';
 import logger from '@/utils/logger';
-
 // Lazy load AnalysisLogs
 const AnalysisLogs = lazy(() => import('./analysisLogs'));
 import { useAnalyses, useTeams } from '@/contexts/sseContext';
@@ -203,11 +202,12 @@ export default function AnalysisItem({ analysis, reorderMode = false }) {
       onClick={
         !reorderMode
           ? (e) => {
-              // Don't toggle if clicking on buttons or interactive elements
+              // Don't toggle if clicking on buttons, interactive elements, or inside logs
               if (
                 e.target.closest('button') ||
                 e.target.closest('[role="button"]') ||
-                e.target.closest('a')
+                e.target.closest('a') ||
+                e.target.closest('[data-logs-section]')
               ) {
                 return;
               }
@@ -404,18 +404,20 @@ export default function AnalysisItem({ analysis, reorderMode = false }) {
 
         {/* Logs Section */}
         {showLogs && (
-          <Suspense
-            fallback={
-              <LoadingState
-                loading={true}
-                skeleton
-                pattern="logs"
-                skeletonCount={10}
-              />
-            }
-          >
-            <AnalysisLogs analysis={analysis} />
-          </Suspense>
+          <Box data-logs-section>
+            <Suspense
+              fallback={
+                <LoadingState
+                  loading={true}
+                  skeleton
+                  pattern="logs"
+                  skeletonCount={10}
+                />
+              }
+            >
+              <AnalysisLogs analysis={analysis} />
+            </Suspense>
+          </Box>
         )}
       </Stack>
     </Paper>

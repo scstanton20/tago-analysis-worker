@@ -62,21 +62,21 @@ export function useUnsavedChangesGuard(hasChanges) {
    * User confirmed they want to discard changes
    * Executes the pending action
    */
-  const confirmDiscard = useCallback(() => {
+  const confirmDiscard = () => {
     setShowConfirmation(false);
     if (pendingAction) {
       pendingAction();
       setPendingAction(null);
     }
-  }, [pendingAction]);
+  };
 
   /**
    * User cancelled - wants to keep editing
    */
-  const cancelDiscard = useCallback(() => {
+  const cancelDiscard = () => {
     setShowConfirmation(false);
     setPendingAction(null);
-  }, []);
+  };
 
   return {
     showConfirmation,

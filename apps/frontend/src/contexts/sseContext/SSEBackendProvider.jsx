@@ -16,8 +16,8 @@ export function SSEBackendProvider({ children }) {
   const stalenessCheckIntervalRef = useRef(null);
   const offlineDetectedRef = useRef(false); // Track if we've already detected offline
 
-  // Event Handlers
-  const handleStatusUpdate = useCallback((data) => {
+  // Event Handlers - plain functions (React 19: no useCallback needed for internal handlers)
+  const handleStatusUpdate = (data) => {
     // Handle both SSE event format and HTTP fetch format
     if (data.container_health) {
       // Direct SSE event: { type: 'statusUpdate', container_health: {...}, ... }
@@ -29,24 +29,24 @@ export function SSEBackendProvider({ children }) {
       // Fallback: just use data.data
       setBackendStatus(data.data);
     }
-  }, []);
+  };
 
-  const handleDnsConfigUpdated = useCallback((data) => {
+  const handleDnsConfigUpdated = (data) => {
     if (data.data) {
       setDnsCache(data.data);
     }
-  }, []);
+  };
 
-  const handleDnsStatsUpdate = useCallback((data) => {
+  const handleDnsStatsUpdate = (data) => {
     if (data.data) {
       setDnsCache((prev) => ({
         ...(prev || {}),
         stats: data.data.stats,
       }));
     }
-  }, []);
+  };
 
-  const handleMetricsUpdate = useCallback((data) => {
+  const handleMetricsUpdate = (data) => {
     if (data.total || data.container || data.children || data.processes) {
       // Track when we last received a metrics update
       lastMetricsUpdateRef.current = Date.now();
@@ -79,16 +79,16 @@ export function SSEBackendProvider({ children }) {
         }));
       }
     }
-  }, []);
+  };
 
   // Handle connection loss - clear stale backend status
   // This fires when EventSource natively detects connection closed
-  const handleConnectionLost = useCallback(() => {
+  const handleConnectionLost = () => {
     setBackendStatus(null);
     setMetricsData(null);
     lastMetricsUpdateRef.current = null;
     // Don't reset offlineDetectedRef here - let metricsUpdate reset it when data flows again
-  }, []);
+  };
 
   // Set up staleness detection - check every second if metrics are stale
   // Run once on mount, no dependencies to prevent re-creating interval
@@ -129,44 +129,36 @@ export function SSEBackendProvider({ children }) {
   }, []); // Empty deps - run once on mount
 
   // Message handler to be called by parent
-  const handleMessage = useCallback(
-    (data) => {
-      try {
-        switch (data.type) {
-          case 'statusUpdate':
-            handleStatusUpdate(data);
-            break;
-          case 'dnsConfigUpdated':
-            handleDnsConfigUpdated(data);
-            break;
-          case 'dnsCacheCleared':
-          case 'dnsStatsReset':
-            handleDnsStatsUpdate(data);
-            break;
-          case 'metricsUpdate':
-            handleMetricsUpdate(data);
-            break;
-          case 'connectionLost':
-            handleConnectionLost();
-            break;
-          default:
-            break;
-        }
-      } catch (error) {
-        logger.error('Error in SSEBackendProvider handleMessage:', {
-          type: data?.type,
-          error: error.message,
-        });
+  // Empty deps: all internal handlers are plain functions using only stable setters/refs
+  const handleMessage = useCallback((data) => {
+    try {
+      switch (data.type) {
+        case 'statusUpdate':
+          handleStatusUpdate(data);
+          break;
+        case 'dnsConfigUpdated':
+          handleDnsConfigUpdated(data);
+          break;
+        case 'dnsCacheCleared':
+        case 'dnsStatsReset':
+          handleDnsStatsUpdate(data);
+          break;
+        case 'metricsUpdate':
+          handleMetricsUpdate(data);
+          break;
+        case 'connectionLost':
+          handleConnectionLost();
+          break;
+        default:
+          break;
       }
-    },
-    [
-      handleStatusUpdate,
-      handleDnsConfigUpdated,
-      handleDnsStatsUpdate,
-      handleMetricsUpdate,
-      handleConnectionLost,
-    ],
-  );
+    } catch (error) {
+      logger.error('Error in SSEBackendProvider handleMessage:', {
+        type: data?.type,
+        error: error.message,
+      });
+    }
+  }, []);
 
   const value = useMemo(
     () => ({

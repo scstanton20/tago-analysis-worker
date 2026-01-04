@@ -87,7 +87,7 @@ describe('sseSchemas', () => {
       expect(result.success).toBe(false);
       expect(result.error?.issues[0].path).toContain('analyses');
       expect(result.error?.issues[0].message).toBe(
-        'At least one analysis must be provided',
+        'At least one analysis ID must be provided',
       );
     });
 
@@ -101,9 +101,7 @@ describe('sseSchemas', () => {
 
       expect(result.success).toBe(false);
       expect(result.error?.issues[0].path).toEqual(['analyses', 1]);
-      expect(result.error?.issues[0].message).toBe(
-        'Analysis name cannot be empty',
-      );
+      expect(result.error?.issues[0].message).toBe('Analysis ID is required');
     });
 
     it('should reject analyses with non-string values', () => {
@@ -256,7 +254,7 @@ describe('sseSchemas', () => {
       expect(result.success).toBe(false);
       expect(result.error?.issues[0].path).toContain('analyses');
       expect(result.error?.issues[0].message).toBe(
-        'At least one analysis must be provided',
+        'At least one analysis ID must be provided',
       );
     });
 
@@ -270,9 +268,7 @@ describe('sseSchemas', () => {
 
       expect(result.success).toBe(false);
       expect(result.error?.issues[0].path).toEqual(['analyses', 1]);
-      expect(result.error?.issues[0].message).toBe(
-        'Analysis name cannot be empty',
-      );
+      expect(result.error?.issues[0].message).toBe('Analysis ID is required');
     });
 
     it('should reject analyses with non-string values', () => {

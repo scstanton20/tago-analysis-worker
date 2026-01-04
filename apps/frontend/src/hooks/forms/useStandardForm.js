@@ -129,14 +129,6 @@ export function useStandardForm(config = {}) {
   }, [form, submitOperation.reset]);
 
   /**
-   * Check if form has changes (dirty state)
-   * @returns {boolean}
-   */
-  const hasChanges = useCallback(() => {
-    return form.isDirty();
-  }, [form]);
-
-  /**
    * Set multiple field values at once
    * @param {Object} values - Object with field names and values
    */
@@ -177,7 +169,6 @@ export function useStandardForm(config = {}) {
     setFormError,
     clearFormError,
     resetForm,
-    hasChanges,
     setValues,
     setFieldValue,
 

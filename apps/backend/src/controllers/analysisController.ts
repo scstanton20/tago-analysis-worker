@@ -6,6 +6,7 @@ import type {
   UpdateEnvironmentRequest,
   RollbackVersionRequest,
   UpdateAnalysisNotesRequest,
+  GetLogsQuery,
 } from '@tago-analysis-worker/types';
 import path from 'path';
 import { promises as fs } from 'fs';
@@ -22,6 +23,7 @@ import {
   FILENAME_ERROR_MESSAGE,
 } from '../validation/shared.ts';
 import { broadcastTeamStructureUpdate } from '../utils/responseHelpers.ts';
+import { formatCompactTime } from '../utils/serverTime.ts';
 
 /** Express request with request-scoped logger */
 type RequestWithLogger = Request & {
@@ -539,37 +541,45 @@ export class AnalysisController {
   }
 
   /**
-   * Retrieve paginated analysis logs
-   * Returns structured log entries with pagination metadata
+   * Retrieve analysis logs as plain text
+   * Returns log content formatted for LazyLog viewer
+   * Format: [HH:MM:SS] message
    */
   static async getLogs(
     req: RequestWithLogger & {
       params: { analysisId: string };
-      query: { page?: string; limit?: string };
+      query: GetLogsQuery;
     },
     res: Response,
   ): Promise<void> {
     const { analysisId } = req.params;
-    const page = parseInt(req.query.page || '1') || 1;
-    const limit = parseInt(req.query.limit || '100') || 100;
+    const { page = 1, limit = 200 } = req.query;
 
     req.log.info(
       { action: 'getLogs', analysisId, page, limit },
       'Getting analysis logs',
     );
 
-    const logs = await analysisService.getLogs(analysisId, page, limit);
+    const result = await analysisService.getLogs(analysisId, page, limit);
+
+    // Format logs as plain text lines
+    // Logs are returned newest-first, reverse to get chronological order for display
+    const formattedLines = [...result.logs].reverse().map((log) => {
+      // Use centralized time formatting for consistency
+      const timestamp = log.createdAt
+        ? formatCompactTime(log.createdAt)
+        : log.timestamp || '';
+
+      return `[${timestamp}] ${log.message}`;
+    });
 
     req.log.info(
-      {
-        action: 'getLogs',
-        analysisId,
-        count: logs.logs?.length,
-      },
+      { action: 'getLogs', analysisId, lineCount: formattedLines.length },
       'Logs retrieved',
     );
 
-    res.json(logs);
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.send(formattedLines.join('\n'));
   }
 
   /**

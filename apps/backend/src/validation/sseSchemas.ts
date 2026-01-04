@@ -1,10 +1,13 @@
-// validation/sseSchemas.js
-import { z } from 'zod';
-import { requiredId, emptyStrictSchema } from './shared.ts';
+// validation/sseSchemas.ts
+import {
+  sseSubscribeSchema,
+  sseUnsubscribeSchema,
+  emptyStrictSchema,
+} from '@tago-analysis-worker/types/validation';
 
 /**
  * Validation schemas for SSE (Server-Sent Events) endpoints
- * These schemas validate subscription and unsubscription requests for analysis log streaming
+ * Uses shared schemas from @tago-analysis-worker/types for consistency
  */
 
 export const sseValidationSchemas = {
@@ -18,31 +21,17 @@ export const sseValidationSchemas = {
 
   /**
    * POST /api/sse/subscribe - Subscribe to analysis channels
-   * Validates sessionId (required string, min 1) and analyses array (required, min 1 element)
+   * Validates sessionId (required string, min 1) and analyses array (analysis IDs, min 1 element)
    */
   subscribe: {
-    body: z
-      .object({
-        sessionId: requiredId('sessionId'),
-        analyses: z
-          .array(z.string().min(1, 'Analysis name cannot be empty'))
-          .min(1, 'At least one analysis must be provided'),
-      })
-      .strict(),
+    body: sseSubscribeSchema,
   },
 
   /**
    * POST /api/sse/unsubscribe - Unsubscribe from analysis channels
-   * Validates sessionId (required string, min 1) and analyses array (required, min 1 element)
+   * Validates sessionId (required string, min 1) and analyses array (analysis IDs, min 1 element)
    */
   unsubscribe: {
-    body: z
-      .object({
-        sessionId: requiredId('sessionId'),
-        analyses: z
-          .array(z.string().min(1, 'Analysis name cannot be empty'))
-          .min(1, 'At least one analysis must be provided'),
-      })
-      .strict(),
+    body: sseUnsubscribeSchema,
   },
 } as const;

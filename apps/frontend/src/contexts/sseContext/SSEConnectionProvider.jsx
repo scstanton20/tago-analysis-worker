@@ -73,8 +73,8 @@ export function SSEConnectionProvider({ children, onMessage }) {
     }
   }, [isAuthenticated]);
 
-  // Handle session invalidation
-  const handleSessionInvalidated = useCallback((data) => {
+  // Handle session invalidation - plain function (React 19: no useCallback needed for internal handlers)
+  const handleSessionInvalidated = (data) => {
     logger.log('Session invalidated:', data.reason);
 
     if (data.reason?.includes('Server is shutting down')) {
@@ -90,45 +90,43 @@ export function SSEConnectionProvider({ children, onMessage }) {
       'Session Revoked',
       false,
     );
-  }, []);
+  };
 
-  const handleMessage = useCallback(
-    (event) => {
-      if (!mountedRef.current) return;
+  // Empty deps: handleSessionInvalidated is now a plain function using only stable setters
+  const handleMessage = useCallback((event) => {
+    if (!mountedRef.current) return;
 
-      try {
-        const data = JSON.parse(event.data);
+    try {
+      const data = JSON.parse(event.data);
 
-        // Skip heartbeat messages
-        if (data.type === 'heartbeat' || data.type === 'connection') {
-          return;
-        }
-
-        // Handle init message to set hasInitialData and capture sessionId
-        if (data.type === 'init') {
-          setHasInitialData(true);
-
-          if (data.sessionId) {
-            setSessionId(data.sessionId);
-          }
-        }
-
-        // Handle session invalidation locally
-        if (data.type === 'sessionInvalidated') {
-          handleSessionInvalidated(data);
-          return;
-        }
-
-        // Forward all messages to parent handler (use ref to avoid dependency cascade)
-        if (onMessageRef.current) {
-          onMessageRef.current(data);
-        }
-      } catch (error) {
-        logger.error('Error handling SSE message:', error);
+      // Skip heartbeat messages
+      if (data.type === 'heartbeat' || data.type === 'connection') {
+        return;
       }
-    },
-    [handleSessionInvalidated],
-  );
+
+      // Handle init message to set hasInitialData and capture sessionId
+      if (data.type === 'init') {
+        setHasInitialData(true);
+
+        if (data.sessionId) {
+          setSessionId(data.sessionId);
+        }
+      }
+
+      // Handle session invalidation locally
+      if (data.type === 'sessionInvalidated') {
+        handleSessionInvalidated(data);
+        return;
+      }
+
+      // Forward all messages to parent handler (use ref to avoid dependency cascade)
+      if (onMessageRef.current) {
+        onMessageRef.current(data);
+      }
+    } catch (error) {
+      logger.error('Error handling SSE message:', error);
+    }
+  }, []);
 
   // Define createConnection before reconnect to avoid circular dependency issues
   const createConnection = useCallback(async () => {

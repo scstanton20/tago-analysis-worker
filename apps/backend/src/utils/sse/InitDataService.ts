@@ -6,6 +6,7 @@
 import { createChildLogger } from '../logging/logger.ts';
 import { SSE_API_VERSION, type Session } from './utils.ts';
 import { getTagoSdkVersion } from '../sdkVersion.ts';
+import { getServerTime } from '../serverTime.ts';
 import type { SSEManager } from './SSEManager.ts';
 import type {
   Analysis,
@@ -233,7 +234,7 @@ export class InitDataService {
           sdkVersion: tagoVersion,
           runningAnalyses: runningAnalyses.length,
         },
-        serverTime: new Date().toString(),
+        serverTime: getServerTime(),
       };
 
       // Use better-sse's push method (no event type for generic onmessage)

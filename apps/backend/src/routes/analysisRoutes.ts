@@ -709,7 +709,9 @@ analysisIdRouter.put(
  * /analyses/{analysisId}/logs:
  *   get:
  *     summary: Get analysis logs
- *     description: Retrieve paginated logs for an analysis
+ *     description: |
+ *       Retrieve logs for an analysis as plain text.
+ *       Each line is formatted as: [HH:MM:SS] message
  *     tags: [Analysis Logs]
  *     parameters:
  *       - in: path
@@ -731,16 +733,21 @@ analysisIdRouter.put(
  *         schema:
  *           type: integer
  *           minimum: 1
- *           maximum: 1000
- *           default: 100
+ *           maximum: 10000
+ *           default: 200
  *         description: Number of log entries per page
  *     responses:
  *       200:
- *         description: Logs retrieved successfully
+ *         description: Logs retrieved successfully as plain text
  *         content:
- *           application/json:
+ *           text/plain:
  *             schema:
- *               $ref: '#/components/schemas/AnalysisLogs'
+ *               type: string
+ *               description: Log entries, one per line in format [HH:MM:SS] message
+ *               example: |
+ *                 [12:00:00] Analysis started
+ *                 [12:00:01] Processing data...
+ *                 [12:00:02] Completed successfully
  *       404:
  *         description: Analysis not found
  *         content:

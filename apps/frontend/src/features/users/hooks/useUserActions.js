@@ -64,9 +64,9 @@ export function useUserActions({ loadUsers }) {
   /**
    * Handle managing user sessions
    */
-  const handleManageSessions = useCallback((user) => {
+  const handleManageSessions = (user) => {
     modalService.openUserSessions(user);
-  }, []);
+  };
 
   /**
    * Handle banning a user

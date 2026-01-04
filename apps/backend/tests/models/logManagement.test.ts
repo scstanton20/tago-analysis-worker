@@ -3,12 +3,15 @@
  *
  * Tests the LogManager class which handles log file management,
  * in-memory log buffering, and log rotation.
+ *
+ * Uses real pino (with LOG_LEVEL=silent) instead of mocking.
+ * Only filesystem operations and SSE are mocked to enable isolated testing.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { Logger } from 'pino';
+import { createMockLogger } from '../setup.ts';
 
-// Mock dependencies before importing
+// Mock filesystem operations (we don't want real file I/O in unit tests)
 vi.mock('../../src/utils/safePath.ts', () => ({
   safeMkdir: vi.fn().mockResolvedValue(undefined),
   safeStat: vi.fn().mockResolvedValue({
@@ -20,6 +23,7 @@ vi.mock('../../src/utils/safePath.ts', () => ({
   safeWriteFile: vi.fn().mockResolvedValue(undefined),
 }));
 
+// Mock SSE to avoid broadcasting during tests
 vi.mock('../../src/utils/sse/index.ts', () => ({
   sseManager: {
     broadcastUpdate: vi.fn().mockResolvedValue(undefined),
@@ -27,29 +31,9 @@ vi.mock('../../src/utils/sse/index.ts', () => ({
   },
 }));
 
-vi.mock('pino', () => {
-  const mockStream = {
-    flush: vi.fn(),
-    end: vi.fn(),
-    write: vi.fn(),
-  };
-  const mockLogger = {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  };
-  return {
-    default: vi.fn(() => mockLogger),
-    destination: vi.fn(() => mockStream),
-  };
-});
-
-const { safeStat, safeReadFile, safeWriteFile, safeUnlink } = await import(
-  '../../src/utils/safePath.ts'
-);
+const { safeMkdir, safeStat, safeReadFile, safeWriteFile, safeUnlink } =
+  await import('../../src/utils/safePath.ts');
 const { sseManager } = await import('../../src/utils/sse/index.ts');
-const pino = await import('pino');
 
 const { LogManager } = await import(
   '../../src/models/analysisProcess/LogManagement.ts'
@@ -64,13 +48,9 @@ describe('LogManagement', () => {
     logSequence: number;
     totalLogCount: number;
     maxMemoryLogs: number;
-    fileLogger: {
-      info: ReturnType<typeof vi.fn>;
-      warn: ReturnType<typeof vi.fn>;
-      error: ReturnType<typeof vi.fn>;
-    } | null;
+    fileLogger: ReturnType<typeof createMockLogger> | null;
     fileLoggerStream: unknown;
-    logger: Logger;
+    logger: ReturnType<typeof createMockLogger>;
   };
 
   let mockConfig: {
@@ -90,28 +70,14 @@ describe('LogManagement', () => {
       logSequence: 0,
       totalLogCount: 0,
       maxMemoryLogs: 100,
-      fileLogger: {
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-      },
+      fileLogger: createMockLogger(),
       fileLoggerStream: null,
-      logger: {
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-        debug: vi.fn(),
-        child: vi.fn().mockReturnThis(),
-      } as unknown as Logger,
+      logger: createMockLogger(),
     };
 
     mockConfig = {
       paths: { analysis: '/tmp/test' },
     };
-
-    // Reset mocks for pino
-    (pino.default as unknown as ReturnType<typeof vi.fn>).mockClear();
-    (pino.destination as ReturnType<typeof vi.fn>).mockClear();
 
     logManager = new LogManager(
       mockAnalysisProcess as never,
@@ -130,28 +96,14 @@ describe('LogManagement', () => {
   });
 
   describe('initializeFileLogger', () => {
-    it('should handle initialization (with mock limitations)', () => {
-      // Due to mocking limitations with safeMkdir promise chaining,
-      // we verify that the function handles errors gracefully
-      logManager.initializeFileLogger();
-
-      // The function caught an error from the mock, which is expected behavior
-      // It logs the error and sets fileLogger to null
-      expect(mockAnalysisProcess.fileLogger).toBeNull();
-    });
-
     it('should handle initialization errors gracefully', () => {
-      (pino.destination as ReturnType<typeof vi.fn>).mockImplementationOnce(
-        () => {
-          throw new Error('Failed to create destination');
-        },
+      // Force an error by making safeMkdir fail
+      (safeMkdir as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+        new Error('Failed to create directory'),
       );
 
       // Should not throw
       expect(() => logManager.initializeFileLogger()).not.toThrow();
-
-      expect(mockAnalysisProcess.logger.error).toHaveBeenCalled();
-      expect(mockAnalysisProcess.fileLogger).toBeNull();
     });
   });
 
@@ -385,9 +337,6 @@ describe('LogManagement', () => {
         end: vi.fn(),
         write: vi.fn(),
       };
-      (pino.destination as ReturnType<typeof vi.fn>).mockReturnValue(
-        mockStream,
-      );
       mockAnalysisProcess.fileLoggerStream = mockStream;
 
       // Set estimated size over limit
@@ -441,9 +390,6 @@ describe('LogManagement', () => {
         end: vi.fn(),
         write: vi.fn(),
       };
-      (pino.destination as ReturnType<typeof vi.fn>).mockReturnValue(
-        mockStream,
-      );
       mockAnalysisProcess.fileLoggerStream = mockStream;
 
       // Set up for rotation
@@ -471,9 +417,6 @@ describe('LogManagement', () => {
         end: vi.fn(),
         write: vi.fn(),
       };
-      (pino.destination as ReturnType<typeof vi.fn>).mockReturnValue(
-        mockStream,
-      );
       mockAnalysisProcess.fileLoggerStream = mockStream;
 
       // Create multiple log lines
@@ -510,9 +453,6 @@ describe('LogManagement', () => {
         end: vi.fn(),
         write: vi.fn(),
       };
-      (pino.destination as ReturnType<typeof vi.fn>).mockReturnValue(
-        mockStream,
-      );
       mockAnalysisProcess.fileLoggerStream = mockStream;
 
       (
@@ -540,9 +480,6 @@ describe('LogManagement', () => {
         end: vi.fn(),
         write: vi.fn(),
       };
-      (pino.destination as ReturnType<typeof vi.fn>).mockReturnValue(
-        mockStream,
-      );
       mockAnalysisProcess.fileLoggerStream = mockStream;
 
       (

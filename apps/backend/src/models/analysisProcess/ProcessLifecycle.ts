@@ -18,6 +18,15 @@ import path from 'path';
 import { fork } from 'child_process';
 import { fileURLToPath } from 'url';
 import { config } from '../../config/default.ts';
+import {
+  formatError,
+  formatExitCode,
+  formatNodeVersion,
+  formatStopping,
+  formatForceStop,
+  formatConnectionRestart,
+} from '../../utils/logging/index.ts';
+import { getServerTime } from '../../utils/serverTime.ts';
 import type {
   AnalysisProcessState,
   AnalysisStatus,
@@ -253,7 +262,10 @@ export class ProcessLifecycleManager {
       `Connection error detected, scheduling restart attempt ${this.analysisProcess.restartAttempts} in ${delay}ms`,
     );
     void this.analysisProcess.addLog(
-      `Connection error - restart attempt ${this.analysisProcess.restartAttempts} in ${delay / 1000}s`,
+      formatConnectionRestart(
+        this.analysisProcess.restartAttempts,
+        delay / 1000,
+      ),
     );
 
     setTimeout(async () => {
@@ -391,7 +403,7 @@ export class ProcessLifecycleManager {
 
       this.analysisProcess.logger.info('Starting analysis process');
 
-      await this.analysisProcess.addLog(`Node.js ${process.version}`);
+      await this.analysisProcess.addLog(formatNodeVersion(process.version));
 
       // Load custom environment variables for this analysis
       const storedEnv = this.analysisProcess.service
@@ -432,6 +444,8 @@ export class ProcessLifecycleManager {
           ...(config.process?.additionalEnv || {}),
           ...storedEnv,
           STORAGE_BASE: config.storage.base,
+          // Force ANSI colors in child process since stdout is piped (not a TTY)
+          FORCE_COLOR: '1',
         },
         stdio: ['inherit', 'pipe', 'pipe', 'ipc'],
         execArgv: sandboxExecArgv,
@@ -460,7 +474,7 @@ export class ProcessLifecycleManager {
           update: {
             status: 'running',
             enabled: true,
-            startTime: new Date().toISOString(),
+            startTime: getServerTime(),
             startSequence: Date.now(),
           },
         },
@@ -470,7 +484,7 @@ export class ProcessLifecycleManager {
         { err: error },
         'Failed to start analysis process',
       );
-      await this.analysisProcess.addLog(`ERROR: ${(error as Error).message}`);
+      await this.analysisProcess.addLog(formatError((error as Error).message));
       throw error;
     } finally {
       // Always reset the flag
@@ -503,7 +517,7 @@ export class ProcessLifecycleManager {
 
     this.analysisProcess.logger.info('Stopping analysis process');
 
-    await this.analysisProcess.addLog('Stopping analysis...');
+    await this.analysisProcess.addLog(formatStopping());
 
     // Mark as manual stop for exit code normalization
     this.analysisProcess.isManualStop = true;
@@ -525,14 +539,12 @@ export class ProcessLifecycleManager {
           'Force stopping process after timeout',
         );
         // Log without await - handleExit will handle final cleanup
-        this.analysisProcess
-          .addLog('Force stopping process...')
-          .catch((err) => {
-            this.analysisProcess.logger.error(
-              { err },
-              'Failed to log force stop message',
-            );
-          });
+        this.analysisProcess.addLog(formatForceStop()).catch((err) => {
+          this.analysisProcess.logger.error(
+            { err },
+            'Failed to log force stop message',
+          );
+        });
         this.analysisProcess.process.kill('SIGKILL');
       }
     }, config.analysis.forceKillTimeout);
@@ -581,7 +593,7 @@ export class ProcessLifecycleManager {
     // Manual stops explicitly set intendedState = 'stopped' in stop()
     if (status === 'running') {
       this.analysisProcess.intendedState = 'running';
-      this.analysisProcess.lastStartTime = new Date().toString();
+      this.analysisProcess.lastStartTime = getServerTime();
     }
 
     this.analysisProcess.logger.debug(
@@ -617,7 +629,7 @@ export class ProcessLifecycleManager {
     }
     if (this.analysisProcess.stderrBuffer.trim()) {
       await this.analysisProcess.addLog(
-        `ERROR: ${this.analysisProcess.stderrBuffer.trim()}`,
+        formatError(this.analysisProcess.stderrBuffer.trim()),
       );
     }
 
@@ -636,9 +648,7 @@ export class ProcessLifecycleManager {
       'Analysis process exited',
     );
 
-    await this.analysisProcess.addLog(
-      `Process exited with code ${normalizedCode}`,
-    );
+    await this.analysisProcess.addLog(formatExitCode(normalizedCode));
     this.analysisProcess.process = null;
 
     // Reset manual stop flag
@@ -657,7 +667,7 @@ export class ProcessLifecycleManager {
         status: 'stopped',
         enabled: false,
         exitCode: normalizedCode,
-        exitTime: new Date().toISOString(),
+        exitTime: getServerTime(),
         exitSequence: Date.now(),
       },
     });

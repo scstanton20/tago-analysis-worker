@@ -1,11 +1,12 @@
 import pino from 'pino';
 import { LokiTransport } from './lokiTransport.ts';
+import { createPrettyStream } from './prettyStream.ts';
 
 type Environment = 'development' | 'production' | 'test';
 
 interface StreamConfig {
   level: string;
-  stream: NodeJS.WritableStream | ReturnType<typeof pino.transport>;
+  stream: NodeJS.WritableStream | ReturnType<typeof pino.destination>;
 }
 
 interface LokiLabels {
@@ -38,40 +39,30 @@ export function parseLokiLabels(labelString: string | undefined): LokiLabels {
 }
 
 /**
- * Creates a console stream with pino-pretty formatting for development
- * or stdout for production/when Loki is enabled
+ * Creates a console stream with pretty colored formatting
+ *
+ * Uses a lightweight picocolors-based formatter for human-readable output.
+ * Loki (if configured) receives structured JSON via its own transport.
  */
 export function createConsoleStream(
   env: Environment | string,
   additionalIgnoreFields: string[] = [],
 ): StreamConfig {
-  const ignoreFields = ['pid', 'hostname', ...additionalIgnoreFields];
+  const includeModule = process.env.LOG_INCLUDE_MODULE === 'true';
+  const level =
+    process.env.LOG_LEVEL || (env === 'development' ? 'debug' : 'info');
 
-  if (process.env.LOG_INCLUDE_MODULE !== 'true') {
-    ignoreFields.push('module', 'analysis');
-  }
+  const prettyStream = createPrettyStream({
+    ignore: additionalIgnoreFields,
+    includeModule,
+  });
 
-  // Pretty output for local development (only when Loki is not configured)
-  if (env === 'development' && !process.env.LOG_LOKI_URL) {
-    return {
-      level: process.env.LOG_LEVEL || 'debug',
-      stream: pino.transport({
-        target: 'pino-pretty',
-        options: {
-          colorize: true,
-          translateTime: 'yyyy-mm-dd HH:MM:ss',
-          ignore: ignoreFields.join(','),
-          messageFormat: '{msg}',
-          errorLikeObjectKeys: ['err', 'error'],
-        },
-      }),
-    };
-  }
+  // Pipe pretty stream to stdout
+  prettyStream.pipe(process.stdout);
 
-  // Standard output for production or when Loki is enabled
   return {
-    level: process.env.LOG_LEVEL || (env === 'development' ? 'debug' : 'info'),
-    stream: process.stdout,
+    level,
+    stream: prettyStream,
   };
 }
 

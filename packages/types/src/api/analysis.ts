@@ -9,7 +9,6 @@ import type {
   AnalysisConfig,
   AnalysisVersion,
 } from '../domain/analysis.js';
-import type { LogsResponse } from '../domain/log.js';
 
 // ============================================================================
 // ANALYSIS CRUD
@@ -109,15 +108,17 @@ export type UpdateConfigResponse = {
 
 /** Get logs request query params */
 export type GetLogsQuery = {
+  /** Page number (default: 1) */
+  page?: number;
+  /** Entries per page (default: 200) */
   limit?: number;
-  before?: number;
-  after?: number;
-  level?: string;
-  search?: string;
 };
 
-/** Get logs response */
-export type GetLogsResponse = LogsResponse;
+/**
+ * Get logs response - plain text format
+ * Each line formatted as: [HH:MM:SS] message
+ */
+export type GetLogsResponse = string;
 
 /** Clear logs response */
 export type ClearLogsResponse = {

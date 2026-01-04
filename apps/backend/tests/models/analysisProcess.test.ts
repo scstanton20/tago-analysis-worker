@@ -941,16 +941,17 @@ describe('AnalysisProcess', () => {
       expect(analysis.logs[0].message).toContain('Test output');
     });
 
-    it('should process stderr data with ERROR prefix', async () => {
+    it('should process stderr data as-is (child process handles formatting)', async () => {
       const analysis = new AnalysisProcess(
         'test-analysis-id',
         'test-analysis',
         mockService,
       );
 
+      // Child process sandboxLogger already adds level indicators, so we pass through as-is
       analysis.handleOutput(true, Buffer.from('Error message\n'));
 
-      expect(analysis.logs[0].message).toContain('ERROR: Error message');
+      expect(analysis.logs[0].message).toBe('Error message');
     });
 
     it('should detect SDK connection errors and start grace period', async () => {

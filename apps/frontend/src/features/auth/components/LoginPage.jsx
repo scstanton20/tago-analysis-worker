@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import {
   TextInput,
   PasswordInput,
@@ -177,14 +177,12 @@ export default function LoginPage() {
     window.dispatchEvent(new Event('auth-change'));
   };
 
-  const isWebAuthnSupported = useMemo(() => {
-    return !!(
-      window.PublicKeyCredential &&
-      window.navigator.credentials &&
-      window.navigator.credentials.create &&
-      window.navigator.credentials.get
-    );
-  }, []);
+  const isWebAuthnSupported = !!(
+    window.PublicKeyCredential &&
+    window.navigator.credentials &&
+    window.navigator.credentials.create &&
+    window.navigator.credentials.get
+  );
 
   const handlePasskeyLogin = async () => {
     await passkeyOperation.execute(async () => {

@@ -1,7 +1,7 @@
 {
   "name": "frontend",
   "private": true,
-  "version": "2.6.535",
+  "version": "2.6.5353",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -31,6 +31,7 @@
     "@mantine/hooks": "^8.3.4",
     "@mantine/modals": "^8.3.4",
     "@mantine/notifications": "^8.3.4",
+    "@melloware/react-logviewer": "^6.3.4",
     "@tabler/icons-react": "^3.35.0",
     "@tago-analysis-worker/types": "workspace:*",
     "better-auth": "^1.4.7",

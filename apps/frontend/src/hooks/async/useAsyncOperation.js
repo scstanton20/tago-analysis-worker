@@ -72,16 +72,16 @@ export function useAsyncOperation(options = {}) {
   /**
    * Set error manually
    */
-  const setErrorManually = useCallback((err) => {
+  const setErrorManually = (err) => {
     setError(err);
-  }, []);
+  };
 
   /**
    * Set data manually
    */
-  const setDataManually = useCallback((newData) => {
+  const setDataManually = (newData) => {
     setData(newData);
-  }, []);
+  };
 
   return {
     execute,

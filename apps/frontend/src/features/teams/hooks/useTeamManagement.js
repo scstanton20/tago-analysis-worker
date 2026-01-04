@@ -217,15 +217,6 @@ export function useTeamManagement() {
   }, []);
 
   /**
-   * Reset all form state
-   */
-  const resetState = useCallback(() => {
-    setEditingId(null);
-    setEditingName('');
-    setEditingColor('');
-  }, []);
-
-  /**
    * Check if a name is already in use (for validation)
    */
   const isNameUsed = useCallback(
@@ -284,7 +275,6 @@ export function useTeamManagement() {
     handleDelete,
     startEditingColor,
     cancelEditing,
-    resetState,
     isNameUsed,
     hasUnsavedInlineEdits,
   };

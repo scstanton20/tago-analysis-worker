@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import PropTypes from 'prop-types';
 import {
   Grid,
@@ -446,10 +446,7 @@ function MetricsDashboard() {
   const loading = !metricsData;
 
   // Derive lastUpdate from metricsData timestamp
-  const lastUpdate = useMemo(() => {
-    if (!metricsData?.timestamp) return null;
-    return new Date(metricsData.timestamp);
-  }, [metricsData]);
+  const lastUpdate = metricsData ? new Date(metricsData.timestamp) : null;
 
   const formatNumber = (value, decimals = 2) => {
     if (value === null || value === undefined) return '--';

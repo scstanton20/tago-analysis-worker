@@ -129,23 +129,15 @@ export const analysisValidationSchemas = {
   },
 
   /**
-   * GET /api/analyses/:analysisId/logs - Get analysis logs
+   * GET /api/analyses/:analysisId/logs - Get analysis logs as plain text
    */
   getLogs: {
     params: z.object({
       analysisId: analysisIdSchema,
     }),
     query: z.object({
-      page: z
-        .string()
-        .regex(/^\d+$/, 'Page must be a number')
-        .optional()
-        .transform((val) => (val ? parseInt(val, 10) : 1)),
-      limit: z
-        .string()
-        .regex(/^\d+$/, 'Limit must be a number')
-        .optional()
-        .transform((val) => (val ? parseInt(val, 10) : 100)),
+      page: pageSchema,
+      limit: limitSchema,
     }),
   },
 

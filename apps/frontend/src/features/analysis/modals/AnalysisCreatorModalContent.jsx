@@ -1,4 +1,4 @@
-import { useMemo, lazy, Suspense } from 'react';
+import { lazy, Suspense } from 'react';
 import PropTypes from 'prop-types';
 import sanitize from 'sanitize-filename';
 import {
@@ -63,14 +63,12 @@ const AnalysisCreatorModalContent = ({ id, innerProps }) => {
   const uploadableTeams = getUploadableTeams();
 
   // Compute initial team selection before form initialization
-  const initialTeamId = useMemo(() => {
-    // If a target team is specified and user has access, use it
-    if (targetTeam && uploadableTeams.some((team) => team.id === targetTeam)) {
-      return targetTeam;
-    }
-    // Otherwise, pick the first available team
-    return uploadableTeams.length > 0 ? uploadableTeams[0].id : null;
-  }, [targetTeam, uploadableTeams]);
+  const initialTeamId =
+    targetTeam && uploadableTeams.some((team) => team.id === targetTeam)
+      ? targetTeam
+      : uploadableTeams.length > 0
+        ? uploadableTeams[0].id
+        : null;
 
   // Initialize form with useStandardForm
   const { form, submitOperation, handleSubmit } = useStandardForm({

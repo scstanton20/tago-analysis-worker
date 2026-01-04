@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import logger from '@/utils/logger';
 import {
@@ -6,13 +6,7 @@ import {
   showError,
   showInfo,
 } from '@/utils/notificationService.jsx';
-// Web worker for log processing (deduplication, sequence tracking)
-import {
-  processLog as workerProcessLog,
-  clearSequences as workerClearSequences,
-  initSequences as workerInitSequences,
-  terminateWorker,
-} from '@/workers/sseWorkerClient';
+import { logEventBus } from '@/utils/logEventBus';
 import { AnalysesContext } from './contexts/AnalysesContext.js';
 
 export function SSEAnalysesProvider({ children }) {
@@ -21,13 +15,6 @@ export function SSEAnalysesProvider({ children }) {
   const [loadingAnalyses, setLoadingAnalyses] = useState(new Set());
   // DNS stats keyed by analysisId (UUID) - populated via SSE channel subscription
   const [analysisDnsStats, setAnalysisDnsStats] = useState({});
-
-  // Cleanup worker on unmount
-  useEffect(() => {
-    return () => {
-      terminateWorker();
-    };
-  }, []);
 
   const addLoadingAnalysis = useCallback((analysisId) => {
     setLoadingAnalyses((prev) => new Set([...prev, analysisId]));
@@ -79,19 +66,13 @@ export function SSEAnalysesProvider({ children }) {
       if (Array.isArray(data.analyses)) {
         // Convert array to object keyed by id
         data.analyses.forEach((analysis) => {
-          analysesObj[analysis.id] = {
-            ...analysis,
-            logs: analysis.logs || [], // Ensure logs is always an array
-          };
+          analysesObj[analysis.id] = { ...analysis };
         });
       } else {
         // Already keyed by analysisId
         analysesObj = Object.entries(data.analyses).reduce(
           (acc, [id, analysis]) => {
-            acc[id] = {
-              ...analysis,
-              logs: analysis.logs || [], // Ensure logs is always an array
-            };
+            acc[id] = { ...analysis };
             return acc;
           },
           {},
@@ -101,13 +82,7 @@ export function SSEAnalysesProvider({ children }) {
 
     setAnalyses(analysesObj);
 
-    // Initialize log sequences tracking in worker (fire-and-forget)
-    const analysisIdList = Object.keys(analysesObj);
-    workerInitSequences(analysisIdList).catch((err) => {
-      logger.error('Failed to init sequences in worker:', err);
-    });
-
-    const analysisIds = new Set(analysisIdList);
+    const analysisIds = new Set(Object.keys(analysesObj));
     setLoadingAnalyses((prev) => {
       const updatedLoadingSet = new Set();
       prev.forEach((loadingId) => {
@@ -138,23 +113,11 @@ export function SSEAnalysesProvider({ children }) {
 
         // Show notifications for status changes
         if (data.update.status === 'running') {
-          // Clear log sequences when analysis starts for fresh sequence tracking
-          // This prevents false duplicate detection after restart
-          recentSequences.current.delete(analysisId);
-          workerClearSequences(analysisId).catch((err) => {
-            logger.error('Failed to clear sequences on start:', err);
-          });
-
           showSuccess(`${analysisName} is now running`, 'Started', 3000);
         } else if (
           data.update.status === 'stopped' &&
           data.update.exitCode !== undefined
         ) {
-          // Clear log sequences in worker (fire-and-forget)
-          workerClearSequences(analysisId).catch((err) => {
-            logger.error('Failed to clear sequences in worker:', err);
-          });
-
           // Analysis stopped
           if (data.update.exitCode === 0) {
             // Normal exit - use info notification with X icon for stopped
@@ -176,10 +139,6 @@ export function SSEAnalysesProvider({ children }) {
   const handleAnalysisCreated = useCallback((data) => {
     if (data.data?.analysisId) {
       const { analysisId, analysisName, teamId, analysisData } = data.data;
-      // Initialize sequences for new analysis in worker (fire-and-forget)
-      workerInitSequences([analysisId]).catch((err) => {
-        logger.error('Failed to init sequences for new analysis:', err);
-      });
 
       if (analysisData) {
         const newAnalysis = {
@@ -187,7 +146,6 @@ export function SSEAnalysesProvider({ children }) {
           id: analysisId,
           name: analysisName,
           teamId: teamId || 'uncategorized',
-          logs: analysisData.logs || [], // Ensure logs is always an array
         };
 
         setAnalyses((prev) => ({
@@ -210,10 +168,6 @@ export function SSEAnalysesProvider({ children }) {
         const newSet = new Set(prev);
         newSet.delete(analysisId);
         return newSet;
-      });
-      // Clear sequences for deleted analysis in worker (fire-and-forget)
-      workerClearSequences(analysisId).catch((err) => {
-        logger.error('Failed to clear sequences for deleted analysis:', err);
       });
       setAnalyses((prev) => {
         const newAnalyses = { ...prev };
@@ -257,76 +211,31 @@ export function SSEAnalysesProvider({ children }) {
     [removeLoadingAnalysis],
   );
 
-  // Track seen sequences locally for fast synchronous duplicate check
-  // Worker handles long-term tracking and cleanup
-  const recentSequences = useRef(new Map());
-
   const handleLog = useCallback((data) => {
     if (data.data?.analysisId && data.data?.log) {
-      const { analysisId, log, totalCount, logFileSize } = data.data;
+      const { analysisId, log } = data.data;
 
-      // Fast synchronous duplicate check using local cache
-      if (log.sequence) {
-        const analysisSeqs = recentSequences.current.get(analysisId);
-        if (analysisSeqs?.has(log.sequence)) {
-          return; // Skip duplicate
-        }
-
-        // Track locally
-        if (!analysisSeqs) {
-          recentSequences.current.set(analysisId, new Set([log.sequence]));
-        } else {
-          analysisSeqs.add(log.sequence);
-          // Keep local cache small (last 100 sequences per analysis)
-          if (analysisSeqs.size > 100) {
-            const arr = Array.from(analysisSeqs);
-            recentSequences.current.set(analysisId, new Set(arr.slice(-100)));
-          }
-        }
-      }
-
-      // Track in worker for cross-session deduplication (fire-and-forget)
-      workerProcessLog(analysisId, log).catch(() => {
-        // Ignore worker errors for log processing
-      });
-
-      setAnalyses((prev) => {
-        if (!prev[analysisId]) return prev;
-        return {
-          ...prev,
-          [analysisId]: {
-            ...prev[analysisId],
-            logs: [log, ...(prev[analysisId]?.logs || [])].slice(0, 1000),
-            totalLogCount: totalCount,
-            logFileSize: logFileSize,
-          },
-        };
-      });
+      // Emit directly to event bus - subscribers handle rendering
+      // This is a pure pipe from SSE channel to LazyLog
+      logEventBus.emit(analysisId, log);
     }
   }, []);
 
   const handleLogsCleared = useCallback((data) => {
     if (data.data?.analysisId) {
-      const { analysisId, analysisName, clearMessage } = data.data;
+      const { analysisId, analysisName } = data.data;
       logger.log(`Clearing logs for ${analysisName || analysisId}`);
 
-      // Clear local sequence cache
-      recentSequences.current.delete(analysisId);
-      // Clear worker sequences (fire-and-forget)
-      workerClearSequences(analysisId).catch(() => {});
+      // Notify event bus subscribers that logs were cleared
+      logEventBus.clear(analysisId);
 
-      // If clearMessage is provided, show it as the only log entry
-      const clearedLogs = clearMessage ? [clearMessage] : [];
-
+      // Update logsClearedAt to trigger LazyLog remount via key
       setAnalyses((prev) => {
         if (!prev[analysisId]) return prev;
         return {
           ...prev,
           [analysisId]: {
             ...prev[analysisId],
-            logs: clearedLogs,
-            totalLogCount: clearedLogs.length,
-            logFileSize: 0,
             logsClearedAt: Date.now(),
           },
         };
@@ -339,9 +248,8 @@ export function SSEAnalysesProvider({ children }) {
       const { analysisId, analysisName, version, restarted, ...analysisData } =
         data.data;
 
-      // Clear log sequences for fresh start
-      recentSequences.current.delete(analysisId);
-      workerClearSequences(analysisId).catch(() => {});
+      // Notify event bus subscribers that logs were cleared
+      logEventBus.clear(analysisId);
 
       // Update analysis with rollback information
       setAnalyses((prev) => {
@@ -351,10 +259,8 @@ export function SSEAnalysesProvider({ children }) {
           [analysisId]: {
             ...prev[analysisId],
             ...analysisData,
-            logs: [], // Clear logs since they were cleared during rollback
-            totalLogCount: 0,
-            logFileSize: 0,
             currentVersion: version,
+            logsClearedAt: Date.now(), // Trigger LazyLog remount
           },
         };
       });

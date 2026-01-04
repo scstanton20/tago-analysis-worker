@@ -19,6 +19,11 @@ import {
   safeReadFile,
   safeWriteFile,
 } from '../../utils/safePath.ts';
+import {
+  formatLogRotation,
+  formatOversizedLogWarning,
+} from '../../utils/logging/index.ts';
+import { getServerTime } from '../../utils/serverTime.ts';
 import { ANALYSIS_PROCESS } from '../../constants.ts';
 import type { Config } from '../../config/default.ts';
 import type {
@@ -140,10 +145,10 @@ export class LogManager {
       // Create Pino logger with custom formatting
       // - Custom timestamp without extra fields
       // - No pid/hostname (cleaner output)
-      // - NDJSON format: {"time":"2025-01-01T00:00:00.000Z","msg":"message"}
+      // - NDJSON format: {"time":"Thu Jan 08 2026 23:05:31 GMT-0500","msg":"message"}
       this.analysisProcess.fileLogger = pino(
         {
-          timestamp: () => `"time":"${new Date().toISOString()}"`,
+          timestamp: () => `"time":"${getServerTime()}"`,
           base: null, // Remove pid, hostname fields
           formatters: {
             level: () => ({}), // Remove level from output
@@ -179,7 +184,7 @@ export class LogManager {
    * @param message - Log message
    */
   async addLog(message: string): Promise<void> {
-    const timestamp = new Date().toLocaleString();
+    const timestamp = getServerTime();
     const logEntry: LogEntry = {
       sequence: ++this.analysisProcess.logSequence,
       timestamp,
@@ -396,7 +401,7 @@ export class LogManager {
 
       // Log that rotation occurred
       // Don't use addLog here to avoid recursion - write directly
-      const rotationMessage = `Log file rotated automatically (was ${sizeMB}MB, preserved last ${preservedLogs.length} entries). Analysis continues.`;
+      const rotationMessage = formatLogRotation(sizeMB, preservedLogs.length);
       if (this.analysisProcess.fileLogger) {
         this.analysisProcess.fileLogger.info(rotationMessage);
         this.estimatedFileSize +=
@@ -406,7 +411,7 @@ export class LogManager {
       // Add rotation message to in-memory logs
       const rotationEntry: LogEntry = {
         sequence: ++this.analysisProcess.logSequence,
-        timestamp: new Date().toLocaleString(),
+        timestamp: getServerTime(),
         message: rotationMessage,
         createdAt: Date.now(),
       };
@@ -571,9 +576,7 @@ export class LogManager {
       this.initializeFileLogger();
 
       // Log that we cleared the file
-      await this.addLog(
-        'Log file was too large and has been cleared. Starting fresh.',
-      );
+      await this.addLog(formatOversizedLogWarning());
     }
   }
 

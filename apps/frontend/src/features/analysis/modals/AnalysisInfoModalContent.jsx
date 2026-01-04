@@ -223,30 +223,22 @@ function AnalysisInfoModalContent({ id, innerProps }) {
   const sseDnsStats = getAnalysisDnsStats(analysis.id);
 
   // Format DNS stats for display (SSE returns stats with enabled flag)
-  const dnsStats = useMemo(() => {
-    // Only show if we have stats and DNS cache is enabled
-    if (!sseDnsStats?.enabled) return null;
-
-    return {
-      enabled: true,
-      hits: sseDnsStats.hits || 0,
-      misses: sseDnsStats.misses || 0,
-      hitRate: sseDnsStats.hitRate || 0,
-      hostnameCount: sseDnsStats.hostnameCount || 0,
-      errors: sseDnsStats.errors || 0,
-    };
-  }, [sseDnsStats]);
+  const dnsStats = sseDnsStats?.enabled
+    ? {
+        enabled: true,
+        hits: sseDnsStats.hits || 0,
+        misses: sseDnsStats.misses || 0,
+        hitRate: sseDnsStats.hitRate || 0,
+        hostnameCount: sseDnsStats.hostnameCount || 0,
+        errors: sseDnsStats.errors || 0,
+      }
+    : null;
 
   // Get team info from SSE
-  const teamInfo = useMemo(() => {
-    const teamId = sseAnalysis?.teamId;
-    if (!teamId) return { id: null, name: 'Uncategorized' };
-    const team = teams[teamId];
-    return {
-      id: teamId,
-      name: team?.name || 'Unknown',
-    };
-  }, [sseAnalysis?.teamId, teams]);
+  const teamId = sseAnalysis?.teamId;
+  const teamInfo = teamId
+    ? { id: teamId, name: teams[teamId]?.name || 'Unknown' }
+    : { id: null, name: 'Uncategorized' };
 
   // Fetch file-based metadata from API (not available in SSE)
   const {

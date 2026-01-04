@@ -1,229 +1,170 @@
-/**
- * Comprehensive hook for managing analysis logs
- * Handles SSE subscription, initial loading, pagination, and clearing
- *
- * @module features/analysis/hooks/useAnalysisLogs
- */
-
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useRef, useEffect, useCallback, useState } from 'react';
 import { useConnection } from '@/contexts/sseContext/hooks/useConnection';
-import logger from '@/utils/logger';
-import { filterNewLogs as workerFilterNewLogs } from '@/workers/sseWorkerClient';
+import { useAnalyses } from '@/contexts/sseContext/hooks/useAnalyses';
+import { logEventBus } from '@/utils/logEventBus';
 import { analysisService } from '../api/analysisService';
 
-const LOGS_PER_PAGE = 100;
+/**
+ * Format a log entry for LazyLog display
+ * @param {Object} log - Log object with timestamp and message
+ * @returns {string} Formatted log line "[HH:MM:SS] message"
+ */
+function formatLogEntry(log) {
+  if (!log) return '';
+
+  const timestamp = log.timestamp
+    ? new Date(log.timestamp).toLocaleTimeString('en-US', {
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      })
+    : '';
+
+  return timestamp ? `[${timestamp}] ${log.message}` : log.message;
+}
 
 /**
- * Manages all aspects of analysis log display:
- * - SSE subscription with restart-aware resubscription
- * - Initial log loading from API
- * - Pagination (load more)
- * - Log clearing detection
- * - Deduplication and sorting
+ * Hook for managing analysis logs with LazyLog integration
  *
- * @param {Object} params - Hook parameters
- * @param {Object} params.analysis - Analysis object from SSE context
- * @param {Function} [params.onRestart] - Optional callback when analysis restarts
- * @returns {Object} Log state and controls
+ * Behavior:
+ * - When analysis is STOPPED: fetches historical logs from API on mount
+ * - When analysis is RUNNING: shows live SSE logs only (no initial fetch)
+ * - User can scroll up to pause auto-follow, scroll to bottom to resume
+ * - When logs are cleared via SSE, returns new logsClearedAt to trigger remount
+ *
+ * @param {Object} analysis - Analysis object with id and status
+ * @returns {Object} Log management state and handlers
  */
-export function useAnalysisLogs({ analysis, onRestart }) {
-  const { sessionId, subscribeToAnalysis, unsubscribeFromAnalysis } =
-    useConnection();
+export function useAnalysisLogs(analysis) {
+  const lazyLogRef = useRef(null);
+  const containerRef = useRef(null);
+  const initialLoadDoneRef = useRef(false);
+  const [isFollowing, setIsFollowing] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Local state for API-fetched logs
-  const [initialLogs, setInitialLogs] = useState([]);
-  const [additionalLogs, setAdditionalLogs] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-
-  // Refs for avoiding stale closures and tracking state
-  const hasLoadedInitial = useRef(false);
-  const previousLogCountRef = useRef(0);
-  const lastClearedAtRef = useRef(null);
-  const prevStatusRef = useRef(analysis.status);
-
-  // Ref to track latest log state for deduplication without deps
-  const currentLogsRef = useRef({
-    sseLogs: [],
-    initialLogs: [],
-    additionalLogs: [],
-  });
-
-  // SSE logs from context (always an array)
-  const sseLogs = analysis.logs;
-  const totalLogCount = analysis.totalLogCount || sseLogs.length;
-
-  // Keep currentLogsRef in sync with latest log state
-  useEffect(() => {
-    currentLogsRef.current = { sseLogs, initialLogs, additionalLogs };
-  }, [sseLogs, initialLogs, additionalLogs]);
-
-  // Load initial logs from API
-  const loadInitialLogs = useCallback(async () => {
-    try {
-      const response = await analysisService.getLogs(analysis.id, {
-        page: 1,
-        limit: LOGS_PER_PAGE,
-      });
-
-      if (response.logs && response.logs.length > 0) {
-        setInitialLogs(response.logs);
-        setHasMore(response.hasMore);
-        hasLoadedInitial.current = true;
-        previousLogCountRef.current = response.logs.length;
-      } else {
-        setHasMore(false);
-      }
-    } catch (error) {
-      logger.error('Failed to fetch initial logs:', error);
-      setHasMore(false);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [analysis.id]);
-
-  // Load more logs (pagination)
-  const loadMoreLogs = useCallback(async () => {
-    if (isLoadingMore || !hasMore) return;
-
-    setIsLoadingMore(true);
-
-    try {
-      const nextPage = page + 1;
-      const response = await analysisService.getLogs(analysis.id, {
-        page: nextPage,
-        limit: LOGS_PER_PAGE,
-      });
-
-      // Use refs to get current log values without stale closures
-      const {
-        sseLogs: currentSseLogs,
-        initialLogs: currentInitialLogs,
-        additionalLogs: currentAdditionalLogs,
-      } = currentLogsRef.current;
-
-      // Collect existing sequences for filtering
-      const existingSequences = [
-        ...currentSseLogs.map((log) => log.sequence),
-        ...currentInitialLogs.map((log) => log.sequence),
-        ...currentAdditionalLogs.map((log) => log.sequence),
-      ].filter(Boolean);
-
-      // Filter out duplicates using worker (off main thread)
-      const result = await workerFilterNewLogs(
-        response.logs || [],
-        existingSequences,
-      );
-      const newLogs = result.logs || [];
-
-      if (newLogs.length > 0) {
-        setAdditionalLogs((prev) => [...prev, ...newLogs]);
-      }
-
-      setHasMore(response.hasMore);
-      setPage(nextPage);
-    } catch (error) {
-      logger.error('Failed to fetch more logs:', error);
-    } finally {
-      setIsLoadingMore(false);
-    }
-  }, [analysis.id, page, hasMore, isLoadingMore]);
-
-  // Reset state helper
-  const resetLogState = useCallback(() => {
-    hasLoadedInitial.current = false;
-    setInitialLogs([]);
-    setAdditionalLogs([]);
-    setPage(1);
-    setHasMore(false);
-    previousLogCountRef.current = 0;
-  }, []);
-
-  // Subscribe to analysis log channel when component mounts
-  useEffect(() => {
-    if (!sessionId || !analysis.id) {
-      return;
-    }
-
-    subscribeToAnalysis([analysis.id]);
-
-    return () => {
-      unsubscribeFromAnalysis([analysis.id]);
-    };
-  }, [analysis.id, sessionId, subscribeToAnalysis, unsubscribeFromAnalysis]);
-
-  // Resubscribe when analysis restarts (status changes to 'running')
-  useEffect(() => {
-    const wasNotRunning = prevStatusRef.current !== 'running';
-    const isNowRunning = analysis.status === 'running';
-
-    // Update ref for next comparison
-    prevStatusRef.current = analysis.status;
-
-    // If analysis just started running, force resubscription for fresh logs
-    if (wasNotRunning && isNowRunning && sessionId && analysis.id) {
-      logger.log('Analysis restarted, resubscribing for fresh logs');
-
-      // Call optional restart callback (e.g., to enable auto-scroll)
-      onRestart?.();
-
-      // Unsubscribe and resubscribe to ensure clean channel state
-      unsubscribeFromAnalysis([analysis.id]).then(() => {
-        subscribeToAnalysis([analysis.id]);
-      });
-    }
-  }, [
-    analysis.status,
-    analysis.id,
+  const {
+    connectionStatus,
     sessionId,
     subscribeToAnalysis,
     unsubscribeFromAnalysis,
-    onRestart,
+  } = useConnection();
+  const { analyses } = useAnalyses();
+
+  const isSSEConnected = connectionStatus === 'connected' && sessionId;
+  const isRunning = analysis?.status === 'running';
+  const analysisId = analysis?.id;
+
+  const logsClearedAt = analyses?.[analysisId]?.logsClearedAt;
+
+  // Subscribe to analysis logs when SSE is connected
+  useEffect(() => {
+    if (!isSSEConnected || !analysisId) return;
+
+    subscribeToAnalysis([analysisId]);
+
+    return () => {
+      unsubscribeFromAnalysis([analysisId]);
+    };
+  }, [
+    analysisId,
+    isSSEConnected,
+    subscribeToAnalysis,
+    unsubscribeFromAnalysis,
   ]);
 
-  // Load initial logs on mount or analysis change
+  // Subscribe to log event bus for real-time logs
   useEffect(() => {
-    resetLogState();
-    loadInitialLogs();
-  }, [analysis.id, resetLogState, loadInitialLogs]);
+    if (!analysisId) return;
 
-  // Handle log clearing via SSE signal (logsClearedAt timestamp)
-  useEffect(() => {
-    const clearedAt = analysis.logsClearedAt;
-    if (clearedAt && clearedAt !== lastClearedAtRef.current) {
-      logger.log('Logs cleared via SSE, resetting local state');
-      resetLogState();
-      lastClearedAtRef.current = clearedAt;
-      // Don't reload - SSE already provides the clear message
+    const unsubscribe = logEventBus.subscribe(analysisId, (log) => {
+      // Handle clear event (from logEventBus.clear())
+      if (log._cleared) {
+        // Component will remount via logsClearedAt key change
+        return;
+      }
+
+      // Skip if LazyLog ref not ready yet
+      if (!lazyLogRef.current) return;
+
+      const formatted = formatLogEntry(log);
+      lazyLogRef.current.appendLines([formatted]);
+    });
+
+    return unsubscribe;
+  }, [analysisId]);
+
+  // Load historical logs - only when analysis is stopped
+  const loadHistoricalLogs = useCallback(async () => {
+    if (!lazyLogRef.current || initialLoadDoneRef.current) return;
+    if (isRunning) {
+      // Don't fetch historical logs when running - SSE will provide live logs
+      initialLoadDoneRef.current = true;
+      return;
     }
-  }, [analysis.logsClearedAt, resetLogState]);
 
-  // Combined, deduplicated, sorted logs
-  const logs = useMemo(() => {
-    return [...sseLogs, ...initialLogs, ...additionalLogs]
-      .filter(
-        (log, index, self) =>
-          index ===
-          self.findIndex((l) =>
-            l.sequence
-              ? l.sequence === log.sequence
-              : l.timestamp === log.timestamp && l.message === log.message,
-          ),
-      )
-      .sort((a, b) => {
-        if (a.sequence && b.sequence) return b.sequence - a.sequence;
-        return new Date(b.timestamp) - new Date(a.timestamp);
-      });
-  }, [sseLogs, initialLogs, additionalLogs]);
+    setIsLoading(true);
+    try {
+      const text = await analysisService.getLogs(analysisId);
+      if (text && text.trim()) {
+        const lines = text.split('\n');
+        lazyLogRef.current.appendLines(lines);
+      }
+      initialLoadDoneRef.current = true;
+    } catch (error) {
+      console.error('Failed to load historical logs:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [analysisId, isRunning]);
+
+  // Load historical logs when SSE connects (only if stopped)
+  useEffect(() => {
+    if (isSSEConnected) {
+      loadHistoricalLogs();
+    }
+  }, [isSSEConnected, loadHistoricalLogs]);
+
+  // Reset state when analysis changes or logs are cleared
+  useEffect(() => {
+    initialLoadDoneRef.current = false;
+  }, [analysisId, logsClearedAt]);
+
+  // Force LazyLog to recalculate viewport when analysis status changes
+  // This fixes the issue where logs disappear visually when stopping
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const frameId = requestAnimationFrame(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
+
+    return () => cancelAnimationFrame(frameId);
+  }, [isRunning]);
+
+  // Handle scroll - detect when user scrolls away from bottom
+  const handleScroll = useCallback(
+    ({ scrollTop, scrollHeight, clientHeight }) => {
+      const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
+      setIsFollowing(isAtBottom);
+    },
+    [],
+  );
+
+  // Scroll to bottom and resume following
+  const scrollToBottom = useCallback(() => {
+    setIsFollowing(true);
+  }, []);
 
   return {
-    logs,
+    lazyLogRef,
+    containerRef,
+    isFollowing,
     isLoading,
-    isLoadingMore,
-    hasMore,
-    totalLogCount,
-    loadMoreLogs,
+    handleScroll,
+    scrollToBottom,
+    logsClearedAt,
   };
 }
+
+export default useAnalysisLogs;
