@@ -43,6 +43,37 @@ import { generateId } from '../utils/generateId.ts';
 
 const moduleLogger = createChildLogger('analysis-service');
 
+// Lazy-loaded SSE manager to avoid circular dependencies
+// Uses singleton pattern with promise caching for thread safety
+type SSEManagerType = {
+  broadcastAnalysisUpdate: (
+    analysisId: string,
+    data: object,
+    teamId?: string,
+  ) => void;
+};
+
+let _sseManager: SSEManagerType | null = null;
+let _sseManagerPromise: Promise<SSEManagerType> | null = null;
+
+async function getSseManager(): Promise<SSEManagerType> {
+  if (_sseManager) return _sseManager;
+  if (_sseManagerPromise) {
+    await _sseManagerPromise;
+    return _sseManager!;
+  }
+
+  _sseManagerPromise = (async () => {
+    const { sseManager } = await import('../utils/sse/index.ts');
+    _sseManager = sseManager as unknown as SSEManagerType;
+    _sseManagerPromise = null;
+    return _sseManager;
+  })();
+
+  await _sseManagerPromise;
+  return _sseManager!;
+}
+
 // ============================================================================
 // INTERNAL TYPES
 // ============================================================================
@@ -769,8 +800,9 @@ class AnalysisService {
 
   async clearLogs(
     analysisId: string,
-    logger: Logger = moduleLogger,
+    options: { broadcast?: boolean; logger?: Logger } = {},
   ): Promise<ClearLogsResult> {
+    const { broadcast = true, logger = moduleLogger } = options;
     try {
       const analysis = this.analyses.get(analysisId);
       if (!analysis) {
@@ -793,7 +825,23 @@ class AnalysisService {
       analysis.logSequence = 0;
       analysis.totalLogCount = 0;
 
-      // Log entry is now handled by the controller's SSE broadcast
+      // Broadcast logsCleared event so frontend clears its state
+      // Skip broadcast if caller handles it (e.g., rollback has its own event)
+      if (broadcast) {
+        const sseManager = await getSseManager();
+        sseManager.broadcastAnalysisUpdate(analysisId, {
+          type: 'logsCleared',
+          data: {
+            analysisId,
+            analysisName: analysis.analysisName,
+            clearMessage: {
+              timestamp: new Date().toLocaleString(),
+              message: 'Log file cleared',
+              level: 'info',
+            },
+          },
+        });
+      }
 
       return { success: true, message: 'Logs cleared successfully' };
     } catch (error) {
@@ -1480,8 +1528,8 @@ class AnalysisService {
       config.paths.analysis,
     );
 
-    // Clear logs
-    await this.clearLogs(analysisId);
+    // Clear logs (skip broadcast since rollback has its own event)
+    await this.clearLogs(analysisId, { broadcast: false });
     await this.addLog(analysisId, `Rolled back to version ${version}`);
 
     // Restart if it was running

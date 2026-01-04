@@ -705,12 +705,14 @@ describe('AnalysisController', () => {
 
       await AnalysisController.clearLogs(req, res);
 
-      expect(analysisService.clearLogs).toHaveBeenCalledWith(analysisId);
+      expect(analysisService.clearLogs).toHaveBeenCalledWith(
+        analysisId,
+        expect.objectContaining({ logger: expect.any(Object) }),
+      );
       expect(res.json).toHaveBeenCalledWith({
         success: true,
         message: 'Logs cleared',
       });
-      expect(sseManager.broadcastAnalysisUpdate).toHaveBeenCalled();
     });
   });
 

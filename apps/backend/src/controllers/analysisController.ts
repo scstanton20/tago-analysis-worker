@@ -745,7 +745,7 @@ export class AnalysisController {
 
   /**
    * Clear all logs for an analysis
-   * Truncates the log file and broadcasts clear event
+   * Truncates the log file and broadcasts clear event (via service)
    */
   static async clearLogs(
     req: RequestWithLogger & { params: { analysisId: string } },
@@ -755,27 +755,12 @@ export class AnalysisController {
 
     req.log.info({ action: 'clearLogs', analysisId }, 'Clearing analysis logs');
 
-    const result = await analysisService.clearLogs(analysisId);
-
-    // Get analysis name for SSE payload
-    const analysis = analysisService.getAnalysisById(analysisId);
-    const analysisName = analysis?.name;
+    // Service handles both clearing and broadcasting logsCleared event
+    const result = await analysisService.clearLogs(analysisId, {
+      logger: req.log,
+    });
 
     req.log.info({ action: 'clearLogs', analysisId }, 'Logs cleared');
-
-    // Broadcast logs cleared with the "Log file cleared" message included
-    sseManager.broadcastAnalysisUpdate(analysisId, {
-      type: 'logsCleared',
-      data: {
-        analysisId,
-        analysisName,
-        clearMessage: {
-          timestamp: new Date().toLocaleString(),
-          message: 'Log file cleared',
-          level: 'info',
-        },
-      },
-    });
 
     res.json(result);
   }

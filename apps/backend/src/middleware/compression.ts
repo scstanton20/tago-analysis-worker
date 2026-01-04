@@ -3,18 +3,6 @@
  *
  * Configures HTTP compression specifically optimized for Server-Sent Events (SSE) endpoints.
  * Provides significant bandwidth savings (30-70%) for repetitive JSON structures in SSE messages.
- *
- * Key Features:
- * - Always compresses SSE responses (threshold: 0)
- * - Maximum compression level for text data
- * - Automatic gzip encoding for browser compatibility
- * - Preserves SSE protocol format during compression
- *
- * Benefits:
- * - 70% bandwidth reduction for typical SSE traffic
- * - Improved performance on mobile/slow networks
- * - Reduced server egress costs
- * - Better scalability for high-frequency updates
  */
 
 import compression from 'compression';
@@ -66,18 +54,8 @@ export function sseCompressionFilter(req: Request, res: Response): boolean {
 export function sseCompression(): RequestHandler {
   return compression({
     filter: sseCompressionFilter,
-
-    // Compress everything, even small messages
-    // SSE sends many small messages, so we want to compress all of them
     threshold: 0,
-
-    // Use maximum compression for text data
-    // Level 9 provides best compression ratio for repetitive JSON
-    // Slight CPU overhead is acceptable for bandwidth savings
-    level: 9,
-
-    // Use default strategy (best for text/JSON compression)
-    // Z_DEFAULT_STRATEGY is optimal for SSE message structures
+    level: 6,
     strategy: zlibConstants.Z_DEFAULT_STRATEGY,
   });
 }

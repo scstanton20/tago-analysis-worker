@@ -138,6 +138,13 @@ export function SSEAnalysesProvider({ children }) {
 
         // Show notifications for status changes
         if (data.update.status === 'running') {
+          // Clear log sequences when analysis starts for fresh sequence tracking
+          // This prevents false duplicate detection after restart
+          recentSequences.current.delete(analysisId);
+          workerClearSequences(analysisId).catch((err) => {
+            logger.error('Failed to clear sequences on start:', err);
+          });
+
           showSuccess(`${analysisName} is now running`, 'Started', 3000);
         } else if (
           data.update.status === 'stopped' &&
