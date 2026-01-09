@@ -7,12 +7,12 @@
 
 import { describe, it, expect } from 'vitest';
 import { createPrettyStream } from '../../../src/utils/logging/prettyStream.ts';
-import { Writable } from 'node:stream';
+import { Transform, Writable } from 'node:stream';
 
 /**
  * Helper to collect stream output
  */
-function collectOutput(stream: NodeJS.WritableStream): Promise<string> {
+function collectOutput(stream: Transform): Promise<string> {
   return new Promise((resolve) => {
     let output = '';
     const collector = new Writable({
