@@ -28,8 +28,9 @@ function formatLogEntry(log) {
  * Hook for managing analysis logs with LazyLog integration
  *
  * Behavior:
- * - When analysis is STOPPED: fetches historical logs from API on mount
- * - When analysis is RUNNING: shows live SSE logs only (no initial fetch)
+ * - Always fetches historical logs from API on mount
+ * - SSE logs that arrive during the fetch are buffered and flushed after
+ * - When analysis is RUNNING: SSE logs append to historical logs in real-time
  * - User can scroll up to pause auto-follow, scroll to bottom to resume
  * - When logs are cleared via SSE, returns new logsClearedAt to trigger remount
  *
@@ -40,6 +41,7 @@ export function useAnalysisLogs(analysis) {
   const lazyLogRef = useRef(null);
   const containerRef = useRef(null);
   const initialLoadDoneRef = useRef(false);
+  const pendingLogsRef = useRef([]); // Buffer for SSE logs during historical fetch
   const [isFollowing, setIsFollowing] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -80,28 +82,36 @@ export function useAnalysisLogs(analysis) {
     const unsubscribe = logEventBus.subscribe(analysisId, (log) => {
       // Handle clear event (from logEventBus.clear())
       if (log._cleared) {
+        // Clear any buffered logs immediately
+        pendingLogsRef.current = [];
         // Component will remount via logsClearedAt key change
+        return;
+      }
+
+      const formatted = formatLogEntry(log);
+
+      // Buffer logs if historical logs haven't loaded yet
+      if (!initialLoadDoneRef.current) {
+        pendingLogsRef.current.push(formatted);
         return;
       }
 
       // Skip if LazyLog ref not ready yet
       if (!lazyLogRef.current) return;
 
-      const formatted = formatLogEntry(log);
       lazyLogRef.current.appendLines([formatted]);
     });
 
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+      // Clear buffer on cleanup to prevent stale logs
+      pendingLogsRef.current = [];
+    };
   }, [analysisId]);
 
-  // Load historical logs - only when analysis is stopped
+  // Load historical logs - always fetch regardless of running state
   const loadHistoricalLogs = useCallback(async () => {
     if (!lazyLogRef.current || initialLoadDoneRef.current) return;
-    if (isRunning) {
-      // Don't fetch historical logs when running - SSE will provide live logs
-      initialLoadDoneRef.current = true;
-      return;
-    }
 
     setIsLoading(true);
     try {
@@ -111,14 +121,26 @@ export function useAnalysisLogs(analysis) {
         lazyLogRef.current.appendLines(lines);
       }
       initialLoadDoneRef.current = true;
+
+      // Flush any SSE logs that arrived during the fetch
+      if (pendingLogsRef.current.length > 0) {
+        lazyLogRef.current.appendLines(pendingLogsRef.current);
+        pendingLogsRef.current = [];
+      }
     } catch (error) {
       console.error('Failed to load historical logs:', error);
+      // Still mark as done so SSE logs can flow through
+      initialLoadDoneRef.current = true;
+      if (pendingLogsRef.current.length > 0) {
+        lazyLogRef.current?.appendLines(pendingLogsRef.current);
+        pendingLogsRef.current = [];
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [analysisId, isRunning]);
+  }, [analysisId]);
 
-  // Load historical logs when SSE connects (only if stopped)
+  // Load historical logs when SSE connects
   useEffect(() => {
     if (isSSEConnected) {
       loadHistoricalLogs();
@@ -128,6 +150,7 @@ export function useAnalysisLogs(analysis) {
   // Reset state when analysis changes or logs are cleared
   useEffect(() => {
     initialLoadDoneRef.current = false;
+    pendingLogsRef.current = [];
   }, [analysisId, logsClearedAt]);
 
   // Force LazyLog to recalculate viewport when analysis status changes
