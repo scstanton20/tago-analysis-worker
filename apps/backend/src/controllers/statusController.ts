@@ -1,16 +1,11 @@
 // controllers/statusController.ts
-import type { Request, Response } from 'express';
-import type { Logger } from 'pino';
+import type { Response } from 'express';
+import type { RequestWithLogger } from '../types/index.ts';
 import ms from 'ms';
-import { analysisService } from '../services/analysisService.ts';
+import { analysisService } from '../services/analysis/index.ts';
 import { sseManager } from '../utils/sse/index.ts';
 import { getTagoSdkVersion } from '../utils/sdkVersion.ts';
 import { getServerTime } from '../utils/serverTime.ts';
-
-/** Express request with request-scoped logger */
-type RequestWithLogger = Request & {
-  log: Logger;
-};
 
 /** System status response */
 type SystemStatusResponse = {
@@ -110,13 +105,14 @@ export class StatusController {
       'System status retrieved',
     );
 
-    // Return appropriate HTTP status code based on container state
+    // Map container state to HTTP status code
+    const containerStatusToHttpCode: Record<string, number> = {
+      ready: 200,
+      error: 500,
+      initializing: 203, // Non-Authoritative Information
+    };
     const httpStatus =
-      currentContainerState.status === 'ready'
-        ? 200
-        : currentContainerState.status === 'error'
-          ? 500
-          : 203; // 203 = Non-Authoritative Information
+      containerStatusToHttpCode[currentContainerState.status] ?? 203;
 
     res.status(httpStatus).json(status);
   }

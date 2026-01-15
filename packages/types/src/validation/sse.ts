@@ -34,6 +34,16 @@ export const sseUnsubscribeSchema = z
   })
   .strict();
 
+/** Subscribe to metrics channel request schema (sessionId only) */
+export const sseSubscribeMetricsSchema = z
+  .object({
+    sessionId: sessionIdSchema,
+  })
+  .strict();
+
 /** Export types from schemas */
 export type SSESubscribeInput = z.infer<typeof sseSubscribeSchema>;
 export type SSEUnsubscribeInput = z.infer<typeof sseUnsubscribeSchema>;
+export type SSESubscribeMetricsInput = z.infer<
+  typeof sseSubscribeMetricsSchema
+>;

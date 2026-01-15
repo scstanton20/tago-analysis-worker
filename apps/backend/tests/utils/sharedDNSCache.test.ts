@@ -69,9 +69,8 @@ describe('sharedDNSCache', () => {
       delete process.env.DNS_CACHE_ENABLED;
       vi.resetModules();
 
-      const { initializeSharedDNSCache } = await import(
-        '../../src/utils/sharedDNSCache.ts'
-      );
+      const { initializeSharedDNSCache } =
+        await import('../../src/utils/sharedDNSCache.ts');
 
       initializeSharedDNSCache();
 
@@ -84,9 +83,8 @@ describe('sharedDNSCache', () => {
       delete (process as { send?: typeof process.send }).send;
       vi.resetModules();
 
-      const { initializeSharedDNSCache } = await import(
-        '../../src/utils/sharedDNSCache.ts'
-      );
+      const { initializeSharedDNSCache } =
+        await import('../../src/utils/sharedDNSCache.ts');
 
       initializeSharedDNSCache();
 
@@ -99,9 +97,8 @@ describe('sharedDNSCache', () => {
       process.send = vi.fn() as typeof process.send;
       vi.resetModules();
 
-      const { initializeSharedDNSCache } = await import(
-        '../../src/utils/sharedDNSCache.ts'
-      );
+      const { initializeSharedDNSCache } =
+        await import('../../src/utils/sharedDNSCache.ts');
 
       initializeSharedDNSCache();
 

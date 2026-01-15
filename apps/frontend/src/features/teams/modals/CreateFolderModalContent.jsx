@@ -1,11 +1,9 @@
 import { useEffect, useEffectEvent } from 'react';
-import { TextInput, Stack } from '@mantine/core';
 import PropTypes from 'prop-types';
 import { modals } from '@mantine/modals';
-import { FormActionButtons, FormAlert } from '@/components/global';
-import { notificationAPI } from '@/utils/notificationAPI.jsx';
-import { useStandardForm } from '@/hooks/forms/useStandardForm';
+import { notificationAPI } from '@/utils/notificationService.jsx';
 import { teamService } from '../api/teamService';
+import { FolderNameForm } from '../components';
 
 /**
  * CreateFolderModalContent
@@ -22,24 +20,13 @@ import { teamService } from '../api/teamService';
  * @param {string} props.innerProps.parentFolderName - Optional parent folder name (for display)
  * @param {Function} props.innerProps.onCreatePending - Optional callback for pending folder creation (reorder mode)
  */
-const CreateFolderModalContent = ({ id, context, innerProps }) => {
+function CreateFolderModalContent({ id, context, innerProps }) {
   const {
     teamId,
     parentFolderId = null,
     parentFolderName = null,
     onCreatePending = null,
   } = innerProps;
-
-  // Initialize form with useStandardForm
-  const { form, submitOperation, handleSubmit } = useStandardForm({
-    initialValues: {
-      name: '',
-    },
-    validate: {
-      name: (value) => (!value?.trim() ? 'Folder name is required' : null),
-    },
-    resetOnSuccess: true,
-  });
 
   const updateModalTitle = useEffectEvent((title) => {
     context.updateModal({ id, title });
@@ -53,15 +40,15 @@ const CreateFolderModalContent = ({ id, context, innerProps }) => {
     updateModalTitle(title);
   }, [parentFolderId, parentFolderName]);
 
-  const handleCreate = handleSubmit(async (values) => {
+  async function handleCreate(name) {
     // If in reorder mode (onCreatePending provided), handle locally
     if (onCreatePending) {
       onCreatePending({
-        name: values.name.trim(),
+        name,
         parentFolderId: parentFolderId || null,
       });
       notificationAPI.info(
-        `Folder "${values.name.trim()}" added to preview. Click Done to save changes.`,
+        `Folder "${name}" added to preview. Click Done to save changes.`,
         'Folder Added',
       );
       modals.close(id);
@@ -70,36 +57,22 @@ const CreateFolderModalContent = ({ id, context, innerProps }) => {
 
     // Otherwise, create folder via API
     await teamService.createFolder(teamId, {
-      name: values.name.trim(),
+      name,
       parentFolderId: parentFolderId || undefined,
     });
-    notificationAPI.success(`Folder "${values.name}" created successfully`);
+    notificationAPI.success(`Folder "${name}" created successfully`);
     modals.close(id);
-  });
+  }
 
   return (
-    <form onSubmit={handleCreate}>
-      <Stack>
-        <FormAlert type="error" message={submitOperation.error} />
-
-        <TextInput
-          label="Folder Name"
-          placeholder="Enter folder name..."
-          {...form.getInputProps('name')}
-          required
-          data-autofocus
-        />
-
-        <FormActionButtons
-          type="submit"
-          loading={submitOperation.loading}
-          submitLabel="Create Folder"
-          fullWidth
-        />
-      </Stack>
-    </form>
+    <FolderNameForm
+      onSubmit={handleCreate}
+      submitLabel="Create Folder"
+      placeholder="Enter folder name..."
+      resetOnSuccess
+    />
   );
-};
+}
 
 CreateFolderModalContent.propTypes = {
   id: PropTypes.string.isRequired,

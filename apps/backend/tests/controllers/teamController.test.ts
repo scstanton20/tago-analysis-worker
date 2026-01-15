@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import {
   createControllerRequest,
   createControllerResponse,
-  type MockResponse,
 } from '../utils/testHelpers.ts';
 import type { Team } from '@tago-analysis-worker/types';
 
@@ -39,10 +38,8 @@ vi.mock('../../src/utils/sse/index.ts', () => ({
   },
 }));
 
-vi.mock('../../src/utils/responseHelpers.ts', () => ({
-  handleError: vi.fn((res: MockResponse, error: Error) => {
-    res.status(500).json({ error: error.message });
-  }),
+// Mock the notification service functions
+vi.mock('../../src/services/analysis/AnalysisNotificationService.ts', () => ({
   broadcastTeamStructureUpdate: vi.fn(),
 }));
 
@@ -68,22 +65,20 @@ type MockSSEManager = {
 };
 
 // Import after mocks
-const { teamService } = (await import(
-  '../../src/services/teamService.ts'
-)) as unknown as {
-  teamService: MockTeamService;
-};
-const { sseManager } = (await import(
-  '../../src/utils/sse/index.ts'
-)) as unknown as {
-  sseManager: MockSSEManager;
-};
-const { broadcastTeamStructureUpdate } = (await import(
-  '../../src/utils/responseHelpers.ts'
-)) as unknown as { broadcastTeamStructureUpdate: Mock };
-const { TeamController } = await import(
-  '../../src/controllers/teamController.ts'
-);
+const { teamService } =
+  (await import('../../src/services/teamService.ts')) as unknown as {
+    teamService: MockTeamService;
+  };
+const { sseManager } =
+  (await import('../../src/utils/sse/index.ts')) as unknown as {
+    sseManager: MockSSEManager;
+  };
+const { broadcastTeamStructureUpdate } =
+  (await import('../../src/services/analysis/AnalysisNotificationService.ts')) as unknown as {
+    broadcastTeamStructureUpdate: Mock;
+  };
+const { TeamController } =
+  await import('../../src/controllers/teamController.ts');
 
 describe('TeamController', () => {
   beforeEach(() => {
@@ -450,10 +445,7 @@ describe('TeamController', () => {
         teamId: 'team-1',
         folder: mockFolder,
       });
-      expect(broadcastTeamStructureUpdate).toHaveBeenCalledWith(
-        sseManager,
-        'team-1',
-      );
+      expect(broadcastTeamStructureUpdate).toHaveBeenCalledWith('team-1');
     });
 
     it('should create nested folder', async () => {
@@ -559,10 +551,7 @@ describe('TeamController', () => {
         teamId: 'team-1',
         ...mockResult,
       });
-      expect(broadcastTeamStructureUpdate).toHaveBeenCalledWith(
-        sseManager,
-        'team-1',
-      );
+      expect(broadcastTeamStructureUpdate).toHaveBeenCalledWith('team-1');
     });
   });
 
@@ -595,10 +584,7 @@ describe('TeamController', () => {
         req.log,
       );
       expect(res.json).toHaveBeenCalledWith(mockResult);
-      expect(broadcastTeamStructureUpdate).toHaveBeenCalledWith(
-        sseManager,
-        'team-1',
-      );
+      expect(broadcastTeamStructureUpdate).toHaveBeenCalledWith('team-1');
     });
 
     it('should move item to root level', async () => {

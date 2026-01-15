@@ -155,34 +155,37 @@ vi.mock('../../src/utils/sse/index.ts', () => ({
   sseManager: {
     broadcastUpdate: vi.fn(),
     broadcastAnalysisUpdate: vi.fn(),
+    broadcastAnalysisLog: vi.fn(),
+    broadcastAnalysisStats: vi.fn(),
+    broadcast: vi.fn(),
   },
 }));
 
 const { fork } = (await import('child_process')) as unknown as { fork: Mock };
-const { sseManager } = (await import(
-  '../../src/utils/sse/index.ts'
-)) as unknown as {
-  sseManager: {
-    broadcastUpdate: Mock;
-    broadcastAnalysisUpdate: Mock;
+const { sseManager } =
+  (await import('../../src/utils/sse/index.ts')) as unknown as {
+    sseManager: {
+      broadcastUpdate: Mock;
+      broadcastAnalysisUpdate: Mock;
+      broadcastAnalysisLog: Mock;
+      broadcastAnalysisStats: Mock;
+      broadcast: Mock;
+    };
   };
-};
-const { dnsCache } = (await import(
-  '../../src/services/dnsCache.ts'
-)) as unknown as {
-  dnsCache: {
-    handleDNSLookupRequest: Mock;
-    handleDNSResolve4Request: Mock;
-    handleDNSResolve6Request: Mock;
-    resetAnalysisStats: Mock;
+const { dnsCache } =
+  (await import('../../src/services/dnsCache.ts')) as unknown as {
+    dnsCache: {
+      handleDNSLookupRequest: Mock;
+      handleDNSResolve4Request: Mock;
+      handleDNSResolve6Request: Mock;
+      resetAnalysisStats: Mock;
+    };
   };
-};
-const { safeStat, safeReadFile } = (await import(
-  '../../src/utils/safePath.ts'
-)) as unknown as {
-  safeStat: Mock;
-  safeReadFile: Mock;
-};
+const { safeStat, safeReadFile } =
+  (await import('../../src/utils/safePath.ts')) as unknown as {
+    safeStat: Mock;
+    safeReadFile: Mock;
+  };
 
 describe('AnalysisProcess', () => {
   let AnalysisProcess: AnalysisProcessClass;
@@ -222,11 +225,10 @@ describe('AnalysisProcess', () => {
     });
 
     // Dynamically import to get fresh instance
-    const module = (await import(
-      '../../src/models/analysisProcess/index.ts'
-    )) as unknown as {
-      AnalysisProcess: AnalysisProcessClass;
-    };
+    const module =
+      (await import('../../src/models/analysisProcess/index.ts')) as unknown as {
+        AnalysisProcess: AnalysisProcessClass;
+      };
     AnalysisProcess = module.AnalysisProcess;
   });
 
@@ -318,11 +320,15 @@ describe('AnalysisProcess', () => {
 
       await analysis.addLog('Test message');
 
-      expect(sseManager.broadcastUpdate).toHaveBeenCalledWith(
-        'log',
+      expect(sseManager.broadcastAnalysisLog).toHaveBeenCalledWith(
+        'test-analysis-id',
         expect.objectContaining({
-          analysisId: 'test-analysis-id',
-          analysisName: 'test-analysis',
+          type: 'log',
+          data: expect.objectContaining({
+            analysisId: 'test-analysis-id',
+            analysisName: 'test-analysis',
+            log: expect.any(Object),
+          }),
         }),
       );
     });
@@ -433,25 +439,27 @@ describe('AnalysisProcess', () => {
 
       await analysis.addLog('test message');
 
-      // Verify file size was broadcast via SSE
-      // The broadcast includes logFileSize which reflects estimatedFileSize
-      expect(sseManager.broadcastUpdate).toHaveBeenCalledWith(
-        'log',
+      // Verify log was broadcast via SSE logs channel
+      expect(sseManager.broadcastAnalysisLog).toHaveBeenCalledWith(
+        'test-analysis-id',
         expect.objectContaining({
-          analysisId: 'test-analysis-id',
-          log: expect.any(Object),
-          logFileSize: expect.any(Number),
+          type: 'log',
+          data: expect.objectContaining({
+            analysisId: 'test-analysis-id',
+            analysisName: 'test-analysis',
+            log: expect.any(Object),
+          }),
         }),
       );
 
-      // File size should be > 0 if fileLogger was initialized and wrote the log
-      // If fileLogger is null (can't write to disk in test), logFileSize will be 0
-      // This is acceptable behavior - the test verifies the broadcast happens
-      const broadcastCall = sseManager.broadcastUpdate.mock.calls.find(
-        (call: any) =>
-          call[0] === 'log' && call[1].analysisId === 'test-analysis-id',
+      // Verify stats (including file size) were broadcast via stats channel
+      expect(sseManager.broadcastAnalysisStats).toHaveBeenCalledWith(
+        'test-analysis-id',
+        expect.objectContaining({
+          totalCount: expect.any(Number),
+          logFileSize: expect.any(Number),
+        }),
       );
-      expect(broadcastCall).toBeDefined();
     });
   });
 
@@ -1230,17 +1238,16 @@ describe('AnalysisProcess', () => {
 
     it('should pass --permission flag when sandbox is enabled', async () => {
       // Override config for this test
-      const { config } = (await import(
-        '../../src/config/default.ts'
-      )) as unknown as {
-        config: {
-          sandbox: {
-            enabled: boolean;
-            allowChildProcess: boolean;
-            allowWorkerThreads: boolean;
+      const { config } =
+        (await import('../../src/config/default.ts')) as unknown as {
+          config: {
+            sandbox: {
+              enabled: boolean;
+              allowChildProcess: boolean;
+              allowWorkerThreads: boolean;
+            };
           };
         };
-      };
       config.sandbox.enabled = true;
 
       const mockProcess = createMockChildProcess();
@@ -1264,17 +1271,16 @@ describe('AnalysisProcess', () => {
     });
 
     it('should include --allow-fs-read with restricted paths when sandbox is enabled', async () => {
-      const { config } = (await import(
-        '../../src/config/default.ts'
-      )) as unknown as {
-        config: {
-          sandbox: {
-            enabled: boolean;
-            allowChildProcess: boolean;
-            allowWorkerThreads: boolean;
+      const { config } =
+        (await import('../../src/config/default.ts')) as unknown as {
+          config: {
+            sandbox: {
+              enabled: boolean;
+              allowChildProcess: boolean;
+              allowWorkerThreads: boolean;
+            };
           };
         };
-      };
       config.sandbox.enabled = true;
 
       const mockProcess = createMockChildProcess();
@@ -1314,17 +1320,16 @@ describe('AnalysisProcess', () => {
     });
 
     it('should NOT include --allow-fs-write when sandbox is enabled (no write access)', async () => {
-      const { config } = (await import(
-        '../../src/config/default.ts'
-      )) as unknown as {
-        config: {
-          sandbox: {
-            enabled: boolean;
-            allowChildProcess: boolean;
-            allowWorkerThreads: boolean;
+      const { config } =
+        (await import('../../src/config/default.ts')) as unknown as {
+          config: {
+            sandbox: {
+              enabled: boolean;
+              allowChildProcess: boolean;
+              allowWorkerThreads: boolean;
+            };
           };
         };
-      };
       config.sandbox.enabled = true;
 
       const mockProcess = createMockChildProcess();
@@ -1352,17 +1357,16 @@ describe('AnalysisProcess', () => {
     });
 
     it('should NOT include --allow-child-process by default', async () => {
-      const { config } = (await import(
-        '../../src/config/default.ts'
-      )) as unknown as {
-        config: {
-          sandbox: {
-            enabled: boolean;
-            allowChildProcess: boolean;
-            allowWorkerThreads: boolean;
+      const { config } =
+        (await import('../../src/config/default.ts')) as unknown as {
+          config: {
+            sandbox: {
+              enabled: boolean;
+              allowChildProcess: boolean;
+              allowWorkerThreads: boolean;
+            };
           };
         };
-      };
       config.sandbox.enabled = true;
       config.sandbox.allowChildProcess = false;
 
@@ -1387,17 +1391,16 @@ describe('AnalysisProcess', () => {
     });
 
     it('should include --allow-child-process when explicitly enabled', async () => {
-      const { config } = (await import(
-        '../../src/config/default.ts'
-      )) as unknown as {
-        config: {
-          sandbox: {
-            enabled: boolean;
-            allowChildProcess: boolean;
-            allowWorkerThreads: boolean;
+      const { config } =
+        (await import('../../src/config/default.ts')) as unknown as {
+          config: {
+            sandbox: {
+              enabled: boolean;
+              allowChildProcess: boolean;
+              allowWorkerThreads: boolean;
+            };
           };
         };
-      };
       config.sandbox.enabled = true;
       config.sandbox.allowChildProcess = true;
 
@@ -1423,17 +1426,16 @@ describe('AnalysisProcess', () => {
     });
 
     it('should NOT include --allow-worker by default', async () => {
-      const { config } = (await import(
-        '../../src/config/default.ts'
-      )) as unknown as {
-        config: {
-          sandbox: {
-            enabled: boolean;
-            allowChildProcess: boolean;
-            allowWorkerThreads: boolean;
+      const { config } =
+        (await import('../../src/config/default.ts')) as unknown as {
+          config: {
+            sandbox: {
+              enabled: boolean;
+              allowChildProcess: boolean;
+              allowWorkerThreads: boolean;
+            };
           };
         };
-      };
       config.sandbox.enabled = true;
       config.sandbox.allowWorkerThreads = false;
 
@@ -1458,17 +1460,16 @@ describe('AnalysisProcess', () => {
     });
 
     it('should include --allow-worker when explicitly enabled', async () => {
-      const { config } = (await import(
-        '../../src/config/default.ts'
-      )) as unknown as {
-        config: {
-          sandbox: {
-            enabled: boolean;
-            allowChildProcess: boolean;
-            allowWorkerThreads: boolean;
+      const { config } =
+        (await import('../../src/config/default.ts')) as unknown as {
+          config: {
+            sandbox: {
+              enabled: boolean;
+              allowChildProcess: boolean;
+              allowWorkerThreads: boolean;
+            };
           };
         };
-      };
       config.sandbox.enabled = true;
       config.sandbox.allowWorkerThreads = true;
 

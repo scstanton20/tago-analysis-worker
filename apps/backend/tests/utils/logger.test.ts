@@ -24,9 +24,8 @@ describe('logger', () => {
 
   describe('createChildLogger', () => {
     it('should create child logger with module name', async () => {
-      const { createChildLogger } = await import(
-        '../../src/utils/logging/logger.ts'
-      );
+      const { createChildLogger } =
+        await import('../../src/utils/logging/logger.ts');
 
       const childLogger = createChildLogger('test-module');
 
@@ -36,9 +35,8 @@ describe('logger', () => {
     });
 
     it('should include additional context', async () => {
-      const { createChildLogger } = await import(
-        '../../src/utils/logging/logger.ts'
-      );
+      const { createChildLogger } =
+        await import('../../src/utils/logging/logger.ts');
 
       const childLogger = createChildLogger('test', { requestId: '123' });
 
@@ -47,9 +45,8 @@ describe('logger', () => {
     });
 
     it('should create multiple distinct child loggers', async () => {
-      const { createChildLogger } = await import(
-        '../../src/utils/logging/logger.ts'
-      );
+      const { createChildLogger } =
+        await import('../../src/utils/logging/logger.ts');
 
       const logger1 = createChildLogger('module1');
       const logger2 = createChildLogger('module2');
@@ -62,9 +59,8 @@ describe('logger', () => {
 
   describe('createAnalysisLogger', () => {
     it('should create analysis-specific logger', async () => {
-      const { createAnalysisLogger } = await import(
-        '../../src/utils/logging/logger.ts'
-      );
+      const { createAnalysisLogger } =
+        await import('../../src/utils/logging/logger.ts');
 
       const analysisLogger = createAnalysisLogger('my-analysis');
 
@@ -73,9 +69,8 @@ describe('logger', () => {
     });
 
     it('should include analysis name in base context', async () => {
-      const { createAnalysisLogger } = await import(
-        '../../src/utils/logging/logger.ts'
-      );
+      const { createAnalysisLogger } =
+        await import('../../src/utils/logging/logger.ts');
 
       const analysisLogger = createAnalysisLogger('test-analysis');
 
@@ -83,9 +78,8 @@ describe('logger', () => {
     });
 
     it('should include log file in transport when provided', async () => {
-      const { createAnalysisLogger } = await import(
-        '../../src/utils/logging/logger.ts'
-      );
+      const { createAnalysisLogger } =
+        await import('../../src/utils/logging/logger.ts');
 
       const analysisLogger = createAnalysisLogger('test', {
         logFile: '/tmp/test.log',
@@ -98,9 +92,8 @@ describe('logger', () => {
       process.env.NODE_ENV = 'development';
       vi.resetModules();
 
-      const { createAnalysisLogger } = await import(
-        '../../src/utils/logging/logger.ts'
-      );
+      const { createAnalysisLogger } =
+        await import('../../src/utils/logging/logger.ts');
 
       const analysisLogger = createAnalysisLogger('dev-analysis');
 
@@ -110,9 +103,8 @@ describe('logger', () => {
 
   describe('parseLogLine', () => {
     it('should parse valid NDJSON log line as object', async () => {
-      const { parseLogLine } = await import(
-        '../../src/utils/logging/logger.ts'
-      );
+      const { parseLogLine } =
+        await import('../../src/utils/logging/logger.ts');
 
       const logLine = JSON.stringify({
         time: '2025-01-15T10:30:00.000Z',
@@ -129,9 +121,8 @@ describe('logger', () => {
     });
 
     it('should parse log line as formatted string', async () => {
-      const { parseLogLine } = await import(
-        '../../src/utils/logging/logger.ts'
-      );
+      const { parseLogLine } =
+        await import('../../src/utils/logging/logger.ts');
 
       const logLine = JSON.stringify({
         time: '2025-01-15T10:30:00.000Z',
@@ -145,9 +136,8 @@ describe('logger', () => {
     });
 
     it('should return null for invalid JSON', async () => {
-      const { parseLogLine } = await import(
-        '../../src/utils/logging/logger.ts'
-      );
+      const { parseLogLine } =
+        await import('../../src/utils/logging/logger.ts');
 
       const result = parseLogLine('not valid json', true);
 
@@ -155,9 +145,8 @@ describe('logger', () => {
     });
 
     it('should return null for log without time', async () => {
-      const { parseLogLine } = await import(
-        '../../src/utils/logging/logger.ts'
-      );
+      const { parseLogLine } =
+        await import('../../src/utils/logging/logger.ts');
 
       const logLine = JSON.stringify({
         msg: 'Test message',
@@ -169,9 +158,8 @@ describe('logger', () => {
     });
 
     it('should return null for log without message', async () => {
-      const { parseLogLine } = await import(
-        '../../src/utils/logging/logger.ts'
-      );
+      const { parseLogLine } =
+        await import('../../src/utils/logging/logger.ts');
 
       const logLine = JSON.stringify({
         time: '2025-01-15T10:30:00.000Z',
@@ -183,9 +171,8 @@ describe('logger', () => {
     });
 
     it('should handle log lines with additional fields', async () => {
-      const { parseLogLine } = await import(
-        '../../src/utils/logging/logger.ts'
-      );
+      const { parseLogLine } =
+        await import('../../src/utils/logging/logger.ts');
 
       const logLine = JSON.stringify({
         time: '2025-01-15T10:30:00.000Z',
@@ -656,9 +643,8 @@ describe('logger', () => {
       process.env.LOG_LOKI_URL = 'http://localhost:3100';
       vi.resetModules();
 
-      const { createAnalysisLogger } = await import(
-        '../../src/utils/logging/logger.ts'
-      );
+      const { createAnalysisLogger } =
+        await import('../../src/utils/logging/logger.ts');
 
       const analysisLogger = createAnalysisLogger('test-analysis');
 
@@ -671,9 +657,8 @@ describe('logger', () => {
       process.env.LOG_LOKI_PASSWORD = 'secret';
       vi.resetModules();
 
-      const { createAnalysisLogger } = await import(
-        '../../src/utils/logging/logger.ts'
-      );
+      const { createAnalysisLogger } =
+        await import('../../src/utils/logging/logger.ts');
 
       const analysisLogger = createAnalysisLogger('auth-analysis');
 
@@ -685,9 +670,8 @@ describe('logger', () => {
       process.env.LOG_LOKI_LABELS = 'team=backend,env=test';
       vi.resetModules();
 
-      const { createAnalysisLogger } = await import(
-        '../../src/utils/logging/logger.ts'
-      );
+      const { createAnalysisLogger } =
+        await import('../../src/utils/logging/logger.ts');
 
       const analysisLogger = createAnalysisLogger('labeled-analysis');
 
@@ -698,9 +682,8 @@ describe('logger', () => {
       process.env.LOG_LOKI_URL = 'http://localhost:3100';
       vi.resetModules();
 
-      const { createAnalysisLogger } = await import(
-        '../../src/utils/logging/logger.ts'
-      );
+      const { createAnalysisLogger } =
+        await import('../../src/utils/logging/logger.ts');
 
       // Note: Pino may have limitations with multiple transports and custom formatters
       try {
@@ -724,9 +707,8 @@ describe('logger', () => {
       // The error may occur during module import (main logger initialization)
       // or during createAnalysisLogger call
       try {
-        const { createAnalysisLogger } = await import(
-          '../../src/utils/logging/logger.ts'
-        );
+        const { createAnalysisLogger } =
+          await import('../../src/utils/logging/logger.ts');
 
         const analysisLogger = createAnalysisLogger('dev-multi', {
           logFile: '/tmp/dev-analysis.log',
@@ -744,9 +726,8 @@ describe('logger', () => {
       process.env.LOG_LOKI_LABELS = 'invalid{{label}}';
       vi.resetModules();
 
-      const { createAnalysisLogger } = await import(
-        '../../src/utils/logging/logger.ts'
-      );
+      const { createAnalysisLogger } =
+        await import('../../src/utils/logging/logger.ts');
 
       // Should not throw even if Loki config has issues
       expect(() => createAnalysisLogger('error-test')).not.toThrow();
@@ -794,9 +775,8 @@ describe('logger', () => {
     });
 
     it('should handle createChildLogger with empty name', async () => {
-      const { createChildLogger } = await import(
-        '../../src/utils/logging/logger.ts'
-      );
+      const { createChildLogger } =
+        await import('../../src/utils/logging/logger.ts');
 
       const childLogger = createChildLogger('');
 
@@ -804,9 +784,8 @@ describe('logger', () => {
     });
 
     it('should handle createAnalysisLogger with empty name', async () => {
-      const { createAnalysisLogger } = await import(
-        '../../src/utils/logging/logger.ts'
-      );
+      const { createAnalysisLogger } =
+        await import('../../src/utils/logging/logger.ts');
 
       const analysisLogger = createAnalysisLogger('');
 
@@ -814,9 +793,8 @@ describe('logger', () => {
     });
 
     it('should handle createChildLogger with special characters', async () => {
-      const { createChildLogger } = await import(
-        '../../src/utils/logging/logger.ts'
-      );
+      const { createChildLogger } =
+        await import('../../src/utils/logging/logger.ts');
 
       const childLogger = createChildLogger('module:test/sub-module@v1');
 
@@ -824,9 +802,8 @@ describe('logger', () => {
     });
 
     it('should handle createAnalysisLogger with special characters', async () => {
-      const { createAnalysisLogger } = await import(
-        '../../src/utils/logging/logger.ts'
-      );
+      const { createAnalysisLogger } =
+        await import('../../src/utils/logging/logger.ts');
 
       const analysisLogger = createAnalysisLogger('analysis-name@v2.0');
 

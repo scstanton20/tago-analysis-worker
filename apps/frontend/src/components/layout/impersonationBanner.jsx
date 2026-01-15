@@ -1,9 +1,12 @@
-// eslint-disable-next-line no-restricted-imports -- Special case: custom-styled sticky banner with filled variant
+// eslint-disable-next-line no-restricted-imports -- Special case: custom-styled fixed banner with filled variant
 import { Alert, Group } from '@mantine/core';
 import { IconUserCheck, IconX } from '@tabler/icons-react';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import logger from '@/utils/logger';
 import { IconLabel, SecondaryButton } from '../global';
+
+// Height of the impersonation banner - exported for AppShell offset calculations
+export const IMPERSONATION_BANNER_HEIGHT = 48;
 
 export default function ImpersonationBanner() {
   const { isImpersonating, user, exitImpersonation } = useAuth();
@@ -24,15 +27,28 @@ export default function ImpersonationBanner() {
     <Alert
       color="orange"
       variant="filled"
-      style={{
-        position: 'sticky',
-        top: 0,
-        zIndex: 1000,
-        borderRadius: 0,
-        border: 'none',
+      styles={{
+        root: {
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: IMPERSONATION_BANNER_HEIGHT,
+          zIndex: 201,
+          borderRadius: 0,
+          border: 'none',
+          display: 'flex',
+          alignItems: 'center',
+        },
+        body: {
+          width: '100%',
+        },
+        wrapper: {
+          width: '100%',
+        },
       }}
     >
-      <Group justify="space-between" align="center">
+      <Group justify="space-between" align="center" w="100%">
         <IconLabel
           icon={<IconUserCheck size={20} />}
           label={`You are impersonating ${user?.name || user?.email}`}

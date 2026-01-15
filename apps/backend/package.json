@@ -1,7 +1,7 @@
 {
   "name": "backend",
   "private": true,
-  "version": "2.5.413",
+  "version": "2.5.42",
   "type": "module",
   "engines": {
     "node": ">=24.0.0"
@@ -30,8 +30,8 @@
     "@tago-io/sdk": "^12.2.1",
     "archiver": "^7.0.1",
     "better-auth": "^1.4.7",
-    "better-sqlite3": "^12.4.1",
-    "better-sse": "^0.15.1",
+    "better-sqlite3": "^12.6.0",
+    "better-sse": "^0.16.1",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
     "express": "^5.1.0",
@@ -43,7 +43,7 @@
     "path": "^0.12.7",
     "picocolors": "^1.1.1",
     "pidusage": "^4.0.1",
-    "pino": "^10.0.0",
+    "pino": "^10.1.1",
     "pino-http": "^11.0.0",
     "pino-loki": "^2.6.0",
     "prom-client": "^15.1.3",
@@ -51,7 +51,7 @@
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
     "uuid": "^13.0.0",
-    "zod": "^4.1.12"
+    "zod": "^4.3.5"
   },
   "devDependencies": {
     "@types/archiver": "^7.0.0",
@@ -66,10 +66,10 @@
     "@types/supertest": "^6.0.3",
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-express": "^4.1.8",
-    "@vitest/coverage-v8": "^4.0.2",
-    "@vitest/ui": "^4.0.2",
-    "supertest": "^7.1.4",
+    "@vitest/coverage-v8": "^4.0.17",
+    "@vitest/ui": "^4.0.17",
+    "supertest": "^7.2.2",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.2"
+    "vitest": "^4.0.17"
   }
 }

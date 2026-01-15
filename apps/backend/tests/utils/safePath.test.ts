@@ -123,9 +123,8 @@ describe('safePath', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     fs = (await import('fs')).promises as unknown as FSPromises;
-    safePath = (await import(
-      '../../src/utils/safePath.ts'
-    )) as unknown as SafePathModule;
+    safePath =
+      (await import('../../src/utils/safePath.ts')) as unknown as SafePathModule;
   });
 
   describe('isPathSafe', () => {

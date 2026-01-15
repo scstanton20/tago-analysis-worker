@@ -22,7 +22,7 @@ import {
   ConfirmDialog,
 } from '@/components/global';
 import { admin } from '@/features/auth/lib/auth';
-import { notificationAPI } from '@/utils/notificationAPI.jsx';
+import { notificationAPI } from '@/utils/notificationService.jsx';
 import { useAsyncOperation, useAsyncEffect } from '@/hooks/async';
 import logger from '@/utils/logger';
 import { userService } from '../api/userService';

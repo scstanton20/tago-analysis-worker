@@ -5,7 +5,7 @@
  */
 
 import { useState, useMemo, useRef, useCallback } from 'react';
-import { notificationAPI } from '@/utils/notificationAPI.jsx';
+import { notificationAPI } from '@/utils/notificationService.jsx';
 import { useAsyncOperation } from '@/hooks/async';
 import { useTeams } from '@/contexts/sseContext/index';
 import logger from '@/utils/logger';

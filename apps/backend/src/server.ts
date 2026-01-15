@@ -14,7 +14,7 @@ import { errorHandler } from './middleware/errorHandler.ts';
 import {
   analysisService,
   initializeAnalyses,
-} from './services/analysisService.ts';
+} from './services/analysis/index.ts';
 import { dnsCache } from './services/dnsCache.ts';
 import { initializeStorage } from './utils/storage.ts';
 import { SERVER_SHUTDOWN } from './constants.ts';
@@ -23,6 +23,7 @@ import { SERVER_SHUTDOWN } from './constants.ts';
 import * as routes from './routes/index.ts';
 import { specs, swaggerUi } from './docs/swagger.ts';
 import { toNodeHandler } from 'better-auth/node';
+import { impersonationGuard } from './middleware/impersonationGuard.ts';
 import { auth } from './lib/auth.ts';
 import {
   runMigrations,
@@ -246,6 +247,9 @@ async function startServer(): Promise<void> {
     // Apply express.json() and metrics middleware before auth routes
     app.use(express.json());
     app.use(metricsMiddleware);
+
+    // Block profile operations during impersonation
+    app.use('/api/auth', impersonationGuard);
 
     // Better Auth routes with rate limiting using toNodeHandler approach
     app.all('/api/auth/*splat', toNodeHandler(auth));

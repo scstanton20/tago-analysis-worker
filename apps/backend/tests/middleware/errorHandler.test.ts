@@ -43,9 +43,8 @@ describe('errorHandler middleware', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     process.env.NODE_ENV = originalNodeEnv;
-    const { errorHandler: handler } = await import(
-      '../../src/middleware/errorHandler.ts'
-    );
+    const { errorHandler: handler } =
+      await import('../../src/middleware/errorHandler.ts');
     errorHandler = handler as unknown as ErrorHandlerFn;
 
     req = createControllerRequest();

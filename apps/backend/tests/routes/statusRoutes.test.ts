@@ -54,7 +54,7 @@ vi.mock('../../src/utils/sse/index.ts', () => ({
 }));
 
 // Mock analysis service
-vi.mock('../../src/services/analysisService.ts', () => ({
+vi.mock('../../src/services/analysis/index.ts', () => ({
   analysisService: {
     getRunningAnalysesCount: vi.fn(() => 1),
   },

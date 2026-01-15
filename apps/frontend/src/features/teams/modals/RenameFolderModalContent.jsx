@@ -1,10 +1,8 @@
-import { TextInput, Stack } from '@mantine/core';
 import PropTypes from 'prop-types';
 import { modals } from '@mantine/modals';
-import { FormActionButtons, FormAlert } from '@/components/global';
-import { notificationAPI } from '@/utils/notificationAPI.jsx';
-import { useStandardForm } from '@/hooks/forms/useStandardForm';
+import { notificationAPI } from '@/utils/notificationService.jsx';
 import { teamService } from '../api/teamService';
+import { FolderNameForm } from '../components';
 
 /**
  * RenameFolderModalContent
@@ -19,58 +17,31 @@ import { teamService } from '../api/teamService';
  * @param {string} props.innerProps.folderId - The folder ID to rename
  * @param {string} props.innerProps.currentName - The current folder name
  */
-const RenameFolderModalContent = ({ id, innerProps }) => {
+function RenameFolderModalContent({ id, innerProps }) {
   const { teamId, folderId, currentName } = innerProps;
 
-  // Initialize form with useStandardForm
-  const { form, submitOperation, handleSubmit } = useStandardForm({
-    initialValues: {
-      name: currentName || '',
-    },
-    validate: {
-      name: (value) => (!value?.trim() ? 'Folder name is required' : null),
-    },
-    resetOnSuccess: false, // Don't reset on success since we close the modal
-  });
-
-  const handleRename = handleSubmit(async (values) => {
+  async function handleRename(name) {
     // If name unchanged, just close modal
-    if (values.name.trim() === currentName) {
+    if (name === currentName) {
       modals.close(id);
       return;
     }
 
     // Update folder name
-    await teamService.updateFolder(teamId, folderId, {
-      name: values.name.trim(),
-    });
-    notificationAPI.success(`Folder renamed to "${values.name}"`);
+    await teamService.updateFolder(teamId, folderId, { name });
+    notificationAPI.success(`Folder renamed to "${name}"`);
     modals.close(id);
-  });
+  }
 
   return (
-    <form onSubmit={handleRename}>
-      <Stack>
-        <FormAlert type="error" message={submitOperation.error} />
-
-        <TextInput
-          label="Folder Name"
-          placeholder="Enter new folder name..."
-          {...form.getInputProps('name')}
-          required
-          data-autofocus
-        />
-
-        <FormActionButtons
-          type="submit"
-          loading={submitOperation.loading}
-          submitLabel="Rename Folder"
-          fullWidth
-        />
-      </Stack>
-    </form>
+    <FolderNameForm
+      initialName={currentName}
+      onSubmit={handleRename}
+      submitLabel="Rename Folder"
+      placeholder="Enter new folder name..."
+    />
   );
-};
+}
 
 RenameFolderModalContent.propTypes = {
   id: PropTypes.string.isRequired,

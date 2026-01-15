@@ -5,7 +5,7 @@
  */
 
 import { lazy, Suspense } from 'react';
-import { Tabs, Badge, Stack, Group, Text, CloseButton } from '@mantine/core';
+import { Tabs, Badge, Stack } from '@mantine/core';
 import {
   IconKey,
   IconShield,
@@ -14,7 +14,11 @@ import {
 import { modals } from '@mantine/modals';
 import PropTypes from 'prop-types';
 import { useProfileModal, useUnsavedChangesGuard } from '@/hooks/modals';
-import { LoadingState, UnsavedChangesOverlay } from '@/components/global';
+import {
+  LoadingState,
+  UnsavedChangesOverlay,
+  ModalHeader,
+} from '@/components/global';
 import { useAsyncMountOnce } from '@/hooks/async';
 const ProfileTab = lazy(() =>
   import('../components/ProfileTab').then((m) => ({
@@ -112,19 +116,11 @@ function ProfileModalContent({ id }) {
         )}
 
         {/* Custom Modal Header */}
-        <Group gap="xs" justify="space-between" mb="md">
-          <Group gap="xs">
-            <TabIconUser size={20} aria-hidden="true" />
-            <Text fw={600} size="lg">
-              Profile Settings
-            </Text>
-          </Group>
-          <CloseButton
-            onClick={handleCloseClick}
-            size="lg"
-            aria-label="Close profile settings"
-          />
-        </Group>
+        <ModalHeader
+          icon={<TabIconUser size={20} aria-hidden="true" />}
+          title="Profile Settings"
+          onClose={handleCloseClick}
+        />
 
         <Tabs value={activeTab} onChange={setActiveTab}>
           <Tabs.List>

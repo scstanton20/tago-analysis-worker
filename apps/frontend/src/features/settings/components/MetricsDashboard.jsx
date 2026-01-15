@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import {
   Grid,
@@ -439,8 +439,24 @@ MetricsTabContent.propTypes = {
 // Main Metrics Dashboard Component
 function MetricsDashboard() {
   const { metricsData } = useBackend();
-  const { connectionStatus } = useConnection();
+  const {
+    connectionStatus,
+    sessionId,
+    subscribeToMetrics,
+    unsubscribeFromMetrics,
+  } = useConnection();
   const [activeTab, setActiveTab] = useState('total');
+
+  // Subscribe to metrics channel when connected (detailed metrics only for Settings)
+  useEffect(() => {
+    if (connectionStatus !== 'connected' || !sessionId) return;
+
+    subscribeToMetrics();
+
+    return () => {
+      unsubscribeFromMetrics();
+    };
+  }, [connectionStatus, sessionId, subscribeToMetrics, unsubscribeFromMetrics]);
 
   // Derive loading state from metricsData availability
   const loading = !metricsData;

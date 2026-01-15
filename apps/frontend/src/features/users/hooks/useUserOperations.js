@@ -1,3 +1,4 @@
+import { modals } from '@mantine/modals';
 import { ConfirmDialog } from '@/components/global';
 import { useUserCRUD } from './useUserCRUD';
 import { useUserActions } from './useUserActions';
@@ -43,7 +44,13 @@ export function useUserOperations({
       title: 'Impersonate User',
       message: `Are you sure you want to impersonate "${user.name || user.email}"? You will be logged in as this user.`,
       confirmLabel: 'Impersonate',
-      onConfirm: () => actions.handleImpersonate(user),
+      onConfirm: () => {
+        // Close all modals BEFORE starting impersonation to prevent
+        // the UserManagementModal from trying to reload users with
+        // the new (non-admin) session
+        modals.closeAll();
+        actions.handleImpersonate(user);
+      },
     });
   };
 

@@ -1,5 +1,4 @@
-import type { Request, Response } from 'express';
-import type { Logger } from 'pino';
+import type { Response } from 'express';
 import type {
   AnalysisStatus,
   RenameAnalysisRequest,
@@ -8,13 +7,26 @@ import type {
   UpdateAnalysisNotesRequest,
   GetLogsQuery,
 } from '@tago-analysis-worker/types';
+import type {
+  RequestWithLogger,
+  AuthenticatedRequest,
+} from '../types/index.ts';
 import path from 'path';
 import { promises as fs } from 'fs';
 import sanitize from 'sanitize-filename';
 import archiver from 'archiver';
-import { analysisService } from '../services/analysisService.ts';
+import {
+  analysisService,
+  broadcastAnalysisCreated,
+  broadcastAnalysisDeleted,
+  broadcastAnalysisRenamed,
+  broadcastAnalysisUpdated,
+  broadcastAnalysisRolledBack,
+  broadcastAnalysisEnvironmentUpdated,
+  broadcastAnalysisNotesUpdated,
+  broadcastTeamStructureUpdate,
+} from '../services/analysis/index.ts';
 import { analysisInfoService } from '../services/analysisInfoService.ts';
-import { sseManager } from '../utils/sse/index.ts';
 import { config } from '../config/default.ts';
 import { FILE_SIZE } from '../constants.ts';
 import {
@@ -22,24 +34,8 @@ import {
   isValidFilename,
   FILENAME_ERROR_MESSAGE,
 } from '../validation/shared.ts';
-import { broadcastTeamStructureUpdate } from '../utils/responseHelpers.ts';
 import { formatCompactTime } from '../utils/serverTime.ts';
-
-/** Express request with request-scoped logger */
-type RequestWithLogger = Request & {
-  log: Logger;
-};
-
-/** Authenticated user on request */
-type AuthenticatedUser = {
-  readonly id: string;
-  readonly role: string;
-};
-
-/** Request with authenticated user */
-type AuthenticatedRequest = RequestWithLogger & {
-  user: AuthenticatedUser;
-};
+import { getTeamPermissionHelpers } from '../utils/lazyLoader.ts';
 
 /** Uploaded file from express-fileupload (minimal type we need) */
 type UploadedFileMinimal = {
@@ -182,22 +178,15 @@ export class AnalysisController {
     const createdAnalysis = analysisService.getAnalysisById(result.analysisId);
 
     // Broadcast analysis creation to team users only
-    sseManager.broadcastAnalysisUpdate(
+    await broadcastAnalysisCreated(
       result.analysisId,
-      {
-        type: 'analysisCreated',
-        data: {
-          analysisId: result.analysisId,
-          analysisName: result.analysisName,
-          teamId: teamId,
-          analysisData: createdAnalysis,
-        },
-      },
+      result.analysisName,
       teamId,
+      createdAnalysis,
     );
 
     // Broadcast team structure update
-    await broadcastTeamStructureUpdate(sseManager, teamId);
+    await broadcastTeamStructureUpdate(teamId);
 
     res.json(result);
   }
@@ -248,9 +237,7 @@ export class AnalysisController {
       );
     } else {
       // Get user's allowed team IDs for view_analyses permission
-      const { getUserTeamIds } = await import(
-        '../middleware/betterAuthMiddleware.ts'
-      );
+      const { getUserTeamIds } = await getTeamPermissionHelpers();
 
       const allowedTeamIds = getUserTeamIds(req.user.id, 'view_analyses');
 
@@ -340,22 +327,15 @@ export class AnalysisController {
     );
 
     // Broadcast deletion with analysis data
-    sseManager.broadcastAnalysisUpdate(
+    await broadcastAnalysisDeleted(
       analysisId,
-      {
-        type: 'analysisDeleted',
-        data: {
-          analysisId,
-          analysisName,
-          teamId,
-        },
-      },
-      teamId ?? undefined,
+      analysisName || '',
+      teamId || '',
     );
 
     // Broadcast team structure update
     if (teamId) {
-      await broadcastTeamStructureUpdate(sseManager, teamId);
+      await broadcastTeamStructureUpdate(teamId);
     }
 
     res.json({ success: true });
@@ -448,15 +428,11 @@ export class AnalysisController {
     const updatedAnalysis = analysisService.getAnalysisById(analysisId);
 
     // Broadcast update with complete analysis data
-    sseManager.broadcastAnalysisUpdate(analysisId, {
-      type: 'analysisUpdated',
-      data: {
-        analysisId,
-        analysisName: updatedAnalysis?.name,
-        status: 'updated',
-        restarted: result.restarted,
-        ...updatedAnalysis,
-      },
+    await broadcastAnalysisUpdated(analysisId, {
+      analysisName: updatedAnalysis?.name,
+      status: 'updated',
+      restarted: result.restarted,
+      ...updatedAnalysis,
     });
 
     res.json({
@@ -516,21 +492,17 @@ export class AnalysisController {
     const renamedAnalysis = analysisService.getAnalysisById(analysisId);
 
     // Broadcast update with complete analysis data
-    sseManager.broadcastAnalysisUpdate(analysisId, {
-      type: 'analysisRenamed',
-      data: {
-        analysisId,
-        oldName,
-        newName: sanitizedNewName,
-        status: 'updated',
-        restarted: result.restarted,
-        ...renamedAnalysis,
-      },
+    await broadcastAnalysisRenamed(analysisId, {
+      oldName: oldName || '',
+      newName: sanitizedNewName,
+      status: 'updated',
+      restarted: result.restarted,
+      ...renamedAnalysis,
     });
 
     // Broadcast team structure update so team-based analysis lists update in real-time
     if (renamedAnalysis?.teamId) {
-      await broadcastTeamStructureUpdate(sseManager, renamedAnalysis.teamId);
+      await broadcastTeamStructureUpdate(renamedAnalysis.teamId);
     }
 
     res.json({
@@ -690,10 +662,10 @@ export class AnalysisController {
     res: Response,
   ): Promise<void> {
     try {
-      // Get filtered log content
+      // Get filtered log content (timeRange validated by route handler)
       const result = await analysisService.getLogsForDownload(
         analysisId,
-        timeRange,
+        timeRange as import('../services/analysis/types.ts').LogTimeRange,
       );
       const { content } = result;
 
@@ -924,16 +896,12 @@ export class AnalysisController {
     const updatedAnalysis = analysisService.getAnalysisById(analysisId);
 
     // Broadcast rollback with complete analysis data
-    sseManager.broadcastAnalysisUpdate(analysisId, {
-      type: 'analysisRolledBack',
-      data: {
-        analysisId,
-        analysisName: updatedAnalysis?.name,
-        version: versionNumber,
-        status: 'rolled back',
-        restarted: result.restarted,
-        ...updatedAnalysis,
-      },
+    await broadcastAnalysisRolledBack(analysisId, {
+      analysisName: updatedAnalysis?.name,
+      version: versionNumber,
+      status: 'rolled back',
+      restarted: result.restarted,
+      ...updatedAnalysis,
     });
 
     res.json({
@@ -978,15 +946,11 @@ export class AnalysisController {
     const updatedAnalysis = analysisService.getAnalysisById(analysisId);
 
     // Broadcast update with complete analysis data
-    sseManager.broadcastAnalysisUpdate(analysisId, {
-      type: 'analysisEnvironmentUpdated',
-      data: {
-        analysisId,
-        analysisName: updatedAnalysis?.name,
-        status: 'updated',
-        restarted: result.restarted,
-        ...updatedAnalysis,
-      },
+    await broadcastAnalysisEnvironmentUpdated(analysisId, {
+      analysisName: updatedAnalysis?.name,
+      status: 'updated',
+      restarted: result.restarted,
+      ...updatedAnalysis,
     });
 
     res.json({
@@ -1106,14 +1070,10 @@ export class AnalysisController {
     );
 
     // Broadcast notes update
-    sseManager.broadcastAnalysisUpdate(analysisId, {
-      type: 'analysisNotesUpdated',
-      data: {
-        analysisId,
-        analysisName: result.analysisName,
-        lineCount: result.lineCount,
-        lastModified: result.lastModified,
-      },
+    await broadcastAnalysisNotesUpdated(analysisId, {
+      analysisName: result.analysisName,
+      lineCount: result.lineCount,
+      lastModified: result.lastModified ?? undefined,
     });
 
     res.json(result);

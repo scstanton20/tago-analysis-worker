@@ -17,7 +17,7 @@ import {
   arrayMove,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { Box, Stack, Text, Divider, Group, CloseButton } from '@mantine/core';
+import { Box, Stack, Text, Divider } from '@mantine/core';
 import { IconUsers } from '@tabler/icons-react';
 import { modals } from '@mantine/modals';
 import PropTypes from 'prop-types';
@@ -25,9 +25,10 @@ import {
   LoadingState,
   UnsavedChangesOverlay,
   ConfirmDialog,
+  ModalHeader,
 } from '@/components/global';
 import { useUnsavedChangesGuard } from '@/hooks/modals';
-import { notificationAPI } from '@/utils/notificationAPI.jsx';
+import { notificationAPI } from '@/utils/notificationService.jsx';
 import { useTeamManagement } from '../hooks/useTeamManagement';
 const TeamCreateForm = lazy(() =>
   import('../components/TeamCreateForm').then((m) => ({
@@ -156,19 +157,11 @@ function TeamManagementModalContent({ id }) {
         )}
 
         {/* Custom Modal Header */}
-        <Group gap="xs" justify="space-between" mb="md">
-          <Group gap="xs">
-            <IconUsers size={20} aria-hidden="true" />
-            <Text fw={600} size="lg">
-              Manage Teams
-            </Text>
-          </Group>
-          <CloseButton
-            onClick={handleCloseClick}
-            size="lg"
-            aria-label="Close team management"
-          />
-        </Group>
+        <ModalHeader
+          icon={<IconUsers size={20} aria-hidden="true" />}
+          title="Manage Teams"
+          onClose={handleCloseClick}
+        />
 
         {/* Create New Team */}
         <TeamCreateForm

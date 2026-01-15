@@ -66,12 +66,16 @@ interface MockChannel {
 interface MockSSEManager {
   sessions: Map<string, MockSession>;
   sessionLastPush: Map<string, number>;
-  analysisChannels: Map<string, MockChannel>;
+  analysisLogsChannels: Map<string, MockChannel>;
+  analysisStatsChannels: Map<string, MockChannel>;
   globalChannel: MockChannel;
+  metricsChannel: MockChannel;
   heartbeatInterval: ReturnType<typeof setInterval> | null;
   metricsInterval: ReturnType<typeof setInterval> | null;
   channelManager: {
-    unsubscribeFromAnalysis: MockInstance;
+    unsubscribeFromAnalysisLogs: MockInstance;
+    unsubscribeFromAnalysisStats: MockInstance;
+    unsubscribeFromMetrics: MockInstance;
   };
   startHeartbeat: MockInstance;
   stopHeartbeat: MockInstance;
@@ -93,18 +97,24 @@ describe('SessionManager', () => {
     const betterSSEModule = await import('better-sse');
     betterSSE = vi.mocked(betterSSEModule);
 
-    // Create unique sessions for each call
+    // Create unique sessions for each call, using options.state if provided
     let sessionCounter = 0;
-    betterSSE.createSession.mockImplementation(async () => {
-      const sessionId = `session-${sessionCounter++}-${Math.random()}`;
-      return {
-        id: sessionId,
-        push: vi.fn().mockResolvedValue(undefined),
-        state: { subscribedChannels: new Set() },
-        isConnected: true,
-        lastPushAt: new Date(),
-      };
-    });
+    betterSSE.createSession.mockImplementation(
+      async (
+        _req: unknown,
+        _res: unknown,
+        options?: { state?: Record<string, unknown> },
+      ) => {
+        const sessionId = `session-${sessionCounter++}-${Math.random()}`;
+        return {
+          id: sessionId,
+          push: vi.fn().mockResolvedValue(undefined),
+          state: options?.state || { subscribedChannels: new Set() },
+          isConnected: true,
+          lastPushAt: new Date(),
+        };
+      },
+    );
 
     // Setup mock SSEManager
     const mockGlobalChannel: MockChannel = {
@@ -115,15 +125,27 @@ describe('SessionManager', () => {
       activeSessions: new Set(),
     };
 
+    const mockMetricsChannel: MockChannel = {
+      register: vi.fn(),
+      deregister: vi.fn(),
+      broadcast: vi.fn(),
+      sessionCount: 0,
+      activeSessions: new Set(),
+    };
+
     mockSSEManager = {
       sessions: new Map(),
       sessionLastPush: new Map(),
-      analysisChannels: new Map(),
+      analysisLogsChannels: new Map(),
+      analysisStatsChannels: new Map(),
       globalChannel: mockGlobalChannel,
+      metricsChannel: mockMetricsChannel,
       heartbeatInterval: null,
       metricsInterval: null,
       channelManager: {
-        unsubscribeFromAnalysis: vi.fn().mockResolvedValue(undefined),
+        unsubscribeFromAnalysisLogs: vi.fn().mockResolvedValue(undefined),
+        unsubscribeFromAnalysisStats: vi.fn().mockResolvedValue(undefined),
+        unsubscribeFromMetrics: vi.fn().mockResolvedValue(undefined),
       },
       startHeartbeat: vi.fn(),
       stopHeartbeat: vi.fn(),
@@ -164,7 +186,8 @@ describe('SessionManager', () => {
     // Clear all sessions for test isolation
     mockSSEManager.sessions.clear();
     mockSSEManager.sessionLastPush.clear();
-    mockSSEManager.analysisChannels.clear();
+    mockSSEManager.analysisLogsChannels.clear();
+    mockSSEManager.analysisStatsChannels.clear();
   });
 
   describe('addClient', () => {
@@ -173,7 +196,14 @@ describe('SessionManager', () => {
 
       await sessionManager.addClient(userId, mockRes as Response, mockReq);
 
-      expect(betterSSE.createSession).toHaveBeenCalledWith(mockReq, mockRes);
+      expect(betterSSE.createSession).toHaveBeenCalledWith(
+        mockReq,
+        mockRes,
+        expect.objectContaining({
+          retry: expect.any(Number),
+          state: expect.any(Object),
+        }),
+      );
     });
 
     it('should generate a unique session ID and assign it to the session', async () => {
@@ -361,43 +391,35 @@ describe('SessionManager', () => {
       expect(mockSSEManager.sessions.has(session2.id)).toBe(true);
     });
 
-    it('should initialize session state if not provided by better-sse', async () => {
-      // Setup better-sse to return a session without state
-      betterSSE.createSession.mockResolvedValueOnce({
-        push: vi.fn().mockResolvedValue(undefined),
-        // No state provided
-        isConnected: true,
-        lastPushAt: new Date(),
-      });
+    it('should pass initial state to createSession', async () => {
+      // Verify that we pass state options to createSession
+      await sessionManager.addClient('user-123', mockRes as Response, mockReq);
 
-      const session = await sessionManager.addClient(
-        'user-123',
-        mockRes as Response,
+      expect(betterSSE.createSession).toHaveBeenCalledWith(
         mockReq,
+        mockRes,
+        expect.objectContaining({
+          state: expect.objectContaining({
+            userId: 'user-123',
+            subscribedChannels: expect.any(Set),
+            subscribedStatsChannels: expect.any(Set),
+            subscribedToMetrics: false,
+          }),
+        }),
       );
-
-      expect(session.state).toBeDefined();
-      expect(session.state.userId).toBe('user-123');
     });
 
-    it('should initialize subscribedChannels if not provided by better-sse', async () => {
-      // Setup better-sse to return a session with state but no subscribedChannels
-      betterSSE.createSession.mockResolvedValueOnce({
-        push: vi.fn().mockResolvedValue(undefined),
-        state: {}, // Empty state without subscribedChannels
-        isConnected: true,
-        lastPushAt: new Date(),
-      });
+    it('should pass retry option to createSession matching heartbeat interval', async () => {
+      // Verify that retry option is set for automatic reconnection
+      await sessionManager.addClient('user-123', mockRes as Response, mockReq);
 
-      const session = await sessionManager.addClient(
-        'user-123',
-        mockRes as Response,
+      expect(betterSSE.createSession).toHaveBeenCalledWith(
         mockReq,
+        mockRes,
+        expect.objectContaining({
+          retry: expect.any(Number),
+        }),
       );
-
-      expect(session.state.subscribedChannels).toBeDefined();
-      expect(session.state.subscribedChannels).toBeInstanceOf(Set);
-      expect(session.state.subscribedChannels.size).toBe(0);
     });
   });
 
@@ -433,7 +455,7 @@ describe('SessionManager', () => {
       );
     });
 
-    it('should unsubscribe from all subscribed analysis channels', async () => {
+    it('should unsubscribe from all subscribed analysis logs channels', async () => {
       // Manually add subscribed channels
       session.state.subscribedChannels.add('analysis-1');
       session.state.subscribedChannels.add('analysis-2');
@@ -441,7 +463,7 @@ describe('SessionManager', () => {
       await sessionManager.removeClient('user-123', session.id);
 
       expect(
-        mockSSEManager.channelManager.unsubscribeFromAnalysis,
+        mockSSEManager.channelManager.unsubscribeFromAnalysisLogs,
       ).toHaveBeenCalledWith(session.id, ['analysis-1', 'analysis-2']);
     });
 
@@ -498,7 +520,7 @@ describe('SessionManager', () => {
       ).resolves.not.toThrow();
 
       expect(
-        mockSSEManager.channelManager.unsubscribeFromAnalysis,
+        mockSSEManager.channelManager.unsubscribeFromAnalysisLogs,
       ).not.toHaveBeenCalled();
     });
   });

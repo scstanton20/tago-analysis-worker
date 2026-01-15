@@ -35,6 +35,7 @@ export { ActionMenu } from './menus/ActionMenu';
 // Modals
 export { ConfirmDialog } from './modals/ConfirmDialog';
 export { UnsavedChangesOverlay } from './modals/UnsavedChangesOverlay';
+export { ModalHeader } from './modals/ModalHeader';
 
 // Form Fields
 export { default as DepartmentPermissionsField } from './DepartmentPermissionsField';

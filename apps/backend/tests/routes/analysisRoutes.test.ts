@@ -106,7 +106,7 @@ const mockAnalysisService = {
   }),
 };
 
-vi.mock('../../src/services/analysisService.ts', () => ({
+vi.mock('../../src/services/analysis/index.ts', () => ({
   analysisService: mockAnalysisService,
 }));
 
@@ -223,9 +223,8 @@ describe('Analysis Routes - WITH REAL AUTH', () => {
     app.use(attachRequestLogger); // Use mocked logging middleware
 
     // Import routes
-    const { analysisRouter } = await import(
-      '../../src/routes/analysisRoutes.ts'
-    );
+    const { analysisRouter } =
+      await import('../../src/routes/analysisRoutes.ts');
     app.use('/api/analyses', analysisRouter);
   });
 

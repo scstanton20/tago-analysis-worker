@@ -43,9 +43,8 @@ describe('ssrfProtection', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    ssrfProtection = (await import(
-      '../../src/utils/ssrfProtection.ts'
-    )) as unknown as SSRFProtectionModule;
+    ssrfProtection =
+      (await import('../../src/utils/ssrfProtection.ts')) as unknown as SSRFProtectionModule;
   });
 
   describe('validateHostname', () => {

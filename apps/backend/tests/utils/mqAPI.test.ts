@@ -46,9 +46,8 @@ describe('mqAPI', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    const module = (await import(
-      '../../src/utils/in-process-utils/mqAPI.ts'
-    )) as unknown as MQAPIModule;
+    const module =
+      (await import('../../src/utils/in-process-utils/mqAPI.ts')) as unknown as MQAPIModule;
     mqAPI = module.default;
   });
 

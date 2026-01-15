@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import {
   createControllerRequest,
   createControllerResponse,
-  type MockResponse,
 } from '../utils/testHelpers.ts';
 import type {
   DNSCacheEntry,
@@ -31,12 +30,6 @@ vi.mock('../../src/utils/sse/index.ts', () => ({
   },
 }));
 
-vi.mock('../../src/utils/responseHelpers.ts', () => ({
-  handleError: vi.fn((res: MockResponse, error: Error) => {
-    res.status(500).json({ error: error.message });
-  }),
-}));
-
 // Type definitions for mocked services
 type MockDNSCache = {
   getConfig: Mock;
@@ -56,19 +49,16 @@ type MockSSEManager = {
 };
 
 // Import after mocks
-const { dnsCache } = (await import(
-  '../../src/services/dnsCache.ts'
-)) as unknown as {
-  dnsCache: MockDNSCache;
-};
-const { sseManager } = (await import(
-  '../../src/utils/sse/index.ts'
-)) as unknown as {
-  sseManager: MockSSEManager;
-};
-const { SettingsController } = await import(
-  '../../src/controllers/settingsController.ts'
-);
+const { dnsCache } =
+  (await import('../../src/services/dnsCache.ts')) as unknown as {
+    dnsCache: MockDNSCache;
+  };
+const { sseManager } =
+  (await import('../../src/utils/sse/index.ts')) as unknown as {
+    sseManager: MockSSEManager;
+  };
+const { SettingsController } =
+  await import('../../src/controllers/settingsController.ts');
 
 describe('SettingsController', () => {
   beforeEach(() => {

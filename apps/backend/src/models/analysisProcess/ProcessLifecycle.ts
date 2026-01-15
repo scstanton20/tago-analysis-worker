@@ -27,79 +27,14 @@ import {
   formatConnectionRestart,
 } from '../../utils/logging/index.ts';
 import { getServerTime } from '../../utils/serverTime.ts';
+import { getSseManager, getDnsCache } from '../../utils/lazyLoader.ts';
 import type {
   AnalysisProcessState,
   AnalysisStatus,
-  SSEManagerInterface,
-  DNSCacheInterface,
   DNSLookupRequest,
   DNSResolve4Request,
   DNSResolve6Request,
 } from './types.ts';
-
-/**
- * Lazy-loaded SSE manager to avoid circular dependency.
- *
- * Direct import would create: ProcessLifecycle -> sse -> analysisService -> AnalysisProcess -> ProcessLifecycle
- * This pattern defers loading until first use, breaking the cycle.
- */
-let _sseManager: SSEManagerInterface | null = null;
-let _sseManagerPromise: Promise<SSEManagerInterface> | null = null;
-
-async function getSseManager(): Promise<SSEManagerInterface> {
-  if (_sseManager) {
-    return _sseManager;
-  }
-
-  if (_sseManagerPromise) {
-    await _sseManagerPromise;
-    return _sseManager!;
-  }
-
-  _sseManagerPromise = (async () => {
-    const { sseManager } = await import('../../utils/sse/index.ts');
-    // Type assertion required: dynamic import loses type info.
-    // The actual implementation matches SSEManagerInterface contract.
-    _sseManager = sseManager as unknown as SSEManagerInterface;
-    _sseManagerPromise = null;
-    return _sseManager;
-  })();
-
-  await _sseManagerPromise;
-  return _sseManager!;
-}
-
-/**
- * Lazy-loaded DNS cache to avoid circular dependency.
- *
- * Direct import would create: ProcessLifecycle -> dnsCache -> analysisService -> AnalysisProcess -> ProcessLifecycle
- * This pattern defers loading until first use, breaking the cycle.
- */
-let _dnsCache: DNSCacheInterface | null = null;
-let _dnsCachePromise: Promise<DNSCacheInterface> | null = null;
-
-async function getDnsCache(): Promise<DNSCacheInterface> {
-  if (_dnsCache) {
-    return _dnsCache;
-  }
-
-  if (_dnsCachePromise) {
-    await _dnsCachePromise;
-    return _dnsCache!;
-  }
-
-  _dnsCachePromise = (async () => {
-    const { dnsCache } = await import('../../services/dnsCache.ts');
-    // Type assertion required: dynamic import loses type info.
-    // The actual implementation matches DNSCacheInterface contract.
-    _dnsCache = dnsCache as unknown as DNSCacheInterface;
-    _dnsCachePromise = null;
-    return _dnsCache;
-  })();
-
-  await _dnsCachePromise;
-  return _dnsCache!;
-}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

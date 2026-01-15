@@ -19,7 +19,7 @@ import {
 } from '@tabler/icons-react';
 import { modals } from '@mantine/modals';
 import { useAnalyses } from '@/contexts/sseContext/index';
-import { notificationAPI } from '@/utils/notificationAPI.jsx';
+import { notificationAPI } from '@/utils/notificationService.jsx';
 import { usePermissions } from '@/features/auth/hooks/usePermissions';
 import { useStandardForm } from '@/hooks/forms/useStandardForm';
 import {

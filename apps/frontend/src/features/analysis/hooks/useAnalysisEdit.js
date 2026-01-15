@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAsyncOperation, useAsyncEffect } from '@/hooks/async';
-import { notificationAPI } from '@/utils/notificationAPI.jsx';
+import { notificationAPI } from '@/utils/notificationService.jsx';
 import logger from '@/utils/logger';
 import { analysisService } from '../api/analysisService';
 

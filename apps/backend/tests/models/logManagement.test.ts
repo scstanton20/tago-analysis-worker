@@ -28,6 +28,9 @@ vi.mock('../../src/utils/sse/index.ts', () => ({
   sseManager: {
     broadcastUpdate: vi.fn().mockResolvedValue(undefined),
     broadcastAnalysisUpdate: vi.fn().mockResolvedValue(undefined),
+    broadcastAnalysisLog: vi.fn(),
+    broadcastAnalysisStats: vi.fn(),
+    broadcast: vi.fn(),
   },
 }));
 
@@ -35,9 +38,8 @@ const { safeMkdir, safeStat, safeReadFile, safeWriteFile, safeUnlink } =
   await import('../../src/utils/safePath.ts');
 const { sseManager } = await import('../../src/utils/sse/index.ts');
 
-const { LogManager } = await import(
-  '../../src/models/analysisProcess/LogManagement.ts'
-);
+const { LogManager } =
+  await import('../../src/models/analysisProcess/LogManagement.ts');
 
 describe('LogManagement', () => {
   let mockAnalysisProcess: {
@@ -122,11 +124,15 @@ describe('LogManagement', () => {
     it('should broadcast log via SSE', async () => {
       await logManager.addLog('Test message');
 
-      expect(sseManager.broadcastUpdate).toHaveBeenCalledWith(
-        'log',
+      expect(sseManager.broadcastAnalysisLog).toHaveBeenCalledWith(
+        'test-analysis-id',
         expect.objectContaining({
-          analysisId: 'test-analysis-id',
-          analysisName: 'test-analysis',
+          type: 'log',
+          data: expect.objectContaining({
+            analysisId: 'test-analysis-id',
+            analysisName: 'test-analysis',
+            log: expect.any(Object),
+          }),
         }),
       );
     });
@@ -498,12 +504,15 @@ describe('LogManagement', () => {
 
       await logManager.addLog('trigger rotation');
 
-      // Should broadcast logsCleared event
-      expect(sseManager.broadcastUpdate).toHaveBeenCalledWith(
-        'logsCleared',
+      // Should broadcast logsCleared event via global broadcast
+      expect(sseManager.broadcast).toHaveBeenCalledWith(
         expect.objectContaining({
-          analysisId: 'test-analysis-id',
-          reason: 'rotation',
+          type: 'logsCleared',
+          data: expect.objectContaining({
+            analysisId: 'test-analysis-id',
+            analysisName: 'test-analysis',
+            reason: 'rotation',
+          }),
         }),
       );
     });

@@ -38,6 +38,8 @@ export type Analysis = AnalysisBase & {
   status: AnalysisStatus;
   /** Whether the analysis is enabled */
   enabled: boolean;
+  /** Intended running state (for auto-recovery) */
+  intendedState: AnalysisIntendedState;
   /** Last start time as ISO string */
   lastStartTime: string | null;
   /** Human-readable file size (e.g., "1.5 KB") */

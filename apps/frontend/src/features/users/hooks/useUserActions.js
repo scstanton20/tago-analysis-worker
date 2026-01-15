@@ -3,7 +3,7 @@ import { admin } from '@/features/auth/lib/auth';
 import { modalService } from '@/modals/modalService';
 import { useAsyncOperation } from '@/hooks/async';
 import { useAuth } from '@/features/auth/hooks/useAuth';
-import { notificationAPI } from '@/utils/notificationAPI.jsx';
+import { notificationAPI } from '@/utils/notificationService.jsx';
 import logger from '@/utils/logger.js';
 import { userService } from '../api/userService';
 
@@ -30,9 +30,11 @@ export function useUserActions({ loadUsers }) {
 
   /**
    * Handle impersonating a user
+   * Note: Modals should be closed BEFORE calling this to prevent
+   * race conditions with session updates
    */
   const handleImpersonate = useCallback(
-    async (user, onConfirm) => {
+    async (user) => {
       await impersonateOperation.execute(async () => {
         const result = await admin.impersonateUser({
           userId: user.id,
@@ -42,7 +44,7 @@ export function useUserActions({ loadUsers }) {
           throw new Error(result.error.message);
         }
 
-        notificationAPI.info(
+        notificationAPI.success(
           `Now impersonating ${user.name || user.email}`,
           'Success',
         );
@@ -50,12 +52,8 @@ export function useUserActions({ loadUsers }) {
         // Refetch session to get updated user from Better Auth
         // This will trigger PermissionsContext to auto-reload permissions via useEffect
         await refetchSession();
-        logger.log('✓ Session refetched after impersonation start');
+        logger.log('Session refetched after impersonation start');
       });
-
-      if (onConfirm) {
-        onConfirm();
-      }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- using .execute for stable reference
     [refetchSession, impersonateOperation.execute],
@@ -64,15 +62,15 @@ export function useUserActions({ loadUsers }) {
   /**
    * Handle managing user sessions
    */
-  const handleManageSessions = (user) => {
+  const handleManageSessions = useCallback((user) => {
     modalService.openUserSessions(user);
-  };
+  }, []);
 
   /**
    * Handle banning a user
    */
   const handleBanUser = useCallback(
-    async (user, onConfirm) => {
+    async (user) => {
       await banOperation.execute(async () => {
         const result = await admin.banUser({
           userId: user.id,
@@ -89,7 +87,7 @@ export function useUserActions({ loadUsers }) {
             user.id,
             'Your account has been banned by an administrator',
           );
-          logger.log(`✓ Forced logout for banned user ${user.id}`);
+          logger.log(`Forced logout for banned user ${user.id}`);
         } catch (logoutError) {
           logger.warn('Failed to force logout banned user:', logoutError);
           // Continue even if force logout fails
@@ -102,10 +100,6 @@ export function useUserActions({ loadUsers }) {
 
         await loadUsers();
       });
-
-      if (onConfirm) {
-        onConfirm();
-      }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- using .execute for stable reference
     [loadUsers, banOperation.execute],
@@ -115,7 +109,7 @@ export function useUserActions({ loadUsers }) {
    * Handle unbanning a user
    */
   const handleUnbanUser = useCallback(
-    async (user, onConfirm) => {
+    async (user) => {
       await unbanOperation.execute(async () => {
         const result = await admin.unbanUser({
           userId: user.id,
@@ -130,10 +124,6 @@ export function useUserActions({ loadUsers }) {
 
         await loadUsers();
       });
-
-      if (onConfirm) {
-        onConfirm();
-      }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- using .execute for stable reference
     [loadUsers, unbanOperation.execute],

@@ -18,6 +18,12 @@ export function SSEBackendProvider({ children }) {
 
   // Event Handlers - plain functions (React 19: no useCallback needed for internal handlers)
   const handleStatusUpdate = (data) => {
+    // Track when we last received a status update (used for staleness detection)
+    lastMetricsUpdateRef.current = Date.now();
+
+    // Reset offline detection flag when we receive status
+    offlineDetectedRef.current = false;
+
     // Handle both SSE event format and HTTP fetch format
     if (data.container_health) {
       // Direct SSE event: { type: 'statusUpdate', container_health: {...}, ... }

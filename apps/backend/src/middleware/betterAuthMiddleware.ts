@@ -1,36 +1,17 @@
-import type { Request, Response, NextFunction, RequestHandler } from 'express';
+import type { Response, NextFunction, RequestHandler } from 'express';
 import type { Logger } from 'pino';
 import { auth } from '../lib/auth.ts';
 import { fromNodeHeaders } from 'better-auth/node';
 import { executeQuery, executeQueryAll } from '../utils/authDatabase.ts';
 import { createChildLogger } from '../utils/logging/logger.ts';
+import { getAnalysisService } from '../utils/lazyLoader.ts';
+import type {
+  AuthUser,
+  AuthSession,
+  AuthenticatingRequest,
+} from '../types/index.ts';
 
 const moduleLogger = createChildLogger('auth-middleware');
-
-/** User attached to request by auth middleware */
-type AuthUser = {
-  id: string;
-  email?: string;
-  name?: string;
-  role?: string;
-  requiresPasswordChange?: boolean;
-};
-
-/** Session attached to request by auth middleware */
-type AuthSession = {
-  id: string;
-  userId: string;
-  expiresAt: Date;
-  activeOrganizationId?: string;
-};
-
-/** Extended request with auth properties */
-type AuthenticatedRequest = Omit<Request, 'log'> & {
-  user?: AuthUser;
-  session?: AuthSession;
-  analysisTeamId?: string;
-  log?: Logger;
-};
 
 /** Team membership from database */
 type TeamMembership = {
@@ -50,7 +31,7 @@ type UserIdRow = {
 
 // Authentication middleware using Better Auth
 export const authMiddleware: RequestHandler = async (
-  req: AuthenticatedRequest,
+  req: AuthenticatingRequest,
   res: Response,
   next: NextFunction,
 ): Promise<void> => {
@@ -105,7 +86,7 @@ export const authMiddleware: RequestHandler = async (
 
 // Admin role requirement middleware
 export const requireAdmin: RequestHandler = async (
-  req: AuthenticatedRequest,
+  req: AuthenticatingRequest,
   res: Response,
   next: NextFunction,
 ): Promise<void> => {
@@ -297,7 +278,7 @@ export function getUsersWithTeamAccess(
 
 // Middleware to extract team information from analysis and add to request
 export const extractAnalysisTeam: RequestHandler = async (
-  req: AuthenticatedRequest,
+  req: AuthenticatingRequest,
   _res: Response,
   next: NextFunction,
 ): Promise<void> => {
@@ -308,10 +289,8 @@ export const extractAnalysisTeam: RequestHandler = async (
     const analysisId = req.params?.analysisId;
 
     if (analysisId) {
-      // Import analysis service to get analysis metadata
-      const { analysisService } = await import(
-        '../services/analysisService.ts'
-      );
+      // Get analysis service via lazy loader to avoid circular dependencies
+      const analysisService = await getAnalysisService();
 
       try {
         const analysis = analysisService.getAnalysisById(analysisId);
@@ -345,7 +324,7 @@ export const extractAnalysisTeam: RequestHandler = async (
 // Middleware for team-specific permission checks
 export const requireTeamPermission = (permission: string): RequestHandler => {
   return async (
-    req: AuthenticatedRequest,
+    req: AuthenticatingRequest,
     res: Response,
     next: NextFunction,
   ): Promise<void> => {
@@ -443,7 +422,7 @@ export const requireAnyTeamPermission = (
   permission: string,
 ): RequestHandler => {
   return async (
-    req: AuthenticatedRequest,
+    req: AuthenticatingRequest,
     res: Response,
     next: NextFunction,
   ): Promise<void> => {
@@ -510,7 +489,7 @@ export const requireAnyTeamPermission = (
 
 // Middleware to require user is accessing their own resource or is an admin
 export const requireSelfOrAdmin: RequestHandler = async (
-  req: AuthenticatedRequest & { params: { userId?: string } },
+  req: AuthenticatingRequest & { params: { userId?: string } },
   res: Response,
   next: NextFunction,
 ): Promise<void> => {

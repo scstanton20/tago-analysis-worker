@@ -15,6 +15,8 @@ export function SSEAnalysesProvider({ children }) {
   const [loadingAnalyses, setLoadingAnalyses] = useState(new Set());
   // DNS stats keyed by analysisId (UUID) - populated via SSE channel subscription
   const [analysisDnsStats, setAnalysisDnsStats] = useState({});
+  // Process metrics keyed by analysisId (UUID) - populated via SSE stats channel
+  const [analysisProcessMetrics, setAnalysisProcessMetrics] = useState({});
 
   const addLoadingAnalysis = useCallback((analysisId) => {
     setLoadingAnalyses((prev) => new Set([...prev, analysisId]));
@@ -56,6 +58,13 @@ export function SSEAnalysesProvider({ children }) {
       return analysisDnsStats[analysisId] || null;
     },
     [analysisDnsStats],
+  );
+
+  const getAnalysisProcessMetrics = useCallback(
+    (analysisId) => {
+      return analysisProcessMetrics[analysisId] || null;
+    },
+    [analysisProcessMetrics],
   );
 
   // Event Handlers
@@ -320,6 +329,37 @@ export function SSEAnalysesProvider({ children }) {
     }
   }, []);
 
+  // Handle log stats updates (totalCount, logFileSize)
+  const handleAnalysisLogStats = useCallback((data) => {
+    if (data.analysisId) {
+      setAnalyses((prev) => {
+        if (!prev[data.analysisId]) return prev;
+        return {
+          ...prev,
+          [data.analysisId]: {
+            ...prev[data.analysisId],
+            totalLogCount: data.totalCount,
+            logFileSize: data.logFileSize,
+          },
+        };
+      });
+    }
+  }, []);
+
+  // Handle process metrics updates (cpu, memory, uptime)
+  const handleAnalysisProcessMetrics = useCallback((data) => {
+    if (data.analysisId && data.metrics) {
+      setAnalysisProcessMetrics((prev) => ({
+        ...prev,
+        [data.analysisId]: {
+          cpu: data.metrics.cpu || 0,
+          memory: data.metrics.memory || 0,
+          uptime: data.metrics.uptime || 0,
+        },
+      }));
+    }
+  }, []);
+
   // Message handler to be called by parent
   const handleMessage = useCallback(
     (data) => {
@@ -361,6 +401,12 @@ export function SSEAnalysesProvider({ children }) {
           case 'analysisDnsStats':
             handleAnalysisDnsStats(data);
             break;
+          case 'analysisLogStats':
+            handleAnalysisLogStats(data);
+            break;
+          case 'analysisProcessMetrics':
+            handleAnalysisProcessMetrics(data);
+            break;
           default:
             break;
         }
@@ -383,6 +429,8 @@ export function SSEAnalysesProvider({ children }) {
       handleAnalysisMovedToTeam,
       handleTeamDeleted,
       handleAnalysisDnsStats,
+      handleAnalysisLogStats,
+      handleAnalysisProcessMetrics,
     ],
   );
 
@@ -396,6 +444,7 @@ export function SSEAnalysesProvider({ children }) {
       getAnalysisIds,
       filterAnalyses,
       getAnalysisDnsStats,
+      getAnalysisProcessMetrics,
       handleMessage,
     }),
     [
@@ -407,6 +456,7 @@ export function SSEAnalysesProvider({ children }) {
       getAnalysisIds,
       filterAnalyses,
       getAnalysisDnsStats,
+      getAnalysisProcessMetrics,
       handleMessage,
     ],
   );

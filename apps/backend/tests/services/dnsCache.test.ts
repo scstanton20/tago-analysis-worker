@@ -106,7 +106,6 @@ type DNSCacheType = {
   originalLookup: Mock | null;
   originalResolve4: Mock | null;
   originalResolve6: Mock | null;
-  statsBroadcastTimer: NodeJS.Timeout | null;
   analysisStats: Map<string, AnalysisStatsEntry>;
   cacheKeyToAnalyses: Map<string, Set<string>>;
   lastStatsSnapshot: {
@@ -146,8 +145,6 @@ type DNSCacheType = {
   getConfig: () => DNSCacheConfig;
   installInterceptors: () => void;
   uninstallInterceptors: () => void;
-  startStatsBroadcasting: () => void;
-  stopStatsBroadcasting: () => void;
   handleDNSLookupRequest: (
     hostname: string,
     options?: { family?: number },
@@ -165,13 +162,10 @@ type DNSCacheType = {
   ) => Promise<{ success: boolean; addresses?: string[]; error?: string }>;
 };
 
-const { safeReadFile, safeWriteFile } = (await import(
-  '../../src/utils/safePath.ts'
-)) as unknown as SafePathMock;
+const { safeReadFile, safeWriteFile } =
+  (await import('../../src/utils/safePath.ts')) as unknown as SafePathMock;
 const { validateHostname, validateResolvedAddress, validateResolvedAddresses } =
-  (await import(
-    '../../src/utils/ssrfProtection.ts'
-  )) as unknown as SSRFProtectionMock;
+  (await import('../../src/utils/ssrfProtection.ts')) as unknown as SSRFProtectionMock;
 
 describe('DNSCacheService', () => {
   let dnsCache: DNSCacheType;
@@ -219,9 +213,6 @@ describe('DNSCacheService', () => {
     if (dnsCache.originalLookup) {
       dnsCache.uninstallInterceptors();
     }
-    if (dnsCache.statsBroadcastTimer) {
-      dnsCache.stopStatsBroadcasting();
-    }
   });
 
   describe('initialize', () => {
@@ -264,20 +255,6 @@ describe('DNSCacheService', () => {
       await dnsCache.initialize();
 
       expect(dnsCache.originalLookup).not.toBeNull();
-    });
-
-    it('should start stats broadcasting if enabled', async () => {
-      safeReadFile.mockResolvedValue(
-        JSON.stringify({
-          enabled: true,
-          ttl: 300000,
-          maxEntries: 1000,
-        }),
-      );
-
-      await dnsCache.initialize();
-
-      expect(dnsCache.statsBroadcastTimer).not.toBeNull();
     });
   });
 
@@ -1224,41 +1201,6 @@ describe('DNSCacheService', () => {
         expect(dnsCache.analysisStats.get('test-analysis-r6-5')!.errors).toBe(
           1,
         );
-      });
-    });
-  });
-
-  describe('stats broadcasting', () => {
-    describe('startStatsBroadcasting', () => {
-      it('should start periodic broadcasting', () => {
-        dnsCache.startStatsBroadcasting();
-
-        expect(dnsCache.statsBroadcastTimer).not.toBeNull();
-      });
-
-      it('should clear existing timer before creating new one', () => {
-        dnsCache.startStatsBroadcasting();
-        const firstTimer = dnsCache.statsBroadcastTimer;
-
-        dnsCache.startStatsBroadcasting();
-        const secondTimer = dnsCache.statsBroadcastTimer;
-
-        expect(secondTimer).not.toBe(firstTimer);
-      });
-    });
-
-    describe('stopStatsBroadcasting', () => {
-      it('should stop periodic broadcasting', () => {
-        dnsCache.startStatsBroadcasting();
-        dnsCache.stopStatsBroadcasting();
-
-        expect(dnsCache.statsBroadcastTimer).toBeNull();
-      });
-
-      it('should handle stopping when not started', () => {
-        dnsCache.stopStatsBroadcasting();
-
-        expect(dnsCache.statsBroadcastTimer).toBeNull();
       });
     });
   });

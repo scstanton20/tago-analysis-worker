@@ -5,15 +5,7 @@
  * @module modals/components/AnalysisNotesModalContent
  */
 import { useState, useCallback, lazy, Suspense } from 'react';
-import {
-  Stack,
-  Group,
-  Text,
-  Box,
-  CloseButton,
-  Badge,
-  ScrollArea,
-} from '@mantine/core';
+import { Stack, Group, Text, Box, Badge, ScrollArea } from '@mantine/core';
 import { IconNotes, IconEdit, IconEye } from '@tabler/icons-react';
 import { modals } from '@mantine/modals';
 import Markdown from 'react-markdown';
@@ -25,6 +17,7 @@ import {
   SecondaryButton,
   CancelButton,
   UnsavedChangesOverlay,
+  ModalHeader,
 } from '@/components/global';
 import { useUnsavedChangesGuard } from '@/hooks/modals';
 import { useAsyncMountOnce } from '@/hooks/async/useAsyncMount';
@@ -137,24 +130,17 @@ function AnalysisNotesModalContent({ id, innerProps }) {
       )}
 
       {/* Custom modal header */}
-      <Box
-        mb="sm"
-        pb="xs"
-        style={{
-          borderBottom: '1px solid var(--mantine-color-gray-3)',
-        }}
-      >
-        <Group justify="space-between" wrap="nowrap">
-          <Group gap="xs" wrap="nowrap">
-            <IconNotes size={20} color="var(--mantine-color-brand-6)" />
-            <Text fw={600}>Analysis Notes: {analysis.name}</Text>
+      <ModalHeader
+        icon={<IconNotes size={20} color="var(--mantine-color-brand-6)" />}
+        title={`Analysis Notes: ${analysis.name}`}
+        onClose={handleClose}
+        rightSection={
+          <>
             {notesData?.isNew && (
               <Badge color="blue" variant="light" size="sm">
                 New
               </Badge>
             )}
-          </Group>
-          <Group gap="xs">
             {isAdmin && (
               <SecondaryButton
                 size="xs"
@@ -166,10 +152,9 @@ function AnalysisNotesModalContent({ id, innerProps }) {
                 {isEditing ? 'View' : 'Edit'}
               </SecondaryButton>
             )}
-            <CloseButton onClick={handleClose} size="lg" />
-          </Group>
-        </Group>
-      </Box>
+          </>
+        }
+      />
 
       {/* Info alert for markdown format - only show in edit mode */}
       {isEditing && (

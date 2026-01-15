@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Stack,
   Paper,
@@ -37,9 +37,9 @@ import {
   LoadingState,
   EmptyState,
 } from '@/components/global';
-import { notificationAPI } from '@/utils/notificationAPI.jsx';
+import { notificationAPI } from '@/utils/notificationService';
 import { useAsyncOperation, useAsyncEffect } from '@/hooks/async';
-import { useBackend, useAnalyses } from '@/contexts/sseContext';
+import { useBackend, useAnalyses, useConnection } from '@/contexts/sseContext';
 import { useAuth } from '@/features/auth/hooks/useAuth';
 import { dnsService } from '../api/dnsService';
 
@@ -49,7 +49,24 @@ import { dnsService } from '../api/dnsService';
 function DNSCacheSettings({ focusAnalysisId }) {
   const { dnsCache } = useBackend();
   const { analyses } = useAnalyses();
+  const {
+    connectionStatus,
+    sessionId,
+    subscribeToMetrics,
+    unsubscribeFromMetrics,
+  } = useConnection();
   const { isAuthenticated } = useAuth();
+
+  // Subscribe to metrics channel for real-time DNS stats updates
+  useEffect(() => {
+    if (connectionStatus !== 'connected' || !sessionId) return;
+
+    subscribeToMetrics();
+
+    return () => {
+      unsubscribeFromMetrics();
+    };
+  }, [connectionStatus, sessionId, subscribeToMetrics, unsubscribeFromMetrics]);
   const loadEntriesOperation = useAsyncOperation();
   const [entries, setEntries] = useState([]);
   const [showEntries, setShowEntries] = useState(true);

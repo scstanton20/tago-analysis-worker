@@ -13,79 +13,25 @@ router.use(authMiddleware);
 
 /**
  * @swagger
- * components:
- *   schemas:
- *     SSEEvent:
- *       type: object
- *       properties:
- *         type:
- *           type: string
- *           description: Event type
- *           enum: [init, statusUpdate, analysisUpdate, log, departmentUpdate, sessionInvalidated]
- *         data:
- *           type: object
- *           description: Event data payload
- *         timestamp:
- *           type: string
- *           format: date-time
- *           description: Event timestamp
- *       example:
- *         type: "analysisUpdate"
- *         data: { fileName: "example-analysis", status: "running" }
- *         timestamp: "2024-06-29T10:30:00.000Z"
- */
-
-/**
- * @swagger
  * /sse/events:
  *   get:
  *     summary: Server-Sent Events stream for real-time updates
  *     description: |
- *       Establishes a Server-Sent Events (SSE) connection for receiving real-time updates about:
- *       - Analysis status changes and logs
- *       - System status updates
- *       - Department changes
- *       - Session invalidation notifications
+ *       Establishes a Server-Sent Events (SSE) connection for receiving real-time updates.
+ *       After connection, subscribe to specific channels for targeted updates.
  *
- *       **Authentication:** Uses existing session cookies - same auth as API access.
- *
- *       **Connection:** Keep-alive with automatic browser reconnection support.
- *
- *       **Events Sent:**
- *       - `init`: Initial data load (analyses, departments)
- *       - `statusUpdate`: Server health and Tago connection status
- *       - `analysisUpdate`: Analysis state changes
- *       - `log`: Real-time analysis log entries
- *       - `departmentUpdate`: Department creation/modification/deletion
- *       - `sessionInvalidated`: Authentication session expired
+ *       **Channel Architecture:**
+ *       - Global: Essential state for all clients (init, statusUpdate, analysisUpdate)
+ *       - Stats: Per-analysis lightweight stats (log count, file size, DNS, metrics)
+ *       - Logs: Per-analysis heavy log lines (for Log Viewer only)
+ *       - Metrics: Detailed system metrics (for Settings modal only)
  *
  *     tags: [Real-time Events]
  *     responses:
  *       200:
  *         description: SSE connection established successfully
- *         content:
- *           text/event-stream:
- *             schema:
- *               $ref: "..."
  *       401:
  *         description: Authentication required or failed
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
- *             examples:
- *               no_token:
- *                 summary: No authentication token
- *                 value:
- *                   error: "Authentication required"
- *               invalid_token:
- *                 summary: Invalid authentication token
- *                 value:
- *                   error: "Authentication failed"
- *               invalid_user:
- *                 summary: User not found
- *                 value:
- *                   error: "Invalid user"
  */
 router.get(
   '/events',
@@ -94,91 +40,20 @@ router.get(
   handleSSEConnection,
 );
 
-/**
- * @swagger
- * /sse/subscribe:
- *   post:
- *     summary: Subscribe to analysis channels
- *     description: |
- *       Subscribe an SSE session to receive real-time events from specific analyses.
- *       Only events from subscribed analyses will be sent to the session.
- *
- *       **Permission Checking:**
- *       - Admin users can subscribe to any analysis
- *       - Regular users can only subscribe to analyses in teams they have access to
- *       - Uncategorized analyses are accessible to all users
- *
- *       **Use Case:** When user opens an analysis view, frontend subscribes to that analysis
- *     tags: [Real-time Events]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - sessionId
- *               - analyses
- *             properties:
- *               sessionId:
- *                 type: string
- *                 description: SSE session ID from the connection
- *                 example: "abc123xyz"
- *               analyses:
- *                 type: array
- *                 items:
- *                   type: string
- *                 description: Array of analysis names to subscribe to
- *                 example: ["my-analysis.js", "another-analysis.js"]
- *     responses:
- *       200:
- *         description: Subscription successful
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 subscribed:
- *                   type: array
- *                   items:
- *                     type: string
- *                   description: Analyses successfully subscribed to
- *                 denied:
- *                   type: array
- *                   items:
- *                     type: string
- *                   description: Analyses that were denied due to permissions
- *                 sessionId:
- *                   type: string
- *                   description: The session ID that was subscribed
- *       400:
- *         description: Invalid request (missing sessionId or analyses)
- *       404:
- *         description: Session not found
- *       401:
- *         description: Authentication required
- */
-router.post(
-  '/subscribe',
-  validateRequest(sseValidationSchemas.subscribe),
-  asyncHandler(async (req: Request, res: Response) => {
-    await sseManager.handleSubscribeRequest(req, res);
-  }, 'subscribe to analysis channels'),
-);
+// ============================================================================
+// Stats Channel (lightweight - for Info Modal)
+// ============================================================================
 
 /**
  * @swagger
- * /sse/unsubscribe:
+ * /sse/subscribe/stats:
  *   post:
- *     summary: Unsubscribe from analysis channels
+ *     summary: Subscribe to analysis stats channels (lightweight)
  *     description: |
- *       Unsubscribe an SSE session from receiving logs from specific analyses.
- *       This stops log streaming for the specified analyses.
+ *       Subscribe to lightweight stats for analyses: log count, file size, DNS stats, process metrics.
+ *       Use this for Info Modal and analysis cards that need metadata without log lines.
  *
- *       **Use Case:** When user closes an analysis view, frontend unsubscribes from that analysis
+ *       On subscription, immediately pushes current stats to the session.
  *     tags: [Real-time Events]
  *     requestBody:
  *       required: true
@@ -186,52 +61,157 @@ router.post(
  *         application/json:
  *           schema:
  *             type: object
- *             required:
- *               - sessionId
- *               - analyses
+ *             required: [sessionId, analyses]
  *             properties:
  *               sessionId:
  *                 type: string
- *                 description: SSE session ID from the connection
- *                 example: "abc123xyz"
  *               analyses:
  *                 type: array
  *                 items:
  *                   type: string
- *                 description: Array of analysis names to unsubscribe from
- *                 example: ["my-analysis.js", "another-analysis.js"]
  *     responses:
  *       200:
- *         description: Unsubscription successful
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 unsubscribed:
- *                   type: array
- *                   items:
- *                     type: string
- *                   description: Analyses successfully unsubscribed from
- *                 sessionId:
- *                   type: string
- *                   description: The session ID that was unsubscribed
+ *         description: Subscription successful
  *       400:
  *         description: Invalid request
  *       404:
  *         description: Session not found
- *       401:
- *         description: Authentication required
  */
 router.post(
-  '/unsubscribe',
+  '/subscribe/stats',
+  validateRequest(sseValidationSchemas.subscribe),
+  asyncHandler(async (req: Request, res: Response) => {
+    await sseManager.handleSubscribeStatsRequest(req, res);
+  }, 'subscribe to analysis stats'),
+);
+
+/**
+ * @swagger
+ * /sse/unsubscribe/stats:
+ *   post:
+ *     summary: Unsubscribe from analysis stats channels
+ *     tags: [Real-time Events]
+ */
+router.post(
+  '/unsubscribe/stats',
   validateRequest(sseValidationSchemas.unsubscribe),
   asyncHandler(async (req: Request, res: Response) => {
-    await sseManager.handleUnsubscribeRequest(req, res);
-  }, 'unsubscribe from analysis channels'),
+    await sseManager.handleUnsubscribeStatsRequest(req, res);
+  }, 'unsubscribe from analysis stats'),
+);
+
+// ============================================================================
+// Logs Channel (heavy - for Log Viewer)
+// ============================================================================
+
+/**
+ * @swagger
+ * /sse/subscribe/logs:
+ *   post:
+ *     summary: Subscribe to analysis logs channels (heavy)
+ *     description: |
+ *       Subscribe to receive individual log lines from analyses.
+ *       Use this only when Log Viewer is open, as it streams every log line.
+ *     tags: [Real-time Events]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [sessionId, analyses]
+ *             properties:
+ *               sessionId:
+ *                 type: string
+ *               analyses:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       200:
+ *         description: Subscription successful
+ *       400:
+ *         description: Invalid request
+ *       404:
+ *         description: Session not found
+ */
+router.post(
+  '/subscribe/logs',
+  validateRequest(sseValidationSchemas.subscribe),
+  asyncHandler(async (req: Request, res: Response) => {
+    await sseManager.handleSubscribeLogsRequest(req, res);
+  }, 'subscribe to analysis logs'),
+);
+
+/**
+ * @swagger
+ * /sse/unsubscribe/logs:
+ *   post:
+ *     summary: Unsubscribe from analysis logs channels
+ *     tags: [Real-time Events]
+ */
+router.post(
+  '/unsubscribe/logs',
+  validateRequest(sseValidationSchemas.unsubscribe),
+  asyncHandler(async (req: Request, res: Response) => {
+    await sseManager.handleUnsubscribeLogsRequest(req, res);
+  }, 'unsubscribe from analysis logs'),
+);
+
+// ============================================================================
+// Metrics Channel (for Settings modal)
+// ============================================================================
+
+/**
+ * @swagger
+ * /sse/subscribe/metrics:
+ *   post:
+ *     summary: Subscribe to detailed system metrics channel
+ *     description: |
+ *       Subscribe to receive detailed system metrics: CPU, memory, process details.
+ *       Use this only when Settings modal or Metrics Dashboard is open.
+ *
+ *       On subscription, immediately pushes current metrics to the session.
+ *     tags: [Real-time Events]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [sessionId]
+ *             properties:
+ *               sessionId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Subscription successful
+ *       400:
+ *         description: Invalid request
+ *       404:
+ *         description: Session not found
+ */
+router.post(
+  '/subscribe/metrics',
+  validateRequest(sseValidationSchemas.subscribeMetrics),
+  asyncHandler(async (req: Request, res: Response) => {
+    await sseManager.handleSubscribeMetricsRequest(req, res);
+  }, 'subscribe to metrics'),
+);
+
+/**
+ * @swagger
+ * /sse/unsubscribe/metrics:
+ *   post:
+ *     summary: Unsubscribe from metrics channel
+ *     tags: [Real-time Events]
+ */
+router.post(
+  '/unsubscribe/metrics',
+  validateRequest(sseValidationSchemas.subscribeMetrics),
+  asyncHandler(async (req: Request, res: Response) => {
+    await sseManager.handleUnsubscribeMetricsRequest(req, res);
+  }, 'unsubscribe from metrics'),
 );
 
 export { router as sseRouter };

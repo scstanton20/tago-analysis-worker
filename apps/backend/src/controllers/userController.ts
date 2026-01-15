@@ -1,4 +1,4 @@
-import type { Request, Response } from 'express';
+import type { Response } from 'express';
 import type { Logger } from 'pino';
 import type { IncomingHttpHeaders } from 'http';
 import type {
@@ -11,6 +11,7 @@ import type {
   RemoveUserFromOrganizationRequest,
   ForceLogoutRequest,
 } from '@tago-analysis-worker/types';
+import type { RequestWithLogger } from '../types/index.ts';
 import { auth } from '../lib/auth.ts';
 import {
   executeQuery,
@@ -22,11 +23,6 @@ import { createChildLogger } from '../utils/logging/logger.ts';
 import { sseManager } from '../utils/sse/index.ts';
 
 const logger = createChildLogger('user-controller');
-
-/** Express request with request-scoped logger */
-type RequestWithLogger = Request & {
-  log: Logger;
-};
 
 /** Team membership result (backend-specific) */
 type TeamMembership = {
@@ -72,7 +68,7 @@ export function getUserTeams(
     return allTeams.map((team) => ({
       id: team.id,
       name: team.name,
-      permissions: adminPermissions,
+      permissions: [...adminPermissions],
     }));
   }
 

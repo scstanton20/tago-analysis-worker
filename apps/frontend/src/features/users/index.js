@@ -15,7 +15,6 @@ export { useUserCRUD } from './hooks/useUserCRUD';
 export { useUserActions } from './hooks/useUserActions';
 export { useUserOperations } from './hooks/useUserOperations';
 export { useUserValidation } from './hooks/useUserValidation';
-export { useDepartmentPermissions } from './hooks/useDepartmentPermissions';
 export { usePasswordManagement } from './hooks/usePasswordManagement';
 export { usePasskeyManagement } from './hooks/usePasskeyManagement';
 export { useProfileEditing } from './hooks/useProfileEditing';

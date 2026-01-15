@@ -134,7 +134,6 @@ export function ProfileTab({
             </Box>
 
             <FormActionButtons
-              onSubmit={handleProfileSubmit}
               onCancel={handleCancelProfileEdit}
               loading={profileLoading}
               disabled={!isDirty}

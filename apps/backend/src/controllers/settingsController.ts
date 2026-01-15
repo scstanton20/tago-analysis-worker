@@ -1,12 +1,7 @@
-import type { Request, Response } from 'express';
-import type { Logger } from 'pino';
+import type { Response } from 'express';
+import type { RequestWithLogger } from '../types/index.ts';
 import { dnsCache } from '../services/dnsCache.ts';
 import { sseManager } from '../utils/sse/index.ts';
-
-/** Express request with request-scoped logger */
-type RequestWithLogger = Request & {
-  log: Logger;
-};
 
 /** Update DNS config request body */
 type UpdateDNSConfigBody = {

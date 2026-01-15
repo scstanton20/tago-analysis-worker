@@ -3,6 +3,8 @@
  * No external dependencies - can be used standalone
  */
 
+import { v4 as uuidv4 } from 'uuid';
+
 // Import SSE constants from constants.js for consistency
 import { SSE } from '../../constants.ts';
 
@@ -18,8 +20,6 @@ export const HEARTBEAT_INTERVAL_MS = SSE.HEARTBEAT_INTERVAL_MS;
 export const METRICS_INTERVAL_MS = SSE.METRICS_BROADCAST_INTERVAL_MS;
 export const STALE_CONNECTION_TIMEOUT = SSE.STALE_CONNECTION_TIMEOUT_MS;
 export const SSE_API_VERSION = SSE.API_VERSION;
-export const SESSION_ID_SUBSTRING_START = SSE.SESSION_ID_SUBSTRING_START;
-export const SESSION_ID_SUBSTRING_END = SSE.SESSION_ID_SUBSTRING_END;
 export const FORCE_LOGOUT_MESSAGE_DELIVERY_DELAY_MS =
   SSE.FORCE_LOGOUT_MESSAGE_DELIVERY_DELAY_MS;
 
@@ -39,7 +39,10 @@ export interface SessionUser {
 export interface SessionState {
   userId: string;
   user: SessionUser;
-  subscribedChannels: Set<string>;
+  // Channel subscriptions
+  subscribedChannels: Set<string>; // Logs channels (analysis IDs)
+  subscribedStatsChannels?: Set<string>; // Stats channels (analysis IDs)
+  subscribedToMetrics?: boolean; // Metrics channel subscription
   _disconnecting?: boolean;
   // Index signature for better-sse DefaultSessionState compatibility
   [key: string]: unknown;
@@ -79,19 +82,11 @@ export interface LogData {
 // ========================================================================
 
 /**
- * Generate unique session ID
- * Matches original implementation from sse.js lines 100-112
+ * Generate unique session ID using UUID v4
  * @returns Unique session identifier
  */
 export function generateSessionId(): string {
-  return (
-    Math.random()
-      .toString(36)
-      .substring(SESSION_ID_SUBSTRING_START, SESSION_ID_SUBSTRING_END) +
-    Math.random()
-      .toString(36)
-      .substring(SESSION_ID_SUBSTRING_START, SESSION_ID_SUBSTRING_END)
-  );
+  return uuidv4();
 }
 
 /**

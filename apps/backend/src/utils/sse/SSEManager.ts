@@ -9,6 +9,7 @@
 import type { Request, Response } from 'express';
 import { createChannel, Channel } from 'better-sse';
 
+import { createChildLogger } from '../logging/logger.ts';
 import { SessionManager } from './SessionManager.ts';
 import { ChannelManager } from './ChannelManager.ts';
 import { BroadcastService } from './BroadcastService.ts';
@@ -21,6 +22,8 @@ import type {
   SubscriptionResult,
   UnsubscriptionResult,
 } from '@tago-analysis-worker/types';
+
+const logger = createChildLogger('sse:manager');
 
 /** Extended request with user (backend-specific) */
 interface AuthenticatedRequest extends Request {
@@ -43,8 +46,13 @@ interface ConnectionStatsDetailed {
 export class SSEManager {
   // Infrastructure (owned by SSEManager)
   sessions: Map<string, Session>;
-  analysisChannels: Map<string, Channel>;
-  globalChannel: Channel;
+
+  // Channel architecture (see SSE_CHANNEL_ARCHITECTURE.md)
+  globalChannel: Channel; // Essential state for all clients
+  metricsChannel: Channel; // Detailed metrics (Settings modal only)
+  analysisLogsChannels: Map<string, Channel>; // Heavy log lines per analysis
+  analysisStatsChannels: Map<string, Channel>; // Lightweight stats per analysis
+
   sessionLastPush: Map<string, number>;
 
   containerState: ContainerState;
@@ -65,8 +73,13 @@ export class SSEManager {
   constructor() {
     // Infrastructure (owned by SSEManager)
     this.sessions = new Map();
-    this.analysisChannels = new Map();
+
+    // Channel infrastructure
     this.globalChannel = createChannel();
+    this.metricsChannel = createChannel();
+    this.analysisLogsChannels = new Map();
+    this.analysisStatsChannels = new Map();
+
     this.sessionLastPush = new Map();
 
     this.containerState = {
@@ -83,6 +96,59 @@ export class SSEManager {
     this.broadcastService = new BroadcastService(this);
     this.initDataService = new InitDataService(this);
     this.heartbeatService = new HeartbeatService(this);
+
+    // Set up channel observability
+    this.setupChannelObservability();
+  }
+
+  /**
+   * Set up event listeners on channels for observability
+   * Listens to better-sse channel events for debugging and monitoring
+   */
+  private setupChannelObservability(): void {
+    // Global channel events
+    this.globalChannel.on('session-registered', (session) => {
+      logger.debug(
+        { sessionId: session.state?.sessionId, userId: session.state?.userId },
+        'Session registered to global channel',
+      );
+    });
+
+    this.globalChannel.on('session-deregistered', (session) => {
+      logger.debug(
+        { sessionId: session.state?.sessionId, userId: session.state?.userId },
+        'Session deregistered from global channel',
+      );
+    });
+
+    this.globalChannel.on('session-disconnected', (session) => {
+      logger.debug(
+        { sessionId: session.state?.sessionId, userId: session.state?.userId },
+        'Session disconnected from global channel',
+      );
+    });
+
+    // Metrics channel events
+    this.metricsChannel.on('session-registered', (session) => {
+      logger.debug(
+        { sessionId: session.state?.sessionId, userId: session.state?.userId },
+        'Session registered to metrics channel',
+      );
+    });
+
+    this.metricsChannel.on('session-deregistered', (session) => {
+      logger.debug(
+        { sessionId: session.state?.sessionId, userId: session.state?.userId },
+        'Session deregistered from metrics channel',
+      );
+    });
+
+    this.metricsChannel.on('session-disconnected', (session) => {
+      logger.debug(
+        { sessionId: session.state?.sessionId, userId: session.state?.userId },
+        'Session disconnected from metrics channel',
+      );
+    });
   }
 
   /**
@@ -192,38 +258,124 @@ export class SSEManager {
   // Channel Management (delegates to ChannelManager)
   // ========================================================================
 
-  getOrCreateAnalysisChannel(analysisId: string): Channel {
-    return this.channelManager.getOrCreateAnalysisChannel(analysisId);
+  // Stats Channel (lightweight - for Info Modal)
+  getOrCreateStatsChannel(analysisId: string): Channel {
+    return this.channelManager.getOrCreateStatsChannel(analysisId);
   }
 
-  async subscribeToAnalysis(
+  async subscribeToAnalysisStats(
     sessionId: string,
     analysisIds: string[],
     userId: string,
   ): Promise<SubscriptionResult> {
-    return this.channelManager.subscribeToAnalysis(
+    return this.channelManager.subscribeToAnalysisStats(
       sessionId,
       analysisIds,
       userId,
     );
   }
 
-  async unsubscribeFromAnalysis(
+  async unsubscribeFromAnalysisStats(
     sessionId: string,
     analysisIds: string[],
   ): Promise<UnsubscriptionResult> {
-    return this.channelManager.unsubscribeFromAnalysis(sessionId, analysisIds);
+    return this.channelManager.unsubscribeFromAnalysisStats(
+      sessionId,
+      analysisIds,
+    );
   }
 
-  async handleSubscribeRequest(req: Request, res: Response): Promise<void> {
-    return this.channelManager.handleSubscribeRequest(
+  // Logs Channel (heavy - for Log Viewer)
+  getOrCreateLogsChannel(analysisId: string): Channel {
+    return this.channelManager.getOrCreateLogsChannel(analysisId);
+  }
+
+  async subscribeToAnalysisLogs(
+    sessionId: string,
+    analysisIds: string[],
+    userId: string,
+  ): Promise<SubscriptionResult> {
+    return this.channelManager.subscribeToAnalysisLogs(
+      sessionId,
+      analysisIds,
+      userId,
+    );
+  }
+
+  async unsubscribeFromAnalysisLogs(
+    sessionId: string,
+    analysisIds: string[],
+  ): Promise<UnsubscriptionResult> {
+    return this.channelManager.unsubscribeFromAnalysisLogs(
+      sessionId,
+      analysisIds,
+    );
+  }
+
+  // Metrics Channel (for Settings modal)
+  async subscribeToMetrics(sessionId: string): Promise<{ success: boolean }> {
+    return this.channelManager.subscribeToMetrics(sessionId);
+  }
+
+  async unsubscribeFromMetrics(
+    sessionId: string,
+  ): Promise<{ success: boolean }> {
+    return this.channelManager.unsubscribeFromMetrics(sessionId);
+  }
+
+  // HTTP handlers for subscription endpoints
+  async handleSubscribeStatsRequest(
+    req: Request,
+    res: Response,
+  ): Promise<void> {
+    return this.channelManager.handleSubscribeStatsRequest(
       req as AuthenticatedRequest,
       res,
     );
   }
 
-  async handleUnsubscribeRequest(req: Request, res: Response): Promise<void> {
-    return this.channelManager.handleUnsubscribeRequest(
+  async handleUnsubscribeStatsRequest(
+    req: Request,
+    res: Response,
+  ): Promise<void> {
+    return this.channelManager.handleUnsubscribeStatsRequest(
+      req as AuthenticatedRequest,
+      res,
+    );
+  }
+
+  async handleSubscribeLogsRequest(req: Request, res: Response): Promise<void> {
+    return this.channelManager.handleSubscribeLogsRequest(
+      req as AuthenticatedRequest,
+      res,
+    );
+  }
+
+  async handleUnsubscribeLogsRequest(
+    req: Request,
+    res: Response,
+  ): Promise<void> {
+    return this.channelManager.handleUnsubscribeLogsRequest(
+      req as AuthenticatedRequest,
+      res,
+    );
+  }
+
+  async handleSubscribeMetricsRequest(
+    req: Request,
+    res: Response,
+  ): Promise<void> {
+    return this.channelManager.handleSubscribeMetricsRequest(
+      req as AuthenticatedRequest,
+      res,
+    );
+  }
+
+  async handleUnsubscribeMetricsRequest(
+    req: Request,
+    res: Response,
+  ): Promise<void> {
+    return this.channelManager.handleUnsubscribeMetricsRequest(
       req as AuthenticatedRequest,
       res,
     );
@@ -247,6 +399,21 @@ export class SSEManager {
 
   broadcastAnalysisLog(analysisId: string, logData: object): void {
     return this.broadcastService.broadcastAnalysisLog(analysisId, logData);
+  }
+
+  broadcastAnalysisStats(
+    analysisId: string,
+    statsData: { totalCount: number; logFileSize: number },
+  ): void {
+    return this.broadcastService.broadcastAnalysisStats(analysisId, statsData);
+  }
+
+  async broadcastAnalysisDnsStats(analysisId: string): Promise<void> {
+    return this.broadcastService.broadcastAnalysisDnsStats(analysisId);
+  }
+
+  async broadcastAnalysisProcessMetrics(analysisId: string): Promise<void> {
+    return this.broadcastService.broadcastAnalysisProcessMetrics(analysisId);
   }
 
   async broadcastUpdate(type: string, data: LogData | object): Promise<void> {

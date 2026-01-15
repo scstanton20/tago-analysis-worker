@@ -6,6 +6,11 @@
 import { createChildLogger } from '../logging/logger.ts';
 import { metricsService } from '../../services/metricsService.ts';
 import {
+  getAnalysisService,
+  getTeamPermissionHelpers,
+  getMs,
+} from '../lazyLoader.ts';
+import {
   extractAnalysisId,
   type Session,
   type ContainerState,
@@ -41,6 +46,9 @@ export class BroadcastService {
   /**
    * Broadcast to global channel (all sessions)
    * Extracted from sse.ts lines 312-318
+   *
+   * NOTE: Do NOT pass event names here - the frontend uses eventSource.onmessage
+   * which only receives unnamed events. Named events require addEventListener().
    */
   broadcast(data: object): void {
     try {
@@ -110,11 +118,70 @@ export class BroadcastService {
   }
 
   /**
-   * Broadcast DNS stats to analysis subscribers
+   * Broadcast DNS stats to analysis stats channel subscribers
    * Delegates to ChannelManager
    */
   async broadcastAnalysisDnsStats(analysisId: string): Promise<void> {
     await this.manager.channelManager.broadcastAnalysisDnsStats(analysisId);
+  }
+
+  /**
+   * Broadcast analysis stats (log count, file size) to stats channel subscribers
+   * Delegates to ChannelManager
+   */
+  broadcastAnalysisStats(
+    analysisId: string,
+    statsData: { totalCount: number; logFileSize: number },
+  ): void {
+    this.manager.channelManager.broadcastAnalysisStats(analysisId, statsData);
+  }
+
+  /**
+   * Broadcast process metrics to analysis stats channel subscribers
+   * Delegates to ChannelManager
+   */
+  async broadcastAnalysisProcessMetrics(analysisId: string): Promise<void> {
+    await this.manager.channelManager.broadcastAnalysisProcessMetrics(
+      analysisId,
+    );
+  }
+
+  /**
+   * Broadcast process metrics to all stats channel subscribers
+   * Called periodically during metrics interval to keep Info Modal performance card updated
+   */
+  private async broadcastProcessMetricsToStatsChannels(
+    metrics: MetricsData,
+  ): Promise<void> {
+    // Get all analyses with active stats channel subscribers
+    const statsChannelIds = Array.from(
+      this.manager.analysisStatsChannels.keys(),
+    );
+
+    if (statsChannelIds.length === 0) return;
+
+    // Broadcast process metrics to each stats channel
+    for (const analysisId of statsChannelIds) {
+      const channel = this.manager.analysisStatsChannels.get(analysisId);
+      if (!channel) continue;
+
+      // Find matching process data from already-loaded metrics
+      const processData = metrics.processes.find(
+        (p: { analysis_id: string }) => p.analysis_id === analysisId,
+      );
+
+      if (processData) {
+        channel.broadcast({
+          type: 'analysisProcessMetrics',
+          analysisId,
+          metrics: {
+            cpu: processData.cpu || 0,
+            memory: processData.memory || 0,
+            uptime: processData.uptime || 0,
+          },
+        });
+      }
+    }
   }
 
   /**
@@ -132,10 +199,7 @@ export class BroadcastService {
         });
       } else {
         // Fallback to global broadcast if no analysis identified
-        this.broadcast({
-          type: 'log',
-          data: data,
-        });
+        this.broadcast({ type: 'log', data: data });
       }
     } else {
       // Non-log updates go to global channel (all sessions)
@@ -159,9 +223,7 @@ export class BroadcastService {
     }
 
     try {
-      const { getUsersWithTeamAccess } = await import(
-        '../../middleware/betterAuthMiddleware.ts'
-      );
+      const { getUsersWithTeamAccess } = await getTeamPermissionHelpers();
       const authorizedUsers = getUsersWithTeamAccess(teamId, 'view_analyses');
 
       let sentCount = 0;
@@ -255,9 +317,7 @@ export class BroadcastService {
       // If teamId not provided, try to get it from the analysis
       let analysisTeamId = teamId;
       if (!analysisTeamId) {
-        const { analysisService } = await import(
-          '../../services/analysisService.ts'
-        );
+        const analysisService = await getAnalysisService();
         const analysis = analysisService.getAnalysisById(analysisId) as
           | Analysis
           | undefined;
@@ -307,12 +367,9 @@ export class BroadcastService {
   }
 
   /**
-   * Broadcast metrics update to all sessions
-   * Extracted from sse.ts lines 1441-1551
+   * Broadcast metrics update - lightweight status to all, detailed metrics to subscribers only
    */
   async broadcastMetricsUpdate(): Promise<void> {
-    if (this.manager.sessions.size === 0) return;
-
     try {
       // Load required dependencies and data
       const { metrics, analysisService, getUserTeamIds, ms } =
@@ -327,8 +384,43 @@ export class BroadcastService {
         ms,
       );
 
-      // Send customized metrics to each connected client
-      for (const session of this.manager.sessions.values()) {
+      // Calculate running analyses count (all analyses, not filtered)
+      const runningAnalysesCount = metrics.processes.length;
+
+      // 1. Always broadcast lightweight status to ALL clients
+      // This keeps the system status indicator working without metrics subscription
+      this.broadcast({
+        type: 'statusUpdate',
+        container_health: {
+          status:
+            containerState.status === 'ready' ? 'healthy' : 'initializing',
+          message: containerState.message,
+          uptime: {
+            seconds: uptimeSeconds,
+            formatted: uptimeFormatted,
+          },
+        },
+        tagoConnection: {
+          sdkVersion: sdkVersion,
+          runningAnalyses: runningAnalysesCount,
+        },
+      });
+
+      // 2. Broadcast process metrics to stats channel subscribers (for Info Modal performance card)
+      // This updates CPU, memory, uptime for analyses that have stats channel subscribers
+      await this.broadcastProcessMetricsToStatsChannels(metrics);
+
+      // 3. Send detailed metrics only to subscribed sessions
+      // Spread to create mutable array (better-sse 0.16+ returns readonly array)
+      // Cast through unknown since our sessions have `id` property added dynamically
+      const subscribedSessions = [
+        ...this.manager.metricsChannel.activeSessions,
+      ] as unknown as Session[];
+
+      if (subscribedSessions.length === 0) return;
+
+      // Send customized metrics to each subscribed session
+      for (const session of subscribedSessions) {
         await this.sendMetricsToSession(
           session,
           metrics,
@@ -362,13 +454,9 @@ export class BroadcastService {
   }> {
     const metrics =
       (await metricsService.getAllMetrics()) as unknown as MetricsData;
-    const { analysisService } = await import(
-      '../../services/analysisService.ts'
-    );
-    const { getUserTeamIds } = await import(
-      '../../middleware/betterAuthMiddleware.ts'
-    );
-    const ms = (await import('ms')).default;
+    const analysisService = await getAnalysisService();
+    const { getUserTeamIds } = await getTeamPermissionHelpers();
+    const ms = await getMs();
 
     return {
       metrics,

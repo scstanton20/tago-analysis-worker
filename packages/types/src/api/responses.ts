@@ -17,6 +17,35 @@ export type ApiErrorResponse = {
   error: string;
   code?: string;
   details?: Record<string, unknown>;
+  /** Stack trace (only in development) */
+  stack?: string;
+};
+
+/** Validation error detail */
+export type ValidationErrorDetail = {
+  /** Path to the invalid field */
+  path: string;
+  /** Validation error message */
+  message: string;
+  /** Zod error code */
+  code: string;
+};
+
+/** Validation error codes */
+export type ValidationErrorCode =
+  | 'INVALID_REQUEST_BODY'
+  | 'INVALID_QUERY_PARAMETERS'
+  | 'INVALID_ROUTE_PARAMETERS'
+  | 'INVALID_FILENAME';
+
+/** Validation error response */
+export type ValidationErrorResponse = {
+  /** Error message */
+  error: string;
+  /** Validation error code */
+  code: ValidationErrorCode;
+  /** Array of validation error details */
+  details: Array<ValidationErrorDetail>;
 };
 
 /** Union of success/error responses */

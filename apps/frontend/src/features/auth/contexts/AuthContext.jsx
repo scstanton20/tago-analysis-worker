@@ -1,6 +1,9 @@
 import { createContext, useCallback, useMemo } from 'react';
-import { showError, showInfo } from '@/utils/notificationService';
-import { notificationAPI } from '@/utils/notificationAPI.jsx';
+import {
+  showError,
+  showInfo,
+  notificationAPI,
+} from '@/utils/notificationService';
 import { useEventListener } from '@/hooks/useEventListener';
 import logger from '@/utils/logger.js';
 import { useSession, signOut, authClient } from '../lib/auth.js';
@@ -151,13 +154,18 @@ export const AuthProvider = ({ children }) => {
             );
           }
         }
+
+        // Refetch session to update local user data with server values
+        await refetchSession();
+        logger.log('✓ Session refreshed after profile update');
+
         return { success: true };
       } catch (error) {
         logger.error('Profile update error:', error);
         throw error;
       }
     },
-    [authData.user?.email, authData.user?.username],
+    [authData.user?.email, authData.user?.username, refetchSession],
   );
 
   const changeProfilePassword = useCallback(

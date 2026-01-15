@@ -5,7 +5,7 @@ import { useAsyncOperation } from '@/hooks/async';
 import { useEventListener } from '@/hooks/useEventListener';
 import { usePermissions } from '@/features/auth/hooks/usePermissions';
 import { useAuth } from '@/features/auth/hooks/useAuth';
-import { notificationAPI } from '@/utils/notificationAPI.jsx';
+import { notificationAPI } from '@/utils/notificationService.jsx';
 import logger from '@/utils/logger.js';
 import { generateSecurePassword } from '@/validation';
 import { userService } from '../api/userService';
@@ -279,6 +279,9 @@ export function useUserCRUD({
                 } else {
                   notificationAPI.warning(message, 'Permissions Updated');
                 }
+
+                // Reset form dirty state after successful team assignment update
+                form.resetDirty();
               } catch (teamError) {
                 logger.warn('Failed to update team assignments:', teamError);
               }
@@ -291,6 +294,9 @@ export function useUserCRUD({
             notificationAPI.success(
               `User ${values.name} updated successfully.`,
             );
+
+            // Reset form dirty state to current values so user can make new changes
+            form.resetDirty();
 
             if (editingUser.id === currentUser?.id) {
               logger.log('Refreshing current user data after update');

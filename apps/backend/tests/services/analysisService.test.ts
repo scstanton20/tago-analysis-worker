@@ -242,12 +242,12 @@ type AnalysisServiceType = {
   getAnalysesThatShouldBeRunning: () => string[];
 };
 
-const { safeMkdir, safeWriteFile, safeReadFile, safeReaddir } = (await import(
-  '../../src/utils/safePath.ts'
-)) as unknown as SafePathMock;
-const { teamService } = (await import(
-  '../../src/services/teamService.ts'
-)) as unknown as { teamService: TeamServiceMock };
+const { safeMkdir, safeWriteFile, safeReadFile, safeReaddir } =
+  (await import('../../src/utils/safePath.ts')) as unknown as SafePathMock;
+const { teamService } =
+  (await import('../../src/services/teamService.ts')) as unknown as {
+    teamService: TeamServiceMock;
+  };
 
 describe('AnalysisService', () => {
   let analysisService: AnalysisServiceType;
@@ -255,7 +255,7 @@ describe('AnalysisService', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     // Re-import to get fresh instance
-    const module = await import('../../src/services/analysisService.ts');
+    const module = await import('../../src/services/analysis/index.ts');
     analysisService = module.analysisService as unknown as AnalysisServiceType;
     // Reset the service state
     analysisService.analyses = new Map();
@@ -1120,9 +1120,8 @@ describe('AnalysisService', () => {
       const analysisId = 'test-analysis-uuid-123';
 
       // Import the mocked AnalysisProcess class - must use instanceof for updateConfig
-      const { AnalysisProcess } = await import(
-        '../../src/models/analysisProcess/index.ts'
-      );
+      const { AnalysisProcess } =
+        await import('../../src/models/analysisProcess/index.ts');
 
       // Create an instance using the mocked class
       const analysis = new AnalysisProcess(
@@ -1193,9 +1192,8 @@ describe('AnalysisService', () => {
     });
 
     it('should remove analyses that no longer exist in config', async () => {
-      const { AnalysisProcess } = await import(
-        '../../src/models/analysisProcess/index.ts'
-      );
+      const { AnalysisProcess } =
+        await import('../../src/models/analysisProcess/index.ts');
 
       const analysis = new AnalysisProcess(
         'analysis-to-remove',
@@ -1219,9 +1217,8 @@ describe('AnalysisService', () => {
     it('should update analysis name when changed in config', async () => {
       const analysisId = 'test-analysis-rename';
 
-      const { AnalysisProcess } = await import(
-        '../../src/models/analysisProcess/index.ts'
-      );
+      const { AnalysisProcess } =
+        await import('../../src/models/analysisProcess/index.ts');
 
       const analysis = new AnalysisProcess(
         analysisId,
@@ -1653,9 +1650,8 @@ describe('AnalysisService', () => {
 
   describe('getAllAnalyses with permission filtering', () => {
     it('should return all analyses when no filter provided', async () => {
-      const { safeStat } = (await import(
-        '../../src/utils/safePath.ts'
-      )) as unknown as SafePathMock;
+      const { safeStat } =
+        (await import('../../src/utils/safePath.ts')) as unknown as SafePathMock;
       safeReaddir.mockResolvedValue(['analysis1', 'analysis2']);
       safeStat.mockResolvedValue({
         isFile: () => true,
@@ -1677,9 +1673,8 @@ describe('AnalysisService', () => {
     });
 
     it('should filter analyses by allowed team IDs', async () => {
-      const { safeStat } = (await import(
-        '../../src/utils/safePath.ts'
-      )) as unknown as SafePathMock;
+      const { safeStat } =
+        (await import('../../src/utils/safePath.ts')) as unknown as SafePathMock;
       safeReaddir.mockResolvedValue(['analysis1', 'analysis2', 'analysis3']);
       safeStat.mockResolvedValue({
         isFile: () => true,
@@ -1706,9 +1701,8 @@ describe('AnalysisService', () => {
     });
 
     it('should return empty object when no analyses match filter', async () => {
-      const { safeStat } = (await import(
-        '../../src/utils/safePath.ts'
-      )) as unknown as SafePathMock;
+      const { safeStat } =
+        (await import('../../src/utils/safePath.ts')) as unknown as SafePathMock;
       safeReaddir.mockResolvedValue(['analysis1', 'analysis2']);
       safeStat.mockResolvedValue({
         isFile: () => true,
@@ -1730,9 +1724,8 @@ describe('AnalysisService', () => {
     });
 
     it('should handle analyses without teamId', async () => {
-      const { safeStat } = (await import(
-        '../../src/utils/safePath.ts'
-      )) as unknown as SafePathMock;
+      const { safeStat } =
+        (await import('../../src/utils/safePath.ts')) as unknown as SafePathMock;
       safeReaddir.mockResolvedValue(['analysis1']);
       safeStat.mockResolvedValue({
         isFile: () => true,
@@ -1755,9 +1748,8 @@ describe('AnalysisService', () => {
 
   describe('getAllAnalyses with advanced filtering', () => {
     beforeEach(async () => {
-      const { safeStat } = (await import(
-        '../../src/utils/safePath.ts'
-      )) as unknown as SafePathMock;
+      const { safeStat } =
+        (await import('../../src/utils/safePath.ts')) as unknown as SafePathMock;
       safeReaddir.mockResolvedValue([
         'analysis1',
         'analysis2',

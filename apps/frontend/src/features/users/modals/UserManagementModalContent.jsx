@@ -12,7 +12,6 @@ import {
   Text,
   ActionIcon,
   Tooltip,
-  CloseButton,
 } from '@mantine/core';
 import { IconPlus, IconUser, IconCopy, IconCheck } from '@tabler/icons-react';
 import { modals } from '@mantine/modals';
@@ -23,6 +22,7 @@ import {
   LoadingState,
   PrimaryButton,
   UnsavedChangesOverlay,
+  ModalHeader,
 } from '@/components/global';
 import { useUnsavedChangesGuard } from '@/hooks/modals';
 import { useAuth } from '@/features/auth/hooks/useAuth';
@@ -125,25 +125,11 @@ function UserManagementModalContent({ id }) {
         )}
 
         {/* Custom Modal Header */}
-        <Group gap="xs" justify="space-between" mb="md">
-          <Group gap="xs">
-            <IconUser size={20} aria-hidden="true" />
-            <Text fw={600} size="lg">
-              User Management
-            </Text>
-          </Group>
-          <Group gap="xs">
-            <CloseButton
-              onClick={handleCloseClick}
-              size="lg"
-              aria-label={
-                showCreateForm || createdUserInfo
-                  ? 'Close form and return to user list'
-                  : 'Close user management'
-              }
-            />
-          </Group>
-        </Group>
+        <ModalHeader
+          icon={<IconUser size={20} aria-hidden="true" />}
+          title="User Management"
+          onClose={handleCloseClick}
+        />
         <FormAlert type="error" message={error} />
 
         {createdUserInfo ? (

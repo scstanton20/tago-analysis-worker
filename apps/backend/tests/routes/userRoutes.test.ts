@@ -227,9 +227,8 @@ describe('User Routes - WITH REAL AUTH', () => {
     app.use(attachRequestLogger); // Use mocked logging middleware
 
     // Import controller for verification
-    const controllerModule = await import(
-      '../../src/controllers/userController.ts'
-    );
+    const controllerModule =
+      await import('../../src/controllers/userController.ts');
     UserController =
       controllerModule.UserController as unknown as UserControllerType;
 

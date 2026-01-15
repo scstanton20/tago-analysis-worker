@@ -71,7 +71,7 @@ jobs:
       # Save types cache for other jobs
       - name: Save types dist cache
         if: steps.setup.outputs.types-cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: packages/types/dist
           key: ${{ runner.os }}-types-dist-${{ hashFiles('packages/types/src/**', 'packages/types/tsconfig.json', 'packages/types/package.json') }}

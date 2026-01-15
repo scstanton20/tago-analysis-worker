@@ -1,5 +1,4 @@
-import type { Request, Response } from 'express';
-import type { Logger } from 'pino';
+import type { Response } from 'express';
 import type {
   CreateTeamRequest,
   UpdateTeamRequest,
@@ -8,14 +7,10 @@ import type {
   UpdateFolderRequest,
   MoveItemRequest,
 } from '@tago-analysis-worker/types';
+import type { RequestWithLogger } from '../types/index.ts';
 import { teamService } from '../services/teamService.ts';
 import { sseManager } from '../utils/sse/index.ts';
-import { broadcastTeamStructureUpdate } from '../utils/responseHelpers.ts';
-
-/** Express request with request-scoped logger */
-type RequestWithLogger = Request & {
-  log: Logger;
-};
+import { broadcastTeamStructureUpdate } from '../services/analysis/index.ts';
 
 // Extend shared types with backend-specific fields
 type CreateTeamBody = CreateTeamRequest & {
@@ -243,10 +238,10 @@ export class TeamController {
 
     // Broadcast structure updates for both teams so tree updates in real-time
     if (result.from) {
-      await broadcastTeamStructureUpdate(sseManager, result.from);
+      await broadcastTeamStructureUpdate(result.from);
     }
     if (result.to) {
-      await broadcastTeamStructureUpdate(sseManager, result.to);
+      await broadcastTeamStructureUpdate(result.to);
     }
 
     res.json(result);
@@ -319,7 +314,7 @@ export class TeamController {
     });
 
     // Broadcast structure update
-    await broadcastTeamStructureUpdate(sseManager, teamId);
+    await broadcastTeamStructureUpdate(teamId);
 
     res.status(201).json(folder);
   }
@@ -367,7 +362,7 @@ export class TeamController {
     });
 
     // Broadcast structure update
-    await broadcastTeamStructureUpdate(sseManager, teamId);
+    await broadcastTeamStructureUpdate(teamId);
 
     res.json(folder);
   }
@@ -401,7 +396,7 @@ export class TeamController {
     });
 
     // Broadcast structure update
-    await broadcastTeamStructureUpdate(sseManager, teamId);
+    await broadcastTeamStructureUpdate(teamId);
 
     res.json(result);
   }
@@ -434,7 +429,7 @@ export class TeamController {
     req.log.info({ action: 'moveItem', teamId, itemId }, 'Item moved');
 
     // Broadcast full structure update to team members
-    await broadcastTeamStructureUpdate(sseManager, teamId);
+    await broadcastTeamStructureUpdate(teamId);
 
     res.json(result);
   }

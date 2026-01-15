@@ -19,7 +19,7 @@ import {
   SecondaryButton,
   CancelButton,
 } from '@/components/global';
-import { notificationAPI } from '@/utils/notificationAPI.jsx';
+import { notificationAPI } from '@/utils/notificationService.jsx';
 import { useStandardForm } from '@/hooks/forms/useStandardForm';
 import { useAsyncOperation } from '@/hooks/async/useAsyncOperation';
 import Logo from '@/components/ui/logo';

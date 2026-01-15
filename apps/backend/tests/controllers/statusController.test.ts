@@ -5,7 +5,7 @@ import {
 } from '../utils/testHelpers.ts';
 
 // Mock dependencies before importing the controller
-vi.mock('../../src/services/analysisService.ts', () => ({
+vi.mock('../../src/services/analysis/index.ts', () => ({
   analysisService: {
     getRunningAnalysesCount: vi.fn(() => 1),
   },
@@ -15,12 +15,6 @@ vi.mock('../../src/utils/sse/index.ts', () => ({
   sseManager: {
     getContainerState: vi.fn(),
   },
-}));
-
-vi.mock('../../src/utils/responseHelpers.ts', () => ({
-  handleError: vi.fn((res: any, error: Error) => {
-    res.status(500).json({ error: error.message });
-  }),
 }));
 
 // Mock sdkVersion module directly - this is the proper way to mock it
@@ -55,22 +49,20 @@ type MockAnalysisService = {
 };
 
 // Import after mocks
-const { getTagoSdkVersion } = (await import(
-  '../../src/utils/sdkVersion.ts'
-)) as unknown as {
-  getTagoSdkVersion: Mock<() => string>;
-};
-const { sseManager } = (await import(
-  '../../src/utils/sse/index.ts'
-)) as unknown as {
-  sseManager: MockSSEManager;
-};
-const { analysisService } = (await import(
-  '../../src/services/analysisService.ts'
-)) as unknown as { analysisService: MockAnalysisService };
-const { StatusController } = await import(
-  '../../src/controllers/statusController.ts'
-);
+const { getTagoSdkVersion } =
+  (await import('../../src/utils/sdkVersion.ts')) as unknown as {
+    getTagoSdkVersion: Mock<() => string>;
+  };
+const { sseManager } =
+  (await import('../../src/utils/sse/index.ts')) as unknown as {
+    sseManager: MockSSEManager;
+  };
+const { analysisService } =
+  (await import('../../src/services/analysis/index.ts')) as unknown as {
+    analysisService: MockAnalysisService;
+  };
+const { StatusController } =
+  await import('../../src/controllers/statusController.ts');
 
 describe('StatusController', () => {
   beforeEach(() => {

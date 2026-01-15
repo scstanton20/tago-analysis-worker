@@ -7,6 +7,7 @@ vi.mock('better-sse', () => ({
     register: vi.fn(),
     broadcast: vi.fn(),
     unregister: vi.fn(),
+    on: vi.fn(),
   })),
   createSession: vi.fn(
     (
@@ -50,11 +51,20 @@ vi.mock('../../../src/utils/sse/SessionManager.ts', () => {
 vi.mock('../../../src/utils/sse/ChannelManager.ts', () => {
   return {
     ChannelManager: class MockChannelManager {
-      getOrCreateAnalysisChannel = vi.fn();
-      subscribeToAnalysis = vi.fn(() => ({ success: true }));
-      unsubscribeFromAnalysis = vi.fn(() => ({ success: true }));
-      handleSubscribeRequest = vi.fn();
-      handleUnsubscribeRequest = vi.fn();
+      getOrCreateLogsChannel = vi.fn();
+      getOrCreateStatsChannel = vi.fn();
+      subscribeToAnalysisLogs = vi.fn(() => ({ success: true }));
+      subscribeToAnalysisStats = vi.fn(() => ({ success: true }));
+      subscribeToMetrics = vi.fn(() => ({ success: true }));
+      unsubscribeFromAnalysisLogs = vi.fn(() => ({ success: true }));
+      unsubscribeFromAnalysisStats = vi.fn(() => ({ success: true }));
+      unsubscribeFromMetrics = vi.fn(() => ({ success: true }));
+      handleSubscribeLogsRequest = vi.fn();
+      handleUnsubscribeLogsRequest = vi.fn();
+      handleSubscribeStatsRequest = vi.fn();
+      handleUnsubscribeStatsRequest = vi.fn();
+      handleSubscribeMetricsRequest = vi.fn();
+      handleUnsubscribeMetricsRequest = vi.fn();
     },
   };
 });
@@ -127,8 +137,10 @@ describe('SSEManager', () => {
   describe('constructor', () => {
     it('should initialize with all service instances', () => {
       expect(manager.sessions).toBeInstanceOf(Map);
-      expect(manager.analysisChannels).toBeInstanceOf(Map);
+      expect(manager.analysisLogsChannels).toBeInstanceOf(Map);
+      expect(manager.analysisStatsChannels).toBeInstanceOf(Map);
       expect(manager.globalChannel).toBeDefined();
+      expect(manager.metricsChannel).toBeDefined();
       expect(manager.sessionLastPush).toBeInstanceOf(Map);
       expect(manager.containerState).toEqual({
         status: 'ready',
@@ -321,51 +333,141 @@ describe('SSEManager', () => {
   });
 
   describe('channel management delegates', () => {
-    it('should delegate getOrCreateAnalysisChannel to channelManager', () => {
-      manager.getOrCreateAnalysisChannel('analysis-1');
+    it('should delegate getOrCreateLogsChannel to channelManager', () => {
+      manager.getOrCreateLogsChannel('analysis-1');
 
       expect(
-        manager.channelManager.getOrCreateAnalysisChannel,
+        manager.channelManager.getOrCreateLogsChannel,
       ).toHaveBeenCalledWith('analysis-1');
     });
 
-    it('should delegate subscribeToAnalysis to channelManager', async () => {
-      await manager.subscribeToAnalysis('session-1', ['analysis-1'], 'user-1');
+    it('should delegate getOrCreateStatsChannel to channelManager', () => {
+      manager.getOrCreateStatsChannel('analysis-1');
 
-      expect(manager.channelManager.subscribeToAnalysis).toHaveBeenCalledWith(
+      expect(
+        manager.channelManager.getOrCreateStatsChannel,
+      ).toHaveBeenCalledWith('analysis-1');
+    });
+
+    it('should delegate subscribeToAnalysisLogs to channelManager', async () => {
+      await manager.subscribeToAnalysisLogs(
         'session-1',
         ['analysis-1'],
         'user-1',
       );
-    });
-
-    it('should delegate unsubscribeFromAnalysis to channelManager', async () => {
-      await manager.unsubscribeFromAnalysis('session-1', ['analysis-1']);
 
       expect(
-        manager.channelManager.unsubscribeFromAnalysis,
+        manager.channelManager.subscribeToAnalysisLogs,
+      ).toHaveBeenCalledWith('session-1', ['analysis-1'], 'user-1');
+    });
+
+    it('should delegate subscribeToAnalysisStats to channelManager', async () => {
+      await manager.subscribeToAnalysisStats(
+        'session-1',
+        ['analysis-1'],
+        'user-1',
+      );
+
+      expect(
+        manager.channelManager.subscribeToAnalysisStats,
+      ).toHaveBeenCalledWith('session-1', ['analysis-1'], 'user-1');
+    });
+
+    it('should delegate subscribeToMetrics to channelManager', async () => {
+      await manager.subscribeToMetrics('session-1');
+
+      expect(manager.channelManager.subscribeToMetrics).toHaveBeenCalledWith(
+        'session-1',
+      );
+    });
+
+    it('should delegate unsubscribeFromAnalysisLogs to channelManager', async () => {
+      await manager.unsubscribeFromAnalysisLogs('session-1', ['analysis-1']);
+
+      expect(
+        manager.channelManager.unsubscribeFromAnalysisLogs,
       ).toHaveBeenCalledWith('session-1', ['analysis-1']);
     });
 
-    it('should delegate handleSubscribeRequest to channelManager', async () => {
+    it('should delegate unsubscribeFromAnalysisStats to channelManager', async () => {
+      await manager.unsubscribeFromAnalysisStats('session-1', ['analysis-1']);
+
+      expect(
+        manager.channelManager.unsubscribeFromAnalysisStats,
+      ).toHaveBeenCalledWith('session-1', ['analysis-1']);
+    });
+
+    it('should delegate unsubscribeFromMetrics to channelManager', async () => {
+      await manager.unsubscribeFromMetrics('session-1');
+
+      expect(
+        manager.channelManager.unsubscribeFromMetrics,
+      ).toHaveBeenCalledWith('session-1');
+    });
+
+    it('should delegate handleSubscribeLogsRequest to channelManager', async () => {
       const mockReq = { user: { id: 'user-1' } } as any;
       const mockRes = {} as Response;
 
-      await manager.handleSubscribeRequest(mockReq, mockRes);
+      await manager.handleSubscribeLogsRequest(mockReq, mockRes);
 
       expect(
-        manager.channelManager.handleSubscribeRequest,
+        manager.channelManager.handleSubscribeLogsRequest,
       ).toHaveBeenCalledWith(mockReq, mockRes);
     });
 
-    it('should delegate handleUnsubscribeRequest to channelManager', async () => {
+    it('should delegate handleUnsubscribeLogsRequest to channelManager', async () => {
       const mockReq = { user: { id: 'user-1' } } as any;
       const mockRes = {} as Response;
 
-      await manager.handleUnsubscribeRequest(mockReq, mockRes);
+      await manager.handleUnsubscribeLogsRequest(mockReq, mockRes);
 
       expect(
-        manager.channelManager.handleUnsubscribeRequest,
+        manager.channelManager.handleUnsubscribeLogsRequest,
+      ).toHaveBeenCalledWith(mockReq, mockRes);
+    });
+
+    it('should delegate handleSubscribeStatsRequest to channelManager', async () => {
+      const mockReq = { user: { id: 'user-1' } } as any;
+      const mockRes = {} as Response;
+
+      await manager.handleSubscribeStatsRequest(mockReq, mockRes);
+
+      expect(
+        manager.channelManager.handleSubscribeStatsRequest,
+      ).toHaveBeenCalledWith(mockReq, mockRes);
+    });
+
+    it('should delegate handleUnsubscribeStatsRequest to channelManager', async () => {
+      const mockReq = { user: { id: 'user-1' } } as any;
+      const mockRes = {} as Response;
+
+      await manager.handleUnsubscribeStatsRequest(mockReq, mockRes);
+
+      expect(
+        manager.channelManager.handleUnsubscribeStatsRequest,
+      ).toHaveBeenCalledWith(mockReq, mockRes);
+    });
+
+    it('should delegate handleSubscribeMetricsRequest to channelManager', async () => {
+      const mockReq = { user: { id: 'user-1' } } as any;
+      const mockRes = {} as Response;
+
+      await manager.handleSubscribeMetricsRequest(mockReq, mockRes);
+
+      expect(
+        manager.channelManager.handleSubscribeMetricsRequest,
+      ).toHaveBeenCalledWith(mockReq, mockRes);
+    });
+
+    it('should delegate handleUnsubscribeMetricsRequest to channelManager', async () => {
+      const mockReq = { user: { id: 'user-1' } } as any;
+      const mockRes = {} as Response;
+
+      await manager.handleUnsubscribeMetricsRequest(mockReq, mockRes);
+
+      expect(
+        manager.channelManager.handleUnsubscribeMetricsRequest,
       ).toHaveBeenCalledWith(mockReq, mockRes);
     });
   });

@@ -143,12 +143,17 @@ export default function UserTable({
                   ...(user.id !== currentUser?.id && user.memberRole !== 'owner'
                     ? [
                         { type: 'divider' },
-                        {
-                          label: 'Impersonate User',
-                          icon: <IconUserCheck size={16} />,
-                          onClick: () => onImpersonate(user),
-                          color: 'violet',
-                        },
+                        // Only show impersonate for non-admin users
+                        ...(user.role !== 'admin'
+                          ? [
+                              {
+                                label: 'Impersonate User',
+                                icon: <IconUserCheck size={16} />,
+                                onClick: () => onImpersonate(user),
+                                color: 'violet',
+                              },
+                            ]
+                          : []),
                         {
                           label: 'Manage Sessions',
                           icon: <IconDeviceLaptop size={16} />,

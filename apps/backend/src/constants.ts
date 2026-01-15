@@ -40,9 +40,6 @@ export const DNS_CACHE = {
   DEFAULT_TTL_MS: 300000, // 5 minutes
   DEFAULT_MAX_ENTRIES: 1000,
 
-  // Stats broadcasting
-  STATS_BROADCAST_INTERVAL_MS: 10000, // 10 seconds
-
   // TTL limits for validation (in milliseconds)
   TTL_MIN_MS: 1000, // 1 second minimum
   TTL_MAX_MS: 86400000, // 24 hours maximum
@@ -90,10 +87,6 @@ export const SSE = {
 
   // Message delivery
   FORCE_LOGOUT_MESSAGE_DELIVERY_DELAY_MS: 400, // 400ms - wait for logout message to be delivered
-
-  // Session ID generation
-  SESSION_ID_SUBSTRING_START: 2,
-  SESSION_ID_SUBSTRING_END: 15,
 
   // API version
   API_VERSION: '4.0',

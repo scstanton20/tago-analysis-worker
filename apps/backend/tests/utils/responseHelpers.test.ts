@@ -1,4 +1,19 @@
-import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// Create mock analysis service
+const mockAnalysisService = {
+  getConfig: vi.fn(),
+};
+
+const mockSseManager = {
+  broadcastToTeamUsers: vi.fn(),
+};
+
+// Mock the lazy loader
+vi.mock('../../src/utils/lazyLoader.ts', () => ({
+  getAnalysisService: vi.fn(() => Promise.resolve(mockAnalysisService)),
+  getSseManager: vi.fn(() => Promise.resolve(mockSseManager)),
+}));
 
 // Mock logger
 vi.mock('../../src/utils/logging/logger.ts', () => ({
@@ -24,119 +39,55 @@ type MockConfig = {
   teamStructure: TeamStructure;
 };
 
-type MockSSEManager = {
-  broadcastToTeamUsers: Mock;
-};
+import { broadcastTeamStructureUpdate } from '../../src/services/analysis/index.ts';
 
-type MockAnalysisService = {
-  getConfig: Mock;
-};
-
-describe('responseHelpers', () => {
-  let responseHelpers: typeof import('../../src/utils/responseHelpers.ts');
-
-  beforeEach(async () => {
+describe('broadcastTeamStructureUpdate (AnalysisNotificationService)', () => {
+  beforeEach(() => {
     vi.clearAllMocks();
-    responseHelpers = await import('../../src/utils/responseHelpers.ts');
   });
 
-  describe('broadcastTeamStructureUpdate', () => {
-    it('should broadcast team structure update', async () => {
-      const mockConfig: MockConfig = {
-        teamStructure: {
-          team1: { items: [{ id: '1', name: 'item1' }] },
-        },
-      };
+  it('should broadcast team structure update', async () => {
+    const mockConfig: MockConfig = {
+      teamStructure: {
+        team1: { items: [{ id: '1', name: 'item1' }] },
+      },
+    };
 
-      const mockAnalysisService: MockAnalysisService = {
-        getConfig: vi.fn().mockResolvedValue(mockConfig),
-      };
+    mockAnalysisService.getConfig.mockResolvedValue(mockConfig);
 
-      const mockSseManager: MockSSEManager = {
-        broadcastToTeamUsers: vi.fn(),
-      };
+    await broadcastTeamStructureUpdate('team1');
 
-      // Mock the dynamic import
-      vi.doMock('../../src/services/analysisService.ts', () => ({
-        analysisService: mockAnalysisService,
-      }));
+    expect(mockAnalysisService.getConfig).toHaveBeenCalled();
+    expect(mockSseManager.broadcastToTeamUsers).toHaveBeenCalledWith(
+      'team1',
+      expect.objectContaining({
+        type: 'teamStructureUpdated',
+        teamId: 'team1',
+      }),
+    );
+  });
 
-      await responseHelpers.broadcastTeamStructureUpdate(
-        mockSseManager as unknown as Parameters<
-          typeof responseHelpers.broadcastTeamStructureUpdate
-        >[0],
-        'team1',
-      );
+  it('should handle missing team structure gracefully', async () => {
+    const mockConfig: MockConfig = {
+      teamStructure: {},
+    };
 
-      expect(mockAnalysisService.getConfig).toHaveBeenCalled();
-      expect(mockSseManager.broadcastToTeamUsers).toHaveBeenCalledWith(
-        'team1',
-        expect.objectContaining({
-          type: 'teamStructureUpdated',
-          teamId: 'team1',
-        }),
-      );
+    mockAnalysisService.getConfig.mockResolvedValue(mockConfig);
 
-      vi.doUnmock('../../src/services/analysisService.ts');
-    });
+    await broadcastTeamStructureUpdate('nonexistent-team');
 
-    it('should handle missing team structure gracefully', async () => {
-      const mockConfig: MockConfig = {
-        teamStructure: {},
-      };
+    expect(mockSseManager.broadcastToTeamUsers).toHaveBeenCalledWith(
+      'nonexistent-team',
+      expect.objectContaining({
+        items: [],
+      }),
+    );
+  });
 
-      const mockAnalysisService: MockAnalysisService = {
-        getConfig: vi.fn().mockResolvedValue(mockConfig),
-      };
+  it('should not throw error on broadcast failure (swallows error)', async () => {
+    mockAnalysisService.getConfig.mockRejectedValue(new Error('Config error'));
 
-      const mockSseManager: MockSSEManager = {
-        broadcastToTeamUsers: vi.fn(),
-      };
-
-      vi.doMock('../../src/services/analysisService.ts', () => ({
-        analysisService: mockAnalysisService,
-      }));
-
-      await responseHelpers.broadcastTeamStructureUpdate(
-        mockSseManager as unknown as Parameters<
-          typeof responseHelpers.broadcastTeamStructureUpdate
-        >[0],
-        'nonexistent-team',
-      );
-
-      expect(mockSseManager.broadcastToTeamUsers).toHaveBeenCalledWith(
-        'nonexistent-team',
-        expect.objectContaining({
-          items: [],
-        }),
-      );
-
-      vi.doUnmock('../../src/services/analysisService.ts');
-    });
-
-    it('should throw error on broadcast failure', async () => {
-      const mockAnalysisService: MockAnalysisService = {
-        getConfig: vi.fn().mockRejectedValue(new Error('Config error')),
-      };
-
-      const mockSseManager: MockSSEManager = {
-        broadcastToTeamUsers: vi.fn(),
-      };
-
-      vi.doMock('../../src/services/analysisService.ts', () => ({
-        analysisService: mockAnalysisService,
-      }));
-
-      await expect(
-        responseHelpers.broadcastTeamStructureUpdate(
-          mockSseManager as unknown as Parameters<
-            typeof responseHelpers.broadcastTeamStructureUpdate
-          >[0],
-          'team1',
-        ),
-      ).rejects.toThrow('Config error');
-
-      vi.doUnmock('../../src/services/analysisService.ts');
-    });
+    // The new notification service swallows errors instead of throwing
+    await expect(broadcastTeamStructureUpdate('team1')).resolves.not.toThrow();
   });
 });

@@ -4,7 +4,7 @@
  * for file-based metadata (file stats, env stats, version history).
  * @module modals/components/AnalysisInfoModalContent
  */
-import { useMemo, useEffect } from 'react';
+import { useEffect } from 'react';
 import {
   Stack,
   Group,
@@ -42,12 +42,7 @@ import {
 } from '@/components/global';
 import { useAsyncMountOnce } from '@/hooks/async/useAsyncMount';
 import { modalService } from '@/modals/modalService';
-import {
-  useAnalyses,
-  useBackend,
-  useTeams,
-  useConnection,
-} from '@/contexts/sseContext';
+import { useAnalyses, useTeams, useConnection } from '@/contexts/sseContext';
 import { usePermissions } from '@/features/auth/hooks/usePermissions';
 import { analysisService } from '../api/analysisService';
 
@@ -181,43 +176,36 @@ function AnalysisInfoModalContent({ id, innerProps }) {
   const { analysis, onNotesUpdated } = innerProps;
 
   // SSE hooks for real-time data
-  const { getAnalysis, getAnalysisDnsStats } = useAnalyses();
-  const { metricsData } = useBackend();
+  const { getAnalysis, getAnalysisDnsStats, getAnalysisProcessMetrics } =
+    useAnalyses();
   const { teams } = useTeams();
-  const { subscribeToAnalysis, unsubscribeFromAnalysis, sessionId } =
+  const { subscribeToAnalysisStats, unsubscribeFromAnalysisStats, sessionId } =
     useConnection();
 
   // Check admin permissions
   const { isAdmin } = usePermissions();
 
-  // Subscribe to analysis log channel for real-time log stats
+  // Subscribe to analysis stats channel for real-time stats (lightweight - no logs)
   useEffect(() => {
     if (!sessionId || !analysis.id) return;
 
-    subscribeToAnalysis([analysis.id]);
+    subscribeToAnalysisStats([analysis.id]);
 
     return () => {
-      unsubscribeFromAnalysis([analysis.id]);
+      unsubscribeFromAnalysisStats([analysis.id]);
     };
-  }, [analysis.id, sessionId, subscribeToAnalysis, unsubscribeFromAnalysis]);
+  }, [
+    analysis.id,
+    sessionId,
+    subscribeToAnalysisStats,
+    unsubscribeFromAnalysisStats,
+  ]);
 
   // Get real-time analysis data from SSE
   const sseAnalysis = getAnalysis(analysis.id);
 
-  // Get real-time metrics for this analysis from SSE
-  const processes = metricsData?.processes;
-  const processMetrics = useMemo(() => {
-    if (!processes) return null;
-    const processData = processes.find((p) => p.analysis_id === analysis.id);
-    if (processData) {
-      return {
-        cpu: processData.cpu || 0,
-        memory: processData.memory || 0,
-        uptime: processData.uptime || 0,
-      };
-    }
-    return null;
-  }, [processes, analysis.id]);
+  // Get real-time metrics for this analysis from SSE (via stats channel subscription)
+  const processMetrics = getAnalysisProcessMetrics(analysis.id);
 
   // Get per-analysis DNS stats from SSE (pushed on channel subscription)
   const sseDnsStats = getAnalysisDnsStats(analysis.id);
@@ -426,20 +414,34 @@ function AnalysisInfoModalContent({ id, innerProps }) {
               }
             />
             <InfoRow label="Enabled" value={enabled ? 'Yes' : 'No'} />
-            <InfoRow
-              label="Intended State"
-              value={fileMeta?.process?.intendedState}
-            />
-            <InfoRow
-              label="Restart Attempts"
-              value={fileMeta?.process?.restartAttempts}
-            />
           </Stack>
         </InfoCard>
 
-        {/* Performance Metrics - from SSE (real-time) */}
+        {/* Performance Metrics - from SSE (real-time) - clickable to open Metrics settings */}
         {(processMetrics || status === 'running') && (
-          <InfoCard icon={<IconDatabase size={14} />} title="Performance">
+          <InfoCard
+            icon={<IconDatabase size={14} />}
+            title="Performance"
+            tooltip="Click to view detailed metrics"
+            onClick={() => {
+              modals.close(id);
+              modalService.openSettings({ initialTab: 'metrics' });
+            }}
+            headerAction={
+              <Tooltip label="Open Metrics Dashboard">
+                <UtilityButton
+                  size="xs"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    modals.close(id);
+                    modalService.openSettings({ initialTab: 'metrics' });
+                  }}
+                >
+                  <IconExternalLink size={14} />
+                </UtilityButton>
+              </Tooltip>
+            }
+          >
             <Stack gap={4}>
               <InfoRow
                 label="CPU Usage"

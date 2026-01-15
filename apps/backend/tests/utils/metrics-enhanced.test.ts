@@ -88,9 +88,8 @@ describe('metrics-enhanced', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    metrics = (await import(
-      '../../src/utils/metrics-enhanced.ts'
-    )) as unknown as MetricsModule;
+    metrics =
+      (await import('../../src/utils/metrics-enhanced.ts')) as unknown as MetricsModule;
   });
 
   describe('metricsMiddleware', () => {

@@ -27,7 +27,7 @@ import {
   IconEyeCode,
 } from '@tabler/icons-react';
 import PropTypes from 'prop-types';
-import { notificationAPI } from '@/utils/notificationAPI.jsx';
+import { notificationAPI } from '@/utils/notificationService';
 import { modalService } from '@/modals/modalService';
 import { LoadingState, FormAlert, ConfirmDialog } from '@/components/global';
 import logger from '@/utils/logger';

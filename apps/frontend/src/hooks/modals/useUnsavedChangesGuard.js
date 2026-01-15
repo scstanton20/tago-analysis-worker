@@ -5,6 +5,10 @@
  */
 import { useState, useCallback } from 'react';
 
+// Re-export the UnsavedChangesOverlay component for convenience
+// This allows modals to import both the hook and overlay from the same location
+export { UnsavedChangesOverlay } from '@/components/global';
+
 /**
  * Creates a guard for unsaved changes that shows inline confirmation
  * This approach keeps the modal open and preserves all state
@@ -13,19 +17,30 @@ import { useState, useCallback } from 'react';
  * @returns {Object} Guard state and handlers
  *
  * @example
+ * // Import both the hook and overlay from the same location
+ * import { useUnsavedChangesGuard, UnsavedChangesOverlay } from '@/hooks/modals';
+ *
+ * // In your component
  * const { showConfirmation, requestClose, confirmDiscard, cancelDiscard } =
  *   useUnsavedChangesGuard(hasChanges);
  *
  * // In close button handler
  * const handleClose = () => {
- *   if (requestClose()) {
+ *   if (requestClose(() => modals.close(id))) {
  *     modals.close(id); // Only called if no changes
  *   }
  *   // If changes exist, confirmation overlay will show
  * };
  *
  * // Render confirmation overlay when showConfirmation is true
- * {showConfirmation && <UnsavedChangesOverlay onConfirm={confirmDiscard} onCancel={cancelDiscard} />}
+ * // The overlay supports custom props: title, message, confirmLabel, cancelLabel
+ * {showConfirmation && (
+ *   <UnsavedChangesOverlay
+ *     onConfirm={confirmDiscard}
+ *     onCancel={cancelDiscard}
+ *     message="You have unsaved changes. Are you sure you want to discard them?"
+ *   />
+ * )}
  */
 export function useUnsavedChangesGuard(hasChanges) {
   const [showConfirmation, setShowConfirmation] = useState(false);

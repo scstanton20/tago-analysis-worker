@@ -48,7 +48,7 @@ async function getAnalysisService(): Promise<AnalysisService> {
     return analysisServiceCache;
   }
   if (!analysisServicePromise) {
-    analysisServicePromise = import('./analysisService.ts').then((module) => {
+    analysisServicePromise = import('./analysis/index.ts').then((module) => {
       analysisServiceCache = module.analysisService as AnalysisService;
       return analysisServiceCache!;
     });
@@ -369,7 +369,8 @@ class MetricsService {
         childrenMetrics,
       );
 
-      const { dnsCache } = await import('../services/dnsCache.ts');
+      const { getDnsCache } = await import('../utils/lazyLoader.ts');
+      const dnsCache = await getDnsCache();
       const dnsStats = dnsCache.getStats();
 
       return {

@@ -196,8 +196,10 @@ export type UpdateFolderRequest = {
 /** Move item within team structure request */
 export type MoveItemRequest = {
   itemId: string;
-  newParentId: string | null;
-  newIndex: number;
+  /** Target parent folder ID (null for root level) */
+  targetParentId: string | null;
+  /** Index position in target location */
+  targetIndex: number;
 };
 
 /** Move item response */

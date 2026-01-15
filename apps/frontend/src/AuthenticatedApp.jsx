@@ -3,14 +3,16 @@ import { AppShell, Text, Burger, Group } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { ModalsProvider } from '@mantine/modals';
 import { SSEProvider, useConnection } from './contexts/sseContext';
-import { PermissionsProvider } from './features/auth';
+import { PermissionsProvider, useAuth } from './features/auth';
 import { useFilteredAnalyses } from './features/analysis';
 // Core components - always visible, no lazy loading needed
 import TeamSidebar from './components/layout/teamSidebar';
 import AnalysisList from './features/analysis/components/analysisList';
 import ConnectionStatus from './components/common/connectionStatus';
 import Logo from './components/ui/logo';
-import ImpersonationBanner from './components/layout/impersonationBanner';
+import ImpersonationBanner, {
+  IMPERSONATION_BANNER_HEIGHT,
+} from './components/layout/impersonationBanner';
 import ThemeSelector from './components/ui/themeSelector';
 import ErrorBoundary from './components/ErrorBoundary';
 import AppLoadingOverlay from './components/global/indicators/AppLoadingOverlay';
@@ -19,6 +21,7 @@ import modalComponents from './modals/registry.jsx';
 
 function AppContent() {
   const { connectionStatus, hasInitialData } = useConnection();
+  const { isImpersonating } = useAuth();
 
   const [selectedTeam, setSelectedTeam] = useState(null);
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure();
@@ -28,6 +31,10 @@ function AppContent() {
   const filteredAnalyses = useFilteredAnalyses(selectedTeam);
 
   const connectionFailed = connectionStatus === 'failed';
+
+  // Calculate header height offset when impersonating
+  const headerHeight = 60;
+  const topOffset = isImpersonating ? IMPERSONATION_BANNER_HEIGHT : 0;
 
   // Show error state if connection failed
   if (connectionFailed) {
@@ -51,15 +58,18 @@ function AppContent() {
     <>
       <ImpersonationBanner />
       <AppShell
-        header={{ height: 60 }}
+        header={{ height: headerHeight }}
         navbar={{
           width: 280,
           breakpoint: 'sm',
           collapsed: { mobile: !mobileOpened, desktop: !desktopOpened },
         }}
         padding="md"
+        style={{
+          '--app-shell-header-offset': `${topOffset}px`,
+        }}
       >
-        <AppShell.Header>
+        <AppShell.Header style={{ top: topOffset }}>
           <Group h="100%" px="md" justify="space-between">
             <Group>
               <Burger
@@ -93,7 +103,12 @@ function AppContent() {
           </Group>
         </AppShell.Header>
 
-        <AppShell.Navbar>
+        <AppShell.Navbar
+          style={{
+            top: headerHeight + topOffset,
+            height: `calc(100vh - ${headerHeight + topOffset}px)`,
+          }}
+        >
           <TeamSidebar
             selectedTeam={selectedTeam}
             onTeamSelect={setSelectedTeam}
@@ -103,6 +118,7 @@ function AppContent() {
         <AppShell.Main
           style={{
             background: 'var(--mantine-color-body)',
+            paddingTop: `calc(var(--app-shell-header-height) + ${topOffset}px + var(--mantine-spacing-md))`,
           }}
         >
           <ErrorBoundary variant="component" componentName="Analysis List">

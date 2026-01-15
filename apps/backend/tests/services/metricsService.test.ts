@@ -77,9 +77,10 @@ type MetricsServiceType = {
   getDefaultSystemMetrics: () => BackendSystemMetrics;
 };
 
-const { register } = (await import(
-  '../../src/utils/metrics-enhanced.ts'
-)) as unknown as { register: RegisterMock };
+const { register } =
+  (await import('../../src/utils/metrics-enhanced.ts')) as unknown as {
+    register: RegisterMock;
+  };
 const pidusage = (await import('pidusage')).default as unknown as Mock;
 
 describe('MetricsService', () => {

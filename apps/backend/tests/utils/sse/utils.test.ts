@@ -10,8 +10,6 @@ import {
   METRICS_INTERVAL_MS,
   STALE_CONNECTION_TIMEOUT,
   SSE_API_VERSION,
-  SESSION_ID_SUBSTRING_START,
-  SESSION_ID_SUBSTRING_END,
   FORCE_LOGOUT_MESSAGE_DELIVERY_DELAY_MS,
 } from '../../../src/utils/sse/utils.ts';
 
@@ -45,18 +43,6 @@ describe('SSE Utils', () => {
       expect(SSE_API_VERSION).toBe('4.0');
     });
 
-    it('should export SESSION_ID_SUBSTRING_START', () => {
-      expect(SESSION_ID_SUBSTRING_START).toBeDefined();
-      expect(typeof SESSION_ID_SUBSTRING_START).toBe('number');
-      expect(SESSION_ID_SUBSTRING_START).toBe(2);
-    });
-
-    it('should export SESSION_ID_SUBSTRING_END', () => {
-      expect(SESSION_ID_SUBSTRING_END).toBeDefined();
-      expect(typeof SESSION_ID_SUBSTRING_END).toBe('number');
-      expect(SESSION_ID_SUBSTRING_END).toBe(15);
-    });
-
     it('should export FORCE_LOGOUT_MESSAGE_DELIVERY_DELAY_MS', () => {
       expect(FORCE_LOGOUT_MESSAGE_DELIVERY_DELAY_MS).toBeDefined();
       expect(typeof FORCE_LOGOUT_MESSAGE_DELIVERY_DELAY_MS).toBe('number');
@@ -74,25 +60,25 @@ describe('SSE Utils', () => {
       expect(typeof sessionId).toBe('string');
     });
 
-    it('should generate session ID of expected length', () => {
+    it('should generate a valid UUID v4 format', () => {
       const sessionId = generateSessionId();
-      // Each random().toString(36).substring(2, 15) produces a variable length string
-      // depending on the random value (typically 9-13 characters)
-      // Two concatenated = 18-26 characters
-      expect(sessionId.length).toBeGreaterThanOrEqual(18);
-      expect(sessionId.length).toBeLessThanOrEqual(26);
+      // UUID v4 format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+      // where y is one of 8, 9, a, or b
+      const uuidRegex =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+      expect(uuidRegex.test(sessionId)).toBe(true);
+    });
+
+    it('should generate session ID of exactly 36 characters', () => {
+      const sessionId = generateSessionId();
+      // UUIDs are always 36 characters (32 hex + 4 dashes)
+      expect(sessionId.length).toBe(36);
     });
 
     it('should generate unique session IDs', () => {
       const sessionId1 = generateSessionId();
       const sessionId2 = generateSessionId();
       expect(sessionId1).not.toBe(sessionId2);
-    });
-
-    it('should generate alphanumeric session IDs', () => {
-      const sessionId = generateSessionId();
-      // Session ID should be alphanumeric (base-36 output)
-      expect(/^[a-z0-9]+$/.test(sessionId)).toBe(true);
     });
 
     it('should generate multiple unique session IDs in rapid succession', () => {

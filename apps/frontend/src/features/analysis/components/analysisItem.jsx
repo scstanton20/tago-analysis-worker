@@ -22,7 +22,7 @@ import {
   SecondaryButton,
 } from '@/components/global';
 import { teamService } from '@/features/teams/api/teamService';
-import { notificationAPI } from '@/utils/notificationAPI.jsx';
+import { notificationAPI } from '@/utils/notificationService.jsx';
 import { filterByPermission } from '@/utils/filterHelpers';
 import logger from '@/utils/logger';
 // Lazy load AnalysisLogs

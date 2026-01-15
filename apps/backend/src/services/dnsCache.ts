@@ -48,6 +48,9 @@ type OriginalLookupFn = (
 /** Original resolve4/resolve6 function signature - simplified for call() usage */
 type OriginalResolveFn = (hostname: string) => Promise<string[]>;
 
+/** IP version type for resolve operations */
+type IPVersion = 4 | 6;
+
 // Import types from shared package
 import type {
   DNSCacheConfig,
@@ -97,7 +100,6 @@ class DNSCacheService {
   private originalLookup: OriginalLookupFn | null;
   private originalResolve4: OriginalResolveFn | null;
   private originalResolve6: OriginalResolveFn | null;
-  private statsBroadcastTimer: NodeJS.Timeout | null;
   private pendingBroadcasts: Map<string, NodeJS.Timeout> | null;
 
   constructor() {
@@ -119,7 +121,6 @@ class DNSCacheService {
     this.originalLookup = null;
     this.originalResolve4 = null;
     this.originalResolve6 = null;
-    this.statsBroadcastTimer = null;
     this.pendingBroadcasts = null;
   }
 
@@ -130,13 +131,11 @@ class DNSCacheService {
       this.updateEnvironmentVariables();
       if (this.config.enabled) {
         this.installInterceptors();
-        this.startStatsBroadcasting();
         logger.info(
           { config: this.config },
           'DNS cache initialized and enabled',
         );
       } else {
-        this.stopStatsBroadcasting();
         logger.info('DNS cache initialized but disabled');
       }
     } catch (error) {
@@ -246,10 +245,15 @@ class DNSCacheService {
   }
 
   /**
-   * Create a cached dnsPromises.resolve4 interceptor
+   * Create a cached DNS resolve interceptor for the specified IP version
    */
-  createCachedResolve4(): typeof dnsPromises.resolve4 {
-    return (async (hostname: string) => {
+  private createCachedResolve(
+    ipVersion: IPVersion,
+  ): (hostname: string) => Promise<string[]> {
+    const cacheKeyPrefix = `resolve${ipVersion}:`;
+    const operation = `resolve${ipVersion}`;
+
+    return async (hostname: string): Promise<string[]> => {
       const hostnameValidation = validateHostname(hostname);
       if (!hostnameValidation.allowed) {
         this.stats.errors++;
@@ -260,47 +264,32 @@ class DNSCacheService {
         throw error;
       }
 
-      const cacheKey = `resolve4:${hostname}`;
+      const cacheKey = `${cacheKeyPrefix}${hostname}`;
 
       const cached = this.getFromCache(cacheKey) as ResolveCacheData | null;
       if (cached) {
         this.checkAndResetTTLPeriod();
-        this.recordCacheHit('resolve4', hostname);
-        logger.debug({ hostname, cached }, 'DNS resolve4 cache hit');
+        this.recordCacheHit(operation, hostname);
+        logger.debug({ hostname, cached }, `DNS ${operation} cache hit`);
         return cached.addresses;
       }
 
-      return this.handleResolve4CacheMiss(hostname, cacheKey);
-    }) as typeof dnsPromises.resolve4;
+      return this.handleResolveCacheMiss(hostname, cacheKey, ipVersion);
+    };
+  }
+
+  /**
+   * Create a cached dnsPromises.resolve4 interceptor
+   */
+  createCachedResolve4(): typeof dnsPromises.resolve4 {
+    return this.createCachedResolve(4) as typeof dnsPromises.resolve4;
   }
 
   /**
    * Create a cached dnsPromises.resolve6 interceptor
    */
   createCachedResolve6(): typeof dnsPromises.resolve6 {
-    return (async (hostname: string) => {
-      const hostnameValidation = validateHostname(hostname);
-      if (!hostnameValidation.allowed) {
-        this.stats.errors++;
-        const error = new Error(
-          `SSRF Protection: ${hostnameValidation.reason}`,
-        ) as NodeJS.ErrnoException;
-        error.code = 'ENOTFOUND';
-        throw error;
-      }
-
-      const cacheKey = `resolve6:${hostname}`;
-
-      const cached = this.getFromCache(cacheKey) as ResolveCacheData | null;
-      if (cached) {
-        this.checkAndResetTTLPeriod();
-        this.recordCacheHit('resolve6', hostname);
-        logger.debug({ hostname, cached }, 'DNS resolve6 cache hit');
-        return cached.addresses;
-      }
-
-      return this.handleResolve6CacheMiss(hostname, cacheKey);
-    }) as typeof dnsPromises.resolve6;
+    return this.createCachedResolve(6) as typeof dnsPromises.resolve6;
   }
 
   /**
@@ -347,19 +336,21 @@ class DNSCacheService {
   }
 
   /**
-   * Handle cache miss for dnsPromises.resolve4
+   * Handle cache miss for dnsPromises.resolve4 or resolve6
    */
-  private async handleResolve4CacheMiss(
+  private async handleResolveCacheMiss(
     hostname: string,
     cacheKey: string,
+    ipVersion: IPVersion,
   ): Promise<string[]> {
+    const originalResolve =
+      ipVersion === 4 ? this.originalResolve4 : this.originalResolve6;
+    const operation = `resolve${ipVersion}`;
+
     try {
       this.checkAndResetTTLPeriod();
       this.recordCacheMiss();
-      const addresses = await this.originalResolve4!.call(
-        dnsPromises,
-        hostname,
-      );
+      const addresses = await originalResolve!.call(dnsPromises, hostname);
 
       const addressesValidation = validateResolvedAddresses(
         hostname,
@@ -378,48 +369,7 @@ class DNSCacheService {
       this.addToCache(cacheKey, { addresses: safeAddresses });
       logger.debug(
         { hostname, addresses: safeAddresses },
-        'DNS resolve4 result cached',
-      );
-      return safeAddresses;
-    } catch (error) {
-      this.stats.errors++;
-      throw error;
-    }
-  }
-
-  /**
-   * Handle cache miss for dnsPromises.resolve6
-   */
-  private async handleResolve6CacheMiss(
-    hostname: string,
-    cacheKey: string,
-  ): Promise<string[]> {
-    try {
-      this.checkAndResetTTLPeriod();
-      this.recordCacheMiss();
-      const addresses = await this.originalResolve6!.call(
-        dnsPromises,
-        hostname,
-      );
-
-      const addressesValidation = validateResolvedAddresses(
-        hostname,
-        addresses,
-      );
-      if (!addressesValidation.allowed) {
-        this.stats.errors++;
-        const error = new Error(
-          `SSRF Protection: ${addressesValidation.reason}`,
-        ) as NodeJS.ErrnoException;
-        error.code = 'ENOTFOUND';
-        throw error;
-      }
-
-      const safeAddresses = addressesValidation.filteredAddresses || addresses;
-      this.addToCache(cacheKey, { addresses: safeAddresses });
-      logger.debug(
-        { hostname, addresses: safeAddresses },
-        'DNS resolve6 result cached',
+        `DNS ${operation} result cached`,
       );
       return safeAddresses;
     } catch (error) {
@@ -559,7 +509,8 @@ class DNSCacheService {
       this.pendingBroadcasts!.delete(analysisId);
       try {
         const { sseManager } = await import('../utils/sse/SSEManager.ts');
-        if (sseManager.analysisChannels.has(analysisId)) {
+        // Broadcast DNS stats to stats channel subscribers
+        if (sseManager.analysisStatsChannels.has(analysisId)) {
           await sseManager.broadcastService.broadcastAnalysisDnsStats(
             analysisId,
           );
@@ -657,22 +608,28 @@ class DNSCacheService {
     });
   }
 
-  // Handle IPC DNS resolve4 requests
-  async handleDNSResolve4Request(
+  /**
+   * Handle IPC DNS resolve requests for both IPv4 and IPv6
+   */
+  private async handleDNSResolveRequest(
     hostname: string,
-    analysisId: string | null = null,
+    analysisId: string | null,
+    ipVersion: IPVersion,
   ): Promise<DNSResolveResult> {
+    const operation = `resolve${ipVersion}`;
+    const cacheKey = `${operation}:${hostname}`;
+    const originalResolve =
+      ipVersion === 4 ? this.originalResolve4 : this.originalResolve6;
+
     const hostnameValidation = validateHostname(hostname);
     if (!hostnameValidation.allowed) {
       this.recordAnalysisError(analysisId);
       logger.warn(
         { hostname, analysisId, reason: hostnameValidation.reason },
-        'SSRF: Blocked DNS resolve4 from child process',
+        `SSRF: Blocked DNS ${operation} from child process`,
       );
       return { success: false, error: hostnameValidation.reason };
     }
-
-    const cacheKey = `resolve4:${hostname}`;
 
     const cached = this.getFromCache(cacheKey) as ResolveCacheData | null;
     if (cached) {
@@ -680,7 +637,7 @@ class DNSCacheService {
       this.recordAnalysisCacheHit(analysisId!, hostname, cacheKey);
       logger.debug(
         { hostname, analysisId, cached },
-        'DNS resolve4 cache hit (IPC)',
+        `DNS ${operation} cache hit (IPC)`,
       );
       return { success: true, addresses: cached.addresses };
     }
@@ -688,10 +645,7 @@ class DNSCacheService {
     try {
       this.checkAndResetTTLPeriod();
       this.recordAnalysisCacheMiss(analysisId!, hostname, cacheKey);
-      const addresses = await this.originalResolve4!.call(
-        dnsPromises,
-        hostname,
-      );
+      const addresses = await originalResolve!.call(dnsPromises, hostname);
 
       const addressesValidation = validateResolvedAddresses(
         hostname,
@@ -715,17 +669,25 @@ class DNSCacheService {
       this.addToCache(cacheKey, { addresses: safeAddresses });
       logger.debug(
         { hostname, analysisId, addresses: safeAddresses },
-        'DNS resolve4 result cached (IPC)',
+        `DNS ${operation} result cached (IPC)`,
       );
       return { success: true, addresses: safeAddresses };
     } catch (error) {
       this.recordAnalysisError(analysisId);
       logger.debug(
         { hostname, analysisId, error: (error as Error).message },
-        'DNS resolve4 error (IPC)',
+        `DNS ${operation} error (IPC)`,
       );
       return { success: false, error: (error as Error).message };
     }
+  }
+
+  // Handle IPC DNS resolve4 requests
+  async handleDNSResolve4Request(
+    hostname: string,
+    analysisId: string | null = null,
+  ): Promise<DNSResolveResult> {
+    return this.handleDNSResolveRequest(hostname, analysisId, 4);
   }
 
   // Handle IPC DNS resolve6 requests
@@ -733,70 +695,7 @@ class DNSCacheService {
     hostname: string,
     analysisId: string | null = null,
   ): Promise<DNSResolveResult> {
-    const hostnameValidation = validateHostname(hostname);
-    if (!hostnameValidation.allowed) {
-      this.recordAnalysisError(analysisId);
-      logger.warn(
-        { hostname, analysisId, reason: hostnameValidation.reason },
-        'SSRF: Blocked DNS resolve6 from child process',
-      );
-      return { success: false, error: hostnameValidation.reason };
-    }
-
-    const cacheKey = `resolve6:${hostname}`;
-
-    const cached = this.getFromCache(cacheKey) as ResolveCacheData | null;
-    if (cached) {
-      this.checkAndResetTTLPeriod();
-      this.recordAnalysisCacheHit(analysisId!, hostname, cacheKey);
-      logger.debug(
-        { hostname, analysisId, cached },
-        'DNS resolve6 cache hit (IPC)',
-      );
-      return { success: true, addresses: cached.addresses };
-    }
-
-    try {
-      this.checkAndResetTTLPeriod();
-      this.recordAnalysisCacheMiss(analysisId!, hostname, cacheKey);
-      const addresses = await this.originalResolve6!.call(
-        dnsPromises,
-        hostname,
-      );
-
-      const addressesValidation = validateResolvedAddresses(
-        hostname,
-        addresses,
-      );
-      if (!addressesValidation.allowed) {
-        this.recordAnalysisError(analysisId);
-        logger.warn(
-          {
-            hostname,
-            analysisId,
-            addresses,
-            reason: addressesValidation.reason,
-          },
-          'SSRF: Blocked resolved addresses from child process',
-        );
-        return { success: false, error: addressesValidation.reason };
-      }
-
-      const safeAddresses = addressesValidation.filteredAddresses || addresses;
-      this.addToCache(cacheKey, { addresses: safeAddresses });
-      logger.debug(
-        { hostname, analysisId, addresses: safeAddresses },
-        'DNS resolve6 result cached (IPC)',
-      );
-      return { success: true, addresses: safeAddresses };
-    } catch (error) {
-      this.recordAnalysisError(analysisId);
-      logger.debug(
-        { hostname, analysisId, error: (error as Error).message },
-        'DNS resolve6 error (IPC)',
-      );
-      return { success: false, error: (error as Error).message };
-    }
+    return this.handleDNSResolveRequest(hostname, analysisId, 6);
   }
 
   // Check if we're in a new TTL period and reset stats if needed
@@ -857,11 +756,9 @@ class DNSCacheService {
 
     if (wasEnabled && !this.config.enabled) {
       this.uninstallInterceptors();
-      this.stopStatsBroadcasting();
       logger.info('DNS cache disabled');
     } else if (!wasEnabled && this.config.enabled) {
       this.installInterceptors();
-      this.startStatsBroadcasting();
       logger.info('DNS cache enabled');
     }
 
@@ -1053,24 +950,6 @@ class DNSCacheService {
     this.cacheKeyToAnalyses.clear();
     this.ttlPeriodStart = Date.now();
     logger.info('DNS cache stats reset (global and per-analysis)');
-  }
-
-  startStatsBroadcasting(): void {
-    if (this.statsBroadcastTimer) {
-      clearInterval(this.statsBroadcastTimer);
-    }
-
-    // Placeholder for future stats broadcasting via SSE
-    this.statsBroadcastTimer = setInterval(() => {
-      // Stats are broadcast on-demand via SSE channels
-    }, DNS_CACHE.STATS_BROADCAST_INTERVAL_MS);
-  }
-
-  stopStatsBroadcasting(): void {
-    if (this.statsBroadcastTimer) {
-      clearInterval(this.statsBroadcastTimer);
-      this.statsBroadcastTimer = null;
-    }
   }
 }
 

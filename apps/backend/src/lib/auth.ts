@@ -307,9 +307,8 @@ export const auth = betterAuth({
             );
 
             // Import analysis service dynamically to avoid circular deps
-            const { analysisService } = await import(
-              '../services/analysisService.ts'
-            );
+            const { analysisService } =
+              await import('../services/analysis/index.ts');
 
             // Get uncategorized team for this organization
             authLogger.info(
@@ -328,9 +327,8 @@ export const auth = betterAuth({
             );
 
             if (!uncategorizedTeam) {
-              const { executeQueryAll } = await import(
-                '../utils/authDatabase.ts'
-              );
+              const { executeQueryAll } =
+                await import('../utils/authDatabase.ts');
               authLogger.warn(
                 {
                   teamOrganizationId: teamData.organizationId,

@@ -24,12 +24,12 @@ import {
   formatOversizedLogWarning,
 } from '../../utils/logging/index.ts';
 import { getServerTime } from '../../utils/serverTime.ts';
+import { getSseManager } from '../../utils/lazyLoader.ts';
 import { ANALYSIS_PROCESS } from '../../constants.ts';
 import type { Config } from '../../config/default.ts';
 import type {
   AnalysisProcessState,
   MemoryLogsResult,
-  SSEManagerInterface,
   LogEntry,
   PinoDestinationStream,
 } from './types.ts';
@@ -39,38 +39,6 @@ const LOG_SIZE_CHECK_INTERVAL = 100;
 
 // Number of recent log lines to preserve during automatic rotation (for context)
 const ROTATION_PRESERVE_LINES = 100;
-
-/**
- * Lazy-loaded SSE manager to avoid circular dependency.
- *
- * Direct import would create: LogManagement -> sse -> analysisService -> AnalysisProcess -> LogManagement
- * This pattern defers loading until first use, breaking the cycle.
- */
-let _sseManager: SSEManagerInterface | null = null;
-let _sseManagerPromise: Promise<SSEManagerInterface> | null = null;
-
-async function getSseManager(): Promise<SSEManagerInterface> {
-  if (_sseManager) {
-    return _sseManager;
-  }
-
-  if (_sseManagerPromise) {
-    await _sseManagerPromise;
-    return _sseManager!;
-  }
-
-  _sseManagerPromise = (async () => {
-    const { sseManager } = await import('../../utils/sse/index.ts');
-    // Type assertion required: dynamic import loses type info.
-    // The actual implementation matches SSEManagerInterface contract.
-    _sseManager = sseManager as unknown as SSEManagerInterface;
-    _sseManagerPromise = null;
-    return _sseManager;
-  })();
-
-  await _sseManagerPromise;
-  return _sseManager!;
-}
 
 /** Stats result from safeStat */
 type FileStats = {
@@ -92,6 +60,32 @@ type ParsedLogEntry = {
   readonly time?: string;
   readonly msg?: string;
 };
+
+/**
+ * Parse a single NDJSON log line into a LogEntry.
+ *
+ * @param line - Raw NDJSON line from log file
+ * @param sequence - Sequence number to assign to the entry
+ * @returns LogEntry if valid, null if malformed
+ */
+function parseNdjsonLogLine(line: string, sequence: number): LogEntry | null {
+  try {
+    const logEntry = JSON.parse(line) as ParsedLogEntry;
+
+    if (!logEntry.time || !logEntry.msg) {
+      return null;
+    }
+
+    return {
+      sequence,
+      timestamp: new Date(logEntry.time).toLocaleString(),
+      message: logEntry.msg,
+      createdAt: new Date(logEntry.time).getTime(),
+    };
+  } catch {
+    return null;
+  }
+}
 
 export class LogManager {
   private analysisProcess: AnalysisProcessState;
@@ -224,10 +218,19 @@ export class LogManager {
 
     // Broadcast to connected clients via SSE
     const sseManager = await getSseManager();
-    await sseManager.broadcastUpdate('log', {
-      analysisId: this.analysisProcess.analysisId,
-      analysisName: this.analysisProcess.analysisName,
-      log: logEntry,
+
+    // Broadcast log line to logs channel subscribers (heavy - individual log entries)
+    sseManager.broadcastAnalysisLog(this.analysisProcess.analysisId, {
+      type: 'log',
+      data: {
+        analysisId: this.analysisProcess.analysisId,
+        analysisName: this.analysisProcess.analysisName,
+        log: logEntry,
+      },
+    });
+
+    // Broadcast stats to stats channel subscribers (lightweight - count and size only)
+    sseManager.broadcastAnalysisStats(this.analysisProcess.analysisId, {
       totalCount: this.analysisProcess.totalLogCount,
       logFileSize: this.estimatedFileSize,
     });
@@ -340,22 +343,7 @@ export class LogManager {
 
         // Parse preserved lines into log entries
         preservedLogs = preservedLines
-          .map((line, index): LogEntry | null => {
-            try {
-              const logEntry = JSON.parse(line) as ParsedLogEntry;
-              if (!logEntry.time || !logEntry.msg) {
-                return null;
-              }
-              return {
-                sequence: index + 1,
-                timestamp: new Date(logEntry.time).toLocaleString(),
-                message: logEntry.msg,
-                createdAt: new Date(logEntry.time).getTime(),
-              };
-            } catch {
-              return null;
-            }
-          })
+          .map((line, index) => parseNdjsonLogLine(line, index + 1))
           .filter((entry): entry is LogEntry => entry !== null);
       } catch (error) {
         // If we can't read the file, just proceed without preserved logs
@@ -418,20 +406,33 @@ export class LogManager {
       this.analysisProcess.logs.unshift(rotationEntry);
       this.analysisProcess.totalLogCount++;
 
-      // Broadcast rotation event
+      // Broadcast rotation event via global channel (all subscribers need to know logs were cleared)
       const sseManager = await getSseManager();
-      await sseManager.broadcastUpdate('logsCleared', {
-        analysisId: this.analysisProcess.analysisId,
-        analysisName: this.analysisProcess.analysisName,
-        reason: 'rotation',
-        previousSizeMB: sizeMB,
-        preservedCount: preservedLogs.length,
+      sseManager.broadcast({
+        type: 'logsCleared',
+        data: {
+          analysisId: this.analysisProcess.analysisId,
+          analysisName: this.analysisProcess.analysisName,
+          reason: 'rotation',
+          previousSizeMB: sizeMB,
+          preservedCount: preservedLogs.length,
+        },
       });
-      await sseManager.broadcastUpdate('log', {
-        analysisId: this.analysisProcess.analysisId,
-        analysisName: this.analysisProcess.analysisName,
-        log: rotationEntry,
+
+      // Broadcast the rotation log entry to logs channel
+      sseManager.broadcastAnalysisLog(this.analysisProcess.analysisId, {
+        type: 'log',
+        data: {
+          analysisId: this.analysisProcess.analysisId,
+          analysisName: this.analysisProcess.analysisName,
+          log: rotationEntry,
+        },
+      });
+
+      // Broadcast updated stats to stats channel
+      sseManager.broadcastAnalysisStats(this.analysisProcess.analysisId, {
         totalCount: this.analysisProcess.totalLogCount,
+        logFileSize: this.estimatedFileSize,
       });
     } catch (error) {
       this.analysisProcess.logger.error(
@@ -500,30 +501,12 @@ export class LogManager {
 
       // Load recent logs into memory (up to maxMemoryLogs)
       const recentLines = lines.slice(-this.analysisProcess.maxMemoryLogs);
+      const baseSequence =
+        this.analysisProcess.logSequence - recentLines.length;
       this.analysisProcess.logs = recentLines
-        .map((line, index): LogEntry | null => {
-          try {
-            const logEntry = JSON.parse(line) as ParsedLogEntry;
-
-            // Validate NDJSON format
-            if (!logEntry.time || !logEntry.msg) {
-              return null;
-            }
-
-            return {
-              sequence:
-                this.analysisProcess.logSequence -
-                recentLines.length +
-                index +
-                1,
-              timestamp: new Date(logEntry.time).toLocaleString(),
-              message: logEntry.msg,
-              createdAt: new Date(logEntry.time).getTime(),
-            };
-          } catch {
-            return null; // Skip malformed lines
-          }
-        })
+        .map((line, index) =>
+          parseNdjsonLogLine(line, baseSequence + index + 1),
+        )
         .filter((entry): entry is LogEntry => entry !== null)
         .reverse(); // Reverse to get newest first
     } catch (error) {

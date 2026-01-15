@@ -1,6 +1,6 @@
 {
   "name": "@tago-analysis-worker/types",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -47,6 +47,10 @@
     "./guards/*": {
       "types": "./dist/guards/*.d.ts",
       "import": "./dist/guards/*.js"
+    },
+    "./openapi": {
+      "types": "./dist/openapi/index.d.ts",
+      "import": "./dist/openapi/index.js"
     }
   },
   "typesVersions": {
@@ -77,6 +81,9 @@
       ],
       "guards/*": [
         "./dist/guards/*.d.ts"
+      ],
+      "openapi": [
+        "./dist/openapi/index.d.ts"
       ]
     }
   },
@@ -88,7 +95,8 @@
     "prepublishOnly": "pnpm build"
   },
   "dependencies": {
-    "zod": "^4.1.12"
+    "@asteasolutions/zod-to-openapi": "^8.4.0",
+    "zod": "^4.3.5"
   },
   "devDependencies": {
     "typescript": "^5.7.2"

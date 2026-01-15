@@ -15,7 +15,8 @@ import type {
 import { config } from '../config/default.ts';
 import { createChildLogger } from '../utils/logging/logger.ts';
 import { safeReadFile, safeWriteFile, safeStat } from '../utils/safePath.ts';
-import { analysisService } from './analysisService.ts';
+import { formatFileSize } from '../utils/formatters.ts';
+import { analysisService } from './analysis/index.ts';
 import { teamService } from './teamService.ts';
 import { dnsCache } from './dnsCache.ts';
 import { metricsService } from './metricsService.ts';
@@ -74,6 +75,15 @@ class AnalysisInfoService {
   }
 
   /**
+   * Count log entries in NDJSON log file (non-empty lines only)
+   * Each line is a JSON log entry, so counting non-empty lines gives accurate count
+   */
+  countLogEntries(content: string | null): number {
+    if (!content || content.length === 0) return 0;
+    return content.split('\n').filter((line) => line.trim().length > 0).length;
+  }
+
+  /**
    * Get comprehensive metadata for an analysis
    */
   async getAnalysisMeta(
@@ -103,6 +113,7 @@ class AnalysisInfoService {
       envStats,
       envContent,
       logStats,
+      logContent,
       versionsData,
       teamInfo,
       processMetrics,
@@ -112,6 +123,7 @@ class AnalysisInfoService {
       this.safeFileStat(envPath),
       this.safeReadContent(envPath),
       this.safeFileStat(logPath),
+      this.safeReadContent(logPath),
       this.safeReadVersions(versionsPath),
       this.getTeamInfo(analysis.teamId),
       this.getProcessMetricsForAnalysis(analysisId),
@@ -134,7 +146,7 @@ class AnalysisInfoService {
       // File statistics
       file: {
         size: indexStats?.size || 0,
-        sizeFormatted: this.formatFileSize(indexStats?.size || 0),
+        sizeFormatted: formatFileSize(indexStats?.size || 0),
         lineCount: analysisLineCount,
         created: indexStats?.birthtime?.toISOString() || null,
         modified: indexStats?.mtime?.toISOString() || null,
@@ -143,16 +155,16 @@ class AnalysisInfoService {
       // Environment
       environment: {
         size: envStats?.size || 0,
-        sizeFormatted: this.formatFileSize(envStats?.size || 0),
+        sizeFormatted: formatFileSize(envStats?.size || 0),
         lineCount: envLineCount,
         variableCount: envVarCount,
       },
 
-      // Logs
+      // Logs (count from file for accuracy - in-memory count resets on stop)
       logs: {
         size: logStats?.size || 0,
-        sizeFormatted: this.formatFileSize(logStats?.size || 0),
-        totalCount: analysis.totalLogCount || 0,
+        sizeFormatted: formatFileSize(logStats?.size || 0),
+        totalCount: this.countLogEntries(logContent),
       },
 
       // Version history
@@ -251,7 +263,7 @@ class AnalysisInfoService {
       isNew,
       lineCount: this.countLines(content),
       size: stats?.size || 0,
-      sizeFormatted: this.formatFileSize(stats?.size || 0),
+      sizeFormatted: formatFileSize(stats?.size || 0),
       lastModified: stats?.mtime?.toISOString() || null,
     };
   }
@@ -294,7 +306,7 @@ class AnalysisInfoService {
       analysisName: analysis.analysisName,
       lineCount: this.countLines(content),
       size: stats?.size || 0,
-      sizeFormatted: this.formatFileSize(stats?.size || 0),
+      sizeFormatted: formatFileSize(stats?.size || 0),
       lastModified: stats?.mtime?.toISOString() || null,
     };
   }
@@ -397,14 +409,6 @@ class AnalysisInfoService {
     } catch {
       return { enabled: false, cacheSize: 0, hits: 0, misses: 0, hitRate: 0 };
     }
-  }
-
-  formatFileSize(bytes: number): string {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   }
 }
 

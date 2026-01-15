@@ -23,7 +23,9 @@ export function SSEConnectionProvider({ children, onMessage }) {
   const maxReconnectDelay = 30000; // 30 seconds max delay between retries
   const mountedRef = useRef(true);
   const connectionStatusRef = useRef('connecting');
-  const subscribedAnalyses = useRef(new Set());
+  const subscribedLogs = useRef(new Set());
+  const subscribedStats = useRef(new Set());
+  const subscribedMetrics = useRef(false);
 
   // Use ref for onMessage to prevent dependency cascade causing reconnections
   const onMessageRef = useRef(onMessage);
@@ -177,6 +179,10 @@ export function SSEConnectionProvider({ children, onMessage }) {
             setConnectionStatus('disconnected');
             connectionStatusRef.current = 'disconnected';
 
+            // Clear sessionId to prevent stale session subscriptions during reconnect
+            // A new sessionId will be received when the new connection sends its init message
+            setSessionId(null);
+
             // Notify message handler that EventSource detected connection lost
             // This handles native disconnection (network failure, server restart, etc.)
             // Use ref to avoid dependency cascade causing reconnections
@@ -263,6 +269,10 @@ export function SSEConnectionProvider({ children, onMessage }) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
     }
+
+    // Clear sessionId to prevent stale session subscriptions
+    // A new sessionId will be received when the new connection sends its init message
+    setSessionId(null);
 
     // Trigger reconnection immediately
     setConnectionStatus('connecting');
@@ -401,8 +411,8 @@ export function SSEConnectionProvider({ children, onMessage }) {
     };
   }, [createConnection, reconnect, isAuthenticated, serverShutdown]);
 
-  // Subscribe to analysis channels
-  const subscribeToAnalysis = useCallback(
+  // Subscribe to analysis logs channel (heavy - only for Log Viewer)
+  const subscribeToAnalysisLogs = useCallback(
     async (analysisIds) => {
       if (!sessionId || !isAuthenticated) {
         return { success: false, error: 'Not connected' };
@@ -413,7 +423,7 @@ export function SSEConnectionProvider({ children, onMessage }) {
       }
 
       try {
-        const response = await fetch('/api/sse/subscribe', {
+        const response = await fetch('/api/sse/subscribe/logs', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -422,41 +432,38 @@ export function SSEConnectionProvider({ children, onMessage }) {
 
         if (!response.ok) {
           const error = await response.json();
-          logger.error('Subscribe failed:', error);
+          logger.error('Subscribe to logs failed:', error);
           return { success: false, error: error.error || 'Subscribe failed' };
         }
 
         const result = await response.json();
 
-        // Track subscriptions locally by analysis ID
         result.subscribed?.forEach((id) => {
-          subscribedAnalyses.current.add(id);
+          subscribedLogs.current.add(id);
         });
 
         return result;
       } catch (error) {
-        logger.error('Error subscribing to analyses:', error);
+        logger.error('Error subscribing to analysis logs:', error);
         return { success: false, error: error.message };
       }
     },
     [sessionId, isAuthenticated],
   );
 
-  // Unsubscribe from analysis channels
-  const unsubscribeFromAnalysis = useCallback(
+  // Unsubscribe from analysis logs channel
+  const unsubscribeFromAnalysisLogs = useCallback(
     async (analysisIds) => {
       if (!sessionId || !isAuthenticated) {
-        logger.warn('Cannot unsubscribe: No session ID or not authenticated');
         return { success: false, error: 'Not connected' };
       }
 
       if (!Array.isArray(analysisIds) || analysisIds.length === 0) {
-        logger.warn('Cannot unsubscribe: Invalid analysisIds');
         return { success: false, error: 'Invalid analysis IDs' };
       }
 
       try {
-        const response = await fetch('/api/sse/unsubscribe', {
+        const response = await fetch('/api/sse/unsubscribe/logs', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
@@ -465,26 +472,164 @@ export function SSEConnectionProvider({ children, onMessage }) {
 
         if (!response.ok) {
           const error = await response.json();
-          logger.error('Unsubscribe failed:', error);
+          logger.error('Unsubscribe from logs failed:', error);
           return { success: false, error: error.error || 'Unsubscribe failed' };
         }
 
         const result = await response.json();
-        logger.log('Unsubscribed from analyses:', result);
 
-        // Remove from local tracking by analysis ID
         result.unsubscribed?.forEach((id) => {
-          subscribedAnalyses.current.delete(id);
+          subscribedLogs.current.delete(id);
         });
 
         return result;
       } catch (error) {
-        logger.error('Error unsubscribing from analyses:', error);
+        logger.error('Error unsubscribing from analysis logs:', error);
         return { success: false, error: error.message };
       }
     },
     [sessionId, isAuthenticated],
   );
+
+  // Subscribe to analysis stats channel (lightweight - for Info Modal)
+  const subscribeToAnalysisStats = useCallback(
+    async (analysisIds) => {
+      if (!sessionId || !isAuthenticated) {
+        return { success: false, error: 'Not connected' };
+      }
+
+      if (!Array.isArray(analysisIds) || analysisIds.length === 0) {
+        return { success: false, error: 'Invalid analysis IDs' };
+      }
+
+      try {
+        const response = await fetch('/api/sse/subscribe/stats', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ sessionId, analyses: analysisIds }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          logger.error('Subscribe to stats failed:', error);
+          return { success: false, error: error.error || 'Subscribe failed' };
+        }
+
+        const result = await response.json();
+
+        result.subscribed?.forEach((id) => {
+          subscribedStats.current.add(id);
+        });
+
+        return result;
+      } catch (error) {
+        logger.error('Error subscribing to analysis stats:', error);
+        return { success: false, error: error.message };
+      }
+    },
+    [sessionId, isAuthenticated],
+  );
+
+  // Unsubscribe from analysis stats channel
+  const unsubscribeFromAnalysisStats = useCallback(
+    async (analysisIds) => {
+      if (!sessionId || !isAuthenticated) {
+        return { success: false, error: 'Not connected' };
+      }
+
+      if (!Array.isArray(analysisIds) || analysisIds.length === 0) {
+        return { success: false, error: 'Invalid analysis IDs' };
+      }
+
+      try {
+        const response = await fetch('/api/sse/unsubscribe/stats', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ sessionId, analyses: analysisIds }),
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          logger.error('Unsubscribe from stats failed:', error);
+          return { success: false, error: error.error || 'Unsubscribe failed' };
+        }
+
+        const result = await response.json();
+
+        result.unsubscribed?.forEach((id) => {
+          subscribedStats.current.delete(id);
+        });
+
+        return result;
+      } catch (error) {
+        logger.error('Error unsubscribing from analysis stats:', error);
+        return { success: false, error: error.message };
+      }
+    },
+    [sessionId, isAuthenticated],
+  );
+
+  // Subscribe to metrics channel (for Settings modal)
+  const subscribeToMetrics = useCallback(async () => {
+    if (!sessionId || !isAuthenticated) {
+      return { success: false, error: 'Not connected' };
+    }
+
+    try {
+      const response = await fetch('/api/sse/subscribe/metrics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ sessionId }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        logger.error('Subscribe to metrics failed:', error);
+        return { success: false, error: error.error || 'Subscribe failed' };
+      }
+
+      const result = await response.json();
+      subscribedMetrics.current = true;
+
+      return result;
+    } catch (error) {
+      logger.error('Error subscribing to metrics:', error);
+      return { success: false, error: error.message };
+    }
+  }, [sessionId, isAuthenticated]);
+
+  // Unsubscribe from metrics channel
+  const unsubscribeFromMetrics = useCallback(async () => {
+    if (!sessionId || !isAuthenticated) {
+      return { success: false, error: 'Not connected' };
+    }
+
+    try {
+      const response = await fetch('/api/sse/unsubscribe/metrics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ sessionId }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        logger.error('Unsubscribe from metrics failed:', error);
+        return { success: false, error: error.error || 'Unsubscribe failed' };
+      }
+
+      const result = await response.json();
+      subscribedMetrics.current = false;
+
+      return result;
+    } catch (error) {
+      logger.error('Error unsubscribing from metrics:', error);
+      return { success: false, error: error.message };
+    }
+  }, [sessionId, isAuthenticated]);
 
   const value = useMemo(
     () => ({
@@ -494,8 +639,12 @@ export function SSEConnectionProvider({ children, onMessage }) {
       requestStatusUpdate,
       forceReconnect,
       sessionId,
-      subscribeToAnalysis,
-      unsubscribeFromAnalysis,
+      subscribeToAnalysisLogs,
+      unsubscribeFromAnalysisLogs,
+      subscribeToAnalysisStats,
+      unsubscribeFromAnalysisStats,
+      subscribeToMetrics,
+      unsubscribeFromMetrics,
     }),
     [
       connectionStatus,
@@ -504,8 +653,12 @@ export function SSEConnectionProvider({ children, onMessage }) {
       requestStatusUpdate,
       forceReconnect,
       sessionId,
-      subscribeToAnalysis,
-      unsubscribeFromAnalysis,
+      subscribeToAnalysisLogs,
+      unsubscribeFromAnalysisLogs,
+      subscribeToAnalysisStats,
+      unsubscribeFromAnalysisStats,
+      subscribeToMetrics,
+      unsubscribeFromMetrics,
     ],
   );
 

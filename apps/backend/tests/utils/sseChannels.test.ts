@@ -17,6 +17,71 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
 
+// Create mock services that we can control
+const mockAnalysisService = {
+  getAllAnalyses: vi.fn(() => Promise.resolve({})),
+  getConfig: vi.fn(() => Promise.resolve({ teamStructure: {} })),
+  getAnalysisById: vi.fn((analysisId: string) => {
+    // Return appropriate teamId based on analysis name for permission tests
+    const teamId = analysisId.includes('team2') ? 'team-2' : 'team-1';
+    return {
+      id: analysisId,
+      name: analysisId,
+      teamId,
+    };
+  }),
+  analyses: new Map(),
+};
+
+const mockTeamService = {
+  getAllTeams: vi.fn(() => Promise.resolve([])),
+};
+
+const mockGetUserTeamIds = vi.fn(() => ['team-1', 'uncategorized']);
+const mockGetUsersWithTeamAccess = vi.fn(() => ['user-123', 'user-456']);
+
+const mockExecuteQuery = vi.fn((query: string, params?: string[]) => {
+  // Return user object for user queries
+  if (query.includes('SELECT') && query.includes('user')) {
+    const userId = params?.[0] || 'user-123';
+    return {
+      id: userId,
+      role: userId.includes('admin') ? 'admin' : 'user',
+      email: `${userId}@test.com`,
+      name: 'Test User',
+    };
+  }
+  return null;
+});
+
+const mockDnsCache = {
+  getConfig: vi.fn(() => ({ enabled: false })),
+  getAnalysisStats: vi.fn(() => null),
+};
+
+// Mock the lazy loaders
+vi.mock('../../src/utils/lazyLoader.ts', () => ({
+  getAnalysisService: vi.fn(() => Promise.resolve(mockAnalysisService)),
+  getTeamService: vi.fn(() => Promise.resolve(mockTeamService)),
+  getTeamPermissionHelpers: vi.fn(() =>
+    Promise.resolve({
+      getUserTeamIds: mockGetUserTeamIds,
+      getUsersWithTeamAccess: mockGetUsersWithTeamAccess,
+    }),
+  ),
+  getAuthDatabase: vi.fn(() =>
+    Promise.resolve({ executeQuery: mockExecuteQuery }),
+  ),
+  getDnsCache: vi.fn(() => Promise.resolve(mockDnsCache)),
+  getMs: vi.fn(() =>
+    Promise.resolve((ms: number) => {
+      if (ms < 1000) return `${ms}ms`;
+      if (ms < 60000) return `${Math.floor(ms / 1000)}s`;
+      return `${Math.floor(ms / 60000)}m`;
+    }),
+  ),
+}));
+
 // Mock better-sse package
 vi.mock('better-sse', () => ({
   createSession: vi.fn(),
@@ -42,55 +107,28 @@ vi.mock('../../src/utils/logging/logger.ts', () => ({
   })),
 }));
 
-// Mock services
+// Mock services (still needed for direct imports in some places)
 vi.mock('../../src/services/metricsService.ts', () => ({
   metricsService: {
     getAllMetrics: vi.fn(),
   },
 }));
 
-vi.mock('../../src/services/analysisService.ts', () => ({
-  analysisService: {
-    getAllAnalyses: vi.fn(() => Promise.resolve({})),
-    getConfig: vi.fn(() => Promise.resolve({ teamStructure: {} })),
-    getAnalysisById: vi.fn((analysisId: string) => {
-      // Return appropriate teamId based on analysis name for permission tests
-      const teamId = analysisId.includes('team2') ? 'team-2' : 'team-1';
-      return {
-        id: analysisId,
-        name: analysisId,
-        teamId,
-      };
-    }),
-    analyses: new Map(),
-  },
+vi.mock('../../src/services/analysis/index.ts', () => ({
+  analysisService: mockAnalysisService,
 }));
 
 vi.mock('../../src/services/teamService.ts', () => ({
-  teamService: {
-    getAllTeams: vi.fn(() => Promise.resolve([])),
-  },
+  teamService: mockTeamService,
 }));
 
 vi.mock('../../src/middleware/betterAuthMiddleware.ts', () => ({
-  getUserTeamIds: vi.fn(() => ['team-1', 'uncategorized']),
-  getUsersWithTeamAccess: vi.fn(() => ['user-123', 'user-456']),
+  getUserTeamIds: mockGetUserTeamIds,
+  getUsersWithTeamAccess: mockGetUsersWithTeamAccess,
 }));
 
 vi.mock('../../src/utils/authDatabase.ts', () => ({
-  executeQuery: vi.fn((query: string, params?: string[]) => {
-    // Return user object for user queries
-    if (query.includes('SELECT') && query.includes('user')) {
-      const userId = params?.[0] || 'user-123';
-      return {
-        id: userId,
-        role: userId.includes('admin') ? 'admin' : 'user',
-        email: `${userId}@test.com`,
-        name: 'Test User',
-      };
-    }
-    return null;
-  }),
+  executeQuery: mockExecuteQuery,
 }));
 
 interface MockSession {
@@ -108,6 +146,7 @@ interface MockChannel {
   register: Mock;
   deregister: Mock;
   broadcast: Mock;
+  on: Mock;
   sessionCount: number;
   activeSessions: Set<MockSession>;
   state: Record<string, unknown>;
@@ -135,20 +174,23 @@ interface MockResponse {
 interface SSEModule {
   sseManager: {
     sessions: Map<string, MockSession>;
-    analysisChannels: Map<string, MockChannel>;
+    analysisLogsChannels: Map<string, MockChannel>;
+    analysisStatsChannels: Map<string, MockChannel>;
     globalChannel: MockChannel;
+    metricsChannel: MockChannel;
     stopHeartbeat: () => void;
     stopMetricsBroadcasting: () => void;
     startMetricsBroadcasting: Mock;
     startHeartbeat: Mock;
-    getOrCreateAnalysisChannel: (analysisId: string) => MockChannel;
+    getOrCreateLogsChannel: (analysisId: string) => MockChannel;
+    getOrCreateStatsChannel: (analysisId: string) => MockChannel;
     addClient: (
       userId: string,
       res: MockResponse,
       req: MockRequest,
     ) => Promise<MockSession>;
     removeClient: (userId: string, sessionId: string) => Promise<void>;
-    subscribeToAnalysis: (
+    subscribeToAnalysisLogs: (
       sessionId: string,
       analyses: string[],
       userId: string,
@@ -158,12 +200,16 @@ interface SSEModule {
       denied?: string[];
       sessionId: string;
     }>;
-    unsubscribeFromAnalysis: (
+    unsubscribeFromAnalysisLogs: (
       sessionId: string,
       analyses: string[],
     ) => Promise<{
       success: boolean;
       unsubscribed: string[];
+      sessionId: string;
+    }>;
+    subscribeToMetrics: (sessionId: string) => Promise<{
+      success: boolean;
       sessionId: string;
     }>;
     broadcastAnalysisLog: (
@@ -183,11 +229,11 @@ interface SSEModule {
     getStats: () => { totalClients: number; uniqueUsers: number };
     sendInitialData: (client: MockSession) => Promise<void>;
     updateContainerState: (state: Record<string, unknown>) => void;
-    handleSubscribeRequest: (
+    handleSubscribeLogsRequest: (
       req: MockRequest,
       res: MockResponse,
     ) => Promise<void>;
-    handleUnsubscribeRequest: (
+    handleUnsubscribeLogsRequest: (
       req: MockRequest,
       res: MockResponse,
     ) => Promise<void>;
@@ -226,6 +272,7 @@ describe('SSE Channel-Based Subscription Management', () => {
         register: vi.fn(),
         deregister: vi.fn(),
         broadcast: vi.fn(),
+        on: vi.fn(), // Event listener for channel events
         sessionCount: 0,
         activeSessions: new Set(),
         state: {},
@@ -255,23 +302,28 @@ describe('SSE Channel-Based Subscription Management', () => {
       return channel;
     });
 
-    // Session mock returns new instance with preserved ID
-    betterSSE.createSession.mockImplementation(() => {
-      const sessionId = `session-${Math.random().toString(36).substring(2, 15)}`;
-      return {
-        id: sessionId,
-        push: vi.fn().mockResolvedValue(undefined), // Return resolved promise to prevent errors
-        state: { subscribedChannels: new Set() },
-        isConnected: true,
-        lastPushAt: new Date(),
-      };
-    });
+    // Session mock returns new instance with preserved ID and uses options.state if provided
+    betterSSE.createSession.mockImplementation(
+      (
+        _req: MockRequest,
+        _res: MockResponse,
+        options?: { state?: Record<string, unknown> },
+      ) => {
+        const sessionId = `session-${Math.random().toString(36).substring(2, 15)}`;
+        return {
+          id: sessionId,
+          push: vi.fn().mockResolvedValue(undefined), // Return resolved promise to prevent errors
+          state: options?.state || { subscribedChannels: new Set() },
+          isConnected: true,
+          lastPushAt: new Date(),
+        };
+      },
+    );
 
     // Import SSE module once (don't reset modules - it breaks mocks for dynamic imports)
     if (!sse) {
-      sse = (await import(
-        '../../src/utils/sse/index.ts'
-      )) as unknown as SSEModule;
+      sse =
+        (await import('../../src/utils/sse/index.ts')) as unknown as SSEModule;
     }
 
     // Ensure any pending async operations from previous tests are settled
@@ -279,7 +331,7 @@ describe('SSE Channel-Based Subscription Management', () => {
 
     // Clear SSEManager state for test isolation
     sse.sseManager.sessions.clear();
-    sse.sseManager.analysisChannels.clear();
+    sse.sseManager.analysisLogsChannels.clear();
     sse.sseManager.stopHeartbeat();
     sse.sseManager.stopMetricsBroadcasting();
 
@@ -326,10 +378,10 @@ describe('SSE Channel-Based Subscription Management', () => {
   // 1. CHANNEL CREATION & MANAGEMENT
   // ========================================================================
   describe('Channel Creation & Management', () => {
-    describe('getOrCreateAnalysisChannel', () => {
+    describe('getOrCreateLogsChannel', () => {
       it('should create new analysis channel on first request', () => {
         const analysisId = 'test-analysis';
-        const channel = sse.sseManager.getOrCreateAnalysisChannel(analysisId);
+        const channel = sse.sseManager.getOrCreateLogsChannel(analysisId);
 
         expect(channel).toBeDefined();
         expect(betterSSE.createChannel).toHaveBeenCalledTimes(1);
@@ -338,8 +390,8 @@ describe('SSE Channel-Based Subscription Management', () => {
       it('should reuse existing channel for subsequent requests', () => {
         const analysisId = 'test-analysis';
 
-        const channel1 = sse.sseManager.getOrCreateAnalysisChannel(analysisId);
-        const channel2 = sse.sseManager.getOrCreateAnalysisChannel(analysisId);
+        const channel1 = sse.sseManager.getOrCreateLogsChannel(analysisId);
+        const channel2 = sse.sseManager.getOrCreateLogsChannel(analysisId);
 
         expect(channel1).toBe(channel2);
         expect(betterSSE.createChannel).toHaveBeenCalledTimes(1);
@@ -348,17 +400,15 @@ describe('SSE Channel-Based Subscription Management', () => {
       it('should track channels in internal registry', () => {
         const analysisId = 'test-analysis';
 
-        sse.sseManager.getOrCreateAnalysisChannel(analysisId);
+        sse.sseManager.getOrCreateLogsChannel(analysisId);
 
-        expect(sse.sseManager.analysisChannels).toBeDefined();
-        expect(sse.sseManager.analysisChannels.has(analysisId)).toBe(true);
+        expect(sse.sseManager.analysisLogsChannels).toBeDefined();
+        expect(sse.sseManager.analysisLogsChannels.has(analysisId)).toBe(true);
       });
 
       it('should create separate channels for different analyses', () => {
-        const channel1 =
-          sse.sseManager.getOrCreateAnalysisChannel('analysis-1');
-        const channel2 =
-          sse.sseManager.getOrCreateAnalysisChannel('analysis-2');
+        const channel1 = sse.sseManager.getOrCreateLogsChannel('analysis-1');
+        const channel2 = sse.sseManager.getOrCreateLogsChannel('analysis-2');
 
         expect(channel1).not.toBe(channel2);
         expect(betterSSE.createChannel).toHaveBeenCalledTimes(2);
@@ -366,7 +416,7 @@ describe('SSE Channel-Based Subscription Management', () => {
 
       it('should initialize channel with session tracking', () => {
         const analysisId = 'test-analysis';
-        const channel = sse.sseManager.getOrCreateAnalysisChannel(analysisId);
+        const channel = sse.sseManager.getOrCreateLogsChannel(analysisId);
 
         expect(channel.sessionCount).toBeDefined();
         expect(channel.activeSessions).toBeDefined();
@@ -387,15 +437,17 @@ describe('SSE Channel-Based Subscription Management', () => {
         );
 
         // Subscribe and then unsubscribe
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session.id,
           [analysisId],
           'user-123',
         );
-        await sse.sseManager.unsubscribeFromAnalysis(session.id, [analysisId]);
+        await sse.sseManager.unsubscribeFromAnalysisLogs(session.id, [
+          analysisId,
+        ]);
 
         // Channel should be removed
-        expect(sse.sseManager.analysisChannels.has(analysisId)).toBe(false);
+        expect(sse.sseManager.analysisLogsChannels.has(analysisId)).toBe(false);
       });
 
       it('should keep channel alive while sessions remain', async () => {
@@ -410,20 +462,22 @@ describe('SSE Channel-Based Subscription Management', () => {
           user: { id: 'user-2' },
         });
 
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session1.id,
           [analysisId],
           'user-1',
         );
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session2.id,
           [analysisId],
           'user-2',
         );
-        await sse.sseManager.unsubscribeFromAnalysis(session1.id, [analysisId]);
+        await sse.sseManager.unsubscribeFromAnalysisLogs(session1.id, [
+          analysisId,
+        ]);
 
         // Channel should still exist (session-2 still subscribed)
-        expect(sse.sseManager.analysisChannels.has(analysisId)).toBe(true);
+        expect(sse.sseManager.analysisLogsChannels.has(analysisId)).toBe(true);
       });
 
       it('should track session count per channel accurately', async () => {
@@ -438,25 +492,29 @@ describe('SSE Channel-Based Subscription Management', () => {
           user: { id: 'user-2' },
         });
 
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session1.id,
           [analysisId],
           'user-1',
         );
-        const channel = sse.sseManager.analysisChannels.get(analysisId);
+        const channel = sse.sseManager.analysisLogsChannels.get(analysisId);
         expect(channel?.sessionCount).toBe(1);
 
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session2.id,
           [analysisId],
           'user-2',
         );
         expect(channel?.sessionCount).toBe(2);
 
-        await sse.sseManager.unsubscribeFromAnalysis(session1.id, [analysisId]);
+        await sse.sseManager.unsubscribeFromAnalysisLogs(session1.id, [
+          analysisId,
+        ]);
         expect(channel?.sessionCount).toBe(1);
 
-        await sse.sseManager.unsubscribeFromAnalysis(session2.id, [analysisId]);
+        await sse.sseManager.unsubscribeFromAnalysisLogs(session2.id, [
+          analysisId,
+        ]);
         expect(channel?.sessionCount).toBe(0);
       });
 
@@ -472,17 +530,19 @@ describe('SSE Channel-Based Subscription Management', () => {
           user: { id: 'user-1' },
         });
 
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session.id,
           [analysisId],
           'user-1',
         );
-        expect(sse.sseManager.analysisChannels.has(analysisId)).toBe(true);
+        expect(sse.sseManager.analysisLogsChannels.has(analysisId)).toBe(true);
 
-        await sse.sseManager.unsubscribeFromAnalysis(session.id, [analysisId]);
+        await sse.sseManager.unsubscribeFromAnalysisLogs(session.id, [
+          analysisId,
+        ]);
 
         // Should be cleaned up immediately, not deferred
-        expect(sse.sseManager.analysisChannels.has(analysisId)).toBe(false);
+        expect(sse.sseManager.analysisLogsChannels.has(analysisId)).toBe(false);
       });
     });
 
@@ -512,7 +572,17 @@ describe('SSE Channel-Based Subscription Management', () => {
       it('should create session using better-sse createSession', async () => {
         await sse.sseManager.addClient('user-123', mockRes, mockReq);
 
-        expect(betterSSE.createSession).toHaveBeenCalledWith(mockReq, mockRes);
+        expect(betterSSE.createSession).toHaveBeenCalledWith(
+          mockReq,
+          mockRes,
+          expect.objectContaining({
+            retry: expect.any(Number),
+            state: expect.objectContaining({
+              userId: 'user-123',
+              subscribedChannels: expect.any(Set),
+            }),
+          }),
+        );
       });
 
       it('should register session to global channel automatically', async () => {
@@ -582,7 +652,7 @@ describe('SSE Channel-Based Subscription Management', () => {
           mockRes,
           mockReq,
         );
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session.id,
           ['analysis-1', 'analysis-2'],
           'user-123',
@@ -591,8 +661,12 @@ describe('SSE Channel-Based Subscription Management', () => {
         await sse.sseManager.removeClient('user-123', session.id);
 
         // Both channels should be cleaned up
-        expect(sse.sseManager.analysisChannels.has('analysis-1')).toBe(false);
-        expect(sse.sseManager.analysisChannels.has('analysis-2')).toBe(false);
+        expect(sse.sseManager.analysisLogsChannels.has('analysis-1')).toBe(
+          false,
+        );
+        expect(sse.sseManager.analysisLogsChannels.has('analysis-2')).toBe(
+          false,
+        );
       });
 
       it('should remove session from sessions map', async () => {
@@ -633,7 +707,7 @@ describe('SSE Channel-Based Subscription Management', () => {
           mockRes,
           mockReq,
         );
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session.id,
           ['analysis-1'],
           'user-123',
@@ -647,7 +721,9 @@ describe('SSE Channel-Based Subscription Management', () => {
         await disconnectHandler();
 
         // Should cleanup channels
-        expect(sse.sseManager.analysisChannels.has('analysis-1')).toBe(false);
+        expect(sse.sseManager.analysisLogsChannels.has('analysis-1')).toBe(
+          false,
+        );
       });
 
       it('should cleanup multiple subscriptions on disconnect', async () => {
@@ -656,7 +732,7 @@ describe('SSE Channel-Based Subscription Management', () => {
           mockRes,
           mockReq,
         );
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session.id,
           ['analysis-1', 'analysis-2', 'analysis-3'],
           'user-123',
@@ -667,7 +743,7 @@ describe('SSE Channel-Based Subscription Management', () => {
         )?.[1];
         await disconnectHandler();
 
-        expect(sse.sseManager.analysisChannels.size).toBe(0);
+        expect(sse.sseManager.analysisLogsChannels.size).toBe(0);
       });
     });
   });
@@ -676,7 +752,7 @@ describe('SSE Channel-Based Subscription Management', () => {
   // 3. SUBSCRIPTION MANAGEMENT
   // ========================================================================
   describe('Subscription Management', () => {
-    describe('subscribeToAnalysis', () => {
+    describe('subscribeToAnalysisLogs', () => {
       it('should subscribe session to single analysis channel', async () => {
         const session = await sse.sseManager.addClient(
           'user-123',
@@ -684,7 +760,7 @@ describe('SSE Channel-Based Subscription Management', () => {
           mockReq,
         );
 
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session.id,
           ['test-analysis'],
           'user-123',
@@ -702,7 +778,7 @@ describe('SSE Channel-Based Subscription Management', () => {
           mockReq,
         );
 
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session.id,
           ['analysis-1', 'analysis-2', 'analysis-3'],
           'user-123',
@@ -720,13 +796,14 @@ describe('SSE Channel-Based Subscription Management', () => {
           mockReq,
         );
 
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session.id,
           ['test-analysis'],
           'user-123',
         );
 
-        const channel = sse.sseManager.analysisChannels.get('test-analysis');
+        const channel =
+          sse.sseManager.analysisLogsChannels.get('test-analysis');
         expect(channel?.register).toHaveBeenCalledWith(session);
       });
 
@@ -737,15 +814,19 @@ describe('SSE Channel-Based Subscription Management', () => {
           mockReq,
         );
 
-        expect(sse.sseManager.analysisChannels.has('new-analysis')).toBe(false);
+        expect(sse.sseManager.analysisLogsChannels.has('new-analysis')).toBe(
+          false,
+        );
 
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session.id,
           ['new-analysis'],
           'user-123',
         );
 
-        expect(sse.sseManager.analysisChannels.has('new-analysis')).toBe(true);
+        expect(sse.sseManager.analysisLogsChannels.has('new-analysis')).toBe(
+          true,
+        );
       });
 
       it('should be idempotent - subscribing twice should work', async () => {
@@ -755,12 +836,12 @@ describe('SSE Channel-Based Subscription Management', () => {
           mockReq,
         );
 
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session.id,
           ['test-analysis'],
           'user-123',
         );
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session.id,
           ['test-analysis'],
           'user-123',
@@ -768,13 +849,14 @@ describe('SSE Channel-Based Subscription Management', () => {
 
         // Should still only be subscribed once
         expect(session.state.subscribedChannels.size).toBe(1);
-        const channel = sse.sseManager.analysisChannels.get('test-analysis');
+        const channel =
+          sse.sseManager.analysisLogsChannels.get('test-analysis');
         expect(channel?.sessionCount).toBe(1);
       });
 
       it('should throw error if session not found', async () => {
         await expect(
-          sse.sseManager.subscribeToAnalysis(
+          sse.sseManager.subscribeToAnalysisLogs(
             'nonexistent-session',
             ['test-analysis'],
             'user-123',
@@ -789,7 +871,7 @@ describe('SSE Channel-Based Subscription Management', () => {
           mockReq,
         );
 
-        const result = await sse.sseManager.subscribeToAnalysis(
+        const result = await sse.sseManager.subscribeToAnalysisLogs(
           session.id,
           ['analysis-1', 'analysis-2'],
           'user-123',
@@ -803,20 +885,20 @@ describe('SSE Channel-Based Subscription Management', () => {
       });
     });
 
-    describe('unsubscribeFromAnalysis', () => {
+    describe('unsubscribeFromAnalysisLogs', () => {
       it('should unsubscribe session from single analysis', async () => {
         const session = await sse.sseManager.addClient(
           'user-123',
           mockRes,
           mockReq,
         );
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session.id,
           ['test-analysis'],
           'user-123',
         );
 
-        await sse.sseManager.unsubscribeFromAnalysis(session.id, [
+        await sse.sseManager.unsubscribeFromAnalysisLogs(session.id, [
           'test-analysis',
         ]);
 
@@ -831,13 +913,13 @@ describe('SSE Channel-Based Subscription Management', () => {
           mockRes,
           mockReq,
         );
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session.id,
           ['analysis-1', 'analysis-2', 'analysis-3'],
           'user-123',
         );
 
-        await sse.sseManager.unsubscribeFromAnalysis(session.id, [
+        await sse.sseManager.unsubscribeFromAnalysisLogs(session.id, [
           'analysis-1',
           'analysis-3',
         ]);
@@ -853,17 +935,18 @@ describe('SSE Channel-Based Subscription Management', () => {
           mockRes,
           mockReq,
         );
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session.id,
           ['test-analysis'],
           'user-123',
         );
 
-        await sse.sseManager.unsubscribeFromAnalysis(session.id, [
+        await sse.sseManager.unsubscribeFromAnalysisLogs(session.id, [
           'test-analysis',
         ]);
 
-        const channel = sse.sseManager.analysisChannels.get('test-analysis');
+        const channel =
+          sse.sseManager.analysisLogsChannels.get('test-analysis');
         // Channel should be deleted when empty
         expect(channel).toBeUndefined();
       });
@@ -876,14 +959,14 @@ describe('SSE Channel-Based Subscription Management', () => {
         );
 
         expect(async () => {
-          await sse.sseManager.unsubscribeFromAnalysis(session.id, [
+          await sse.sseManager.unsubscribeFromAnalysisLogs(session.id, [
             'never-subscribed',
           ]);
         }).not.toThrow();
       });
 
       it('should handle non-existent session gracefully (no-op)', async () => {
-        const result = await sse.sseManager.unsubscribeFromAnalysis(
+        const result = await sse.sseManager.unsubscribeFromAnalysisLogs(
           'nonexistent-session',
           ['test-analysis'],
         );
@@ -898,13 +981,13 @@ describe('SSE Channel-Based Subscription Management', () => {
           mockRes,
           mockReq,
         );
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session.id,
           ['analysis-1', 'analysis-2'],
           'user-123',
         );
 
-        const result = await sse.sseManager.unsubscribeFromAnalysis(
+        const result = await sse.sseManager.unsubscribeFromAnalysisLogs(
           session.id,
           ['analysis-1'],
         );
@@ -929,19 +1012,19 @@ describe('SSE Channel-Based Subscription Management', () => {
         });
 
         await Promise.all([
-          sse.sseManager.subscribeToAnalysis(
+          sse.sseManager.subscribeToAnalysisLogs(
             session1.id,
             ['analysis-1'],
             'user-1',
           ),
-          sse.sseManager.subscribeToAnalysis(
+          sse.sseManager.subscribeToAnalysisLogs(
             session2.id,
             ['analysis-1'],
             'user-2',
           ),
         ]);
 
-        const channel = sse.sseManager.analysisChannels.get('analysis-1');
+        const channel = sse.sseManager.analysisLogsChannels.get('analysis-1');
         expect(channel?.sessionCount).toBe(2);
       });
 
@@ -952,26 +1035,28 @@ describe('SSE Channel-Based Subscription Management', () => {
           mockReq,
         );
 
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session.id,
           ['analysis-1'],
           'user-123',
         );
-        await sse.sseManager.unsubscribeFromAnalysis(session.id, [
+        await sse.sseManager.unsubscribeFromAnalysisLogs(session.id, [
           'analysis-1',
         ]);
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session.id,
           ['analysis-1'],
           'user-123',
         );
-        await sse.sseManager.unsubscribeFromAnalysis(session.id, [
+        await sse.sseManager.unsubscribeFromAnalysisLogs(session.id, [
           'analysis-1',
         ]);
 
         // Final state: not subscribed
         expect(session.state.subscribedChannels.has('analysis-1')).toBe(false);
-        expect(sse.sseManager.analysisChannels.has('analysis-1')).toBe(false);
+        expect(sse.sseManager.analysisLogsChannels.has('analysis-1')).toBe(
+          false,
+        );
       });
     });
   });
@@ -987,7 +1072,7 @@ describe('SSE Channel-Based Subscription Management', () => {
           user: { id: 'user-1' },
         });
 
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session1.id,
           ['analysis-1'],
           'user-1',
@@ -999,7 +1084,7 @@ describe('SSE Channel-Based Subscription Management', () => {
           message: 'test log',
         });
 
-        const channel = sse.sseManager.analysisChannels.get('analysis-1');
+        const channel = sse.sseManager.analysisLogsChannels.get('analysis-1');
         expect(channel?.broadcast).toHaveBeenCalledWith(
           expect.objectContaining({ type: 'log', message: 'test log' }),
         );
@@ -1015,13 +1100,13 @@ describe('SSE Channel-Based Subscription Management', () => {
           user: { id: 'user-2' },
         });
 
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session1.id,
           ['analysis-1'],
           'user-1',
         );
         // session2 subscribed to different analysis
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session2.id,
           ['analysis-2'],
           'user-2',
@@ -1034,10 +1119,10 @@ describe('SSE Channel-Based Subscription Management', () => {
         });
 
         // Only session1 should receive it through channel
-        const channel = sse.sseManager.analysisChannels.get('analysis-1');
+        const channel = sse.sseManager.analysisLogsChannels.get('analysis-1');
         expect(channel?.broadcast).toHaveBeenCalled();
 
-        const channel2 = sse.sseManager.analysisChannels.get('analysis-2');
+        const channel2 = sse.sseManager.analysisLogsChannels.get('analysis-2');
         expect(channel2?.broadcast).not.toHaveBeenCalled();
       });
 
@@ -1056,12 +1141,12 @@ describe('SSE Channel-Based Subscription Management', () => {
           mockRes,
           mockReq,
         );
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session.id,
           ['analysis-1'],
           'user-123',
         );
-        await sse.sseManager.unsubscribeFromAnalysis(session.id, [
+        await sse.sseManager.unsubscribeFromAnalysisLogs(session.id, [
           'analysis-1',
         ]);
 
@@ -1088,17 +1173,17 @@ describe('SSE Channel-Based Subscription Management', () => {
           user: { id: 'user-3' },
         });
 
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session1.id,
           ['analysis-1'],
           'user-1',
         );
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session2.id,
           ['analysis-1'],
           'user-2',
         );
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session3.id,
           ['analysis-1'],
           'user-3',
@@ -1109,7 +1194,7 @@ describe('SSE Channel-Based Subscription Management', () => {
           message: 'shared log',
         });
 
-        const channel = sse.sseManager.analysisChannels.get('analysis-1');
+        const channel = sse.sseManager.analysisLogsChannels.get('analysis-1');
         expect(channel?.broadcast).toHaveBeenCalled();
         expect(channel?.sessionCount).toBe(3);
       });
@@ -1159,15 +1244,17 @@ describe('SSE Channel-Based Subscription Management', () => {
         );
       });
 
-      it('should send metrics to all sessions', async () => {
+      it('should send metrics to subscribed sessions only', async () => {
         const session = await sse.sseManager.addClient('user-1', mockRes, {
           ...mockReq,
           user: { id: 'user-1', role: 'user' },
         });
 
-        const { metricsService } = await import(
-          '../../src/services/metricsService.ts'
-        );
+        // Subscribe to metrics channel
+        await sse.sseManager.subscribeToMetrics(session.id);
+
+        const { metricsService } =
+          await import('../../src/services/metricsService.ts');
         (metricsService.getAllMetrics as Mock).mockResolvedValue({
           total: { cpu: 50, memory: 200 },
           container: { cpu: 25, memory: 100 },
@@ -1194,7 +1281,7 @@ describe('SSE Channel-Based Subscription Management', () => {
           mockRes,
           mockReq,
         );
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session.id,
           ['test-analysis'],
           'user-123',
@@ -1205,21 +1292,20 @@ describe('SSE Channel-Based Subscription Management', () => {
           message: 'log message',
         });
 
-        const channel = sse.sseManager.analysisChannels.get('test-analysis');
+        const channel =
+          sse.sseManager.analysisLogsChannels.get('test-analysis');
         expect(channel?.broadcast).toHaveBeenCalled();
       });
 
       it('should route analysis updates to global channel', async () => {
         // Ensure mocks are set up correctly for this test
-        const { analysisService } = await import(
-          '../../src/services/analysisService.ts'
-        );
+        const { analysisService } =
+          await import('../../src/services/analysis/index.ts');
         // Return empty to trigger uncategorized teamId, which goes to users via sendToUser
         (analysisService.getAllAnalyses as Mock).mockResolvedValue({});
 
-        const { getUsersWithTeamAccess } = await import(
-          '../../src/middleware/betterAuthMiddleware.ts'
-        );
+        const { getUsersWithTeamAccess } =
+          await import('../../src/middleware/betterAuthMiddleware.ts');
         (getUsersWithTeamAccess as Mock).mockReturnValue(['user-123']);
 
         const session = await sse.sseManager.addClient(
@@ -1268,7 +1354,7 @@ describe('SSE Channel-Based Subscription Management', () => {
         );
 
         await expect(
-          sse.sseManager.subscribeToAnalysis(
+          sse.sseManager.subscribeToAnalysisLogs(
             session.id,
             ['restricted-analysis'],
             'admin-123',
@@ -1277,9 +1363,8 @@ describe('SSE Channel-Based Subscription Management', () => {
       });
 
       it('should check team permissions for non-admin users', async () => {
-        const { getUserTeamIds } = await import(
-          '../../src/middleware/betterAuthMiddleware.ts'
-        );
+        const { getUserTeamIds } =
+          await import('../../src/middleware/betterAuthMiddleware.ts');
         (getUserTeamIds as Mock).mockReturnValue(['team-1']); // User only has access to team-1
 
         const session = await sse.sseManager.addClient(
@@ -1289,9 +1374,8 @@ describe('SSE Channel-Based Subscription Management', () => {
         );
 
         // Mock analysis with team
-        const { analysisService } = await import(
-          '../../src/services/analysisService.ts'
-        );
+        const { analysisService } =
+          await import('../../src/services/analysis/index.ts');
         (analysisService.getAllAnalyses as Mock).mockReturnValue({
           'team1-analysis': { name: 'team1-analysis', teamId: 'team-1' },
           'team2-analysis': { name: 'team2-analysis', teamId: 'team-2' },
@@ -1299,7 +1383,7 @@ describe('SSE Channel-Based Subscription Management', () => {
 
         // Should succeed for team-1 analysis
         await expect(
-          sse.sseManager.subscribeToAnalysis(
+          sse.sseManager.subscribeToAnalysisLogs(
             session.id,
             ['team1-analysis'],
             'user-123',
@@ -1308,9 +1392,8 @@ describe('SSE Channel-Based Subscription Management', () => {
       });
 
       it('should reject subscription to analysis without permission', async () => {
-        const { getUserTeamIds } = await import(
-          '../../src/middleware/betterAuthMiddleware.ts'
-        );
+        const { getUserTeamIds } =
+          await import('../../src/middleware/betterAuthMiddleware.ts');
         (getUserTeamIds as Mock).mockReturnValue(['team-1']); // User only has access to team-1
 
         const session = await sse.sseManager.addClient(
@@ -1319,14 +1402,13 @@ describe('SSE Channel-Based Subscription Management', () => {
           mockReq,
         );
 
-        const { analysisService } = await import(
-          '../../src/services/analysisService.ts'
-        );
+        const { analysisService } =
+          await import('../../src/services/analysis/index.ts');
         (analysisService.getAllAnalyses as Mock).mockResolvedValue({
           'team2-analysis': { name: 'team2-analysis', teamId: 'team-2' },
         });
 
-        const result = await sse.sseManager.subscribeToAnalysis(
+        const result = await sse.sseManager.subscribeToAnalysisLogs(
           session.id,
           ['team2-analysis'],
           'user-123',
@@ -1339,9 +1421,8 @@ describe('SSE Channel-Based Subscription Management', () => {
       });
 
       it('should check permissions for each analysis in batch subscribe', async () => {
-        const { getUserTeamIds } = await import(
-          '../../src/middleware/betterAuthMiddleware.ts'
-        );
+        const { getUserTeamIds } =
+          await import('../../src/middleware/betterAuthMiddleware.ts');
         (getUserTeamIds as Mock).mockReturnValue(['team-1']);
 
         const session = await sse.sseManager.addClient(
@@ -1350,16 +1431,15 @@ describe('SSE Channel-Based Subscription Management', () => {
           mockReq,
         );
 
-        const { analysisService } = await import(
-          '../../src/services/analysisService.ts'
-        );
+        const { analysisService } =
+          await import('../../src/services/analysis/index.ts');
         (analysisService.getAllAnalyses as Mock).mockReturnValue({
           'team1-analysis': { teamId: 'team-1' },
           'team2-analysis': { teamId: 'team-2' },
         });
 
         // Should partially succeed
-        const result = await sse.sseManager.subscribeToAnalysis(
+        const result = await sse.sseManager.subscribeToAnalysisLogs(
           session.id,
           ['team1-analysis', 'team2-analysis'],
           'user-123',
@@ -1371,9 +1451,8 @@ describe('SSE Channel-Based Subscription Management', () => {
       });
 
       it('should allow subscription to uncategorized analyses', async () => {
-        const { getUserTeamIds } = await import(
-          '../../src/middleware/betterAuthMiddleware.ts'
-        );
+        const { getUserTeamIds } =
+          await import('../../src/middleware/betterAuthMiddleware.ts');
         (getUserTeamIds as Mock).mockReturnValue(['team-1', 'uncategorized']);
 
         const session = await sse.sseManager.addClient(
@@ -1382,15 +1461,14 @@ describe('SSE Channel-Based Subscription Management', () => {
           mockReq,
         );
 
-        const { analysisService } = await import(
-          '../../src/services/analysisService.ts'
-        );
+        const { analysisService } =
+          await import('../../src/services/analysis/index.ts');
         (analysisService.getAllAnalyses as Mock).mockReturnValue({
           'uncategorized-analysis': { teamId: 'uncategorized' },
         });
 
         await expect(
-          sse.sseManager.subscribeToAnalysis(
+          sse.sseManager.subscribeToAnalysisLogs(
             session.id,
             ['uncategorized-analysis'],
             'user-123',
@@ -1401,9 +1479,8 @@ describe('SSE Channel-Based Subscription Management', () => {
 
     describe('broadcastToTeamUsers compatibility', () => {
       it('should still filter broadcasts by team access', async () => {
-        const { getUsersWithTeamAccess } = await import(
-          '../../src/middleware/betterAuthMiddleware.ts'
-        );
+        const { getUsersWithTeamAccess } =
+          await import('../../src/middleware/betterAuthMiddleware.ts');
         (getUsersWithTeamAccess as Mock).mockReturnValue(['user-1', 'user-2']);
 
         await sse.sseManager.addClient('user-1', mockRes, {
@@ -1440,7 +1517,7 @@ describe('SSE Channel-Based Subscription Management', () => {
           mockRes,
           mockReq,
         );
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session.id,
           ['analysis-1'],
           'user-123',
@@ -1451,7 +1528,7 @@ describe('SSE Channel-Based Subscription Management', () => {
 
         // Reconnect
         session = await sse.sseManager.addClient('user-123', mockRes, mockReq);
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session.id,
           ['analysis-1'],
           'user-123',
@@ -1466,7 +1543,7 @@ describe('SSE Channel-Based Subscription Management', () => {
           ...mockReq,
           user: { id: 'user-1' },
         });
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session1.id,
           ['analysis-1'],
           'user-1',
@@ -1477,7 +1554,7 @@ describe('SSE Channel-Based Subscription Management', () => {
           ...mockReq,
           user: { id: 'user-2' },
         });
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session2.id,
           ['analysis-1'],
           'user-2',
@@ -1487,7 +1564,9 @@ describe('SSE Channel-Based Subscription Management', () => {
         await sse.sseManager.removeClient('user-1', session1.id);
 
         // Channel should still exist (session 2 still subscribed)
-        expect(sse.sseManager.analysisChannels.has('analysis-1')).toBe(true);
+        expect(sse.sseManager.analysisLogsChannels.has('analysis-1')).toBe(
+          true,
+        );
       });
     });
 
@@ -1500,18 +1579,18 @@ describe('SSE Channel-Based Subscription Management', () => {
         );
 
         for (let i = 0; i < 100; i++) {
-          await sse.sseManager.subscribeToAnalysis(
+          await sse.sseManager.subscribeToAnalysisLogs(
             session.id,
             [`analysis-${i}`],
             'user-123',
           );
-          await sse.sseManager.unsubscribeFromAnalysis(session.id, [
+          await sse.sseManager.unsubscribeFromAnalysisLogs(session.id, [
             `analysis-${i}`,
           ]);
         }
 
         // All channels should be cleaned up
-        expect(sse.sseManager.analysisChannels.size).toBe(0);
+        expect(sse.sseManager.analysisLogsChannels.size).toBe(0);
       });
 
       it('should clean up session references on remove', async () => {
@@ -1520,7 +1599,7 @@ describe('SSE Channel-Based Subscription Management', () => {
           mockRes,
           mockReq,
         );
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session.id,
           ['analysis-1', 'analysis-2'],
           'user-123',
@@ -1531,7 +1610,7 @@ describe('SSE Channel-Based Subscription Management', () => {
         // Session should be removed
         expect(sse.sseManager.sessions.has(session.id)).toBe(false);
         // Channels should be cleaned up
-        expect(sse.sseManager.analysisChannels.size).toBe(0);
+        expect(sse.sseManager.analysisLogsChannels.size).toBe(0);
       });
     });
 
@@ -1542,13 +1621,13 @@ describe('SSE Channel-Based Subscription Management', () => {
           mockRes,
           mockReq,
         );
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session.id,
           ['analysis-1'],
           'user-123',
         );
 
-        const channel = sse.sseManager.analysisChannels.get('analysis-1');
+        const channel = sse.sseManager.analysisLogsChannels.get('analysis-1');
         channel?.broadcast.mockImplementation(() => {
           throw new Error('Broadcast failed');
         });
@@ -1579,7 +1658,7 @@ describe('SSE Channel-Based Subscription Management', () => {
         );
 
         await expect(
-          sse.sseManager.subscribeToAnalysis(
+          sse.sseManager.subscribeToAnalysisLogs(
             session.id,
             [null as unknown as string],
             'user-123',
@@ -1587,7 +1666,7 @@ describe('SSE Channel-Based Subscription Management', () => {
         ).rejects.toThrow();
 
         await expect(
-          sse.sseManager.subscribeToAnalysis(
+          sse.sseManager.subscribeToAnalysisLogs(
             session.id,
             [undefined as unknown as string],
             'user-123',
@@ -1645,15 +1724,12 @@ describe('SSE Channel-Based Subscription Management', () => {
           mockReq,
         );
 
-        const { analysisService } = await import(
-          '../../src/services/analysisService.ts'
-        );
-        const { teamService } = await import(
-          '../../src/services/teamService.ts'
-        );
-        const { executeQuery } = await import(
-          '../../src/utils/authDatabase.ts'
-        );
+        const { analysisService } =
+          await import('../../src/services/analysis/index.ts');
+        const { teamService } =
+          await import('../../src/services/teamService.ts');
+        const { executeQuery } =
+          await import('../../src/utils/authDatabase.ts');
 
         (executeQuery as Mock).mockReturnValue({
           id: 'user-123',
@@ -1722,13 +1798,11 @@ describe('SSE Channel-Based Subscription Management', () => {
     });
 
     describe('metrics broadcasting', () => {
-      it('should use per-session filtering for metrics', async () => {
-        const { metricsService } = await import(
-          '../../src/services/metricsService.ts'
-        );
-        const { analysisService } = await import(
-          '../../src/services/analysisService.ts'
-        );
+      it('should use per-session filtering for metrics (subscribed sessions only)', async () => {
+        const { metricsService } =
+          await import('../../src/services/metricsService.ts');
+        const { analysisService } =
+          await import('../../src/services/analysis/index.ts');
 
         (metricsService.getAllMetrics as Mock).mockResolvedValue({
           total: { cpu: 50, memory: 200 },
@@ -1755,12 +1829,17 @@ describe('SSE Channel-Based Subscription Management', () => {
           'analysis-2': { teamId: 'team-2' },
         });
 
-        const { getUserTeamIds } = await import(
-          '../../src/middleware/betterAuthMiddleware.ts'
-        );
+        const { getUserTeamIds } =
+          await import('../../src/middleware/betterAuthMiddleware.ts');
         (getUserTeamIds as Mock).mockReturnValue(['team-1']);
 
-        await sse.sseManager.addClient('user-123', mockRes, mockReq);
+        const session = await sse.sseManager.addClient(
+          'user-123',
+          mockRes,
+          mockReq,
+        );
+        // Subscribe to metrics channel
+        await sse.sseManager.subscribeToMetrics(session.id);
         await sse.sseManager.broadcastMetricsUpdate();
 
         // Should still work with session-based approach
@@ -1786,7 +1865,7 @@ describe('SSE Channel-Based Subscription Management', () => {
           analyses: ['analysis-1', 'analysis-2'],
         };
 
-        await sse.sseManager.handleSubscribeRequest(mockReq, mockRes);
+        await sse.sseManager.handleSubscribeLogsRequest(mockReq, mockRes);
 
         expect(mockRes.json).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -1801,7 +1880,7 @@ describe('SSE Channel-Based Subscription Management', () => {
           analyses: ['analysis-1'],
         };
 
-        await sse.sseManager.handleSubscribeRequest(mockReq, mockRes);
+        await sse.sseManager.handleSubscribeLogsRequest(mockReq, mockRes);
 
         expect(mockRes.status).toHaveBeenCalledWith(400);
       });
@@ -1811,7 +1890,7 @@ describe('SSE Channel-Based Subscription Management', () => {
           sessionId: 'session-123',
         };
 
-        await sse.sseManager.handleSubscribeRequest(mockReq, mockRes);
+        await sse.sseManager.handleSubscribeLogsRequest(mockReq, mockRes);
 
         expect(mockRes.status).toHaveBeenCalledWith(400);
       });
@@ -1822,7 +1901,7 @@ describe('SSE Channel-Based Subscription Management', () => {
           analyses: ['analysis-1'],
         };
 
-        await sse.sseManager.handleSubscribeRequest(mockReq, mockRes);
+        await sse.sseManager.handleSubscribeLogsRequest(mockReq, mockRes);
 
         expect(mockRes.status).toHaveBeenCalledWith(404);
       });
@@ -1835,7 +1914,7 @@ describe('SSE Channel-Based Subscription Management', () => {
           mockRes,
           mockReq,
         );
-        await sse.sseManager.subscribeToAnalysis(
+        await sse.sseManager.subscribeToAnalysisLogs(
           session.id,
           ['analysis-1', 'analysis-2'],
           'user-123',
@@ -1846,7 +1925,7 @@ describe('SSE Channel-Based Subscription Management', () => {
           analyses: ['analysis-1'],
         };
 
-        await sse.sseManager.handleUnsubscribeRequest(mockReq, mockRes);
+        await sse.sseManager.handleUnsubscribeLogsRequest(mockReq, mockRes);
 
         expect(mockRes.json).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -1859,7 +1938,7 @@ describe('SSE Channel-Based Subscription Management', () => {
       it('should return 400 for invalid request', async () => {
         mockReq.body = {};
 
-        await sse.sseManager.handleUnsubscribeRequest(mockReq, mockRes);
+        await sse.sseManager.handleUnsubscribeLogsRequest(mockReq, mockRes);
 
         expect(mockRes.status).toHaveBeenCalledWith(400);
       });

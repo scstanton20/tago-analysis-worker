@@ -1,21 +1,5 @@
-import type {
-  Request,
-  Response,
-  NextFunction,
-  ErrorRequestHandler,
-} from 'express';
-import type { Logger } from 'pino';
-
-/** Extended request with logger */
-type RequestWithLogger = Omit<Request, 'log'> & {
-  log?: Logger;
-};
-
-/** Error with additional properties */
-type AppError = Error & {
-  statusCode?: number;
-  code?: string;
-};
+import type { Response, NextFunction, ErrorRequestHandler } from 'express';
+import type { RequestWithLogger, AppError } from '../types/index.ts';
 
 const errorHandler: ErrorRequestHandler = (
   err: AppError,

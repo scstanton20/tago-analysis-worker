@@ -1,34 +1,41 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Response } from 'express';
 
-// Mock external dependencies that ChannelManager dynamically imports
-vi.mock('../../../src/services/analysisService.ts', () => ({
-  analysisService: {
-    getAnalysisById: vi.fn(),
-  },
-}));
+// Create mock service objects that we can control in tests
+const mockAnalysisService = {
+  getAnalysisById: vi.fn(),
+};
 
-vi.mock('../../../src/middleware/betterAuthMiddleware.ts', () => ({
-  getUserTeamIds: vi.fn(),
-}));
+const mockDnsCache = {
+  getConfig: vi.fn(() => ({ enabled: true })),
+  getAnalysisStats: vi.fn(() => ({
+    hits: 10,
+    misses: 2,
+    errors: 0,
+    hitRate: 0.83,
+    hostnameCount: 3,
+    hostnames: ['api.tago.io', 'example.com', 'test.com'],
+    cacheKeyCount: 5,
+  })),
+};
 
-vi.mock('../../../src/utils/authDatabase.ts', () => ({
-  executeQuery: vi.fn(),
-}));
+const mockGetUserTeamIds = vi.fn();
+const mockGetUsersWithTeamAccess = vi.fn();
+const mockExecuteQuery = vi.fn();
 
-vi.mock('../../../src/services/dnsCache.ts', () => ({
-  dnsCache: {
-    getConfig: vi.fn(() => ({ enabled: true })),
-    getAnalysisStats: vi.fn(() => ({
-      hits: 10,
-      misses: 2,
-      errors: 0,
-      hitRate: 0.83,
-      hostnameCount: 3,
-      hostnames: ['api.tago.io', 'example.com', 'test.com'],
-      cacheKeyCount: 5,
-    })),
-  },
+// Mock the lazy loaders to return our controlled mocks
+vi.mock('../../../src/utils/lazyLoader.ts', () => ({
+  getAnalysisService: vi.fn(() => Promise.resolve(mockAnalysisService)),
+  getTeamPermissionHelpers: vi.fn(() =>
+    Promise.resolve({
+      getUserTeamIds: mockGetUserTeamIds,
+      getUsersWithTeamAccess: mockGetUsersWithTeamAccess,
+    }),
+  ),
+  getAuthDatabase: vi.fn(() =>
+    Promise.resolve({ executeQuery: mockExecuteQuery }),
+  ),
+  getDnsCache: vi.fn(() => Promise.resolve(mockDnsCache)),
 }));
 
 vi.mock('better-sse', () => ({
@@ -53,10 +60,6 @@ vi.mock('../../../src/utils/logging/logger.ts', () => ({
 import { ChannelManager } from '../../../src/utils/sse/ChannelManager.ts';
 import type { SSEManager } from '../../../src/utils/sse/SSEManager.ts';
 import { createChannel } from 'better-sse';
-import { analysisService } from '../../../src/services/analysisService.ts';
-import { getUserTeamIds } from '../../../src/middleware/betterAuthMiddleware.ts';
-import { executeQuery } from '../../../src/utils/authDatabase.ts';
-import { dnsCache } from '../../../src/services/dnsCache.ts';
 
 describe('ChannelManager', () => {
   let channelManager: ChannelManager;
@@ -68,7 +71,13 @@ describe('ChannelManager', () => {
 
     mockManager = {
       sessions: new Map(),
-      analysisChannels: new Map(),
+      analysisLogsChannels: new Map(),
+      analysisStatsChannels: new Map(),
+      metricsChannel: {
+        register: vi.fn(),
+        deregister: vi.fn(),
+        broadcast: vi.fn(),
+      },
     } as unknown as SSEManager;
 
     channelManager = new ChannelManager(mockManager);
@@ -79,15 +88,15 @@ describe('ChannelManager', () => {
     } as unknown as Response;
 
     // Default mock implementations
-    vi.mocked(executeQuery).mockReturnValue({ id: 'user-1', role: 'user' });
-    vi.mocked(getUserTeamIds).mockReturnValue(['team-1', 'team-2']);
-    vi.mocked(analysisService.getAnalysisById).mockReturnValue({
+    mockExecuteQuery.mockReturnValue({ id: 'user-1', role: 'user' });
+    mockGetUserTeamIds.mockReturnValue(['team-1', 'team-2']);
+    mockAnalysisService.getAnalysisById.mockReturnValue({
       id: 'analysis-1',
       name: 'Test Analysis',
       teamId: 'team-1',
     } as any);
-    vi.mocked(dnsCache.getConfig).mockReturnValue({ enabled: true } as any);
-    vi.mocked(dnsCache.getAnalysisStats).mockReturnValue({
+    mockDnsCache.getConfig.mockReturnValue({ enabled: true } as any);
+    mockDnsCache.getAnalysisStats.mockReturnValue({
       hits: 10,
       misses: 2,
       errors: 0,
@@ -108,30 +117,33 @@ describe('ChannelManager', () => {
     });
   });
 
-  describe('getOrCreateAnalysisChannel', () => {
+  describe('getOrCreateLogsChannel', () => {
     it('should create a new channel when one does not exist', () => {
-      const channel = channelManager.getOrCreateAnalysisChannel('analysis-1');
+      const channel = channelManager.getOrCreateLogsChannel('analysis-1');
 
       expect(createChannel).toHaveBeenCalled();
-      expect(mockManager.analysisChannels.has('analysis-1')).toBe(true);
+      expect(mockManager.analysisLogsChannels.has('analysis-1')).toBe(true);
       expect(channel).toBeDefined();
     });
 
     it('should return existing channel when one exists', () => {
       const existingChannel = { register: vi.fn(), broadcast: vi.fn() };
-      mockManager.analysisChannels.set('analysis-1', existingChannel as any);
+      mockManager.analysisLogsChannels.set(
+        'analysis-1',
+        existingChannel as any,
+      );
 
-      const channel = channelManager.getOrCreateAnalysisChannel('analysis-1');
+      const channel = channelManager.getOrCreateLogsChannel('analysis-1');
 
       expect(createChannel).not.toHaveBeenCalled();
       expect(channel).toBe(existingChannel);
     });
   });
 
-  describe('subscribeToAnalysis', () => {
+  describe('subscribeToAnalysisLogs', () => {
     it('should throw when session not found', async () => {
       await expect(
-        channelManager.subscribeToAnalysis(
+        channelManager.subscribeToAnalysisLogs(
           'nonexistent',
           ['analysis-1'],
           'user-1',
@@ -147,7 +159,11 @@ describe('ChannelManager', () => {
       mockManager.sessions.set('session-1', mockSession as any);
 
       await expect(
-        channelManager.subscribeToAnalysis('session-1', null as any, 'user-1'),
+        channelManager.subscribeToAnalysisLogs(
+          'session-1',
+          null as any,
+          'user-1',
+        ),
       ).rejects.toThrow('analysisIds must be a non-empty array');
     });
 
@@ -159,7 +175,7 @@ describe('ChannelManager', () => {
       mockManager.sessions.set('session-1', mockSession as any);
 
       await expect(
-        channelManager.subscribeToAnalysis('session-1', [], 'user-1'),
+        channelManager.subscribeToAnalysisLogs('session-1', [], 'user-1'),
       ).rejects.toThrow('analysisIds must be a non-empty array');
     });
 
@@ -171,7 +187,7 @@ describe('ChannelManager', () => {
       mockManager.sessions.set('session-1', mockSession as any);
 
       await expect(
-        channelManager.subscribeToAnalysis(
+        channelManager.subscribeToAnalysisLogs(
           'session-1',
           [null as any, 'analysis-1'],
           'user-1',
@@ -187,7 +203,7 @@ describe('ChannelManager', () => {
       mockManager.sessions.set('session-1', mockSession as any);
 
       await expect(
-        channelManager.subscribeToAnalysis(
+        channelManager.subscribeToAnalysisLogs(
           'session-1',
           [undefined as any],
           'user-1',
@@ -204,7 +220,7 @@ describe('ChannelManager', () => {
       };
       mockManager.sessions.set('session-1', mockSession as any);
 
-      const result = await channelManager.subscribeToAnalysis(
+      const result = await channelManager.subscribeToAnalysisLogs(
         'session-1',
         ['analysis-1'],
         'user-1',
@@ -217,7 +233,7 @@ describe('ChannelManager', () => {
     });
 
     it('should allow admin to subscribe to any analysis', async () => {
-      vi.mocked(executeQuery).mockReturnValue({ id: 'admin-1', role: 'admin' });
+      mockExecuteQuery.mockReturnValue({ id: 'admin-1', role: 'admin' });
 
       const mockSession = {
         id: 'session-1',
@@ -227,7 +243,7 @@ describe('ChannelManager', () => {
       };
       mockManager.sessions.set('session-1', mockSession as any);
 
-      const result = await channelManager.subscribeToAnalysis(
+      const result = await channelManager.subscribeToAnalysisLogs(
         'session-1',
         ['analysis-1'],
         'admin-1',
@@ -236,13 +252,13 @@ describe('ChannelManager', () => {
       expect(result.success).toBe(true);
       expect(result.subscribed).toContain('analysis-1');
       // Admin should not trigger getUserTeamIds check
-      expect(getUserTeamIds).not.toHaveBeenCalled();
+      expect(mockGetUserTeamIds).not.toHaveBeenCalled();
     });
 
     it('should allow non-admin with team permission to subscribe', async () => {
-      vi.mocked(executeQuery).mockReturnValue({ id: 'user-1', role: 'user' });
-      vi.mocked(getUserTeamIds).mockReturnValue(['team-1', 'team-2']);
-      vi.mocked(analysisService.getAnalysisById).mockReturnValue({
+      mockExecuteQuery.mockReturnValue({ id: 'user-1', role: 'user' });
+      mockGetUserTeamIds.mockReturnValue(['team-1', 'team-2']);
+      mockAnalysisService.getAnalysisById.mockReturnValue({
         id: 'analysis-1',
         teamId: 'team-1',
       } as any);
@@ -255,7 +271,7 @@ describe('ChannelManager', () => {
       };
       mockManager.sessions.set('session-1', mockSession as any);
 
-      const result = await channelManager.subscribeToAnalysis(
+      const result = await channelManager.subscribeToAnalysisLogs(
         'session-1',
         ['analysis-1'],
         'user-1',
@@ -267,9 +283,9 @@ describe('ChannelManager', () => {
     });
 
     it('should deny non-admin without team permission', async () => {
-      vi.mocked(executeQuery).mockReturnValue({ id: 'user-1', role: 'user' });
-      vi.mocked(getUserTeamIds).mockReturnValue(['team-2', 'team-3']); // Not team-1
-      vi.mocked(analysisService.getAnalysisById).mockReturnValue({
+      mockExecuteQuery.mockReturnValue({ id: 'user-1', role: 'user' });
+      mockGetUserTeamIds.mockReturnValue(['team-2', 'team-3']); // Not team-1
+      mockAnalysisService.getAnalysisById.mockReturnValue({
         id: 'analysis-1',
         teamId: 'team-1', // User doesn't have access to team-1
       } as any);
@@ -282,7 +298,7 @@ describe('ChannelManager', () => {
       };
       mockManager.sessions.set('session-1', mockSession as any);
 
-      const result = await channelManager.subscribeToAnalysis(
+      const result = await channelManager.subscribeToAnalysisLogs(
         'session-1',
         ['analysis-1'],
         'user-1',
@@ -294,9 +310,9 @@ describe('ChannelManager', () => {
     });
 
     it('should handle uncategorized analyses for non-admin', async () => {
-      vi.mocked(executeQuery).mockReturnValue({ id: 'user-1', role: 'user' });
-      vi.mocked(getUserTeamIds).mockReturnValue(['uncategorized']);
-      vi.mocked(analysisService.getAnalysisById).mockReturnValue({
+      mockExecuteQuery.mockReturnValue({ id: 'user-1', role: 'user' });
+      mockGetUserTeamIds.mockReturnValue(['uncategorized']);
+      mockAnalysisService.getAnalysisById.mockReturnValue({
         id: 'analysis-1',
         teamId: null, // No team = uncategorized
       } as any);
@@ -309,7 +325,7 @@ describe('ChannelManager', () => {
       };
       mockManager.sessions.set('session-1', mockSession as any);
 
-      const result = await channelManager.subscribeToAnalysis(
+      const result = await channelManager.subscribeToAnalysisLogs(
         'session-1',
         ['analysis-1'],
         'user-1',
@@ -320,9 +336,9 @@ describe('ChannelManager', () => {
     });
 
     it('should subscribe to multiple analyses with mixed permissions', async () => {
-      vi.mocked(executeQuery).mockReturnValue({ id: 'user-1', role: 'user' });
-      vi.mocked(getUserTeamIds).mockReturnValue(['team-1']);
-      vi.mocked(analysisService.getAnalysisById).mockImplementation((id) => {
+      mockExecuteQuery.mockReturnValue({ id: 'user-1', role: 'user' });
+      mockGetUserTeamIds.mockReturnValue(['team-1']);
+      mockAnalysisService.getAnalysisById.mockImplementation((id) => {
         if (id === 'analysis-1') {
           return { id: 'analysis-1', teamId: 'team-1' } as any;
         }
@@ -337,7 +353,7 @@ describe('ChannelManager', () => {
       };
       mockManager.sessions.set('session-1', mockSession as any);
 
-      const result = await channelManager.subscribeToAnalysis(
+      const result = await channelManager.subscribeToAnalysisLogs(
         'session-1',
         ['analysis-1', 'analysis-2'],
         'user-1',
@@ -349,7 +365,7 @@ describe('ChannelManager', () => {
     });
 
     it('should register session to channel and update subscribedChannels', async () => {
-      vi.mocked(executeQuery).mockReturnValue({ id: 'admin-1', role: 'admin' });
+      mockExecuteQuery.mockReturnValue({ id: 'admin-1', role: 'admin' });
 
       const mockChannel = {
         register: vi.fn(),
@@ -365,7 +381,7 @@ describe('ChannelManager', () => {
       };
       mockManager.sessions.set('session-1', mockSession as any);
 
-      await channelManager.subscribeToAnalysis(
+      await channelManager.subscribeToAnalysisLogs(
         'session-1',
         ['analysis-1'],
         'admin-1',
@@ -375,9 +391,8 @@ describe('ChannelManager', () => {
       expect(mockSession.state.subscribedChannels.has('analysis-1')).toBe(true);
     });
 
-    it('should send DNS stats after subscription', async () => {
-      vi.mocked(executeQuery).mockReturnValue({ id: 'admin-1', role: 'admin' });
-      vi.mocked(dnsCache.getConfig).mockReturnValue({ enabled: true } as any);
+    it('should not send initial stats for logs channel (stats channel only)', async () => {
+      mockExecuteQuery.mockReturnValue({ id: 'admin-1', role: 'admin' });
 
       const mockSession = {
         id: 'session-1',
@@ -387,23 +402,18 @@ describe('ChannelManager', () => {
       };
       mockManager.sessions.set('session-1', mockSession as any);
 
-      await channelManager.subscribeToAnalysis(
+      await channelManager.subscribeToAnalysisLogs(
         'session-1',
         ['analysis-1'],
         'admin-1',
       );
 
-      expect(mockSession.push).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: 'analysisDnsStats',
-          analysisId: 'analysis-1',
-          enabled: true,
-        }),
-      );
+      // Logs channel should not push any initial data
+      expect(mockSession.push).not.toHaveBeenCalled();
     });
 
     it('should return correct sessionId in result', async () => {
-      vi.mocked(executeQuery).mockReturnValue({ id: 'admin-1', role: 'admin' });
+      mockExecuteQuery.mockReturnValue({ id: 'admin-1', role: 'admin' });
 
       const mockSession = {
         id: 'my-session-id',
@@ -413,7 +423,7 @@ describe('ChannelManager', () => {
       };
       mockManager.sessions.set('my-session-id', mockSession as any);
 
-      const result = await channelManager.subscribeToAnalysis(
+      const result = await channelManager.subscribeToAnalysisLogs(
         'my-session-id',
         ['analysis-1'],
         'admin-1',
@@ -423,13 +433,13 @@ describe('ChannelManager', () => {
     });
   });
 
-  describe('unsubscribeFromAnalysis', () => {
+  describe('unsubscribeFromAnalysisLogs', () => {
     it('should unsubscribe session from analysis', async () => {
       const mockChannel = {
         deregister: vi.fn(),
         sessionCount: 0,
       };
-      mockManager.analysisChannels.set('analysis-1', mockChannel as any);
+      mockManager.analysisLogsChannels.set('analysis-1', mockChannel as any);
 
       const mockSession = {
         id: 'session-1',
@@ -439,9 +449,10 @@ describe('ChannelManager', () => {
       };
       mockManager.sessions.set('session-1', mockSession as any);
 
-      const result = await channelManager.unsubscribeFromAnalysis('session-1', [
-        'analysis-1',
-      ]);
+      const result = await channelManager.unsubscribeFromAnalysisLogs(
+        'session-1',
+        ['analysis-1'],
+      );
 
       expect(result.success).toBe(true);
       expect(result.unsubscribed).toContain('analysis-1');
@@ -449,7 +460,7 @@ describe('ChannelManager', () => {
     });
 
     it('should handle session not found gracefully', async () => {
-      const result = await channelManager.unsubscribeFromAnalysis(
+      const result = await channelManager.unsubscribeFromAnalysisLogs(
         'nonexistent',
         ['analysis-1'],
       );
@@ -463,7 +474,7 @@ describe('ChannelManager', () => {
         deregister: vi.fn(),
         sessionCount: 0,
       };
-      mockManager.analysisChannels.set('analysis-1', mockChannel as any);
+      mockManager.analysisLogsChannels.set('analysis-1', mockChannel as any);
 
       const mockSession = {
         id: 'session-1',
@@ -473,9 +484,11 @@ describe('ChannelManager', () => {
       };
       mockManager.sessions.set('session-1', mockSession as any);
 
-      await channelManager.unsubscribeFromAnalysis('session-1', ['analysis-1']);
+      await channelManager.unsubscribeFromAnalysisLogs('session-1', [
+        'analysis-1',
+      ]);
 
-      expect(mockManager.analysisChannels.has('analysis-1')).toBe(false);
+      expect(mockManager.analysisLogsChannels.has('analysis-1')).toBe(false);
     });
 
     it('should not clean up channels with remaining subscribers', async () => {
@@ -483,7 +496,7 @@ describe('ChannelManager', () => {
         deregister: vi.fn(),
         sessionCount: 2, // Still has subscribers
       };
-      mockManager.analysisChannels.set('analysis-1', mockChannel as any);
+      mockManager.analysisLogsChannels.set('analysis-1', mockChannel as any);
 
       const mockSession = {
         id: 'session-1',
@@ -493,9 +506,11 @@ describe('ChannelManager', () => {
       };
       mockManager.sessions.set('session-1', mockSession as any);
 
-      await channelManager.unsubscribeFromAnalysis('session-1', ['analysis-1']);
+      await channelManager.unsubscribeFromAnalysisLogs('session-1', [
+        'analysis-1',
+      ]);
 
-      expect(mockManager.analysisChannels.has('analysis-1')).toBe(true);
+      expect(mockManager.analysisLogsChannels.has('analysis-1')).toBe(true);
     });
 
     it('should skip analyses not subscribed to', async () => {
@@ -507,9 +522,10 @@ describe('ChannelManager', () => {
       };
       mockManager.sessions.set('session-1', mockSession as any);
 
-      const result = await channelManager.unsubscribeFromAnalysis('session-1', [
-        'analysis-1',
-      ]);
+      const result = await channelManager.unsubscribeFromAnalysisLogs(
+        'session-1',
+        ['analysis-1'],
+      );
 
       expect(result.unsubscribed).not.toContain('analysis-1');
     });
@@ -522,11 +538,12 @@ describe('ChannelManager', () => {
         },
       };
       mockManager.sessions.set('session-1', mockSession as any);
-      // No channel in analysisChannels
+      // No channel in analysisLogsChannels
 
-      const result = await channelManager.unsubscribeFromAnalysis('session-1', [
-        'analysis-1',
-      ]);
+      const result = await channelManager.unsubscribeFromAnalysisLogs(
+        'session-1',
+        ['analysis-1'],
+      );
 
       expect(result.success).toBe(true);
       expect(result.unsubscribed).toContain('analysis-1');
@@ -535,8 +552,8 @@ describe('ChannelManager', () => {
     it('should unsubscribe from multiple analyses', async () => {
       const mockChannel1 = { deregister: vi.fn(), sessionCount: 0 };
       const mockChannel2 = { deregister: vi.fn(), sessionCount: 0 };
-      mockManager.analysisChannels.set('analysis-1', mockChannel1 as any);
-      mockManager.analysisChannels.set('analysis-2', mockChannel2 as any);
+      mockManager.analysisLogsChannels.set('analysis-1', mockChannel1 as any);
+      mockManager.analysisLogsChannels.set('analysis-2', mockChannel2 as any);
 
       const mockSession = {
         id: 'session-1',
@@ -546,10 +563,10 @@ describe('ChannelManager', () => {
       };
       mockManager.sessions.set('session-1', mockSession as any);
 
-      const result = await channelManager.unsubscribeFromAnalysis('session-1', [
-        'analysis-1',
-        'analysis-2',
-      ]);
+      const result = await channelManager.unsubscribeFromAnalysisLogs(
+        'session-1',
+        ['analysis-1', 'analysis-2'],
+      );
 
       expect(result.unsubscribed).toEqual(['analysis-1', 'analysis-2']);
       expect(mockChannel1.deregister).toHaveBeenCalled();
@@ -562,7 +579,7 @@ describe('ChannelManager', () => {
       const mockChannel = {
         broadcast: vi.fn(),
       };
-      mockManager.analysisChannels.set('analysis-1', mockChannel as any);
+      mockManager.analysisLogsChannels.set('analysis-1', mockChannel as any);
 
       const logData = { message: 'test log' };
       channelManager.broadcastAnalysisLog('analysis-1', logData);
@@ -582,7 +599,7 @@ describe('ChannelManager', () => {
           throw new Error('Broadcast failed');
         }),
       };
-      mockManager.analysisChannels.set('analysis-1', mockChannel as any);
+      mockManager.analysisLogsChannels.set('analysis-1', mockChannel as any);
 
       // Should not throw, error is logged
       expect(() =>
@@ -602,8 +619,8 @@ describe('ChannelManager', () => {
         hostnames: ['api.tago.io', 'example.com', 'test.com'],
         cacheKeyCount: 5,
       };
-      vi.mocked(dnsCache.getConfig).mockReturnValue({ enabled: true } as any);
-      vi.mocked(dnsCache.getAnalysisStats).mockReturnValue(mockStats);
+      mockDnsCache.getConfig.mockReturnValue({ enabled: true } as any);
+      mockDnsCache.getAnalysisStats.mockReturnValue(mockStats);
 
       const mockSession = {
         id: 'session-1',
@@ -625,7 +642,7 @@ describe('ChannelManager', () => {
     });
 
     it('should not send stats when DNS cache is disabled', async () => {
-      vi.mocked(dnsCache.getConfig).mockReturnValue({ enabled: false } as any);
+      mockDnsCache.getConfig.mockReturnValue({ enabled: false } as any);
 
       const mockSession = {
         id: 'session-1',
@@ -642,7 +659,7 @@ describe('ChannelManager', () => {
     });
 
     it('should not send stats when session is disconnected', async () => {
-      vi.mocked(dnsCache.getConfig).mockReturnValue({ enabled: true } as any);
+      mockDnsCache.getConfig.mockReturnValue({ enabled: true } as any);
 
       const mockSession = {
         id: 'session-1',
@@ -659,7 +676,7 @@ describe('ChannelManager', () => {
     });
 
     it('should handle errors gracefully', async () => {
-      vi.mocked(dnsCache.getConfig).mockImplementation(() => {
+      mockDnsCache.getConfig.mockImplementation(() => {
         throw new Error('DNS cache error');
       });
 
@@ -681,7 +698,7 @@ describe('ChannelManager', () => {
       await channelManager.broadcastAnalysisDnsStats('nonexistent');
 
       // Should complete without error
-      expect(dnsCache.getConfig).not.toHaveBeenCalled();
+      expect(mockDnsCache.getConfig).not.toHaveBeenCalled();
     });
 
     it('should broadcast stats when channel exists and DNS enabled', async () => {
@@ -697,10 +714,10 @@ describe('ChannelManager', () => {
       const mockChannel = {
         broadcast: vi.fn(),
       };
-      mockManager.analysisChannels.set('analysis-1', mockChannel as any);
+      mockManager.analysisStatsChannels.set('analysis-1', mockChannel as any);
 
-      vi.mocked(dnsCache.getConfig).mockReturnValue({ enabled: true } as any);
-      vi.mocked(dnsCache.getAnalysisStats).mockReturnValue(mockStats);
+      mockDnsCache.getConfig.mockReturnValue({ enabled: true } as any);
+      mockDnsCache.getAnalysisStats.mockReturnValue(mockStats);
 
       await channelManager.broadcastAnalysisDnsStats('analysis-1');
 
@@ -716,9 +733,9 @@ describe('ChannelManager', () => {
       const mockChannel = {
         broadcast: vi.fn(),
       };
-      mockManager.analysisChannels.set('analysis-1', mockChannel as any);
+      mockManager.analysisStatsChannels.set('analysis-1', mockChannel as any);
 
-      vi.mocked(dnsCache.getConfig).mockReturnValue({ enabled: false } as any);
+      mockDnsCache.getConfig.mockReturnValue({ enabled: false } as any);
 
       await channelManager.broadcastAnalysisDnsStats('analysis-1');
 
@@ -731,9 +748,9 @@ describe('ChannelManager', () => {
           throw new Error('Broadcast failed');
         }),
       };
-      mockManager.analysisChannels.set('analysis-1', mockChannel as any);
+      mockManager.analysisStatsChannels.set('analysis-1', mockChannel as any);
 
-      vi.mocked(dnsCache.getConfig).mockReturnValue({ enabled: true } as any);
+      mockDnsCache.getConfig.mockReturnValue({ enabled: true } as any);
 
       // Should not throw
       await expect(
@@ -742,14 +759,14 @@ describe('ChannelManager', () => {
     });
   });
 
-  describe('handleSubscribeRequest', () => {
+  describe('handleSubscribeLogsRequest', () => {
     it('should return 400 when sessionId is missing', async () => {
       const mockReq = {
         body: { analyses: ['analysis-1'] },
         user: { id: 'user-1' },
       } as any;
 
-      await channelManager.handleSubscribeRequest(mockReq, mockRes);
+      await channelManager.handleSubscribeLogsRequest(mockReq, mockRes);
 
       expect(mockRes.status).toHaveBeenCalledWith(400);
       expect(mockRes.json).toHaveBeenCalledWith({
@@ -764,7 +781,7 @@ describe('ChannelManager', () => {
         user: { id: 'user-1' },
       } as any;
 
-      await channelManager.handleSubscribeRequest(mockReq, mockRes);
+      await channelManager.handleSubscribeLogsRequest(mockReq, mockRes);
 
       expect(mockRes.status).toHaveBeenCalledWith(400);
       expect(mockRes.json).toHaveBeenCalledWith({
@@ -779,7 +796,7 @@ describe('ChannelManager', () => {
         user: { id: 'user-1' },
       } as any;
 
-      await channelManager.handleSubscribeRequest(mockReq, mockRes);
+      await channelManager.handleSubscribeLogsRequest(mockReq, mockRes);
 
       expect(mockRes.status).toHaveBeenCalledWith(400);
       expect(mockRes.json).toHaveBeenCalledWith({
@@ -794,7 +811,7 @@ describe('ChannelManager', () => {
         user: { id: 'user-1' },
       } as any;
 
-      await channelManager.handleSubscribeRequest(mockReq, mockRes);
+      await channelManager.handleSubscribeLogsRequest(mockReq, mockRes);
 
       expect(mockRes.status).toHaveBeenCalledWith(404);
       expect(mockRes.json).toHaveBeenCalledWith({
@@ -804,7 +821,7 @@ describe('ChannelManager', () => {
     });
 
     it('should successfully subscribe and return result', async () => {
-      vi.mocked(executeQuery).mockReturnValue({ id: 'user-1', role: 'admin' });
+      mockExecuteQuery.mockReturnValue({ id: 'user-1', role: 'admin' });
 
       const mockSession = {
         id: 'session-1',
@@ -819,7 +836,7 @@ describe('ChannelManager', () => {
         user: { id: 'user-1' },
       } as any;
 
-      await channelManager.handleSubscribeRequest(mockReq, mockRes);
+      await channelManager.handleSubscribeLogsRequest(mockReq, mockRes);
 
       expect(mockRes.json).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -831,7 +848,7 @@ describe('ChannelManager', () => {
     });
 
     it('should handle subscription errors', async () => {
-      vi.mocked(executeQuery).mockImplementation(() => {
+      mockExecuteQuery.mockImplementation(() => {
         throw new Error('Database error');
       });
 
@@ -846,7 +863,7 @@ describe('ChannelManager', () => {
         user: { id: 'user-1' },
       } as any;
 
-      await channelManager.handleSubscribeRequest(mockReq, mockRes);
+      await channelManager.handleSubscribeLogsRequest(mockReq, mockRes);
 
       expect(mockRes.status).toHaveBeenCalledWith(500);
       expect(mockRes.json).toHaveBeenCalledWith({
@@ -856,14 +873,14 @@ describe('ChannelManager', () => {
     });
   });
 
-  describe('handleUnsubscribeRequest', () => {
+  describe('handleUnsubscribeLogsRequest', () => {
     it('should return 400 when sessionId is missing', async () => {
       const mockReq = {
         body: { analyses: ['analysis-1'] },
         user: { id: 'user-1' },
       } as any;
 
-      await channelManager.handleUnsubscribeRequest(mockReq, mockRes);
+      await channelManager.handleUnsubscribeLogsRequest(mockReq, mockRes);
 
       expect(mockRes.status).toHaveBeenCalledWith(400);
       expect(mockRes.json).toHaveBeenCalledWith({
@@ -878,7 +895,7 @@ describe('ChannelManager', () => {
         user: { id: 'user-1' },
       } as any;
 
-      await channelManager.handleUnsubscribeRequest(mockReq, mockRes);
+      await channelManager.handleUnsubscribeLogsRequest(mockReq, mockRes);
 
       expect(mockRes.status).toHaveBeenCalledWith(400);
       expect(mockRes.json).toHaveBeenCalledWith({
@@ -893,7 +910,7 @@ describe('ChannelManager', () => {
         user: { id: 'user-1' },
       } as any;
 
-      await channelManager.handleUnsubscribeRequest(mockReq, mockRes);
+      await channelManager.handleUnsubscribeLogsRequest(mockReq, mockRes);
 
       expect(mockRes.status).toHaveBeenCalledWith(404);
       expect(mockRes.json).toHaveBeenCalledWith({
@@ -916,7 +933,7 @@ describe('ChannelManager', () => {
         user: { id: 'user-1' },
       } as any;
 
-      await channelManager.handleUnsubscribeRequest(mockReq, mockRes);
+      await channelManager.handleUnsubscribeLogsRequest(mockReq, mockRes);
 
       expect(mockRes.json).toHaveBeenCalledWith({
         success: true,
@@ -926,7 +943,7 @@ describe('ChannelManager', () => {
     });
 
     it('should handle errors during unsubscribe', async () => {
-      // Create a session but make unsubscribeFromAnalysis throw
+      // Create a session but make unsubscribeFromAnalysisLogs throw
       const mockSession = {
         id: 'session-1',
         state: {
@@ -943,7 +960,7 @@ describe('ChannelManager', () => {
         user: { id: 'user-1' },
       } as any;
 
-      await channelManager.handleUnsubscribeRequest(mockReq, mockRes);
+      await channelManager.handleUnsubscribeLogsRequest(mockReq, mockRes);
 
       expect(mockRes.status).toHaveBeenCalledWith(500);
       expect(mockRes.json).toHaveBeenCalledWith({

@@ -6,8 +6,9 @@
 
 import { useState, useCallback } from 'react';
 import { closestCenter, pointerWithin, rectIntersection } from '@dnd-kit/core';
-import { notificationAPI } from '@/utils/notificationAPI.jsx';
+import { notificationAPI } from '@/utils/notificationService';
 import logger from '@/utils/logger';
+import { findItemWithParent } from '@/utils/reorderUtils';
 import { teamService } from '../api/teamService';
 
 /**
@@ -28,46 +29,23 @@ export function useTreeDragDrop({
   const [activeId, setActiveId] = useState(null);
 
   /**
-   * Find item and its parent in tree
-   */
-  const findItemWithParent = useCallback((items, itemId, parent = null) => {
-    const search = (itemsList, currentParent) => {
-      for (let i = 0; i < itemsList.length; i++) {
-        const item = itemsList[i];
-        if (item.id === itemId) {
-          return { item, parent: currentParent, index: i };
-        }
-        if (item.type === 'folder' && item.items) {
-          const found = search(item.items, item);
-          if (found) return found;
-        }
-      }
-      return null;
-    };
-    return search(items, parent);
-  }, []);
-
-  /**
    * Check if target is a descendant of source
    */
-  const isDescendant = useCallback(
-    (items, ancestorId, targetId) => {
-      const checkItems = (itemList) => {
-        for (const item of itemList) {
-          if (item.id === targetId) return true;
-          if (item.type === 'folder' && item.items) {
-            if (checkItems(item.items)) return true;
-          }
+  const isDescendant = useCallback((items, ancestorId, targetId) => {
+    const checkItems = (itemList) => {
+      for (const item of itemList) {
+        if (item.id === targetId) return true;
+        if (item.type === 'folder' && item.items) {
+          if (checkItems(item.items)) return true;
         }
-        return false;
-      };
+      }
+      return false;
+    };
 
-      const ancestor = findItemWithParent(items, ancestorId);
-      if (!ancestor || !ancestor.item.items) return false;
-      return checkItems(ancestor.item.items);
-    },
-    [findItemWithParent],
-  );
+    const ancestor = findItemWithParent(items, ancestorId);
+    if (!ancestor || !ancestor.item.items) return false;
+    return checkItems(ancestor.item.items);
+  }, []);
 
   /**
    * Custom collision detection for nested sortable with folders
@@ -250,14 +228,7 @@ export function useTreeDragDrop({
         }
       }
     },
-    [
-      teamId,
-      items,
-      findItemWithParent,
-      isDescendant,
-      reorderMode,
-      onPendingReorder,
-    ],
+    [teamId, items, isDescendant, reorderMode, onPendingReorder],
   );
 
   /**
@@ -274,12 +245,18 @@ export function useTreeDragDrop({
     setActiveId(null);
   }, []);
 
+  // Create a bound findItemWithParent that uses current items
+  const findItem = useCallback(
+    (itemId) => findItemWithParent(items, itemId),
+    [items],
+  );
+
   return {
     activeId,
     customCollisionDetection,
     handleDragStart,
     handleDragEnd,
     handleDragCancel,
-    findItemWithParent,
+    findItemWithParent: findItem,
   };
 }

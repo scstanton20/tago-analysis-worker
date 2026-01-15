@@ -211,16 +211,14 @@ describe('Settings Routes - WITH REAL AUTH', () => {
     app.use(attachRequestLogger); // Use mocked logging middleware
 
     // Import controller for verification (cast through unknown for mocked types)
-    const controllerModule = await import(
-      '../../src/controllers/settingsController.ts'
-    );
+    const controllerModule =
+      await import('../../src/controllers/settingsController.ts');
     SettingsController =
       controllerModule.SettingsController as unknown as SettingsControllerType;
 
     // Import routes with REAL auth middleware
-    const { settingsRouter } = await import(
-      '../../src/routes/settingsRoutes.ts'
-    );
+    const { settingsRouter } =
+      await import('../../src/routes/settingsRoutes.ts');
     app.use('/api/settings', settingsRouter);
   });
 
@@ -682,9 +680,8 @@ describe('Settings Routes - WITH REAL AUTH', () => {
     it('should reject getDNSConfig with unexpected query parameters', async () => {
       // This test verifies the schema rejects unexpected query params
       // Even though validateRequest is mocked, we verify the schema exists
-      const { settingsValidationSchemas } = await import(
-        '../../src/validation/settingsSchemas.ts'
-      );
+      const { settingsValidationSchemas } =
+        await import('../../src/validation/settingsSchemas.ts');
 
       expect(settingsValidationSchemas.getDNSConfig).toBeDefined();
       expect(settingsValidationSchemas.getDNSConfig.query).toBeDefined();
@@ -716,9 +713,8 @@ describe('Settings Routes - WITH REAL AUTH', () => {
 
   describe('Query Parameter Validation - getDNSCacheEntries', () => {
     it('should validate pagination parameters for getDNSCacheEntries', async () => {
-      const { settingsValidationSchemas } = await import(
-        '../../src/validation/settingsSchemas.ts'
-      );
+      const { settingsValidationSchemas } =
+        await import('../../src/validation/settingsSchemas.ts');
 
       expect(settingsValidationSchemas.getDNSCacheEntries).toBeDefined();
       expect(settingsValidationSchemas.getDNSCacheEntries.query).toBeDefined();

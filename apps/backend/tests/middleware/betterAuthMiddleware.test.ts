@@ -66,7 +66,7 @@ const mockAnalysisService = {
   getAnalysisById: vi.fn() as Mock<(id: string) => AnalysisInfo | undefined>,
 };
 
-vi.mock('../../src/services/analysisService.ts', () => ({
+vi.mock('../../src/services/analysis/index.ts', () => ({
   analysisService: mockAnalysisService,
 }));
 
@@ -122,9 +122,8 @@ describe('betterAuthMiddleware', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    middleware = (await import(
-      '../../src/middleware/betterAuthMiddleware.ts'
-    )) as unknown as BetterAuthMiddlewareModule;
+    middleware =
+      (await import('../../src/middleware/betterAuthMiddleware.ts')) as unknown as BetterAuthMiddlewareModule;
 
     req = createControllerRequest();
     res = createControllerResponse();

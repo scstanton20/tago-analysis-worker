@@ -48,8 +48,8 @@ export function useAnalysisLogs(analysis) {
   const {
     connectionStatus,
     sessionId,
-    subscribeToAnalysis,
-    unsubscribeFromAnalysis,
+    subscribeToAnalysisLogs,
+    unsubscribeFromAnalysisLogs,
   } = useConnection();
   const { analyses } = useAnalyses();
 
@@ -59,20 +59,20 @@ export function useAnalysisLogs(analysis) {
 
   const logsClearedAt = analyses?.[analysisId]?.logsClearedAt;
 
-  // Subscribe to analysis logs when SSE is connected
+  // Subscribe to analysis logs channel when SSE is connected (heavy - for real-time log streaming)
   useEffect(() => {
     if (!isSSEConnected || !analysisId) return;
 
-    subscribeToAnalysis([analysisId]);
+    subscribeToAnalysisLogs([analysisId]);
 
     return () => {
-      unsubscribeFromAnalysis([analysisId]);
+      unsubscribeFromAnalysisLogs([analysisId]);
     };
   }, [
     analysisId,
     isSSEConnected,
-    subscribeToAnalysis,
-    unsubscribeFromAnalysis,
+    subscribeToAnalysisLogs,
+    unsubscribeFromAnalysisLogs,
   ]);
 
   // Subscribe to log event bus for real-time logs

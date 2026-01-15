@@ -6,11 +6,11 @@
 import type { Request, Response } from 'express';
 import { createChildLogger } from '../logging/logger.ts';
 import { createSession, Session as BetterSSESession } from 'better-sse';
+import { SSE } from '../../constants.ts';
 import {
   generateSessionId,
   FORCE_LOGOUT_MESSAGE_DELIVERY_DELAY_MS,
   type Session,
-  type SessionState,
   type SessionUser,
   type SSEMessage,
 } from './utils.ts';
@@ -40,24 +40,23 @@ export class SessionManager {
     req: AuthenticatedRequest,
   ): Promise<Session> {
     try {
-      // Create better-sse session
-      const betterSession = await createSession(req, res);
+      const sessionId = generateSessionId();
 
-      // Cast to our Session type with modifications
+      // Create better-sse session with initial state and retry matching heartbeat
+      const betterSession = await createSession(req, res, {
+        retry: SSE.HEARTBEAT_INTERVAL_MS,
+        state: {
+          userId,
+          user: req.user as SessionUser,
+          subscribedChannels: new Set<string>(),
+          subscribedStatsChannels: new Set<string>(),
+          subscribedToMetrics: false,
+        },
+      });
+
+      // Cast to our Session type and attach session ID
       const session = betterSession as unknown as Session & BetterSSESession;
-
-      // Generate and attach session ID
-      session.id = generateSessionId();
-
-      // Initialize session state
-      if (!session.state) {
-        session.state = {} as SessionState;
-      }
-      session.state.userId = userId;
-      session.state.user = req.user as SessionUser;
-      if (!session.state.subscribedChannels) {
-        session.state.subscribedChannels = new Set();
-      }
+      session.id = sessionId;
 
       // Track session
       this.manager.sessions.set(session.id, session);
@@ -99,13 +98,31 @@ export class SessionManager {
     const session = this.manager.sessions.get(sessionId);
 
     if (session) {
-      // Unsubscribe from all analysis channels
-      const subscribedChannels = Array.from(session.state.subscribedChannels);
-      if (subscribedChannels.length > 0) {
-        await this.manager.channelManager.unsubscribeFromAnalysis(
+      // Unsubscribe from all logs channels
+      const subscribedLogsChannels = Array.from(
+        session.state.subscribedChannels,
+      );
+      if (subscribedLogsChannels.length > 0) {
+        await this.manager.channelManager.unsubscribeFromAnalysisLogs(
           sessionId,
-          subscribedChannels,
+          subscribedLogsChannels,
         );
+      }
+
+      // Unsubscribe from all stats channels
+      const subscribedStatsChannels = Array.from(
+        session.state.subscribedStatsChannels || [],
+      );
+      if (subscribedStatsChannels.length > 0) {
+        await this.manager.channelManager.unsubscribeFromAnalysisStats(
+          sessionId,
+          subscribedStatsChannels,
+        );
+      }
+
+      // Unsubscribe from metrics channel
+      if (session.state.subscribedToMetrics) {
+        await this.manager.channelManager.unsubscribeFromMetrics(sessionId);
       }
 
       // Deregister from global channel

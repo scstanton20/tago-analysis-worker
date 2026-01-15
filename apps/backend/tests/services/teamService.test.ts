@@ -204,9 +204,8 @@ describe('TeamService', () => {
     };
 
     // Re-import to get fresh instance
-    const { teamService: service } = await import(
-      '../../src/services/teamService.ts'
-    );
+    const { teamService: service } =
+      await import('../../src/services/teamService.ts');
     teamService = service as unknown as TeamServiceType;
 
     // Reset service state

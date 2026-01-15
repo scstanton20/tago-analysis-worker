@@ -50,7 +50,6 @@ type TeamServiceMock = {
 type AnalysisInfoServiceType = {
   getNotesPath: (analysisId: string) => string;
   countLines: (content: string | null) => number;
-  formatFileSize: (bytes: number) => string;
   getDefaultTemplate: () => string;
   getAnalysisMeta: (analysisId: string) => Promise<{
     analysisId: string;
@@ -100,7 +99,7 @@ type AnalysisInfoServiceType = {
 };
 
 // Mock dependencies
-vi.mock('../../src/services/analysisService.ts', () => ({
+vi.mock('../../src/services/analysis/index.ts', () => ({
   analysisService: {
     getAnalysisProcess: vi.fn(),
   },
@@ -149,23 +148,26 @@ describe('analysisInfoService', () => {
   let analysisService: AnalysisServiceMock;
   let teamService: TeamServiceMock;
   let safePath: SafePathMock;
+  let formatFileSize: (bytes: number) => string;
 
   beforeEach(async () => {
     vi.clearAllMocks();
 
     // Import mocked modules
-    const analysisServiceModule = await import(
-      '../../src/services/analysisService.ts'
-    );
+    const analysisServiceModule =
+      await import('../../src/services/analysis/index.ts');
     analysisService =
       analysisServiceModule.analysisService as unknown as AnalysisServiceMock;
 
     const teamServiceModule = await import('../../src/services/teamService.ts');
     teamService = teamServiceModule.teamService as unknown as TeamServiceMock;
 
-    safePath = (await import(
-      '../../src/utils/safePath.ts'
-    )) as unknown as SafePathMock;
+    safePath =
+      (await import('../../src/utils/safePath.ts')) as unknown as SafePathMock;
+
+    // Import formatters
+    const formattersModule = await import('../../src/utils/formatters.ts');
+    formatFileSize = formattersModule.formatFileSize;
 
     // Import the service under test
     const module = await import('../../src/services/analysisInfoService.ts');
@@ -206,23 +208,23 @@ describe('analysisInfoService', () => {
 
   describe('formatFileSize', () => {
     it('should return "0 B" for zero bytes', () => {
-      expect(analysisInfoService.formatFileSize(0)).toBe('0 B');
+      expect(formatFileSize(0)).toBe('0 B');
     });
 
     it('should format bytes correctly', () => {
-      expect(analysisInfoService.formatFileSize(500)).toBe('500 B');
+      expect(formatFileSize(500)).toBe('500 B');
     });
 
     it('should format kilobytes correctly', () => {
-      expect(analysisInfoService.formatFileSize(1024)).toBe('1 KB');
+      expect(formatFileSize(1024)).toBe('1 KB');
     });
 
     it('should format megabytes correctly', () => {
-      expect(analysisInfoService.formatFileSize(1048576)).toBe('1 MB');
+      expect(formatFileSize(1048576)).toBe('1 MB');
     });
 
     it('should format with decimals', () => {
-      expect(analysisInfoService.formatFileSize(1500)).toBe('1.46 KB');
+      expect(formatFileSize(1500)).toBe('1.46 KB');
     });
   });
 

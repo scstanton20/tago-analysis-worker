@@ -26,6 +26,7 @@ import {
   convertSQLiteBooleans,
   convertSQLiteBooleansArray,
 } from '../utils/databaseHelpers.ts';
+import { getAuth } from '../utils/lazyLoader.ts';
 
 // Module-level logger for initialization; public methods accept logger parameter for request-scoped logging
 const moduleLogger = createChildLogger('team-service');
@@ -134,6 +135,18 @@ type MoveItemResult = {
   to: string;
 };
 
+// SQL query constants to avoid duplication
+const TEAM_SELECT_FIELDS = `
+  id,
+  name,
+  organizationId,
+  createdAt,
+  color,
+  order_index AS orderIndex,
+  is_system AS isSystem`;
+
+const TEAM_ORDER_BY = 'isSystem DESC, orderIndex, name';
+
 class TeamService {
   private analysisService: AnalysisServiceInterface | null;
   private initialized: boolean;
@@ -192,17 +205,10 @@ class TeamService {
       logger.info({ action: 'getAllTeams' }, 'Getting all teams');
 
       const teams = executeQueryAll<TeamRow>(
-        `SELECT
-          id,
-          name,
-          organizationId,
-          createdAt,
-          color,
-          order_index AS orderIndex,
-          is_system AS isSystem
+        `SELECT ${TEAM_SELECT_FIELDS}
         FROM team
         WHERE organizationId = ?
-        ORDER BY isSystem DESC, orderIndex, name`,
+        ORDER BY ${TEAM_ORDER_BY}`,
         [this.organizationId],
         'getting all teams',
       );
@@ -234,14 +240,7 @@ class TeamService {
       logger.info({ action: 'getTeam', teamId: id }, 'Getting team');
 
       let team = executeQuery<TeamRow>(
-        `SELECT
-          id,
-          name,
-          organizationId,
-          createdAt,
-          color,
-          order_index AS orderIndex,
-          is_system AS isSystem
+        `SELECT ${TEAM_SELECT_FIELDS}
         FROM team
         WHERE id = ? AND organizationId = ?`,
         [id, this.organizationId],
@@ -292,8 +291,8 @@ class TeamService {
         throw new Error(`Team with name "${data.name}" already exists`);
       }
 
-      // Import auth dynamically to avoid circular dependencies
-      const { auth } = await import('../lib/auth.ts');
+      // Get auth via lazy loader to avoid circular dependencies
+      const auth = await getAuth();
 
       const teamResult = (await auth.api.createTeam({
         body: {
@@ -369,14 +368,7 @@ class TeamService {
         // Check if team exists first
         const existing = db
           .prepare(
-            `SELECT
-              id,
-              name,
-              organizationId,
-              createdAt,
-              color,
-              order_index AS orderIndex,
-              is_system AS isSystem
+            `SELECT ${TEAM_SELECT_FIELDS}
             FROM team
             WHERE id = ? AND organizationId = ?`,
           )
@@ -416,14 +408,7 @@ class TeamService {
         // Return updated team
         const updatedTeam = db
           .prepare(
-            `SELECT
-              id,
-              name,
-              organizationId,
-              createdAt,
-              color,
-              order_index AS orderIndex,
-              is_system AS isSystem
+            `SELECT ${TEAM_SELECT_FIELDS}
             FROM team
             WHERE id = ? AND organizationId = ?`,
           )
@@ -470,8 +455,8 @@ class TeamService {
         'Deleting team via better-auth API (beforeDeleteTeam hook will handle analysis migration)',
       );
 
-      // Import auth dynamically to avoid circular dependencies
-      const { auth } = await import('../lib/auth.ts');
+      // Get auth via lazy loader to avoid circular dependencies
+      const auth = await getAuth();
 
       const result = (await auth.api.removeTeam({
         body: {
@@ -658,17 +643,10 @@ class TeamService {
 
         const teams = db
           .prepare(
-            `SELECT
-              id,
-              name,
-              organizationId,
-              createdAt,
-              color,
-              order_index AS orderIndex,
-              is_system AS isSystem
+            `SELECT ${TEAM_SELECT_FIELDS}
             FROM team
             WHERE organizationId = ?
-            ORDER BY isSystem DESC, orderIndex, name`,
+            ORDER BY ${TEAM_ORDER_BY}`,
           )
           .all(this.organizationId) as TeamRow[];
 

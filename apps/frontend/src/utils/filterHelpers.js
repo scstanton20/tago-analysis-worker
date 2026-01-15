@@ -18,22 +18,6 @@ export const filterByPermission = (items, isAdmin, checkPermission) => {
 };
 
 /**
- * Filter teams by membership, always including uncategorized
- * @param {Array} teams - Teams to filter
- * @param {Function} isTeamMember - Function to check team membership
- * @returns {Array} Filtered teams
- */
-export const filterByTeamMembership = (teams, isTeamMember) => {
-  return teams.filter((team) => {
-    // Always include uncategorized
-    if (team.id === 'uncategorized') return true;
-
-    // Check team membership
-    return isTeamMember(team.id);
-  });
-};
-
-/**
  * Filter analyses by selected team and permissions
  * @param {Object} analyses - Analyses object
  * @param {string|null} selectedTeam - Selected team ID

@@ -9,7 +9,7 @@ import {
 import type { AnalysesMap } from '@tago-analysis-worker/types';
 
 // Mock dependencies before importing the controller
-vi.mock('../../src/services/analysisService.ts', () => ({
+vi.mock('../../src/services/analysis/index.ts', () => ({
   analysisService: {
     uploadAnalysis: vi.fn(),
     getAllAnalyses: vi.fn(),
@@ -31,13 +31,15 @@ vi.mock('../../src/services/analysisService.ts', () => ({
     getEnvironment: vi.fn(),
     getConfig: vi.fn(),
   },
-}));
-
-vi.mock('../../src/utils/sse/index.ts', () => ({
-  sseManager: {
-    broadcastAnalysisUpdate: vi.fn(),
-    broadcastToTeamUsers: vi.fn(),
-  },
+  // Notification functions (re-exported from AnalysisNotificationService)
+  broadcastAnalysisCreated: vi.fn(),
+  broadcastAnalysisDeleted: vi.fn(),
+  broadcastAnalysisRenamed: vi.fn(),
+  broadcastAnalysisUpdated: vi.fn(),
+  broadcastAnalysisRolledBack: vi.fn(),
+  broadcastAnalysisEnvironmentUpdated: vi.fn(),
+  broadcastAnalysisNotesUpdated: vi.fn(),
+  broadcastTeamStructureUpdate: vi.fn(),
 }));
 
 // Use real validation functions from safePath, only mock file I/O operations
@@ -53,17 +55,6 @@ vi.mock('../../src/utils/safePath.ts', async (importOriginal) => {
     safeMkdir: vi.fn().mockResolvedValue(undefined),
     safeReaddir: vi.fn().mockResolvedValue([]),
     safeStat: vi.fn().mockResolvedValue({ isFile: () => true, size: 0 }),
-  };
-});
-
-// Use real responseHelpers - they are pure functions
-// Only mock broadcastTeamStructureUpdate which has side effects (SSE broadcasting)
-vi.mock('../../src/utils/responseHelpers.ts', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../src/utils/responseHelpers.ts')>();
-  return {
-    ...actual,
-    broadcastTeamStructureUpdate: vi.fn(),
   };
 });
 
@@ -90,8 +81,21 @@ vi.mock('fs', () => ({
   },
 }));
 
+// Mock function for getUserTeamIds (used by both lazy loader and direct mock)
+const mockGetUserTeamIds = vi.fn().mockReturnValue(['team-1', 'team-2']);
+
+// Mock the lazy loader for getTeamPermissionHelpers
+vi.mock('../../src/utils/lazyLoader.ts', () => ({
+  getTeamPermissionHelpers: vi.fn(() =>
+    Promise.resolve({
+      getUserTeamIds: mockGetUserTeamIds,
+      getUsersWithTeamAccess: vi.fn(() => ['user-1', 'user-2']),
+    }),
+  ),
+}));
+
 vi.mock('../../src/middleware/betterAuthMiddleware.ts', () => ({
-  getUserTeamIds: vi.fn().mockReturnValue(['team-1', 'team-2']),
+  getUserTeamIds: mockGetUserTeamIds,
   authMiddleware: vi.fn(
     (_req: MockRequest, _res: MockResponse, next: () => void) => next(),
   ),
@@ -129,23 +133,28 @@ type MockAnalysisService = {
   getConfig: Mock;
 };
 
-type MockSSEManager = {
-  broadcastAnalysisUpdate: Mock;
-  broadcastToTeamUsers: Mock;
-};
-
 // Import after mocks
-const { analysisService } = (await import(
-  '../../src/services/analysisService.ts'
-)) as unknown as { analysisService: MockAnalysisService };
-const { sseManager } = (await import(
-  '../../src/utils/sse/index.ts'
-)) as unknown as {
-  sseManager: MockSSEManager;
+const {
+  analysisService,
+  broadcastAnalysisCreated,
+  broadcastAnalysisDeleted,
+  broadcastAnalysisUpdated,
+  broadcastAnalysisRolledBack,
+  broadcastAnalysisEnvironmentUpdated,
+  broadcastAnalysisNotesUpdated,
+  broadcastTeamStructureUpdate,
+} = (await import('../../src/services/analysis/index.ts')) as unknown as {
+  analysisService: MockAnalysisService;
+  broadcastAnalysisCreated: Mock;
+  broadcastAnalysisDeleted: Mock;
+  broadcastAnalysisUpdated: Mock;
+  broadcastAnalysisRolledBack: Mock;
+  broadcastAnalysisEnvironmentUpdated: Mock;
+  broadcastAnalysisNotesUpdated: Mock;
+  broadcastTeamStructureUpdate: Mock;
 };
-const { AnalysisController } = await import(
-  '../../src/controllers/analysisController.ts'
-);
+const { AnalysisController } =
+  await import('../../src/controllers/analysisController.ts');
 
 describe('AnalysisController', () => {
   beforeEach(() => {
@@ -176,6 +185,7 @@ describe('AnalysisController', () => {
           name: 'test-analysis',
           status: 'stopped',
           enabled: true,
+          intendedState: 'stopped',
           lastStartTime: null,
           teamId: 'team-123',
         },
@@ -200,7 +210,8 @@ describe('AnalysisController', () => {
         analysisId: 'analysis-uuid-123',
         analysisName: 'test-analysis',
       });
-      expect(sseManager.broadcastAnalysisUpdate).toHaveBeenCalled();
+      expect(broadcastAnalysisCreated).toHaveBeenCalled();
+      expect(broadcastTeamStructureUpdate).toHaveBeenCalledWith('team-123');
     });
 
     it('should return 400 if no file is uploaded', async () => {
@@ -254,6 +265,7 @@ describe('AnalysisController', () => {
           status: 'running',
           teamId: null,
           enabled: true,
+          intendedState: 'running',
           lastStartTime: null,
         },
         'uuid-analysis-2': {
@@ -262,6 +274,7 @@ describe('AnalysisController', () => {
           status: 'stopped',
           teamId: null,
           enabled: true,
+          intendedState: 'stopped',
           lastStartTime: null,
         },
       };
@@ -294,6 +307,7 @@ describe('AnalysisController', () => {
           status: 'running',
           teamId: null,
           enabled: true,
+          intendedState: 'running',
           lastStartTime: null,
         },
       };
@@ -320,6 +334,7 @@ describe('AnalysisController', () => {
           status: 'running',
           teamId: null,
           enabled: true,
+          intendedState: 'running',
           lastStartTime: null,
         },
       };
@@ -513,7 +528,8 @@ describe('AnalysisController', () => {
 
       expect(analysisService.deleteAnalysis).toHaveBeenCalledWith(analysisId);
       expect(res.json).toHaveBeenCalledWith({ success: true });
-      expect(sseManager.broadcastAnalysisUpdate).toHaveBeenCalled();
+      expect(broadcastAnalysisDeleted).toHaveBeenCalled();
+      expect(broadcastTeamStructureUpdate).toHaveBeenCalledWith('team-123');
     });
   });
 
@@ -608,7 +624,7 @@ describe('AnalysisController', () => {
           message: 'Analysis updated successfully',
         }),
       );
-      expect(sseManager.broadcastAnalysisUpdate).toHaveBeenCalled();
+      expect(broadcastAnalysisUpdated).toHaveBeenCalled();
     });
   });
 
@@ -823,7 +839,7 @@ describe('AnalysisController', () => {
           version: 1,
         }),
       );
-      expect(sseManager.broadcastAnalysisUpdate).toHaveBeenCalled();
+      expect(broadcastAnalysisRolledBack).toHaveBeenCalled();
     });
   });
 
@@ -859,7 +875,7 @@ describe('AnalysisController', () => {
           message: 'Environment updated successfully',
         }),
       );
-      expect(sseManager.broadcastAnalysisUpdate).toHaveBeenCalled();
+      expect(broadcastAnalysisEnvironmentUpdated).toHaveBeenCalled();
     });
   });
 
@@ -1204,11 +1220,10 @@ describe('AnalysisController', () => {
 
   describe('getAnalysisMeta', () => {
     it('should get analysis metadata successfully', async () => {
-      const { analysisInfoService } = (await import(
-        '../../src/services/analysisInfoService.ts'
-      )) as unknown as {
-        analysisInfoService: { getAnalysisMeta: Mock };
-      };
+      const { analysisInfoService } =
+        (await import('../../src/services/analysisInfoService.ts')) as unknown as {
+          analysisInfoService: { getAnalysisMeta: Mock };
+        };
 
       const analysisId = 'test-analysis-uuid-123';
       const req = createControllerRequest({
@@ -1237,11 +1252,10 @@ describe('AnalysisController', () => {
 
   describe('getAnalysisNotes', () => {
     it('should get analysis notes successfully', async () => {
-      const { analysisInfoService } = (await import(
-        '../../src/services/analysisInfoService.ts'
-      )) as unknown as {
-        analysisInfoService: { getAnalysisNotes: Mock };
-      };
+      const { analysisInfoService } =
+        (await import('../../src/services/analysisInfoService.ts')) as unknown as {
+          analysisInfoService: { getAnalysisNotes: Mock };
+        };
 
       const analysisId = 'test-analysis-uuid-123';
       const req = createControllerRequest({
@@ -1266,11 +1280,10 @@ describe('AnalysisController', () => {
     });
 
     it('should return default notes if none exist', async () => {
-      const { analysisInfoService } = (await import(
-        '../../src/services/analysisInfoService.ts'
-      )) as unknown as {
-        analysisInfoService: { getAnalysisNotes: Mock };
-      };
+      const { analysisInfoService } =
+        (await import('../../src/services/analysisInfoService.ts')) as unknown as {
+          analysisInfoService: { getAnalysisNotes: Mock };
+        };
 
       const analysisId = 'test-analysis-uuid-123';
       const req = createControllerRequest({
@@ -1293,11 +1306,10 @@ describe('AnalysisController', () => {
 
   describe('updateAnalysisNotes', () => {
     it('should update analysis notes successfully', async () => {
-      const { analysisInfoService } = (await import(
-        '../../src/services/analysisInfoService.ts'
-      )) as unknown as {
-        analysisInfoService: { updateAnalysisNotes: Mock };
-      };
+      const { analysisInfoService } =
+        (await import('../../src/services/analysisInfoService.ts')) as unknown as {
+          analysisInfoService: { updateAnalysisNotes: Mock };
+        };
 
       const analysisId = 'test-analysis-uuid-123';
       const req = createControllerRequest({
@@ -1322,7 +1334,7 @@ describe('AnalysisController', () => {
         req.log,
       );
       expect(res.json).toHaveBeenCalledWith(mockResult);
-      expect(sseManager.broadcastAnalysisUpdate).toHaveBeenCalled();
+      expect(broadcastAnalysisNotesUpdated).toHaveBeenCalled();
     });
   });
 
@@ -1406,7 +1418,7 @@ describe('AnalysisController', () => {
       await AnalysisController.deleteAnalysis(req, res);
 
       expect(res.json).toHaveBeenCalledWith({ success: true });
-      expect(sseManager.broadcastAnalysisUpdate).toHaveBeenCalled();
+      expect(broadcastAnalysisDeleted).toHaveBeenCalled();
     });
 
     it('should handle when analysis does not exist', async () => {
@@ -1424,8 +1436,8 @@ describe('AnalysisController', () => {
       await AnalysisController.deleteAnalysis(req, res);
 
       expect(res.json).toHaveBeenCalledWith({ success: true });
-      // broadcastAnalysisUpdate still called but with undefined teamId
-      expect(sseManager.broadcastAnalysisUpdate).toHaveBeenCalled();
+      // broadcastAnalysisDeleted still called but with undefined teamId
+      expect(broadcastAnalysisDeleted).toHaveBeenCalled();
     });
   });
 
@@ -1484,7 +1496,7 @@ describe('AnalysisController', () => {
           success: true,
         }),
       );
-      expect(sseManager.broadcastAnalysisUpdate).toHaveBeenCalled();
+      expect(broadcastAnalysisUpdated).toHaveBeenCalled();
     });
   });
 

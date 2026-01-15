@@ -3,7 +3,6 @@ import type { AssignmentResult } from '@tago-analysis-worker/types';
 import {
   createControllerRequest,
   createControllerResponse,
-  type MockResponse,
 } from '../utils/testHelpers.ts';
 
 // Mock dependencies before importing the controller
@@ -44,12 +43,6 @@ vi.mock('../../src/utils/sse/index.ts', () => ({
   },
 }));
 
-vi.mock('../../src/utils/responseHelpers.ts', () => ({
-  handleError: vi.fn((res: MockResponse, error: Error) => {
-    res.status(500).json({ error: error.message });
-  }),
-}));
-
 // Type definitions for mocked services
 type MockAuthApi = {
   addMember: Mock;
@@ -80,21 +73,18 @@ type MockSSEManager = {
 const { auth } = (await import('../../src/lib/auth.ts')) as unknown as {
   auth: MockAuth;
 };
-const { executeQuery, executeQueryAll, executeUpdate } = (await import(
-  '../../src/utils/authDatabase.ts'
-)) as unknown as {
-  executeQuery: Mock;
-  executeQueryAll: Mock;
-  executeUpdate: Mock;
-};
-const { sseManager } = (await import(
-  '../../src/utils/sse/index.ts'
-)) as unknown as {
-  sseManager: MockSSEManager;
-};
-const { UserController, getUserTeams } = await import(
-  '../../src/controllers/userController.ts'
-);
+const { executeQuery, executeQueryAll, executeUpdate } =
+  (await import('../../src/utils/authDatabase.ts')) as unknown as {
+    executeQuery: Mock;
+    executeQueryAll: Mock;
+    executeUpdate: Mock;
+  };
+const { sseManager } =
+  (await import('../../src/utils/sse/index.ts')) as unknown as {
+    sseManager: MockSSEManager;
+  };
+const { UserController, getUserTeams } =
+  await import('../../src/controllers/userController.ts');
 
 describe('UserController', () => {
   beforeEach(() => {

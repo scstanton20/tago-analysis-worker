@@ -48,25 +48,54 @@ vi.mock('ms', () => ({
   }),
 }));
 
-vi.mock('../../../src/services/analysisService.ts', () => ({
-  analysisService: {
-    getAllAnalyses: vi.fn(),
-    getConfig: vi.fn(),
-  },
+// Create mocked services that we can control in tests
+const mockAnalysisService = {
+  getAllAnalyses: vi.fn(),
+  getConfig: vi.fn(),
+};
+
+const mockTeamService = {
+  getAllTeams: vi.fn(),
+};
+
+const mockGetUserTeamIds = vi.fn();
+const mockExecuteQuery = vi.fn();
+
+vi.mock('../../../src/services/analysis/index.ts', () => ({
+  analysisService: mockAnalysisService,
 }));
 
 vi.mock('../../../src/services/teamService.ts', () => ({
-  teamService: {
-    getAllTeams: vi.fn(),
-  },
+  teamService: mockTeamService,
 }));
 
 vi.mock('../../../src/middleware/betterAuthMiddleware.ts', () => ({
-  getUserTeamIds: vi.fn(),
+  getUserTeamIds: mockGetUserTeamIds,
 }));
 
 vi.mock('../../../src/utils/authDatabase.ts', () => ({
-  executeQuery: vi.fn(),
+  executeQuery: mockExecuteQuery,
+}));
+
+// Mock the lazy loaders to return our controlled mocks
+vi.mock('../../../src/utils/lazyLoader.ts', () => ({
+  getAnalysisService: vi.fn(() => Promise.resolve(mockAnalysisService)),
+  getTeamService: vi.fn(() => Promise.resolve(mockTeamService)),
+  getTeamPermissionHelpers: vi.fn(() =>
+    Promise.resolve({ getUserTeamIds: mockGetUserTeamIds }),
+  ),
+  getAuthDatabase: vi.fn(() =>
+    Promise.resolve({ executeQuery: mockExecuteQuery }),
+  ),
+  getMs: vi.fn(() =>
+    Promise.resolve((ms: number) => {
+      if (ms < 1000) return `${ms}ms`;
+      if (ms < 60000) return `${Math.floor(ms / 1000)}s`;
+      return `${Math.floor(ms / 60000)}m`;
+    }),
+  ),
+  getSseManager: vi.fn(),
+  getDnsCache: vi.fn(),
 }));
 
 /**
@@ -137,9 +166,8 @@ describe('InitDataService', () => {
     mockSSEManager = createMockSSEManager();
 
     // Import mocked modules
-    const analysisModule = await import(
-      '../../../src/services/analysisService.ts'
-    );
+    const analysisModule =
+      await import('../../../src/services/analysis/index.ts');
     mockAnalysisService =
       analysisModule.analysisService as unknown as typeof mockAnalysisService;
 
@@ -147,9 +175,8 @@ describe('InitDataService', () => {
     mockTeamService =
       teamModule.teamService as unknown as typeof mockTeamService;
 
-    const authMiddlewareModule = await import(
-      '../../../src/middleware/betterAuthMiddleware.ts'
-    );
+    const authMiddlewareModule =
+      await import('../../../src/middleware/betterAuthMiddleware.ts');
     mockGetUserTeamIds =
       authMiddlewareModule.getUserTeamIds as unknown as MockInstance;
 
@@ -157,9 +184,8 @@ describe('InitDataService', () => {
     mockExecuteQuery = authDbModule.executeQuery as unknown as MockInstance;
 
     // Import InitDataService after mocks are set up
-    const serviceModule = await import(
-      '../../../src/utils/sse/InitDataService.ts'
-    );
+    const serviceModule =
+      await import('../../../src/utils/sse/InitDataService.ts');
     InitDataService = serviceModule.InitDataService;
   });
 
@@ -190,6 +216,7 @@ describe('InitDataService', () => {
             teamId: 'team-1',
             status: 'stopped',
             enabled: true,
+            intendedState: 'stopped',
             lastStartTime: null,
             created: new Date().toISOString(),
           },
@@ -199,6 +226,7 @@ describe('InitDataService', () => {
             teamId: 'team-2',
             status: 'stopped',
             enabled: true,
+            intendedState: 'stopped',
             lastStartTime: null,
             created: new Date().toISOString(),
           },
@@ -291,6 +319,7 @@ describe('InitDataService', () => {
             teamId: 'team-1',
             status: 'stopped',
             enabled: true,
+            intendedState: 'stopped',
             lastStartTime: null,
             created: new Date().toISOString(),
           },
@@ -300,6 +329,7 @@ describe('InitDataService', () => {
             teamId: 'team-2',
             status: 'stopped',
             enabled: true,
+            intendedState: 'stopped',
             lastStartTime: null,
             created: new Date().toISOString(),
           },
@@ -403,6 +433,7 @@ describe('InitDataService', () => {
             teamId: 'uncategorized',
             status: 'stopped',
             enabled: true,
+            intendedState: 'stopped',
             lastStartTime: null,
             created: new Date().toISOString(),
           },
@@ -997,9 +1028,8 @@ describe('InitDataService', () => {
           message: 'Ready',
         });
 
-        const { getTagoSdkVersion } = await import(
-          '../../../src/utils/sdkVersion.ts'
-        );
+        const { getTagoSdkVersion } =
+          await import('../../../src/utils/sdkVersion.ts');
         (getTagoSdkVersion as unknown as MockInstance).mockReturnValue('1.2.3');
 
         await service.sendStatusUpdate(client);

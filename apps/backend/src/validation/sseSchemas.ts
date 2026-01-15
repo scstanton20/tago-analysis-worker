@@ -2,6 +2,7 @@
 import {
   sseSubscribeSchema,
   sseUnsubscribeSchema,
+  sseSubscribeMetricsSchema,
   emptyStrictSchema,
 } from '@tago-analysis-worker/types/validation';
 
@@ -20,7 +21,7 @@ export const sseValidationSchemas = {
   },
 
   /**
-   * POST /api/sse/subscribe - Subscribe to analysis channels
+   * POST /api/sse/subscribe/stats or /api/sse/subscribe/logs
    * Validates sessionId (required string, min 1) and analyses array (analysis IDs, min 1 element)
    */
   subscribe: {
@@ -28,10 +29,18 @@ export const sseValidationSchemas = {
   },
 
   /**
-   * POST /api/sse/unsubscribe - Unsubscribe from analysis channels
+   * POST /api/sse/unsubscribe/stats or /api/sse/unsubscribe/logs
    * Validates sessionId (required string, min 1) and analyses array (analysis IDs, min 1 element)
    */
   unsubscribe: {
     body: sseUnsubscribeSchema,
+  },
+
+  /**
+   * POST /api/sse/subscribe/metrics or /api/sse/unsubscribe/metrics
+   * Validates only sessionId (required string, min 1) - no analyses array
+   */
+  subscribeMetrics: {
+    body: sseSubscribeMetricsSchema,
   },
 } as const;

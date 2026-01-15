@@ -28,9 +28,8 @@ type OpenAPISpec = {
 // Import after mocks - use real implementations for packages/utilities
 const { getUtilsSpecs, getAvailablePackages, getAvailableUtilities } =
   await import('../../src/docs/utilsSwagger.ts');
-const { UtilsDocsController } = await import(
-  '../../src/controllers/utilsDocsController.ts'
-);
+const { UtilsDocsController } =
+  await import('../../src/controllers/utilsDocsController.ts');
 
 describe('UtilsDocsController', () => {
   beforeEach(() => {

@@ -202,7 +202,7 @@ SortableTeamItem.propTypes = {
 // Main Team Sidebar Component
 export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
   const { hasInitialData } = useConnection();
-  const { user, logout } = useAuth();
+  const { user, logout, isImpersonating } = useAuth();
   const { isAdmin } = usePermissions();
 
   // Use custom hook for visible teams and analysis counts
@@ -397,17 +397,20 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
             </Box>
           </Group>
           <Group gap="xs">
-            <Tooltip label="Profile Settings">
-              <ActionIcon
-                variant="light"
-                color="brand"
-                size="sm"
-                onClick={() => modalService.openProfile()}
-                aria-label="Profile Settings"
-              >
-                <IconUserEdit size={14} aria-hidden="true" />
-              </ActionIcon>
-            </Tooltip>
+            {/* Hide profile settings when impersonating - admins should not edit impersonated user's profile */}
+            {!isImpersonating && (
+              <Tooltip label="Profile Settings">
+                <ActionIcon
+                  variant="light"
+                  color="brand"
+                  size="sm"
+                  onClick={() => modalService.openProfile()}
+                  aria-label="Profile Settings"
+                >
+                  <IconUserEdit size={14} aria-hidden="true" />
+                </ActionIcon>
+              </Tooltip>
+            )}
             <Tooltip label="Logout">
               <ActionIcon
                 variant="light"

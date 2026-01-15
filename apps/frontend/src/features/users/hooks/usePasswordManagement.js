@@ -6,7 +6,7 @@
 
 import { useState, useCallback } from 'react';
 import { useAuth } from '@/features/auth/hooks/useAuth';
-import { notificationAPI } from '@/utils/notificationAPI.jsx';
+import { notificationAPI } from '@/utils/notificationService';
 import { useAsyncOperation } from '@/hooks/async';
 import { useStandardForm } from '@/hooks/forms/useStandardForm';
 import logger from '@/utils/logger';

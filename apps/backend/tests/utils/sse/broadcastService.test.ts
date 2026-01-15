@@ -37,12 +37,22 @@ vi.mock('../../../src/utils/logging/logger.ts', () => ({
 // Mock metricsService
 vi.mock('../../../src/services/metricsService.ts', () => ({
   metricsService: {
-    getAllMetrics: vi.fn(),
+    getAllMetrics: vi.fn(() =>
+      Promise.resolve({
+        processes: [
+          { analysis_id: 'analysis-1', memory: 100, cpu: 5 },
+          { analysis_id: 'analysis-2', memory: 200, cpu: 10 },
+        ],
+        children: { processCount: 2, memoryUsage: 300, cpuUsage: 15 },
+        container: { processCount: 1, memoryUsage: 500, cpuUsage: 20 },
+        total: { memory: 800, cpu: 35 },
+      }),
+    ),
   },
 }));
 
 // Mock dynamic imports
-vi.mock('../../../src/services/analysisService.ts', () => ({
+vi.mock('../../../src/services/analysis/index.ts', () => ({
   analysisService: {
     getAllAnalyses: vi.fn(() =>
       Promise.resolve({
@@ -80,13 +90,67 @@ vi.mock('../../../src/middleware/betterAuthMiddleware.ts', () => ({
   }),
 }));
 
+// Mock lazyLoader for broadcastMetricsUpdate
+vi.mock('../../../src/utils/lazyLoader.ts', () => ({
+  getAnalysisService: vi.fn(() =>
+    Promise.resolve({
+      getAllAnalyses: vi.fn(() =>
+        Promise.resolve({
+          'analysis-1': {
+            id: 'analysis-1',
+            name: 'Analysis 1',
+            teamId: 'team-1',
+          },
+          'analysis-2': {
+            id: 'analysis-2',
+            name: 'Analysis 2',
+            teamId: 'team-2',
+          },
+        }),
+      ),
+      getAnalysisById: vi.fn((id: string) => ({
+        id,
+        name: `Analysis ${id}`,
+        teamId: id.includes('team-2') ? 'team-2' : 'team-1',
+      })),
+    }),
+  ),
+  getTeamPermissionHelpers: vi.fn(() =>
+    Promise.resolve({
+      getUsersWithTeamAccess: vi.fn((teamId: string) => {
+        if (teamId === 'team-1') return ['user-1', 'user-2'];
+        if (teamId === 'team-2') return ['user-2', 'user-3'];
+        return [];
+      }),
+      getUserTeamIds: vi.fn((userId: string) => {
+        if (userId === 'user-1') return ['team-1', 'uncategorized'];
+        if (userId === 'user-2') return ['team-1', 'team-2', 'uncategorized'];
+        if (userId === 'user-3') return ['team-2', 'uncategorized'];
+        return ['uncategorized'];
+      }),
+    }),
+  ),
+  getMs: vi.fn(() =>
+    Promise.resolve((value: number) => {
+      const seconds = Math.floor(value / 1000);
+      return `${seconds}s`;
+    }),
+  ),
+  extractAnalysisId: vi.fn(),
+}));
+
 // Helper to create mock SSEManager
 function createMockSSEManager() {
   return {
     sessions: new Map<string, Session>(),
-    analysisChannels: new Map(),
+    analysisLogsChannels: new Map(),
+    analysisStatsChannels: new Map(),
     globalChannel: {
       broadcast: vi.fn(),
+    },
+    metricsChannel: {
+      broadcast: vi.fn(),
+      activeSessions: [] as Session[],
     },
     sessionLastPush: new Map<string, number>(),
     sessionManager: {
@@ -933,6 +997,7 @@ describe('BroadcastService', () => {
           userId: 'user-1',
           user: { id: 'user-1', role: 'admin' },
           subscribedChannels: new Set(),
+          subscribedToMetrics: true,
         },
         isConnected: true,
       });
@@ -944,8 +1009,16 @@ describe('BroadcastService', () => {
       ).resolves.not.toThrow();
     });
 
-    it('should skip disconnected sessions', async () => {
-      const session = createMockSession({ isConnected: false });
+    it('should skip sessions not subscribed to metrics', async () => {
+      const session = createMockSession({
+        state: {
+          userId: 'user-1',
+          user: { id: 'user-1', role: 'admin' },
+          subscribedChannels: new Set(),
+          subscribedToMetrics: false,
+        },
+        isConnected: true,
+      });
       mockSSEManager.sessions.set(session.id, session);
 
       await broadcastService.broadcastMetricsUpdate();
@@ -954,9 +1027,21 @@ describe('BroadcastService', () => {
     });
 
     it('should handle session errors gracefully', async () => {
-      const session = createMockSession();
+      const session = createMockSession({
+        state: {
+          userId: 'user-123',
+          user: { id: 'user-123', role: 'admin' },
+          subscribedChannels: new Set(),
+          subscribedToMetrics: true,
+        },
+        isConnected: true,
+      });
       session.push.mockRejectedValueOnce(new Error('Push failed'));
       mockSSEManager.sessions.set(session.id, session);
+      // Add session to metricsChannel.activeSessions since that's what the implementation uses
+      mockSSEManager.metricsChannel.activeSessions = [
+        session as unknown as Session,
+      ];
 
       await broadcastService.broadcastMetricsUpdate();
 
@@ -972,6 +1057,7 @@ describe('BroadcastService', () => {
           userId: 'user-1',
           user: { id: 'user-1', role: 'user' },
           subscribedChannels: new Set(),
+          subscribedToMetrics: true,
         },
       });
       const session2 = createMockSession({
@@ -979,6 +1065,7 @@ describe('BroadcastService', () => {
           userId: 'user-2',
           user: { id: 'user-2', role: 'admin' },
           subscribedChannels: new Set(),
+          subscribedToMetrics: true,
         },
       });
       mockSSEManager.sessions.set(session1.id, session1);
@@ -990,7 +1077,15 @@ describe('BroadcastService', () => {
     });
 
     it('should get container state and SDK version', async () => {
-      const session = createMockSession();
+      const session = createMockSession({
+        state: {
+          userId: 'user-1',
+          user: { id: 'user-1', role: 'admin' },
+          subscribedChannels: new Set(),
+          subscribedToMetrics: true,
+        },
+        isConnected: true,
+      });
       mockSSEManager.sessions.set(session.id, session);
 
       await broadcastService.broadcastMetricsUpdate();
@@ -1011,6 +1106,7 @@ describe('BroadcastService', () => {
           userId: 'user-1',
           user: { id: 'user-1', role: 'user' },
           subscribedChannels: new Set(),
+          subscribedToMetrics: true,
         },
       });
       mockSSEManager.sessions.set(session.id, session);
@@ -1027,6 +1123,7 @@ describe('BroadcastService', () => {
           userId: 'admin-1',
           user: { id: 'admin-1', role: 'admin' },
           subscribedChannels: new Set(),
+          subscribedToMetrics: true,
         },
       });
       mockSSEManager.sessions.set(session.id, session);
@@ -1043,6 +1140,7 @@ describe('BroadcastService', () => {
           userId: 'user-1',
           user: { id: 'user-1', role: 'user' },
           subscribedChannels: new Set(),
+          subscribedToMetrics: true,
         },
       });
       mockSSEManager.sessions.set(session.id, session);

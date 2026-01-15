@@ -1,14 +1,8 @@
 import type { Request, Response, NextFunction, RequestHandler } from 'express';
-import type { Logger } from 'pino';
+import type { RequestWithLogger } from '../types/index.ts';
 import { createChildLogger } from './logging/logger.ts';
 
 const defaultLogger = createChildLogger('async-handler');
-
-// Use type intersection instead of interface extension to avoid index signature conflicts
-type RequestWithLogger = Request & {
-  logger?: Logger;
-  log?: Logger;
-};
 
 /**
  * Type for controller handler functions that may use extended request types.

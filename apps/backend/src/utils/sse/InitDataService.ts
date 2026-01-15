@@ -7,6 +7,13 @@ import { createChildLogger } from '../logging/logger.ts';
 import { SSE_API_VERSION, type Session } from './utils.ts';
 import { getTagoSdkVersion } from '../sdkVersion.ts';
 import { getServerTime } from '../serverTime.ts';
+import {
+  getAnalysisService,
+  getTeamService,
+  getTeamPermissionHelpers,
+  getAuthDatabase,
+  getMs,
+} from '../lazyLoader.ts';
 import type { SSEManager } from './SSEManager.ts';
 import type {
   Analysis,
@@ -42,17 +49,13 @@ export class InitDataService {
    */
   async sendInitialData(client: Session): Promise<void> {
     try {
-      const { analysisService } = await import(
-        '../../services/analysisService.ts'
-      );
-      const { teamService } = await import('../../services/teamService.ts');
-      const { getUserTeamIds } = await import(
-        '../../middleware/betterAuthMiddleware.ts'
-      );
+      const analysisService = await getAnalysisService();
+      const teamService = await getTeamService();
+      const { getUserTeamIds } = await getTeamPermissionHelpers();
 
       // IMPORTANT: Always fetch fresh user data from database
       // Don't rely on cached session.state.user which may be stale after permission changes
-      const { executeQuery } = await import('../../utils/authDatabase.ts');
+      const { executeQuery } = await getAuthDatabase();
       const freshUser = executeQuery<UserRow>(
         'SELECT id, role, email, name FROM user WHERE id = ?',
         [client.state.user.id],
@@ -188,10 +191,8 @@ export class InitDataService {
    */
   async sendStatusUpdate(client: Session): Promise<void> {
     try {
-      const { analysisService } = await import(
-        '../../services/analysisService.ts'
-      );
-      const ms = (await import('ms')).default;
+      const analysisService = await getAnalysisService();
+      const ms = await getMs();
 
       // Get container state
       const containerState = this.manager.getContainerState();
