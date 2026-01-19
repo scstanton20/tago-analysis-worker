@@ -29,7 +29,9 @@ import {
 } from '@/components/global';
 import { useUnsavedChangesGuard } from '@/hooks/modals';
 import { notificationAPI } from '@/utils/notificationService.jsx';
+import logger from '@/utils/logger';
 import { useTeamManagement } from '../hooks/useTeamManagement';
+import { teamService } from '../api/teamService';
 const TeamCreateForm = lazy(() =>
   import('../components/TeamCreateForm').then((m) => ({
     default: m.TeamCreateForm,
@@ -40,8 +42,6 @@ const TeamListItem = lazy(() =>
     default: m.TeamListItem,
   })),
 );
-import { teamService } from '../api/teamService';
-import logger from '@/utils/logger';
 
 /**
  * TeamManagementModalContent

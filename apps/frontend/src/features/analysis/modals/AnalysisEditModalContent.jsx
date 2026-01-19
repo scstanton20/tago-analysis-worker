@@ -33,24 +33,24 @@ import {
   IconAlertTriangleFilled,
 } from '@tabler/icons-react';
 import { modals } from '@mantine/modals';
-import { useUnsavedChangesGuard } from '@/hooks/modals';
-import { UnsavedChangesOverlay } from '@/components/global';
-import { useDiagnostics } from '@/hooks/useDiagnostics';
-const CodeMirrorEditor = lazy(() =>
-  import('@/components/editor/CodeMirrorEditor.jsx').then((m) => ({
-    default: m.CodeMirrorEditor,
-  })),
-);
-import { useAnalyses } from '@/contexts/sseContext';
 import PropTypes from 'prop-types';
+import { useUnsavedChangesGuard } from '@/hooks/modals';
 import {
   FormAlert,
   FormActionButtons,
   LoadingState,
   SecondaryButton,
   CancelButton,
+  UnsavedChangesOverlay,
 } from '@/components/global';
+import { useDiagnostics } from '@/hooks/useDiagnostics';
+import { useAnalyses } from '@/contexts/sseContext';
 import { useAnalysisEdit } from '../hooks/useAnalysisEdit';
+const CodeMirrorEditor = lazy(() =>
+  import('@/components/editor/CodeMirrorEditor.jsx').then((m) => ({
+    default: m.CodeMirrorEditor,
+  })),
+);
 
 /**
  * Analysis Edit Modal Content Component

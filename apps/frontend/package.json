@@ -1,7 +1,7 @@
 {
   "name": "frontend",
   "private": true,
-  "version": "2.6.54",
+  "version": "2.6.541",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -38,11 +38,14 @@
     "codemirror": "^6.0.2",
     "eslint-linter-browserify": "^9.37.0",
     "globals": "^17.0.0",
+    "highlight.js": "^11.11.1",
     "prettier": "3.6.2",
     "prop-types": "^15.8.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-markdown": "^10.1.0",
+    "rehype-highlight": "^7.0.2",
+    "remark-gfm": "^4.0.1",
     "sanitize-filename": "^1.6.3"
   },
   "devDependencies": {

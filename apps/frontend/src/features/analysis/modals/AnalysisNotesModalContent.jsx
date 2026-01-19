@@ -4,11 +4,24 @@
  * Starts in view mode by default, user can switch to edit mode
  * @module modals/components/AnalysisNotesModalContent
  */
-import { useState, useCallback, lazy, Suspense } from 'react';
-import { Stack, Group, Text, Box, Badge, ScrollArea } from '@mantine/core';
+import { useState, useCallback, useEffect, lazy, Suspense } from 'react';
+import {
+  Stack,
+  Group,
+  Text,
+  Box,
+  Badge,
+  ScrollArea,
+  TypographyStylesProvider,
+  useMantineColorScheme,
+} from '@mantine/core';
 import { IconNotes, IconEdit, IconEye } from '@tabler/icons-react';
 import { modals } from '@mantine/modals';
 import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import rehypeHighlight from 'rehype-highlight';
+import hljsLight from 'highlight.js/styles/github.css?url';
+import hljsDark from 'highlight.js/styles/github-dark.css?url';
 import PropTypes from 'prop-types';
 import {
   FormAlert,
@@ -42,6 +55,26 @@ function AnalysisNotesModalContent({ id, innerProps }) {
   const [originalContent, setOriginalContent] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const { isAdmin } = usePermissions();
+  const { colorScheme } = useMantineColorScheme();
+
+  // Switch highlight.js theme based on Mantine color scheme
+  useEffect(() => {
+    const isDark =
+      colorScheme === 'dark' ||
+      (colorScheme === 'auto' &&
+        window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+    let link = document.getElementById('hljs-theme');
+    if (!link) {
+      link = document.createElement('link');
+      link.id = 'hljs-theme';
+      link.rel = 'stylesheet';
+      document.head.appendChild(link);
+    }
+    link.href = isDark ? hljsDark : hljsLight;
+
+    return () => link.remove();
+  }, [colorScheme]);
   // Load notes on mount
   const {
     loading,
@@ -192,9 +225,14 @@ function AnalysisNotesModalContent({ id, innerProps }) {
           </Suspense>
         ) : (
           <ScrollArea h="100%" offsetScrollbars>
-            <Markdown>
-              {content || '*No notes yet. Click Edit to add notes.*'}
-            </Markdown>
+            <TypographyStylesProvider>
+              <Markdown
+                remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeHighlight]}
+              >
+                {content || '*No notes yet. Click Edit to add notes.*'}
+              </Markdown>
+            </TypographyStylesProvider>
           </ScrollArea>
         )}
       </Box>
