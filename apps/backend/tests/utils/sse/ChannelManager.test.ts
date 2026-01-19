@@ -969,4 +969,479 @@ describe('ChannelManager', () => {
       });
     });
   });
+
+  describe('getOrCreateStatsChannel', () => {
+    it('should create a new stats channel when one does not exist', () => {
+      const channel = channelManager.getOrCreateStatsChannel('analysis-1');
+
+      expect(createChannel).toHaveBeenCalled();
+      expect(mockManager.analysisStatsChannels.has('analysis-1')).toBe(true);
+      expect(channel).toBeDefined();
+    });
+
+    it('should return existing stats channel when one exists', () => {
+      const existingChannel = { register: vi.fn(), broadcast: vi.fn() };
+      mockManager.analysisStatsChannels.set(
+        'analysis-1',
+        existingChannel as any,
+      );
+
+      const channel = channelManager.getOrCreateStatsChannel('analysis-1');
+
+      expect(createChannel).not.toHaveBeenCalled();
+      expect(channel).toBe(existingChannel);
+    });
+  });
+
+  describe('subscribeToAnalysisStats', () => {
+    it('should subscribe session to stats channel', async () => {
+      mockExecuteQuery.mockReturnValue({ id: 'admin-1', role: 'admin' });
+
+      const mockSession = {
+        id: 'session-1',
+        state: { subscribedStatsChannels: new Set() },
+        isConnected: true,
+        push: vi.fn().mockResolvedValue(undefined),
+      };
+      mockManager.sessions.set('session-1', mockSession as any);
+
+      const result = await channelManager.subscribeToAnalysisStats(
+        'session-1',
+        ['analysis-1'],
+        'admin-1',
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.subscribed).toContain('analysis-1');
+    });
+  });
+
+  describe('unsubscribeFromAnalysisStats', () => {
+    it('should unsubscribe from stats channel', async () => {
+      const mockChannel = {
+        deregister: vi.fn(),
+        sessionCount: 0,
+      };
+      mockManager.analysisStatsChannels.set('analysis-1', mockChannel as any);
+
+      const mockSession = {
+        id: 'session-1',
+        state: {
+          subscribedStatsChannels: new Set(['analysis-1']),
+        },
+      };
+      mockManager.sessions.set('session-1', mockSession as any);
+
+      const result = await channelManager.unsubscribeFromAnalysisStats(
+        'session-1',
+        ['analysis-1'],
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.unsubscribed).toContain('analysis-1');
+    });
+  });
+
+  describe('subscribeToMetrics', () => {
+    it('should throw when session not found', async () => {
+      await expect(
+        channelManager.subscribeToMetrics('nonexistent'),
+      ).rejects.toThrow('Session not found');
+    });
+
+    it('should subscribe session to metrics channel', async () => {
+      const mockSession = {
+        id: 'session-1',
+        state: { subscribedToMetrics: false },
+        isConnected: true,
+        push: vi.fn().mockResolvedValue(undefined),
+      };
+      mockManager.sessions.set('session-1', mockSession as any);
+
+      const result = await channelManager.subscribeToMetrics('session-1');
+
+      expect(result.success).toBe(true);
+      expect(mockManager.metricsChannel.register).toHaveBeenCalledWith(
+        mockSession,
+      );
+      expect(mockSession.state.subscribedToMetrics).toBe(true);
+    });
+  });
+
+  describe('unsubscribeFromMetrics', () => {
+    it('should handle session not found', async () => {
+      const result = await channelManager.unsubscribeFromMetrics('nonexistent');
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should unsubscribe from metrics channel', async () => {
+      const mockSession = {
+        id: 'session-1',
+        state: { subscribedToMetrics: true },
+      };
+      mockManager.sessions.set('session-1', mockSession as any);
+
+      const result = await channelManager.unsubscribeFromMetrics('session-1');
+
+      expect(result.success).toBe(true);
+      expect(mockManager.metricsChannel.deregister).toHaveBeenCalledWith(
+        mockSession,
+      );
+      expect(mockSession.state.subscribedToMetrics).toBe(false);
+    });
+  });
+
+  describe('broadcastAnalysisStats', () => {
+    it('should broadcast stats to channel', () => {
+      const mockChannel = {
+        broadcast: vi.fn(),
+      };
+      mockManager.analysisStatsChannels.set('analysis-1', mockChannel as any);
+
+      channelManager.broadcastAnalysisStats('analysis-1', {
+        totalCount: 100,
+        logFileSize: 5000,
+      });
+
+      expect(mockChannel.broadcast).toHaveBeenCalledWith({
+        type: 'analysisLogStats',
+        analysisId: 'analysis-1',
+        totalCount: 100,
+        logFileSize: 5000,
+      });
+    });
+
+    it('should not throw when channel does not exist', () => {
+      expect(() =>
+        channelManager.broadcastAnalysisStats('nonexistent', {
+          totalCount: 100,
+          logFileSize: 5000,
+        }),
+      ).not.toThrow();
+    });
+
+    it('should handle broadcast error gracefully', () => {
+      const mockChannel = {
+        broadcast: vi.fn().mockImplementation(() => {
+          throw new Error('Broadcast failed');
+        }),
+      };
+      mockManager.analysisStatsChannels.set('analysis-1', mockChannel as any);
+
+      expect(() =>
+        channelManager.broadcastAnalysisStats('analysis-1', {
+          totalCount: 100,
+          logFileSize: 5000,
+        }),
+      ).not.toThrow();
+    });
+  });
+
+  describe('broadcastToMetricsChannel', () => {
+    it('should broadcast to metrics channel', () => {
+      channelManager.broadcastToMetricsChannel({ cpu: 50, memory: 1024 });
+
+      expect(mockManager.metricsChannel.broadcast).toHaveBeenCalledWith({
+        type: 'metricsUpdate',
+        cpu: 50,
+        memory: 1024,
+      });
+    });
+
+    it('should handle broadcast error gracefully', () => {
+      mockManager.metricsChannel.broadcast = vi.fn().mockImplementation(() => {
+        throw new Error('Broadcast failed');
+      });
+
+      expect(() =>
+        channelManager.broadcastToMetricsChannel({ cpu: 50 }),
+      ).not.toThrow();
+    });
+  });
+
+  describe('handleSubscribeStatsRequest', () => {
+    it('should return 400 when sessionId is missing', async () => {
+      const mockReq = {
+        body: { analyses: ['analysis-1'] },
+        user: { id: 'user-1' },
+      } as any;
+
+      await channelManager.handleSubscribeStatsRequest(mockReq, mockRes);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(mockRes.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'sessionId is required',
+      });
+    });
+
+    it('should return 400 when analyses is empty', async () => {
+      const mockReq = {
+        body: { sessionId: 'session-1', analyses: [] },
+        user: { id: 'user-1' },
+      } as any;
+
+      await channelManager.handleSubscribeStatsRequest(mockReq, mockRes);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(mockRes.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'analyses must be a non-empty array',
+      });
+    });
+
+    it('should return 404 when session not found', async () => {
+      const mockReq = {
+        body: { sessionId: 'nonexistent', analyses: ['analysis-1'] },
+        user: { id: 'user-1' },
+      } as any;
+
+      await channelManager.handleSubscribeStatsRequest(mockReq, mockRes);
+
+      expect(mockRes.status).toHaveBeenCalledWith(404);
+      expect(mockRes.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'Session not found',
+      });
+    });
+
+    it('should successfully subscribe to stats', async () => {
+      mockExecuteQuery.mockReturnValue({ id: 'user-1', role: 'admin' });
+
+      const mockSession = {
+        id: 'session-1',
+        state: { subscribedStatsChannels: new Set() },
+        isConnected: true,
+        push: vi.fn().mockResolvedValue(undefined),
+      };
+      mockManager.sessions.set('session-1', mockSession as any);
+
+      const mockReq = {
+        body: { sessionId: 'session-1', analyses: ['analysis-1'] },
+        user: { id: 'user-1' },
+      } as any;
+
+      await channelManager.handleSubscribeStatsRequest(mockReq, mockRes);
+
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+        }),
+      );
+    });
+  });
+
+  describe('handleUnsubscribeStatsRequest', () => {
+    it('should return 400 when sessionId is missing', async () => {
+      const mockReq = {
+        body: { analyses: ['analysis-1'] },
+        user: { id: 'user-1' },
+      } as any;
+
+      await channelManager.handleUnsubscribeStatsRequest(mockReq, mockRes);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+    });
+
+    it('should return 404 when session not found', async () => {
+      const mockReq = {
+        body: { sessionId: 'nonexistent', analyses: ['analysis-1'] },
+        user: { id: 'user-1' },
+      } as any;
+
+      await channelManager.handleUnsubscribeStatsRequest(mockReq, mockRes);
+
+      expect(mockRes.status).toHaveBeenCalledWith(404);
+    });
+
+    it('should successfully unsubscribe from stats', async () => {
+      const mockSession = {
+        id: 'session-1',
+        state: {
+          subscribedStatsChannels: new Set(['analysis-1']),
+        },
+      };
+      mockManager.sessions.set('session-1', mockSession as any);
+
+      const mockReq = {
+        body: { sessionId: 'session-1', analyses: ['analysis-1'] },
+        user: { id: 'user-1' },
+      } as any;
+
+      await channelManager.handleUnsubscribeStatsRequest(mockReq, mockRes);
+
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: true,
+        }),
+      );
+    });
+  });
+
+  describe('handleSubscribeMetricsRequest', () => {
+    it('should return 400 when sessionId is missing', async () => {
+      const mockReq = {
+        body: {},
+        user: { id: 'user-1' },
+      } as any;
+
+      await channelManager.handleSubscribeMetricsRequest(mockReq, mockRes);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(mockRes.json).toHaveBeenCalledWith({
+        success: false,
+        error: 'sessionId is required',
+      });
+    });
+
+    it('should return 404 when session not found', async () => {
+      const mockReq = {
+        body: { sessionId: 'nonexistent' },
+        user: { id: 'user-1' },
+      } as any;
+
+      await channelManager.handleSubscribeMetricsRequest(mockReq, mockRes);
+
+      expect(mockRes.status).toHaveBeenCalledWith(404);
+    });
+
+    it('should successfully subscribe to metrics', async () => {
+      const mockSession = {
+        id: 'session-1',
+        state: { subscribedToMetrics: false },
+        isConnected: true,
+        push: vi.fn().mockResolvedValue(undefined),
+      };
+      mockManager.sessions.set('session-1', mockSession as any);
+
+      const mockReq = {
+        body: { sessionId: 'session-1' },
+        user: { id: 'user-1' },
+      } as any;
+
+      await channelManager.handleSubscribeMetricsRequest(mockReq, mockRes);
+
+      expect(mockRes.json).toHaveBeenCalledWith({
+        success: true,
+      });
+    });
+  });
+
+  describe('handleUnsubscribeMetricsRequest', () => {
+    it('should return 400 when sessionId is missing', async () => {
+      const mockReq = {
+        body: {},
+        user: { id: 'user-1' },
+      } as any;
+
+      await channelManager.handleUnsubscribeMetricsRequest(mockReq, mockRes);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+    });
+
+    it('should return 404 when session not found', async () => {
+      const mockReq = {
+        body: { sessionId: 'nonexistent' },
+        user: { id: 'user-1' },
+      } as any;
+
+      await channelManager.handleUnsubscribeMetricsRequest(mockReq, mockRes);
+
+      expect(mockRes.status).toHaveBeenCalledWith(404);
+    });
+
+    it('should successfully unsubscribe from metrics', async () => {
+      const mockSession = {
+        id: 'session-1',
+        state: { subscribedToMetrics: true },
+      };
+      mockManager.sessions.set('session-1', mockSession as any);
+
+      const mockReq = {
+        body: { sessionId: 'session-1' },
+        user: { id: 'user-1' },
+      } as any;
+
+      await channelManager.handleUnsubscribeMetricsRequest(mockReq, mockRes);
+
+      expect(mockRes.json).toHaveBeenCalledWith({
+        success: true,
+      });
+    });
+  });
+
+  describe('sendLogStatsToSession', () => {
+    it('should send log stats to connected session', async () => {
+      const mockSession = {
+        id: 'session-1',
+        isConnected: true,
+        push: vi.fn().mockResolvedValue(undefined),
+      };
+
+      await channelManager.sendLogStatsToSession(
+        mockSession as any,
+        'analysis-1',
+      );
+
+      expect(mockSession.push).toHaveBeenCalledWith({
+        type: 'analysisLogStats',
+        analysisId: 'analysis-1',
+        totalCount: 0,
+        logFileSize: 0,
+      });
+    });
+
+    it('should not send stats when session is disconnected', async () => {
+      const mockSession = {
+        id: 'session-1',
+        isConnected: false,
+        push: vi.fn(),
+      };
+
+      await channelManager.sendLogStatsToSession(
+        mockSession as any,
+        'analysis-1',
+      );
+
+      expect(mockSession.push).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('sendProcessMetricsToSession', () => {
+    it('should not send metrics when session is disconnected', async () => {
+      const mockSession = {
+        id: 'session-1',
+        isConnected: false,
+        push: vi.fn(),
+      };
+
+      await channelManager.sendProcessMetricsToSession(
+        mockSession as any,
+        'analysis-1',
+      );
+
+      expect(mockSession.push).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('broadcastAnalysisProcessMetrics', () => {
+    it('should not broadcast when no channel exists', async () => {
+      await channelManager.broadcastAnalysisProcessMetrics('nonexistent');
+      // Should complete without error
+    });
+
+    it('should handle broadcast error gracefully', async () => {
+      const mockChannel = {
+        broadcast: vi.fn().mockImplementation(() => {
+          throw new Error('Broadcast failed');
+        }),
+      };
+      mockManager.analysisStatsChannels.set('analysis-1', mockChannel as any);
+
+      await expect(
+        channelManager.broadcastAnalysisProcessMetrics('analysis-1'),
+      ).resolves.not.toThrow();
+    });
+  });
 });

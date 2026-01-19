@@ -162,6 +162,7 @@ export class AnalysisLogService {
       const startIndex = (page - 1) * limit;
       const endIndex = startIndex + limit;
 
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is validated by getLogFilePath
       const fileStream = createReadStream(logFile, { encoding: 'utf8' });
       const rl = createInterface({
         input: fileStream,

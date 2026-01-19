@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- integration test with controlled temp paths */
 /**
  * Storage Integration Tests
  *

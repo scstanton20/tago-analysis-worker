@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- test with controlled temp paths */
 /**
  * Auth Database Tests
  *

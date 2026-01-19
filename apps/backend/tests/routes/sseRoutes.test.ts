@@ -48,8 +48,11 @@ vi.mock('../../src/utils/sse/index.ts', async () => {
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
+      // Flush headers first to establish connection properly
+      res.flushHeaders();
       res.write('data: {"type":"init"}\n\n');
-      res.end();
+      // Use setImmediate to ensure response is fully written before ending
+      setImmediate(() => res.end());
     }),
     sseManager: {
       sendToUser: vi.fn(),

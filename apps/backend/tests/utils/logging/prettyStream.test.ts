@@ -222,6 +222,112 @@ describe('prettyStream', () => {
     });
   });
 
+  describe('edge cases', () => {
+    it('should handle unix timestamp time format', async () => {
+      const stream = createPrettyStream();
+      const outputPromise = collectOutput(stream);
+
+      // Use unix timestamp instead of ISO string
+      const logEntry = JSON.stringify({
+        level: 30,
+        time: Date.now(),
+        msg: 'Unix timestamp test',
+      });
+      stream.write(logEntry + '\n');
+      stream.end();
+
+      const output = await outputPromise;
+      expect(output).toContain('Unix timestamp test');
+      expect(output).toMatch(/\d{4}-\d{2}-\d{2}/);
+    });
+
+    it('should handle unknown log level', async () => {
+      const stream = createPrettyStream();
+      const outputPromise = collectOutput(stream);
+
+      // Use level 99 which is not in LEVEL_NAMES
+      const logEntry = JSON.stringify({
+        level: 99,
+        time: new Date().toISOString(),
+        msg: 'Unknown level message',
+      });
+      stream.write(logEntry + '\n');
+      stream.end();
+
+      const output = await outputPromise;
+      expect(output).toContain('LOG');
+      expect(output).toContain('Unknown level message');
+    });
+
+    it('should handle missing msg field', async () => {
+      const stream = createPrettyStream();
+      const outputPromise = collectOutput(stream);
+
+      // Log entry without msg field
+      const logEntry = JSON.stringify({
+        level: 30,
+        time: new Date().toISOString(),
+        // No msg field
+      });
+      stream.write(logEntry + '\n');
+      stream.end();
+
+      const output = await outputPromise;
+      expect(output).toContain('INFO');
+      expect(output).toMatch(/\d{4}-\d{2}-\d{2}/);
+    });
+
+    it('should handle error with only type', async () => {
+      const stream = createPrettyStream();
+      const outputPromise = collectOutput(stream);
+
+      const logEntry = createLogEntry(50, 'Error with type only', {
+        err: {
+          type: 'TypeError',
+        },
+      });
+      stream.write(logEntry + '\n');
+      stream.end();
+
+      const output = await outputPromise;
+      expect(output).toContain('TypeError');
+    });
+
+    it('should handle error with only message', async () => {
+      const stream = createPrettyStream();
+      const outputPromise = collectOutput(stream);
+
+      const logEntry = createLogEntry(50, 'Error with message only', {
+        err: {
+          message: 'Something failed',
+        },
+      });
+      stream.write(logEntry + '\n');
+      stream.end();
+
+      const output = await outputPromise;
+      expect(output).toContain('Something failed');
+    });
+
+    it('should handle error without stack', async () => {
+      const stream = createPrettyStream();
+      const outputPromise = collectOutput(stream);
+
+      const logEntry = createLogEntry(50, 'Error no stack', {
+        err: {
+          type: 'Error',
+          message: 'No stack trace here',
+        },
+      });
+      stream.write(logEntry + '\n');
+      stream.end();
+
+      const output = await outputPromise;
+      expect(output).toContain('Error no stack');
+      expect(output).toContain('No stack trace here');
+    });
+  });
+
   describe('options', () => {
     it('should include module when includeModule is true', async () => {
       const stream = createPrettyStream({ includeModule: true });

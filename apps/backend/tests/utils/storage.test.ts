@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- test with controlled temp paths */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';

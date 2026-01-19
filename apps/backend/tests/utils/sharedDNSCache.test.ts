@@ -341,6 +341,32 @@ describe('sharedDNSCache', () => {
         '2606:2800:220:1:248:1893:25c8:1946',
       ]);
     });
+
+    it('should handle DNS_RESOLVE6_RESPONSE error', async () => {
+      process.env.DNS_CACHE_ENABLED = 'true';
+      process.send = vi.fn() as typeof process.send;
+      vi.resetModules();
+
+      const { promises: dnsPromises } = await import('dns');
+      await import('../../src/utils/sharedDNSCache.ts');
+
+      const promise = dnsPromises.resolve6('invalid.domain');
+
+      const sendMock = process.send as Mock;
+      const requestId = sendMock.mock.calls[0][0].requestId;
+
+      const handler = messageHandlers[messageHandlers.length - 1];
+      handler({
+        type: 'DNS_RESOLVE6_RESPONSE',
+        requestId,
+        result: {
+          success: false,
+          error: 'ENOTFOUND',
+        },
+      });
+
+      await expect(promise).rejects.toThrow('ENOTFOUND');
+    });
   });
 
   describe('timeout handling', () => {

@@ -391,4 +391,132 @@ describe('asyncHandler', () => {
       expect(res.json).toHaveBeenCalledWith({ error: 'Something went wrong' });
     });
   });
+
+  describe('non-Error type handling', () => {
+    it('should handle string errors', async () => {
+      const mockFn = vi.fn().mockRejectedValue('string error');
+      const req = { log: { error: vi.fn() } } as MockRequest;
+      const res = {
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      } as MockResponse;
+      const next = vi.fn();
+
+      const wrapped = asyncHandler(mockFn);
+      await wrapped(
+        req as unknown as Request,
+        res as unknown as Response,
+        next,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'string error' });
+    });
+
+    it('should handle number errors', async () => {
+      const mockFn = vi.fn().mockRejectedValue(404);
+      const req = { log: { error: vi.fn() } } as MockRequest;
+      const res = {
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      } as MockResponse;
+      const next = vi.fn();
+
+      const wrapped = asyncHandler(mockFn);
+      await wrapped(
+        req as unknown as Request,
+        res as unknown as Response,
+        next,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: '404' });
+    });
+
+    it('should handle null errors', async () => {
+      const mockFn = vi.fn().mockRejectedValue(null);
+      const req = { log: { error: vi.fn() } } as MockRequest;
+      const res = {
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      } as MockResponse;
+      const next = vi.fn();
+
+      const wrapped = asyncHandler(mockFn);
+      await wrapped(
+        req as unknown as Request,
+        res as unknown as Response,
+        next,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      // String(null) = 'null'
+      expect(res.json).toHaveBeenCalledWith({ error: 'null' });
+    });
+
+    it('should handle undefined errors', async () => {
+      const mockFn = vi.fn().mockRejectedValue(undefined);
+      const req = { log: { error: vi.fn() } } as MockRequest;
+      const res = {
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      } as MockResponse;
+      const next = vi.fn();
+
+      const wrapped = asyncHandler(mockFn);
+      await wrapped(
+        req as unknown as Request,
+        res as unknown as Response,
+        next,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      // String(undefined) = 'undefined'
+      expect(res.json).toHaveBeenCalledWith({ error: 'undefined' });
+    });
+
+    it('should handle object errors', async () => {
+      const mockFn = vi
+        .fn()
+        .mockRejectedValue({ code: 'ERR_001', detail: 'Custom error' });
+      const req = { log: { error: vi.fn() } } as MockRequest;
+      const res = {
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      } as MockResponse;
+      const next = vi.fn();
+
+      const wrapped = asyncHandler(mockFn);
+      await wrapped(
+        req as unknown as Request,
+        res as unknown as Response,
+        next,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      // String({...}) = '[object Object]'
+      expect(res.json).toHaveBeenCalledWith({ error: '[object Object]' });
+    });
+
+    it('should handle empty string error without operation name', async () => {
+      const mockFn = vi.fn().mockRejectedValue('');
+      const req = { log: { error: vi.fn() } } as MockRequest;
+      const res = {
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      } as MockResponse;
+      const next = vi.fn();
+
+      const wrapped = asyncHandler(mockFn);
+      await wrapped(
+        req as unknown as Request,
+        res as unknown as Response,
+        next,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      // Empty string is falsy, so falls back to 'An error occurred'
+      expect(res.json).toHaveBeenCalledWith({ error: 'An error occurred' });
+    });
+  });
 });

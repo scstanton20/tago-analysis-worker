@@ -66,6 +66,7 @@ type AnalysisInfoServiceType = {
     versions: unknown;
     team: { id: string | null; name: string };
     process: { status: string; enabled: boolean; intendedState: string };
+    metrics: { cpu: number; memory: number; uptime: number } | null;
     dns: {
       enabled: boolean;
       cacheSize: number;
@@ -344,6 +345,63 @@ describe('analysisInfoService', () => {
       expect(meta.dns).toHaveProperty('hits');
       expect(meta.dns).toHaveProperty('misses');
       expect(meta.dns).toHaveProperty('hitRate');
+    });
+
+    it('should handle team service error gracefully', async () => {
+      // When teamService.getTeam throws an error, should return Unknown team
+      teamService.getTeam.mockRejectedValue(new Error('Team service error'));
+
+      const meta = await analysisInfoService.getAnalysisMeta(mockAnalysisId);
+
+      expect(meta.team).toHaveProperty('id', 'team-123');
+      expect(meta.team).toHaveProperty('name', 'Unknown');
+    });
+
+    it('should include process metrics when available', async () => {
+      // Mock metricsService to return process metrics for this analysis
+      const metricsServiceModule =
+        await import('../../src/services/metricsService.ts');
+      vi.mocked(
+        metricsServiceModule.metricsService.getProcessMetrics,
+      ).mockResolvedValue([
+        {
+          analysis_id: mockAnalysisId,
+          name: 'Test Analysis',
+          cpu: 25.5,
+          memory: 1024000,
+          uptime: 3600,
+        },
+      ]);
+
+      const meta = await analysisInfoService.getAnalysisMeta(mockAnalysisId);
+
+      expect(meta).toHaveProperty('metrics');
+      expect(meta.metrics).toEqual({
+        cpu: 25.5,
+        memory: 1024000,
+        uptime: 3600,
+      });
+    });
+
+    it('should return null metrics when no process data found', async () => {
+      // Mock metricsService to return empty array
+      const metricsServiceModule =
+        await import('../../src/services/metricsService.ts');
+      vi.mocked(
+        metricsServiceModule.metricsService.getProcessMetrics,
+      ).mockResolvedValue([
+        {
+          analysis_id: 'other-analysis',
+          name: 'Other Analysis',
+          cpu: 10,
+          memory: 500000,
+          uptime: 1800,
+        },
+      ]);
+
+      const meta = await analysisInfoService.getAnalysisMeta(mockAnalysisId);
+
+      expect(meta.metrics).toBeNull();
     });
   });
 

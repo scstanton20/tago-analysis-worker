@@ -27,6 +27,7 @@ function findLockfile(): string | null {
   // Walk up directories to find pnpm-lock.yaml
   while (currentDir !== path.dirname(currentDir)) {
     const lockfilePath = path.join(currentDir, 'pnpm-lock.yaml');
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is constructed from __dirname
     if (fs.existsSync(lockfilePath)) {
       return lockfilePath;
     }
@@ -75,6 +76,7 @@ export function getTagoSdkVersion(): string {
     const lockfilePath = findLockfile();
 
     if (lockfilePath) {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- path is from findLockfile()
       const content = fs.readFileSync(lockfilePath, 'utf8');
       const version = extractVersionFromLockfile(content);
 

@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- test fixture with controlled temp paths */
 /**
  * Temp Storage Factory
  *

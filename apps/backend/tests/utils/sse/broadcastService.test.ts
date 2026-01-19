@@ -161,6 +161,8 @@ function createMockSSEManager() {
     channelManager: {
       broadcastAnalysisLog: vi.fn(),
       broadcastAnalysisDnsStats: vi.fn(),
+      broadcastAnalysisStats: vi.fn(),
+      broadcastAnalysisProcessMetrics: vi.fn().mockResolvedValue(undefined),
     },
     initDataService: {
       sendStatusUpdate: vi.fn(),
@@ -1229,6 +1231,367 @@ describe('BroadcastService', () => {
       expect(
         mockSSEManager.channelManager.broadcastAnalysisDnsStats,
       ).toHaveBeenCalledWith(analysisId);
+    });
+  });
+
+  // ========================================================================
+  // 17. ERROR HANDLING IN BROADCAST METRICS UPDATE
+  // ========================================================================
+  describe('broadcastMetricsUpdate error handling', () => {
+    it('should catch and log errors when metrics broadcast fails', async () => {
+      const session = createMockSession({
+        state: {
+          userId: 'user-1',
+          user: { id: 'user-1', role: 'admin' },
+          subscribedChannels: new Set(),
+          subscribedToMetrics: true,
+        },
+        isConnected: true,
+      });
+      mockSSEManager.sessions.set(session.id, session);
+      mockSSEManager.metricsChannel.activeSessions = [
+        session as unknown as Session,
+      ];
+
+      // Make getAllMetrics throw to trigger the catch block
+      const { metricsService } =
+        await import('../../../src/services/metricsService.ts');
+      vi.mocked(metricsService.getAllMetrics).mockRejectedValueOnce(
+        new Error('Metrics service error'),
+      );
+
+      // Should not throw, error should be caught and logged
+      await expect(
+        broadcastService.broadcastMetricsUpdate(),
+      ).resolves.not.toThrow();
+    });
+
+    it('should handle error when loading broadcast dependencies fails', async () => {
+      const session = createMockSession({
+        state: {
+          userId: 'user-1',
+          user: { id: 'user-1', role: 'admin' },
+          subscribedChannels: new Set(),
+          subscribedToMetrics: true,
+        },
+        isConnected: true,
+      });
+      mockSSEManager.sessions.set(session.id, session);
+      mockSSEManager.metricsChannel.activeSessions = [
+        session as unknown as Session,
+      ];
+
+      // Make getAnalysisService throw to trigger the catch block
+      const { getAnalysisService } =
+        await import('../../../src/utils/lazyLoader.ts');
+      vi.mocked(getAnalysisService).mockRejectedValueOnce(
+        new Error('Analysis service loading failed'),
+      );
+
+      // Should not throw, error should be caught and logged
+      await expect(
+        broadcastService.broadcastMetricsUpdate(),
+      ).resolves.not.toThrow();
+    });
+  });
+
+  // ========================================================================
+  // 18. NON-ADMIN USER FILTERING WITH TEAM ACCESS
+  // ========================================================================
+  describe('non-admin user filtering with metricsChannel', () => {
+    it('should filter processes for non-admin users based on team access', async () => {
+      // Create a non-admin user session
+      const session = createMockSession({
+        state: {
+          userId: 'user-1',
+          user: { id: 'user-1', role: 'user' },
+          subscribedChannels: new Set(),
+          subscribedToMetrics: true,
+        },
+        isConnected: true,
+      });
+      mockSSEManager.sessions.set(session.id, session);
+      // Add session to metricsChannel.activeSessions
+      mockSSEManager.metricsChannel.activeSessions = [
+        session as unknown as Session,
+      ];
+
+      await broadcastService.broadcastMetricsUpdate();
+
+      // Session should receive filtered metrics via push
+      expect(session.push).toHaveBeenCalled();
+    });
+
+    it('should include all processes for admin users', async () => {
+      const adminSession = createMockSession({
+        state: {
+          userId: 'admin-user',
+          user: { id: 'admin-user', role: 'admin' },
+          subscribedChannels: new Set(),
+          subscribedToMetrics: true,
+        },
+        isConnected: true,
+      });
+      mockSSEManager.sessions.set(adminSession.id, adminSession);
+      mockSSEManager.metricsChannel.activeSessions = [
+        adminSession as unknown as Session,
+      ];
+
+      await broadcastService.broadcastMetricsUpdate();
+
+      // Admin session should receive unfiltered metrics
+      expect(adminSession.push).toHaveBeenCalled();
+    });
+
+    it('should recalculate children metrics after filtering for non-admin', async () => {
+      const userSession = createMockSession({
+        state: {
+          userId: 'user-3',
+          user: { id: 'user-3', role: 'user' },
+          subscribedChannels: new Set(),
+          subscribedToMetrics: true,
+        },
+        isConnected: true,
+      });
+      mockSSEManager.sessions.set(userSession.id, userSession);
+      mockSSEManager.metricsChannel.activeSessions = [
+        userSession as unknown as Session,
+      ];
+
+      await broadcastService.broadcastMetricsUpdate();
+
+      // Should successfully complete with filtered metrics for user-3 (only team-2 access)
+      expect(userSession.push).toHaveBeenCalled();
+    });
+
+    it('should handle analysis without teamId using uncategorized', async () => {
+      // Override analysis service to return an analysis without teamId
+      const { getAnalysisService } =
+        await import('../../../src/utils/lazyLoader.ts');
+      vi.mocked(getAnalysisService).mockResolvedValueOnce({
+        getAllAnalyses: vi.fn(() =>
+          Promise.resolve({
+            'analysis-no-team': {
+              id: 'analysis-no-team',
+              name: 'Analysis No Team',
+              teamId: null, // null teamId - should be treated as 'uncategorized'
+            },
+          }),
+        ),
+        getAnalysisById: vi.fn(),
+      } as unknown as Awaited<ReturnType<typeof getAnalysisService>>);
+
+      const userSession = createMockSession({
+        state: {
+          userId: 'user-1',
+          user: { id: 'user-1', role: 'user' },
+          subscribedChannels: new Set(),
+          subscribedToMetrics: true,
+        },
+        isConnected: true,
+      });
+      mockSSEManager.sessions.set(userSession.id, userSession);
+      mockSSEManager.metricsChannel.activeSessions = [
+        userSession as unknown as Session,
+      ];
+
+      // user-1 has access to 'uncategorized' team
+      await broadcastService.broadcastMetricsUpdate();
+
+      expect(userSession.push).toHaveBeenCalled();
+    });
+  });
+
+  describe('broadcastAnalysisStats()', () => {
+    it('should delegate to channelManager.broadcastAnalysisStats', () => {
+      const analysisId = 'test-analysis-id';
+      const statsData = { totalCount: 100, logFileSize: 50000 };
+
+      broadcastService.broadcastAnalysisStats(analysisId, statsData);
+
+      expect(
+        mockSSEManager.channelManager.broadcastAnalysisStats,
+      ).toHaveBeenCalledWith(analysisId, statsData);
+    });
+
+    it('should pass correct stats data structure', () => {
+      broadcastService.broadcastAnalysisStats('analysis-1', {
+        totalCount: 250,
+        logFileSize: 1024000,
+      });
+
+      expect(
+        mockSSEManager.channelManager.broadcastAnalysisStats,
+      ).toHaveBeenCalledWith('analysis-1', {
+        totalCount: 250,
+        logFileSize: 1024000,
+      });
+    });
+  });
+
+  describe('broadcastAnalysisProcessMetrics()', () => {
+    it('should delegate to channelManager.broadcastAnalysisProcessMetrics', async () => {
+      const analysisId = 'test-analysis-id';
+
+      await broadcastService.broadcastAnalysisProcessMetrics(analysisId);
+
+      expect(
+        mockSSEManager.channelManager.broadcastAnalysisProcessMetrics,
+      ).toHaveBeenCalledWith(analysisId);
+    });
+
+    it('should await channelManager method', async () => {
+      mockSSEManager.channelManager.broadcastAnalysisProcessMetrics = vi
+        .fn()
+        .mockResolvedValue(undefined);
+
+      await broadcastService.broadcastAnalysisProcessMetrics('analysis-2');
+
+      expect(
+        mockSSEManager.channelManager.broadcastAnalysisProcessMetrics,
+      ).toHaveBeenCalledWith('analysis-2');
+    });
+  });
+
+  describe('broadcastProcessMetricsToStatsChannels()', () => {
+    it('should broadcast process metrics to stats channel subscribers', async () => {
+      const mockChannel = {
+        broadcast: vi.fn(),
+        register: vi.fn(),
+        activeSessions: [],
+      };
+      mockSSEManager.analysisStatsChannels.set('analysis-1', mockChannel);
+
+      // Create a session subscribed to metrics
+      const session = createMockSession({
+        state: {
+          userId: 'user-1',
+          user: { id: 'user-1', role: 'admin' },
+          subscribedChannels: new Set(),
+          subscribedToMetrics: true,
+        },
+        isConnected: true,
+      });
+      mockSSEManager.sessions.set(session.id, session);
+      mockSSEManager.metricsChannel.activeSessions = [
+        session as unknown as Session,
+      ];
+
+      await broadcastService.broadcastMetricsUpdate();
+
+      // The stats channel should have received the process metrics broadcast
+      expect(mockChannel.broadcast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'analysisProcessMetrics',
+          analysisId: 'analysis-1',
+        }),
+      );
+    });
+
+    it('should skip stats channels with no matching process data', async () => {
+      const mockChannel = {
+        broadcast: vi.fn(),
+        register: vi.fn(),
+        activeSessions: [],
+      };
+      // Set up stats channel for an analysis that won't have process data
+      mockSSEManager.analysisStatsChannels.set(
+        'non-existent-analysis',
+        mockChannel,
+      );
+
+      const session = createMockSession({
+        state: {
+          userId: 'user-1',
+          user: { id: 'user-1', role: 'admin' },
+          subscribedChannels: new Set(),
+          subscribedToMetrics: true,
+        },
+        isConnected: true,
+      });
+      mockSSEManager.sessions.set(session.id, session);
+      mockSSEManager.metricsChannel.activeSessions = [
+        session as unknown as Session,
+      ];
+
+      await broadcastService.broadcastMetricsUpdate();
+
+      // The channel for non-matching analysis should NOT have been called
+      expect(mockChannel.broadcast).not.toHaveBeenCalled();
+    });
+
+    it('should handle channel that no longer exists in map', async () => {
+      // Create a situation where keys() returns an ID but get() returns undefined
+      const originalGet = mockSSEManager.analysisStatsChannels.get.bind(
+        mockSSEManager.analysisStatsChannels,
+      );
+      mockSSEManager.analysisStatsChannels.set('temp-analysis', {
+        broadcast: vi.fn(),
+        register: vi.fn(),
+        activeSessions: [],
+      });
+
+      // Override get to return undefined
+      mockSSEManager.analysisStatsChannels.get = vi.fn(() => undefined);
+
+      const session = createMockSession({
+        state: {
+          userId: 'user-1',
+          user: { id: 'user-1', role: 'admin' },
+          subscribedChannels: new Set(),
+          subscribedToMetrics: true,
+        },
+        isConnected: true,
+      });
+      mockSSEManager.sessions.set(session.id, session);
+      mockSSEManager.metricsChannel.activeSessions = [
+        session as unknown as Session,
+      ];
+
+      // Should not throw
+      await expect(
+        broadcastService.broadcastMetricsUpdate(),
+      ).resolves.not.toThrow();
+
+      // Restore original get
+      mockSSEManager.analysisStatsChannels.get = originalGet;
+    });
+
+    it('should broadcast metrics with cpu, memory, and uptime', async () => {
+      const mockChannel = {
+        broadcast: vi.fn(),
+        register: vi.fn(),
+        activeSessions: [],
+      };
+      mockSSEManager.analysisStatsChannels.set('analysis-1', mockChannel);
+
+      const session = createMockSession({
+        state: {
+          userId: 'user-1',
+          user: { id: 'user-1', role: 'admin' },
+          subscribedChannels: new Set(),
+          subscribedToMetrics: true,
+        },
+        isConnected: true,
+      });
+      mockSSEManager.sessions.set(session.id, session);
+      mockSSEManager.metricsChannel.activeSessions = [
+        session as unknown as Session,
+      ];
+
+      await broadcastService.broadcastMetricsUpdate();
+
+      expect(mockChannel.broadcast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'analysisProcessMetrics',
+          analysisId: 'analysis-1',
+          metrics: expect.objectContaining({
+            cpu: expect.any(Number),
+            memory: expect.any(Number),
+            uptime: expect.any(Number),
+          }),
+        }),
+      );
     });
   });
 });

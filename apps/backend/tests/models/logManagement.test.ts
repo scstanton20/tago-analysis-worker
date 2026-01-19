@@ -518,6 +518,151 @@ describe('LogManagement', () => {
     });
   });
 
+  describe('safeStat result validation', () => {
+    it('should handle safeStat returning non-FileStats during rotation check', async () => {
+      (
+        logManager as unknown as { estimatedFileSize: number }
+      ).estimatedFileSize = 60 * 1024 * 1024;
+      (
+        logManager as unknown as { logsSinceLastCheck: number }
+      ).logsSinceLastCheck = 100;
+
+      // Return something that's not FileStats (null, undefined, or object without size)
+      (safeStat as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
+
+      // Should not throw and should not trigger rotation
+      await expect(logManager.addLog('test message')).resolves.not.toThrow();
+      expect(safeWriteFile).not.toHaveBeenCalled();
+    });
+
+    it('should handle safeStat returning object without size property', async () => {
+      (
+        logManager as unknown as { estimatedFileSize: number }
+      ).estimatedFileSize = 60 * 1024 * 1024;
+      (
+        logManager as unknown as { logsSinceLastCheck: number }
+      ).logsSinceLastCheck = 100;
+
+      // Return object without size property
+      (safeStat as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        isFile: () => true,
+      });
+
+      await expect(logManager.addLog('test message')).resolves.not.toThrow();
+      expect(safeWriteFile).not.toHaveBeenCalled();
+    });
+
+    it('should handle safeStat returning invalid stats during initializeLogState', async () => {
+      // Return object without proper size property
+      (safeStat as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        notSize: 1024,
+      });
+
+      await logManager.initializeLogState();
+
+      // Should start fresh with empty logs
+      expect(mockAnalysisProcess.totalLogCount).toBe(0);
+      expect(mockAnalysisProcess.logSequence).toBe(0);
+      expect(mockAnalysisProcess.logs).toEqual([]);
+    });
+  });
+
+  describe('loadExistingLogs edge cases', () => {
+    it('should handle safeReadFile returning non-string content', async () => {
+      (safeStat as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        size: 1024,
+      });
+      // Return something that's not a string (e.g., Buffer)
+      (safeReadFile as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+        Buffer.from('test'),
+      );
+
+      await expect(logManager.initializeLogState()).resolves.not.toThrow();
+
+      // Should log error about non-string content
+      expect(mockAnalysisProcess.logger.error).toHaveBeenCalled();
+    });
+
+    it('should re-throw non-ENOENT errors during log loading', async () => {
+      const error = new Error('Disk full') as Error & { code: string };
+      error.code = 'ENOSPC';
+
+      (safeStat as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        size: 1024,
+      });
+      (safeReadFile as ReturnType<typeof vi.fn>).mockRejectedValueOnce(error);
+
+      // initializeLogState catches this at the outer level
+      await expect(logManager.initializeLogState()).resolves.not.toThrow();
+
+      // The error should have been logged (as non-ENOENT error)
+      expect(mockAnalysisProcess.logger.error).toHaveBeenCalled();
+    });
+  });
+
+  describe('rotation content handling', () => {
+    it('should handle non-string content during rotation', async () => {
+      const mockStream = {
+        flush: vi.fn(),
+        end: vi.fn(),
+        write: vi.fn(),
+      };
+      mockAnalysisProcess.fileLoggerStream = mockStream;
+
+      (
+        logManager as unknown as { estimatedFileSize: number }
+      ).estimatedFileSize = 60 * 1024 * 1024;
+      (
+        logManager as unknown as { logsSinceLastCheck: number }
+      ).logsSinceLastCheck = 100;
+
+      (safeStat as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        size: 60 * 1024 * 1024,
+      });
+      // Return Buffer instead of string
+      (safeReadFile as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+        Buffer.from('test'),
+      );
+
+      await expect(logManager.addLog('test message')).resolves.not.toThrow();
+
+      // Should warn about preservation failure
+      expect(mockAnalysisProcess.logger.warn).toHaveBeenCalled();
+    });
+
+    it('should handle empty log file during rotation', async () => {
+      const mockStream = {
+        flush: vi.fn(),
+        end: vi.fn(),
+        write: vi.fn(),
+      };
+      mockAnalysisProcess.fileLoggerStream = mockStream;
+
+      (
+        logManager as unknown as { estimatedFileSize: number }
+      ).estimatedFileSize = 60 * 1024 * 1024;
+      (
+        logManager as unknown as { logsSinceLastCheck: number }
+      ).logsSinceLastCheck = 100;
+
+      (safeStat as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        size: 60 * 1024 * 1024,
+      });
+      // Return empty string
+      (safeReadFile as ReturnType<typeof vi.fn>).mockResolvedValueOnce('');
+
+      await expect(logManager.addLog('test message')).resolves.not.toThrow();
+
+      // Should write empty preserved content
+      expect(safeWriteFile).toHaveBeenCalledWith(
+        expect.any(String),
+        '',
+        expect.any(String),
+        expect.any(Object),
+      );
+    });
+  });
+
   describe('log entry format', () => {
     it('should create log entries with correct structure', async () => {
       await logManager.addLog('Test message');
