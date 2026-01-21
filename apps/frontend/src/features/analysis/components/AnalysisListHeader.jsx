@@ -63,8 +63,8 @@ export default function AnalysisListHeader({
 
       {/* Action buttons */}
       <Group gap="xs">
-        {/* Create Analysis Button - always visible when user has upload permissions */}
-        {canUploadAnalyses() && (
+        {/* Create Analysis Button - hidden during reorder mode */}
+        {canUploadAnalyses() && !reorderMode && (
           <Tooltip label="Create Analysis" position="bottom">
             <ActionIcon
               variant="gradient"
