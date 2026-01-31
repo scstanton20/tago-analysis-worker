@@ -129,7 +129,7 @@ function VersionManagementModalContent({ innerProps }) {
   };
 
   const handleRollback = async (version) => {
-    ConfirmDialog.warning({
+    ConfirmDialog.info({
       title: 'Rollback to Previous Version',
       message: `Are you sure you want to rollback "${analysis.name}" to version ${version}? This will clear the current logs and restart the analysis if it's running.`,
       confirmLabel: 'Rollback',

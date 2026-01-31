@@ -892,14 +892,16 @@ export class AnalysisController {
       'Analysis rolled back',
     );
 
-    // Get updated analysis data
+    // Get updated analysis data (config entry + runtime status)
     const updatedAnalysis = analysisService.getAnalysisById(analysisId);
+    const analysisProcess = analysisService.getAnalysisProcess(analysisId);
+    const currentStatus = analysisProcess?.status || 'stopped';
 
-    // Broadcast rollback with complete analysis data
+    // Broadcast rollback with complete analysis data and actual status
     await broadcastAnalysisRolledBack(analysisId, {
       analysisName: updatedAnalysis?.name,
       version: versionNumber,
-      status: 'rolled back',
+      status: currentStatus,
       restarted: result.restarted,
       ...updatedAnalysis,
     });

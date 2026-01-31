@@ -252,33 +252,44 @@ export function SSEAnalysesProvider({ children }) {
     }
   }, []);
 
-  const handleAnalysisRolledBack = useCallback((data) => {
-    if (data.data?.analysisId) {
-      const { analysisId, analysisName, version, restarted, ...analysisData } =
-        data.data;
+  const handleAnalysisRolledBack = useCallback(
+    (data) => {
+      if (data.data?.analysisId) {
+        const {
+          analysisId,
+          analysisName,
+          version,
+          restarted,
+          ...analysisData
+        } = data.data;
 
-      // Notify event bus subscribers that logs were cleared
-      logEventBus.clear(analysisId);
+        // Notify event bus subscribers that logs were cleared
+        logEventBus.clear(analysisId);
 
-      // Update analysis with rollback information
-      setAnalyses((prev) => {
-        if (!prev[analysisId]) return prev;
-        return {
-          ...prev,
-          [analysisId]: {
-            ...prev[analysisId],
-            ...analysisData,
-            currentVersion: version,
-            logsClearedAt: Date.now(), // Trigger LazyLog remount
-          },
-        };
-      });
+        // Update analysis with rollback information
+        setAnalyses((prev) => {
+          if (!prev[analysisId]) return prev;
+          return {
+            ...prev,
+            [analysisId]: {
+              ...prev[analysisId],
+              ...analysisData,
+              currentVersion: version,
+              logsClearedAt: Date.now(), // Trigger LazyLog remount
+            },
+          };
+        });
 
-      logger.log(
-        `Analysis ${analysisName || analysisId} rolled back to version ${version}${restarted ? ' and restarted' : ''}`,
-      );
-    }
-  }, []);
+        // Clear loading state - rollback is complete
+        removeLoadingAnalysis(analysisId);
+
+        logger.log(
+          `Analysis ${analysisName || analysisId} rolled back to version ${version}${restarted ? ' and restarted' : ''}`,
+        );
+      }
+    },
+    [removeLoadingAnalysis],
+  );
 
   const handleAnalysisMovedToTeam = useCallback((data) => {
     if (data.analysisId && data.to) {

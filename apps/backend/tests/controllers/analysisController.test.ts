@@ -14,6 +14,7 @@ vi.mock('../../src/services/analysis/index.ts', () => ({
     uploadAnalysis: vi.fn(),
     getAllAnalyses: vi.fn(),
     getAnalysisById: vi.fn(),
+    getAnalysisProcess: vi.fn(),
     runAnalysis: vi.fn(),
     stopAnalysis: vi.fn(),
     deleteAnalysis: vi.fn(),
@@ -115,6 +116,7 @@ type MockAnalysisService = {
   uploadAnalysis: Mock;
   getAllAnalyses: Mock;
   getAnalysisById: Mock;
+  getAnalysisProcess: Mock;
   runAnalysis: Mock;
   stopAnalysis: Mock;
   deleteAnalysis: Mock;
@@ -822,8 +824,11 @@ describe('AnalysisController', () => {
       });
 
       analysisService.getAnalysisById.mockReturnValue({
-        analysisId,
-        analysisName: 'test-analysis',
+        id: analysisId,
+        name: 'test-analysis',
+      });
+
+      analysisService.getAnalysisProcess.mockReturnValue({
         status: 'stopped',
       });
 
@@ -840,6 +845,40 @@ describe('AnalysisController', () => {
         }),
       );
       expect(broadcastAnalysisRolledBack).toHaveBeenCalled();
+    });
+
+    it('should broadcast running status when analysis is restarted', async () => {
+      const analysisId = 'test-analysis-uuid-123';
+      const req = createControllerRequest({
+        params: { analysisId },
+        body: { version: 1 },
+      });
+      const res = createControllerResponse();
+
+      analysisService.rollbackToVersion.mockResolvedValue({
+        success: true,
+        restarted: true,
+        version: 1,
+      });
+
+      analysisService.getAnalysisById.mockReturnValue({
+        id: analysisId,
+        name: 'test-analysis',
+      });
+
+      analysisService.getAnalysisProcess.mockReturnValue({
+        status: 'running',
+      });
+
+      await AnalysisController.rollbackToVersion(req, res);
+
+      expect(broadcastAnalysisRolledBack).toHaveBeenCalledWith(
+        analysisId,
+        expect.objectContaining({
+          status: 'running',
+          restarted: true,
+        }),
+      );
     });
   });
 

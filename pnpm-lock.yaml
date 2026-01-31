@@ -78,7 +78,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/types
       '@tago-io/sdk':
-        specifier: ^12.2.1
+        specifier: ^12.2.2
         version: 12.2.2
       archiver:
         specifier: ^7.0.1
@@ -9251,7 +9251,7 @@ snapshots:
       http-errors: 2.0.1
       iconv-lite: 0.7.1
       on-finished: 2.4.1
-      qs: 6.14.0
+      qs: 6.14.1
       raw-body: 3.0.2
       type-is: 2.0.1
     transitivePeerDependencies:

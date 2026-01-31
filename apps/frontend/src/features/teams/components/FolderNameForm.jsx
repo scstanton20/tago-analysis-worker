@@ -23,7 +23,7 @@ export function FolderNameForm({
   placeholder = 'Enter folder name...',
   resetOnSuccess = false,
 }) {
-  const { form, submitOperation, handleSubmit } = useStandardForm({
+  const { form, submitOperation, handleSubmit, isDirty } = useStandardForm({
     initialValues: {
       name: initialName,
     },
@@ -53,6 +53,7 @@ export function FolderNameForm({
         <FormActionButtons
           type="submit"
           loading={submitOperation.loading}
+          disabled={!isDirty}
           submitLabel={submitLabel}
           fullWidth
         />
