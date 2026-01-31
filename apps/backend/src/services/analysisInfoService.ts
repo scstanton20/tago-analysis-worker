@@ -90,7 +90,7 @@ class AnalysisInfoService {
     analysisId: string,
     logger: Logger = moduleLogger,
   ): Promise<AnalysisInfoResponse> {
-    logger.info(
+    logger.debug(
       { action: 'getAnalysisMeta', analysisId },
       'Getting analysis metadata',
     );
@@ -205,7 +205,7 @@ class AnalysisInfoService {
       },
     };
 
-    logger.info(
+    logger.debug(
       {
         action: 'getAnalysisMeta',
         analysisId,
@@ -224,7 +224,7 @@ class AnalysisInfoService {
     analysisId: string,
     logger: Logger = moduleLogger,
   ): Promise<AnalysisNotesResponse> {
-    logger.info(
+    logger.debug(
       { action: 'getAnalysisNotes', analysisId },
       'Getting analysis notes',
     );
@@ -248,7 +248,7 @@ class AnalysisInfoService {
         content = DEFAULT_NOTES_TEMPLATE;
         await safeWriteFile(notesPath, content, config.paths.analysis);
         isNew = true;
-        logger.info({ analysisId }, 'Created default notes file');
+        logger.debug({ analysisId }, 'Created default notes file');
       } else {
         throw error;
       }
@@ -276,7 +276,7 @@ class AnalysisInfoService {
     content: string,
     logger: Logger = moduleLogger,
   ): Promise<UpdateAnalysisNotesResponse> {
-    logger.info(
+    logger.debug(
       { action: 'updateAnalysisNotes', analysisId },
       'Updating analysis notes',
     );

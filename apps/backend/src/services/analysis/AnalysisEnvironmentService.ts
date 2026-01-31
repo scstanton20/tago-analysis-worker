@@ -45,7 +45,7 @@ class AnalysisEnvironmentService {
     analysisId: string,
     logger: Logger = moduleLogger,
   ): Promise<EnvironmentVariables> {
-    logger.info(
+    logger.debug(
       { action: 'getEnvironment', analysisId },
       'Getting environment variables',
     );

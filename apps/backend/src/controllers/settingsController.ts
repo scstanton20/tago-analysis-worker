@@ -26,12 +26,12 @@ export class SettingsController {
     req: RequestWithLogger,
     res: Response,
   ): Promise<void> {
-    req.log.info({ action: 'getDNSConfig' }, 'Getting DNS configuration');
+    req.log.debug({ action: 'getDNSConfig' }, 'Getting DNS configuration');
 
     const config = dnsCache.getConfig();
     const stats = dnsCache.getStats();
 
-    req.log.info(
+    req.log.debug(
       { action: 'getDNSConfig', cacheSize: stats.cacheSize },
       'DNS configuration retrieved',
     );
@@ -94,11 +94,14 @@ export class SettingsController {
     req: RequestWithLogger,
     res: Response,
   ): Promise<void> {
-    req.log.info({ action: 'getDNSCacheEntries' }, 'Getting DNS cache entries');
+    req.log.debug(
+      { action: 'getDNSCacheEntries' },
+      'Getting DNS cache entries',
+    );
 
     const entries = dnsCache.getCacheEntries();
 
-    req.log.info(
+    req.log.debug(
       { action: 'getDNSCacheEntries', count: entries.length },
       'DNS cache entries retrieved',
     );
@@ -117,7 +120,7 @@ export class SettingsController {
     req: RequestWithLogger,
     res: Response,
   ): Promise<void> {
-    req.log.info({ action: 'clearDNSCache' }, 'Clearing DNS cache');
+    req.log.debug({ action: 'clearDNSCache' }, 'Clearing DNS cache');
 
     const entriesCleared = dnsCache.clearCache();
     const stats = dnsCache.getStats();
@@ -154,7 +157,7 @@ export class SettingsController {
     const { key } = req.params;
 
     // Validation handled by middleware
-    req.log.info(
+    req.log.debug(
       { action: 'deleteDNSCacheEntry', key },
       'Deleting DNS cache entry',
     );
@@ -187,7 +190,10 @@ export class SettingsController {
     req: RequestWithLogger,
     res: Response,
   ): Promise<void> {
-    req.log.info({ action: 'resetDNSStats' }, 'Resetting DNS cache statistics');
+    req.log.debug(
+      { action: 'resetDNSStats' },
+      'Resetting DNS cache statistics',
+    );
 
     dnsCache.resetStats();
     const stats = dnsCache.getStats();
@@ -216,14 +222,14 @@ export class SettingsController {
     req: RequestWithLogger,
     res: Response,
   ): Promise<void> {
-    req.log.info(
+    req.log.debug(
       { action: 'getAllAnalysisDNSStats' },
       'Getting all analysis DNS stats',
     );
 
     const analysisStats = dnsCache.getAllAnalysisStats();
 
-    req.log.info(
+    req.log.debug(
       {
         action: 'getAllAnalysisDNSStats',
         count: Object.keys(analysisStats).length,
@@ -246,14 +252,14 @@ export class SettingsController {
   ): Promise<void> {
     const { analysisId } = req.params;
 
-    req.log.info(
+    req.log.debug(
       { action: 'getAnalysisDNSStats', analysisId },
       'Getting analysis DNS stats',
     );
 
     const stats = dnsCache.getAnalysisStats(analysisId);
 
-    req.log.info(
+    req.log.debug(
       { action: 'getAnalysisDNSStats', analysisId, stats },
       'Analysis DNS stats retrieved',
     );
@@ -274,14 +280,14 @@ export class SettingsController {
   ): Promise<void> {
     const { analysisId } = req.params;
 
-    req.log.info(
+    req.log.debug(
       { action: 'getAnalysisDNSCacheEntries', analysisId },
       'Getting analysis DNS cache entries',
     );
 
     const entries = dnsCache.getAnalysisCacheEntries(analysisId);
 
-    req.log.info(
+    req.log.debug(
       {
         action: 'getAnalysisDNSCacheEntries',
         analysisId,

@@ -210,7 +210,7 @@ export class AnalysisLifecycleService {
     analysisId: string,
     logger: Logger = moduleLogger,
   ): Promise<RunAnalysisResult> {
-    logger.info({ action: 'runAnalysis', analysisId }, 'Running analysis');
+    logger.debug({ action: 'runAnalysis', analysisId }, 'Running analysis');
 
     const analysis = this.configService.getAnalysisProcess(analysisId);
     if (!analysis) {
@@ -219,14 +219,14 @@ export class AnalysisLifecycleService {
 
     // Check if a start operation is already in progress
     if (this.startLocks.has(analysisId)) {
-      logger.info(
+      logger.debug(
         { action: 'runAnalysis', analysisId },
         'Start operation already in progress, waiting for completion',
       );
 
       try {
         const result = await this.startLocks.get(analysisId)!;
-        logger.info(
+        logger.debug(
           { action: 'runAnalysis', analysisId },
           'Concurrent start operation completed',
         );
@@ -242,7 +242,7 @@ export class AnalysisLifecycleService {
 
     // Check if analysis is already running
     if (analysis.status === 'running' && analysis.process) {
-      logger.info(
+      logger.debug(
         { action: 'runAnalysis', analysisId },
         'Analysis is already running',
       );
@@ -299,7 +299,7 @@ export class AnalysisLifecycleService {
     analysisId: string,
     logger: Logger = moduleLogger,
   ): Promise<StopAnalysisResult> {
-    logger.info({ action: 'stopAnalysis', analysisId }, 'Stopping analysis');
+    logger.debug({ action: 'stopAnalysis', analysisId }, 'Stopping analysis');
 
     const analysis = this.configService.getAnalysisProcess(analysisId);
     if (!analysis) {

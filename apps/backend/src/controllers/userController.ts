@@ -177,7 +177,7 @@ export class UserController {
     // Validation handled by middleware
     // Don't create member entries if no teams are being assigned
     if (teamAssignments.length === 0) {
-      req.log.info(
+      req.log.debug(
         { action: 'assignUserToTeams', userId },
         'No teams to assign - skipping',
       );
@@ -269,7 +269,7 @@ export class UserController {
     );
 
     if (!existingOrgMember) {
-      log.info(
+      log.debug(
         { action: 'ensureUserIsOrgMember', userId, organizationId: org.id },
         'Adding user to organization',
       );
@@ -286,7 +286,7 @@ export class UserController {
           `Failed to add user to organization: ${addMemberResult?.error?.message || 'Unknown error'}`,
         );
       }
-      log.info(
+      log.debug(
         { action: 'ensureUserIsOrgMember', userId },
         'Added user to organization',
       );
@@ -449,7 +449,7 @@ export class UserController {
   ): Promise<void> {
     const { userId } = req.params;
 
-    req.log.info(
+    req.log.debug(
       { action: 'getUserTeamsForEdit', userId },
       'Getting team memberships for editing',
     );
@@ -471,7 +471,7 @@ export class UserController {
     // Use shared helper function to get teams
     const teams = getUserTeams(userId, targetUser.role || 'user');
 
-    req.log.info(
+    req.log.debug(
       {
         action: 'getUserTeamsForEdit',
         userId,
@@ -589,7 +589,7 @@ export class UserController {
         [userId, teamId],
         `removing user ${userId} from team ${teamId}`,
       );
-      log.info(
+      log.debug(
         { action: 'removeUserFromTeams', userId, teamId },
         'Removed user from team',
       );
@@ -658,7 +658,7 @@ export class UserController {
       }
 
       organizationId = mainOrg.id;
-      req.log.info(
+      req.log.debug(
         { action: 'updateUserOrganizationRole', organizationId },
         'Using main organization',
       );
@@ -810,7 +810,7 @@ export class UserController {
 
     // User has organizationId, so they must be a member
     // Remove from organization using Better Auth
-    req.log.info(
+    req.log.debug(
       { action: 'removeUserFromOrganization', userId, organizationId },
       'Finding member record for removal',
     );
@@ -832,7 +832,7 @@ export class UserController {
       return;
     }
 
-    req.log.info(
+    req.log.debug(
       { userId, memberId: member.id, organizationId },
       'Removing user from organization',
     );

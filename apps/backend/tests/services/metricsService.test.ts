@@ -231,12 +231,12 @@ tago_http_requests_total{status="500"} 5`;
           [
             {
               name: 'tago_analysis_processes',
-              labels: { state: 'running', type: 'all' },
+              labels: { state: 'running' },
               value: 5,
             },
             {
               name: 'tago_analysis_processes',
-              labels: { state: 'stopped', type: 'all' },
+              labels: { state: 'stopped' },
               value: 2,
             },
           ],
@@ -248,7 +248,6 @@ tago_http_requests_total{status="500"} 5`;
         'tago_analysis_processes',
         {
           state: 'running',
-          type: 'all',
         },
       );
 
@@ -622,7 +621,7 @@ tago_dns_cache_misses_total 20`;
 
   describe('getChildrenOnlyMetrics', () => {
     it('should get analysis process metrics', async () => {
-      const metricsString = `tago_analysis_processes{state="running",type="all"} 3
+      const metricsString = `tago_analysis_processes{state="running"} 3
 tago_analysis_memory_bytes{analysis_name="a1"} 52428800
 tago_analysis_memory_bytes{analysis_name="a2"} 52428800
 tago_analysis_cpu_percent{analysis_name="a1"} 15.5
@@ -687,7 +686,7 @@ tago_analysis_cpu_percent{analysis_name="a2"} 20.0`;
 
   describe('getSystemMetrics', () => {
     it('should get system metrics with health score', async () => {
-      const metricsString = `tago_analysis_processes{state="running",type="all"} 3
+      const metricsString = `tago_analysis_processes{state="running"} 3
 tago_analysis_memory_bytes{analysis_name="a1"} 52428800
 tago_analysis_cpu_percent{analysis_name="a1"} 15.5
 tago_dns_cache_hits_total 80
@@ -791,7 +790,7 @@ tago_analysis_cpu_percent{analysis_id="a2"} 20`;
   describe('getAllMetrics', () => {
     it('should get all metrics categories', async () => {
       const metricsString = `tago_process_resident_memory_bytes 104857600
-tago_analysis_processes{state="running",type="all"} 3
+tago_analysis_processes{state="running"} 3
 tago_analysis_cpu_percent{analysis_name="a1"} 15.5
 tago_analysis_memory_bytes{analysis_name="a1"} 52428800`;
 

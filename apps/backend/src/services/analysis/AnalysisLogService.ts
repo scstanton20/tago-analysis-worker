@@ -87,7 +87,10 @@ export class AnalysisLogService {
     limit: number = ANALYSIS_SERVICE.DEFAULT_PAGINATION_LIMIT,
     logger: Logger = moduleLogger,
   ): Promise<LogsResult> {
-    logger.info({ action: 'getLogs', analysisId, page, limit }, 'Getting logs');
+    logger.debug(
+      { action: 'getLogs', analysisId, page, limit },
+      'Getting logs',
+    );
 
     const analysis = this.configService.getAnalysisProcess(analysisId);
 
@@ -277,7 +280,7 @@ export class AnalysisLogService {
     timeRange: LogTimeRange,
     logger: Logger = moduleLogger,
   ): Promise<DownloadLogsResult> {
-    logger.info(
+    logger.debug(
       { action: 'getLogsForDownload', analysisId, timeRange },
       'Getting logs for download',
     );

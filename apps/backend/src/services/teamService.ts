@@ -202,7 +202,7 @@ class TeamService {
 
   async getAllTeams(logger: Logger = moduleLogger): Promise<Team[]> {
     try {
-      logger.info({ action: 'getAllTeams' }, 'Getting all teams');
+      logger.debug({ action: 'getAllTeams' }, 'Getting all teams');
 
       const teams = executeQueryAll<TeamRow>(
         `SELECT ${TEAM_SELECT_FIELDS}
@@ -218,7 +218,7 @@ class TeamService {
         ['isSystem'],
       ) as unknown as Team[];
 
-      logger.info(
+      logger.debug(
         { action: 'getAllTeams', teamCount: result.length },
         'Teams retrieved',
       );
@@ -237,7 +237,7 @@ class TeamService {
     logger: Logger = moduleLogger,
   ): Promise<Team | undefined> {
     try {
-      logger.info({ action: 'getTeam', teamId: id }, 'Getting team');
+      logger.debug({ action: 'getTeam', teamId: id }, 'Getting team');
 
       let team = executeQuery<TeamRow>(
         `SELECT ${TEAM_SELECT_FIELDS}
@@ -252,12 +252,12 @@ class TeamService {
           team as unknown as Record<string, unknown>,
           ['isSystem'],
         ) as unknown as TeamRow;
-        logger.info(
+        logger.debug(
           { action: 'getTeam', teamId: id, teamName: team.name },
           'Team retrieved',
         );
       } else {
-        logger.info({ action: 'getTeam', teamId: id }, 'Team not found');
+        logger.debug({ action: 'getTeam', teamId: id }, 'Team not found');
       }
 
       return team as Team | undefined;
@@ -276,7 +276,7 @@ class TeamService {
     logger: Logger = moduleLogger,
   ): Promise<Team> {
     try {
-      logger.info(
+      logger.debug(
         { action: 'createTeam', teamName: data.name },
         'Creating team',
       );
@@ -349,7 +349,7 @@ class TeamService {
     logger: Logger = moduleLogger,
   ): Promise<Team | null> {
     try {
-      logger.info(
+      logger.debug(
         { action: 'updateTeam', teamId: id, updates },
         'Updating team',
       );
@@ -443,14 +443,14 @@ class TeamService {
     logger: Logger = moduleLogger,
   ): Promise<DeleteTeamResult> {
     try {
-      logger.info({ action: 'deleteTeam', teamId: id }, 'Deleting team');
+      logger.debug({ action: 'deleteTeam', teamId: id }, 'Deleting team');
 
       const team = await this.getTeam(id, logger);
       if (!team) {
         throw new Error(`Team ${id} not found`);
       }
 
-      logger.info(
+      logger.debug(
         { action: 'deleteTeam', teamId: id, teamName: team.name },
         'Deleting team via better-auth API (beforeDeleteTeam hook will handle analysis migration)',
       );
@@ -494,7 +494,7 @@ class TeamService {
     teamId: string,
     logger: Logger = moduleLogger,
   ): Promise<AnalysisConfig[]> {
-    logger.info(
+    logger.debug(
       { action: 'getAnalysesByTeam', teamId },
       'Getting analyses by team',
     );
@@ -518,7 +518,7 @@ class TeamService {
       }
     }
 
-    logger.info(
+    logger.debug(
       { action: 'getAnalysesByTeam', teamId, analysisCount: analyses.length },
       'Analyses retrieved',
     );
@@ -530,7 +530,7 @@ class TeamService {
     teamId: string,
     logger: Logger = moduleLogger,
   ): Promise<MoveAnalysisResult> {
-    logger.info(
+    logger.debug(
       { action: 'moveAnalysisToTeam', analysisId, teamId },
       'Moving analysis to team',
     );
@@ -550,7 +550,7 @@ class TeamService {
     const previousTeam = analysis.teamId;
 
     if (previousTeam === teamId) {
-      logger.info(
+      logger.debug(
         { action: 'moveAnalysisToTeam', analysisId, teamId },
         'Analysis already in target team, no move needed',
       );
@@ -627,7 +627,7 @@ class TeamService {
     logger: Logger = moduleLogger,
   ): Promise<Team[]> {
     try {
-      logger.info(
+      logger.debug(
         { action: 'reorderTeams', teamCount: orderedIds.length },
         'Reordering teams',
       );
@@ -731,7 +731,7 @@ class TeamService {
     targetFolderId: string | null = null,
     logger: Logger = moduleLogger,
   ): Promise<void> {
-    logger.info(
+    logger.debug(
       { action: 'addItemToTeamStructure', teamId, targetFolderId },
       'Adding item to team structure',
     );
@@ -773,7 +773,7 @@ class TeamService {
     analysisId: string,
     logger: Logger = moduleLogger,
   ): Promise<void> {
-    logger.info(
+    logger.debug(
       { action: 'removeItemFromTeamStructure', teamId, analysisId },
       'Removing item from team structure',
     );
@@ -812,7 +812,7 @@ class TeamService {
     name: string,
     logger: Logger = moduleLogger,
   ): Promise<FolderStructureItem> {
-    logger.info(
+    logger.debug(
       { action: 'createFolder', teamId, parentFolderId, name },
       'Creating folder',
     );
@@ -876,7 +876,7 @@ class TeamService {
     updates: FolderUpdateInput,
     logger: Logger = moduleLogger,
   ): Promise<FolderStructureItem> {
-    logger.info(
+    logger.debug(
       { action: 'updateFolder', teamId, folderId, updates },
       'Updating folder',
     );
@@ -919,7 +919,7 @@ class TeamService {
     folderId: string,
     logger: Logger = moduleLogger,
   ): Promise<DeleteFolderResult> {
-    logger.info(
+    logger.debug(
       { action: 'deleteFolder', teamId, folderId },
       'Deleting folder',
     );
@@ -971,7 +971,7 @@ class TeamService {
     targetIndex: number,
     logger: Logger = moduleLogger,
   ): Promise<MoveItemResult> {
-    logger.info(
+    logger.debug(
       { action: 'moveItem', teamId, itemId, targetParentId, targetIndex },
       'Moving item in tree',
     );

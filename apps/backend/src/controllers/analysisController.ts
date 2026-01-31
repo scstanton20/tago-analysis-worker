@@ -148,7 +148,7 @@ export class AnalysisController {
     const teamId = req.body.teamId;
     const targetFolderId = req.body.targetFolderId || null;
 
-    req.log.info(
+    req.log.debug(
       {
         action: 'uploadAnalysis',
         fileName: analysis.name,
@@ -203,7 +203,7 @@ export class AnalysisController {
     // Extract query parameters for filtering
     const { search, teamId, status, page, limit } = req.query;
 
-    req.log.info(
+    req.log.debug(
       {
         action: 'getAnalyses',
         userId: req.user.id,
@@ -355,7 +355,7 @@ export class AnalysisController {
     const { analysisId } = req.params;
     const { version } = req.query;
 
-    req.log.info(
+    req.log.debug(
       { action: 'getAnalysisContent', analysisId, version },
       'Getting analysis content',
     );
@@ -386,7 +386,7 @@ export class AnalysisController {
       content = await analysisService.getAnalysisContent(analysisId);
     }
 
-    req.log.info(
+    req.log.debug(
       { action: 'getAnalysisContent', analysisId, version },
       'Analysis content retrieved',
     );
@@ -409,7 +409,10 @@ export class AnalysisController {
     const { analysisId } = req.params;
     const { content } = req.body;
 
-    req.log.info({ action: 'updateAnalysis', analysisId }, 'Updating analysis');
+    req.log.debug(
+      { action: 'updateAnalysis', analysisId },
+      'Updating analysis',
+    );
 
     const result = await analysisService.updateAnalysis(analysisId, {
       content,
@@ -527,7 +530,7 @@ export class AnalysisController {
     const { analysisId } = req.params;
     const { page = 1, limit = 200 } = req.query;
 
-    req.log.info(
+    req.log.debug(
       { action: 'getLogs', analysisId, page, limit },
       'Getting analysis logs',
     );
@@ -545,7 +548,7 @@ export class AnalysisController {
       return `[${timestamp}] ${log.message}`;
     });
 
-    req.log.info(
+    req.log.debug(
       { action: 'getLogs', analysisId, lineCount: formattedLines.length },
       'Logs retrieved',
     );
@@ -568,7 +571,7 @@ export class AnalysisController {
     const { analysisId } = req.params;
     const { timeRange } = req.query;
 
-    req.log.info(
+    req.log.debug(
       { action: 'downloadLogs', analysisId, timeRange },
       'Downloading logs',
     );
@@ -625,7 +628,7 @@ export class AnalysisController {
 
     AnalysisController.setZipDownloadHeaders(sanitizedName, res);
 
-    req.log.info(
+    req.log.debug(
       { action: 'downloadLogs', analysisId },
       'Streaming compressed log file',
     );
@@ -676,7 +679,7 @@ export class AnalysisController {
 
       AnalysisController.setZipDownloadHeaders(sanitizedName, res);
 
-      req.log.info(
+      req.log.debug(
         { action: 'downloadLogs', analysisId, timeRange },
         'Streaming compressed filtered log file',
       );
@@ -761,7 +764,7 @@ export class AnalysisController {
     const { analysisId } = req.params;
     const { version } = req.query;
 
-    req.log.info(
+    req.log.debug(
       { action: 'downloadAnalysis', analysisId, version },
       'Downloading analysis',
     );
@@ -791,7 +794,7 @@ export class AnalysisController {
       content = await analysisService.getAnalysisContent(analysisId);
     }
 
-    req.log.info(
+    req.log.debug(
       { action: 'downloadAnalysis', analysisId, version },
       'Analysis download prepared',
     );
@@ -826,7 +829,7 @@ export class AnalysisController {
     const { analysisId } = req.params;
     const { page, limit } = req.query;
 
-    req.log.info(
+    req.log.debug(
       { action: 'getVersions', analysisId, page, limit },
       'Getting analysis versions',
     );
@@ -837,7 +840,7 @@ export class AnalysisController {
       logger: req.log,
     });
 
-    req.log.info(
+    req.log.debug(
       {
         action: 'getVersions',
         analysisId,
@@ -972,14 +975,14 @@ export class AnalysisController {
   ): Promise<void> {
     const { analysisId } = req.params;
 
-    req.log.info(
+    req.log.debug(
       { action: 'getEnvironment', analysisId },
       'Getting environment variables',
     );
 
     const env = await analysisService.getEnvironment(analysisId);
 
-    req.log.info(
+    req.log.debug(
       { action: 'getEnvironment', analysisId },
       'Environment variables retrieved',
     );
@@ -998,14 +1001,14 @@ export class AnalysisController {
   ): Promise<void> {
     const { analysisId } = req.params;
 
-    req.log.info(
+    req.log.debug(
       { action: 'getAnalysisMeta', analysisId },
       'Getting analysis metadata',
     );
 
     const meta = await analysisInfoService.getAnalysisMeta(analysisId, req.log);
 
-    req.log.info(
+    req.log.debug(
       { action: 'getAnalysisMeta', analysisId },
       'Analysis metadata retrieved',
     );
@@ -1023,7 +1026,7 @@ export class AnalysisController {
   ): Promise<void> {
     const { analysisId } = req.params;
 
-    req.log.info(
+    req.log.debug(
       { action: 'getAnalysisNotes', analysisId },
       'Getting analysis notes',
     );
@@ -1033,7 +1036,7 @@ export class AnalysisController {
       req.log,
     );
 
-    req.log.info(
+    req.log.debug(
       { action: 'getAnalysisNotes', analysisId, isNew: notes.isNew },
       'Analysis notes retrieved',
     );
@@ -1055,7 +1058,7 @@ export class AnalysisController {
     const { analysisId } = req.params;
     const { content } = req.body;
 
-    req.log.info(
+    req.log.debug(
       { action: 'updateAnalysisNotes', analysisId },
       'Updating analysis notes',
     );

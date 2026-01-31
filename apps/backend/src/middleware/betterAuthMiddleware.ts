@@ -70,7 +70,7 @@ export const authMiddleware: RequestHandler = async (
     req.user = user;
     req.session = session.session as AuthSession;
 
-    logger.info(
+    logger.debug(
       { action: 'authenticate', userId: user.id },
       'User authenticated',
     );
@@ -108,7 +108,7 @@ export const requireAdmin: RequestHandler = async (
       return;
     }
 
-    logger.info(
+    logger.debug(
       { action: 'checkAdmin', userId: req.user.id },
       'Admin access granted',
     );
@@ -297,7 +297,7 @@ export const extractAnalysisTeam: RequestHandler = async (
 
         if (analysis) {
           req.analysisTeamId = analysis.teamId || 'uncategorized';
-          logger.info(
+          logger.debug(
             { action: 'extractTeam', analysisId, teamId: req.analysisTeamId },
             'Analysis team extracted',
           );
@@ -346,7 +346,7 @@ export const requireTeamPermission = (permission: string): RequestHandler => {
       const globalPermissions = globalRolePermissions[globalRole] || [];
 
       if (globalPermissions.includes(permission)) {
-        logger.info(
+        logger.debug(
           {
             action: 'checkTeamPermission',
             userId: req.user.id,
@@ -380,7 +380,7 @@ export const requireTeamPermission = (permission: string): RequestHandler => {
 
       // Check team-specific permission
       if (hasTeamPermission(req.user.id, teamId, permission, logger)) {
-        logger.info(
+        logger.debug(
           {
             action: 'checkTeamPermission',
             userId: req.user.id,
@@ -445,7 +445,7 @@ export const requireAnyTeamPermission = (
       const globalPermissions = globalRolePermissions[globalRole] || [];
 
       if (globalPermissions.includes(permission)) {
-        logger.info(
+        logger.debug(
           {
             action: 'checkAnyTeamPermission',
             userId: req.user.id,
@@ -460,7 +460,7 @@ export const requireAnyTeamPermission = (
 
       // Check if user has the permission in ANY of their teams
       if (hasAnyTeamPermission(req.user.id, permission, logger)) {
-        logger.info(
+        logger.debug(
           { action: 'checkAnyTeamPermission', userId: req.user.id, permission },
           'Team permission granted',
         );
@@ -508,7 +508,7 @@ export const requireSelfOrAdmin: RequestHandler = async (
     const isAdmin = req.user.role === 'admin';
 
     if (isOwnResource || isAdmin) {
-      logger.info(
+      logger.debug(
         {
           action: 'checkSelfOrAdmin',
           userId: req.user.id,

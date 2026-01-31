@@ -54,7 +54,7 @@ export class TeamController {
     req: RequestWithLogger,
     res: Response,
   ): Promise<void> {
-    req.log.info({ action: 'getAllTeams' }, 'Retrieving all teams');
+    req.log.debug({ action: 'getAllTeams' }, 'Retrieving all teams');
 
     const teams = await teamService.getAllTeams(req.log);
     req.log.info(
@@ -256,13 +256,13 @@ export class TeamController {
     res: Response,
   ): Promise<void> {
     const { id } = req.params;
-    req.log.info(
+    req.log.debug(
       { action: 'getTeamAnalysisCount', teamId: id },
       'Getting team analysis count',
     );
 
     const count = await teamService.getAnalysisCountByTeamId(id, req.log);
-    req.log.info(
+    req.log.debug(
       { action: 'getTeamAnalysisCount', teamId: id, count },
       'Analysis count retrieved',
     );
@@ -284,7 +284,7 @@ export class TeamController {
     const { parentFolderId, name } = req.body;
 
     // Validation handled by middleware
-    req.log.info(
+    req.log.debug(
       { action: 'createFolder', teamId, folderName: name, parentFolderId },
       'Creating folder',
     );
@@ -332,7 +332,7 @@ export class TeamController {
   ): Promise<void> {
     const { teamId, folderId } = req.params;
     const updates = req.body;
-    req.log.info(
+    req.log.debug(
       {
         action: 'updateFolder',
         teamId,
@@ -376,7 +376,7 @@ export class TeamController {
     res: Response,
   ): Promise<void> {
     const { teamId, folderId } = req.params;
-    req.log.info(
+    req.log.debug(
       { action: 'deleteFolder', teamId, folderId },
       'Deleting folder',
     );
@@ -413,7 +413,7 @@ export class TeamController {
     const { itemId, newParentId, newIndex } = req.body;
 
     // Validation handled by middleware
-    req.log.info(
+    req.log.debug(
       { action: 'moveItem', teamId, itemId, newParentId, newIndex },
       'Moving item',
     );

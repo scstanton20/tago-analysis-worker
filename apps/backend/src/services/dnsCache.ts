@@ -920,7 +920,7 @@ class DNSCacheService {
   resetAnalysisStats(analysisId: string): void {
     if (analysisId) {
       this.analysisStats.delete(analysisId);
-      logger.info({ analysisId }, 'Analysis DNS stats reset');
+      logger.debug({ analysisId }, 'Analysis DNS stats reset');
     }
   }
 

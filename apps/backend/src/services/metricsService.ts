@@ -134,7 +134,6 @@ class MetricsService {
       const processCount =
         this.getMetricValue(metrics, 'tago_analysis_processes', {
           state: 'running',
-          type: 'all',
         }) || 0;
 
       const totalMemory =
@@ -203,7 +202,6 @@ class MetricsService {
       const processCount =
         this.getMetricValue(parsedMetrics, 'tago_analysis_processes', {
           state: 'running',
-          type: 'all',
         }) || 0;
 
       const totalMemory =

@@ -274,16 +274,18 @@ function MetricsTabContent({
           </Grid.Col>
         )}
 
-        <Grid.Col span={{ base: 12, sm: 6, lg: 3 }}>
-          <MetricCard
-            title={isContainer ? 'HTTP Requests' : 'Request Rate'}
-            value={formatNumber(data.requestRate, 3)}
-            unit="req/s"
-            icon={IconBrandSpeedtest}
-            color="teal"
-            loading={loading}
-          />
-        </Grid.Col>
+        {(isContainer || isTotal) && (
+          <Grid.Col span={{ base: 12, sm: 6, lg: 3 }}>
+            <MetricCard
+              title="HTTP Requests"
+              value={formatNumber(data.requestRate, 3)}
+              unit="req/s"
+              icon={IconBrandSpeedtest}
+              color="teal"
+              loading={loading}
+            />
+          </Grid.Col>
+        )}
 
         {/* Performance Metrics - Available space flow */}
         {(isContainer || isTotal) && (

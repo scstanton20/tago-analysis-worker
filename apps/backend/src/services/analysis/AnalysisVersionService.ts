@@ -221,7 +221,7 @@ export class AnalysisVersionService {
       logger = moduleLogger,
     } = options;
 
-    logger.info(
+    logger.debug(
       { action: 'getVersions', analysisId, page, limit },
       'Getting versions',
     );
@@ -337,7 +337,7 @@ export class AnalysisVersionService {
     version: number,
     logger: Logger = moduleLogger,
   ): Promise<RollbackResult> {
-    logger.info(
+    logger.debug(
       { action: 'rollbackToVersion', analysisId, version },
       'Rolling back to version',
     );
@@ -442,7 +442,7 @@ export class AnalysisVersionService {
     version: number,
     logger: Logger = moduleLogger,
   ): Promise<string> {
-    logger.info(
+    logger.debug(
       { action: 'getVersionContent', analysisId, version },
       'Getting version content',
     );

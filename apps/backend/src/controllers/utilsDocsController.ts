@@ -28,12 +28,12 @@ export class UtilsDocsController {
     req: RequestWithLogger,
     res: Response,
   ): Promise<void> {
-    req.log?.info({ action: 'getOverview' }, 'Getting utils overview');
+    req.log?.debug({ action: 'getOverview' }, 'Getting utils overview');
 
     const packages = getAvailablePackages();
     const utilities = getAvailableUtilities();
 
-    req.log?.info(
+    req.log?.debug(
       {
         action: 'getOverview',
         packageCount: packages.length,
@@ -53,11 +53,11 @@ export class UtilsDocsController {
     req: RequestWithLogger,
     res: Response,
   ): Promise<void> {
-    req.log?.info({ action: 'getPackages' }, 'Getting available packages');
+    req.log?.debug({ action: 'getPackages' }, 'Getting available packages');
 
     const packages = getAvailablePackages();
 
-    req.log?.info(
+    req.log?.debug(
       { action: 'getPackages', count: packages.length },
       'Available packages retrieved',
     );
@@ -73,14 +73,14 @@ export class UtilsDocsController {
     req: RequestWithLogger,
     res: Response,
   ): Promise<void> {
-    req.log?.info({ action: 'getUtilities' }, 'Getting utility documentation');
+    req.log?.debug({ action: 'getUtilities' }, 'Getting utility documentation');
 
     const specs = getUtilsSpecs() as { paths?: Record<string, unknown> };
 
     // Count paths for logging
     const pathCount = Object.keys(specs.paths || {}).length;
 
-    req.log?.info(
+    req.log?.debug(
       { action: 'getUtilities', pathCount },
       'Utility documentation retrieved',
     );
