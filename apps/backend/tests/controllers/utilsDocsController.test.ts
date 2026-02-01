@@ -62,7 +62,7 @@ describe('UtilsDocsController', () => {
       const expectedPackages = getAvailablePackages();
       const expectedUtilities = getAvailableUtilities();
 
-      expect(req.log.info).toHaveBeenCalledWith(
+      expect(req.log.debug).toHaveBeenCalledWith(
         {
           action: 'getOverview',
           packageCount: expectedPackages.length,
@@ -106,7 +106,7 @@ describe('UtilsDocsController', () => {
       await UtilsDocsController.getPackages(req, res);
 
       const expectedPackages = getAvailablePackages();
-      expect(req.log.info).toHaveBeenCalledWith(
+      expect(req.log.debug).toHaveBeenCalledWith(
         { action: 'getPackages', count: expectedPackages.length },
         'Available packages retrieved',
       );
@@ -194,7 +194,7 @@ describe('UtilsDocsController', () => {
 
       await UtilsDocsController.getUtilities(req, res);
 
-      expect(req.log.info).toHaveBeenCalledWith(
+      expect(req.log.debug).toHaveBeenCalledWith(
         { action: 'getUtilities', pathCount: 3 },
         'Utility documentation retrieved',
       );
@@ -231,7 +231,7 @@ describe('UtilsDocsController', () => {
 
       await UtilsDocsController.getUtilities(req, res);
 
-      expect(req.log.info).toHaveBeenCalledWith(
+      expect(req.log.debug).toHaveBeenCalledWith(
         { action: 'getUtilities', pathCount: 0 },
         'Utility documentation retrieved',
       );

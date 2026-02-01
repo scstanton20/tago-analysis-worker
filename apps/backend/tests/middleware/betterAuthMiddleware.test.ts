@@ -76,6 +76,8 @@ vi.mock('../../src/utils/logging/logger.ts', () => ({
     info: vi.fn(),
     error: vi.fn(),
     warn: vi.fn(),
+    debug: vi.fn(),
+    child: vi.fn().mockReturnThis(),
   })),
 }));
 
@@ -148,7 +150,7 @@ describe('betterAuthMiddleware', () => {
       ).toEqual(mockSession.session);
       expect(next).toHaveBeenCalled();
       expect(res.status).not.toHaveBeenCalled();
-      expect(req.log.info).toHaveBeenCalledWith(
+      expect(req.log.debug).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'authenticate',
           userId: 'user-123',
@@ -277,7 +279,7 @@ describe('betterAuthMiddleware', () => {
 
       expect(next).toHaveBeenCalled();
       expect(res.status).not.toHaveBeenCalled();
-      expect(req.log.info).toHaveBeenCalledWith(
+      expect(req.log.debug).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'checkAdmin',
           userId: 'user-123',
@@ -362,7 +364,7 @@ describe('betterAuthMiddleware', () => {
 
       expect(next).toHaveBeenCalled();
       expect(res.status).not.toHaveBeenCalled();
-      expect(req.log.info).toHaveBeenCalledWith(
+      expect(req.log.debug).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'checkTeamPermission',
           userId: 'admin-123',
@@ -392,7 +394,7 @@ describe('betterAuthMiddleware', () => {
       );
       expect(next).toHaveBeenCalled();
       expect(res.status).not.toHaveBeenCalled();
-      expect(req.log.info).toHaveBeenCalledWith(
+      expect(req.log.debug).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'checkTeamPermission',
           userId: 'user-123',
@@ -566,7 +568,7 @@ describe('betterAuthMiddleware', () => {
 
       expect(next).toHaveBeenCalled();
       expect(res.status).not.toHaveBeenCalled();
-      expect(req.log.info).toHaveBeenCalledWith(
+      expect(req.log.debug).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'checkAnyTeamPermission',
           userId: 'admin-123',
@@ -596,7 +598,7 @@ describe('betterAuthMiddleware', () => {
       );
       expect(next).toHaveBeenCalled();
       expect(res.status).not.toHaveBeenCalled();
-      expect(req.log.info).toHaveBeenCalledWith(
+      expect(req.log.debug).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'checkAnyTeamPermission',
           userId: 'user-123',
@@ -712,7 +714,7 @@ describe('betterAuthMiddleware', () => {
         (req as unknown as { analysisTeamId: string }).analysisTeamId,
       ).toBe('team-123');
       expect(next).toHaveBeenCalled();
-      expect(req.log.info).toHaveBeenCalledWith(
+      expect(req.log.debug).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'extractTeam',
           analysisId,

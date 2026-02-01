@@ -650,7 +650,7 @@ describe('AnalysisLifecycleService', () => {
         alreadyRunning: true,
       });
       expect(mockAnalysis.start).not.toHaveBeenCalled();
-      expect(mockLogger.info).toHaveBeenCalledWith(
+      expect(mockLogger.debug).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'runAnalysis' }),
         'Analysis is already running',
       );
@@ -721,7 +721,7 @@ describe('AnalysisLifecycleService', () => {
       // Both should return the same result
       const results = await Promise.all([promise1, promise2]);
       expect(results[0]).toEqual(results[1]);
-      expect(mockLogger.info).toHaveBeenCalledWith(
+      expect(mockLogger.debug).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'runAnalysis',
           analysisId: 'analysis-1',
@@ -828,7 +828,7 @@ describe('AnalysisLifecycleService', () => {
           action: 'stopAnalysis',
           analysisId: 'analysis-1',
         }),
-        'Stopping analysis',
+        'Analysis stopped',
       );
     });
   });
