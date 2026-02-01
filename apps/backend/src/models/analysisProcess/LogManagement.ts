@@ -23,7 +23,7 @@ import {
   formatLogRotation,
   formatOversizedLogWarning,
 } from '../../utils/logging/index.ts';
-import { getServerTime } from '../../utils/serverTime.ts';
+import { getServerTime, formatLogTimestamp } from '../../utils/serverTime.ts';
 import { getSseManager } from '../../utils/lazyLoader.ts';
 import { ANALYSIS_PROCESS } from '../../constants.ts';
 import type { Config } from '../../config/default.ts';
@@ -78,7 +78,7 @@ function parseNdjsonLogLine(line: string, sequence: number): LogEntry | null {
 
     return {
       sequence,
-      timestamp: new Date(logEntry.time).toLocaleString(),
+      timestamp: formatLogTimestamp(new Date(logEntry.time)),
       message: logEntry.msg,
       createdAt: new Date(logEntry.time).getTime(),
     };
@@ -178,12 +178,12 @@ export class LogManager {
    * @param message - Log message
    */
   async addLog(message: string): Promise<void> {
-    const timestamp = getServerTime();
+    const now = Date.now();
     const logEntry: LogEntry = {
       sequence: ++this.analysisProcess.logSequence,
-      timestamp,
+      timestamp: formatLogTimestamp(now),
       message,
-      createdAt: Date.now(), // For efficient sorting
+      createdAt: now,
     };
 
     // Add to in-memory buffer (FIFO - newest first)
@@ -399,7 +399,7 @@ export class LogManager {
       // Add rotation message to in-memory logs
       const rotationEntry: LogEntry = {
         sequence: ++this.analysisProcess.logSequence,
-        timestamp: getServerTime(),
+        timestamp: formatLogTimestamp(Date.now()),
         message: rotationMessage,
         createdAt: Date.now(),
       };

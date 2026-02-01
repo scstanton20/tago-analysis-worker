@@ -1,7 +1,7 @@
 {
   "name": "backend",
   "private": true,
-  "version": "2.5.422",
+  "version": "2.5.4221",
   "type": "module",
   "engines": {
     "node": ">=24.0.0"

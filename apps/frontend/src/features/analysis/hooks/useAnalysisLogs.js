@@ -5,23 +5,13 @@ import { logEventBus } from '@/utils/logEventBus';
 import { analysisService } from '../api/analysisService';
 
 /**
- * Format a log entry for LazyLog display
- * @param {Object} log - Log object with timestamp and message
- * @returns {string} Formatted log line "[HH:MM:SS] message"
+ * Format a log entry for LazyLog display.
+ * Timestamp is pre-formatted by the backend (includes date when not today).
  */
 function formatLogEntry(log) {
   if (!log) return '';
 
-  const timestamp = log.timestamp
-    ? new Date(log.timestamp).toLocaleTimeString('en-US', {
-        hour12: false,
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      })
-    : '';
-
-  return timestamp ? `[${timestamp}] ${log.message}` : log.message;
+  return log.timestamp ? `[${log.timestamp}] ${log.message}` : log.message;
 }
 
 /**

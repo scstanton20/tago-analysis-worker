@@ -87,3 +87,41 @@ export function formatCompactTime(timestamp: number | Date | string): string {
 export function getCompactServerTime(): string {
   return formatCompactTime(new Date());
 }
+
+/**
+ * Format a timestamp for log display, including the date when not today.
+ * Uses server's current date as the reference for "today".
+ *
+ * @param timestamp - Unix timestamp in milliseconds, Date object, or date string
+ * @returns "HH:MM:SS" for today, "Mon DD HH:MM:SS" for other days
+ * @example "23:05:31" or "Jan 8 23:05:31"
+ */
+export function formatLogTimestamp(timestamp: number | Date | string): string {
+  const date =
+    timestamp instanceof Date
+      ? timestamp
+      : new Date(
+          typeof timestamp === 'string'
+            ? Date.parse(timestamp) || Date.now()
+            : timestamp,
+        );
+
+  const now = new Date();
+  const timeStr = formatCompactTime(date);
+
+  const isToday =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+
+  if (isToday) {
+    return timeStr;
+  }
+
+  const dateStr = date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  });
+
+  return `${dateStr} ${timeStr}`;
+}

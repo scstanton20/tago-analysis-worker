@@ -34,7 +34,7 @@ import {
   isValidFilename,
   FILENAME_ERROR_MESSAGE,
 } from '../validation/shared.ts';
-import { formatCompactTime } from '../utils/serverTime.ts';
+import { formatLogTimestamp } from '../utils/serverTime.ts';
 import { getTeamPermissionHelpers } from '../utils/lazyLoader.ts';
 
 /** Uploaded file from express-fileupload (minimal type we need) */
@@ -540,9 +540,8 @@ export class AnalysisController {
     // Format logs as plain text lines
     // Logs are returned newest-first, reverse to get chronological order for display
     const formattedLines = [...result.logs].reverse().map((log) => {
-      // Use centralized time formatting for consistency
       const timestamp = log.createdAt
-        ? formatCompactTime(log.createdAt)
+        ? formatLogTimestamp(log.createdAt)
         : log.timestamp || '';
 
       return `[${timestamp}] ${log.message}`;
