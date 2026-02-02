@@ -376,6 +376,7 @@ export type UpdateEnvironmentResponse = {
 /** Get analyses query params */
 export type GetAnalysesQuery = {
   search?: string;
+  id?: string;
   teamId?: string;
   status?: string;
   page?: number;

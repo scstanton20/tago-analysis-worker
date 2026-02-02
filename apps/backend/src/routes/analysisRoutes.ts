@@ -110,11 +110,17 @@ router.post(
  *     tags: [Analysis Management]
  *     parameters:
  *       - in: query
- *         name: analysis name
+ *         name: search
  *         schema:
  *           type: string
- *           maxLength: 100
+ *           maxLength: 255
  *         description: Case-insensitive name filter for analysis name
+ *       - in: query
+ *         name: id
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by analysis ID (exact match)
  *       - in: query
  *         name: status
  *         schema:

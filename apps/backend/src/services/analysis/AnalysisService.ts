@@ -497,6 +497,7 @@ class AnalysisService {
     const {
       allowedTeamIds = null,
       search = '',
+      id = null,
       status = null,
       teamId = null,
       page = null,
@@ -515,6 +516,10 @@ class AnalysisService {
           'index.js',
         );
         try {
+          if (id !== null && analysisId !== id) {
+            return null;
+          }
+
           const analysis = this.configService.getAnalysisProcess(analysisId);
 
           if (

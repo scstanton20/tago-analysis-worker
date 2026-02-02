@@ -59,6 +59,7 @@ type UploadAnalysisRequest = Omit<RequestWithLogger, 'files'> & {
 /** Get analyses query params (backend-specific, string values) */
 type GetAnalysesQuery = {
   readonly search?: string;
+  readonly id?: string;
   readonly teamId?: string;
   readonly status?: string;
   readonly page?: string;
@@ -201,14 +202,14 @@ export class AnalysisController {
     res: Response,
   ): Promise<void> {
     // Extract query parameters for filtering
-    const { search, teamId, status, page, limit } = req.query;
+    const { search, id, teamId, status, page, limit } = req.query;
 
     req.log.debug(
       {
         action: 'getAnalyses',
         userId: req.user.id,
         role: req.user.role,
-        filters: { search, teamId, status, page, limit },
+        filters: { search, id, teamId, status, page, limit },
       },
       'Retrieving analyses',
     );
@@ -216,6 +217,7 @@ export class AnalysisController {
     // Build filter options
     const filterOptions = {
       search: search || '',
+      id: id || undefined,
       teamId: teamId || undefined,
       status: (status as AnalysisStatus) || undefined,
       page: page ? parseInt(page, 10) : undefined,

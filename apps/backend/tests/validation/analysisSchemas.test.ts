@@ -765,6 +765,27 @@ describe('analysisSchemas', () => {
         });
       });
 
+      it('should validate query with id parameter', () => {
+        const validData = { id: '123e4567-e89b-12d3-a456-426614174000' };
+
+        const result = schemas.getAnalyses.query!.safeParse(validData);
+
+        expect(result.success).toBe(true);
+        expect(result.data!.id).toBe('123e4567-e89b-12d3-a456-426614174000');
+      });
+
+      it('should reject non-UUID id parameter', () => {
+        const invalidData = { id: 'not-a-uuid' };
+
+        const result = schemas.getAnalyses.query!.safeParse(invalidData);
+
+        expect(result.success).toBe(false);
+        expect(result.error?.issues[0].path).toContain('id');
+        expect(result.error?.issues[0].message).toContain(
+          'ID must be a valid UUID',
+        );
+      });
+
       it('should reject unexpected query parameters (strict mode)', () => {
         const invalidData = {
           page: '1',

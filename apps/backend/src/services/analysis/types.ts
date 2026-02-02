@@ -59,6 +59,7 @@ export type TeamStructureEntry = {
 export type GetAllAnalysesOptions = {
   readonly allowedTeamIds?: ReadonlyArray<string> | null;
   readonly search?: string;
+  readonly id?: string | null;
   readonly status?: AnalysisStatus | null;
   readonly teamId?: string | null;
   readonly page?: number | null;

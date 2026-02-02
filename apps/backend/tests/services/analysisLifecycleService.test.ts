@@ -428,7 +428,7 @@ describe('AnalysisLifecycleService', () => {
       );
     });
 
-    it('should handle errors during analysis discovery', async () => {
+    it('should warn and skip orphaned analysis directory with missing index.js', async () => {
       mockConfigService.getConfig.mockResolvedValue({
         version: '1.0',
         analyses: {},
@@ -442,13 +442,14 @@ describe('AnalysisLifecycleService', () => {
 
       await service.initialize();
 
-      expect(mockLogger.error).toHaveBeenCalledWith(
+      expect(mockLogger.warn).toHaveBeenCalledWith(
         expect.objectContaining({
-          error: expect.any(Error),
           analysisId: 'analysis-1',
         }),
-        'Error loading analysis',
+        'Skipping orphaned analysis directory (missing index.js)',
       );
+      // Should still initialize the valid analysis
+      expect(service.initializeAnalysis).toHaveBeenCalledTimes(1);
     });
 
     it('should start health check after initialization', async () => {

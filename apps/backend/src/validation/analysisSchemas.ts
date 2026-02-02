@@ -45,6 +45,7 @@ export const analysisValidationSchemas = {
           .string()
           .max(255, 'Search query must not exceed 255 characters')
           .optional(),
+        id: z.string().uuid('ID must be a valid UUID').optional(),
         teamId: z.string().optional(),
         status: z
           .enum(['running', 'stopped', 'error'], {

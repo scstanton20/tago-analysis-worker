@@ -130,7 +130,16 @@ export class AnalysisLifecycleService {
       analysisDirectories.map(async (analysisId: string) => {
         try {
           const indexPath = `${config.paths.analysis}/${analysisId}/index.js`;
-          const stats = await safeStat(indexPath, config.paths.analysis);
+          let stats;
+          try {
+            stats = await safeStat(indexPath, config.paths.analysis);
+          } catch {
+            moduleLogger.warn(
+              { analysisId },
+              'Skipping orphaned analysis directory (missing index.js)',
+            );
+            return;
+          }
           if (stats.isFile()) {
             const analysisConfig = configuration.analyses?.[analysisId];
             await this.initializeAnalysis(analysisId, analysisConfig);

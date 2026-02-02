@@ -533,6 +533,7 @@ export class AnalysisFileService {
     const {
       allowedTeamIds = null,
       search = '',
+      id = null,
       status = null,
       teamId = null,
       page = null,
@@ -551,6 +552,10 @@ export class AnalysisFileService {
           'index.js',
         );
         try {
+          if (id !== null && analysisId !== id) {
+            return null;
+          }
+
           const analysis = this.configService.getAnalysisProcess(analysisId);
 
           // Apply filters
