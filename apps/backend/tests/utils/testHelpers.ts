@@ -123,6 +123,7 @@ export interface MockSSEManager {
 export interface MockChildProcess {
   pid: number;
   killed: boolean;
+  connected: boolean;
   stdout: {
     on: MockFn;
   };
@@ -294,6 +295,7 @@ export function createMockChildProcess(): MockChildProcess {
   return {
     pid: 12345,
     killed: false,
+    connected: true,
     stdout: {
       on: vi.fn(),
     },

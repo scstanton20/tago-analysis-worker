@@ -301,6 +301,12 @@ export class ProcessLifecycleManager {
       }
     });
 
+    // Handle process-level errors (e.g. EPIPE on IPC channel)
+    // Without this, an asynchronous 'error' event crashes the parent process
+    process.on('error', (error) => {
+      this.analysisProcess.logger.warn({ err: error }, 'Child process error');
+    });
+
     // Handle process exit
     process.once('exit', this.handleExit.bind(this));
   }

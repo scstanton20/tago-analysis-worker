@@ -292,7 +292,7 @@ export class AnalysisProcess {
     const messageType = hasMessageType(message) ? message.type : undefined;
 
     try {
-      if (this.process && !this.process.killed) {
+      if (this.process && this.process.connected) {
         this.process.send(message);
       } else {
         this.logger.debug(

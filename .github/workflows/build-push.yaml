@@ -7,6 +7,13 @@ on:
         description: 'Target platforms'
         required: true
         default: 'linux/amd64,linux/arm64/v8'
+  workflow_call:
+    inputs:
+      platforms:
+        description: 'Target platforms'
+        required: false
+        type: string
+        default: 'linux/amd64,linux/arm64/v8'
 
 env:
   DOCKER_BUILDKIT: 1
