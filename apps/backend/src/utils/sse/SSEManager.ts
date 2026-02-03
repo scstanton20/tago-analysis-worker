@@ -15,7 +15,7 @@ import { ChannelManager } from './ChannelManager.ts';
 import { BroadcastService } from './BroadcastService.ts';
 import { InitDataService } from './InitDataService.ts';
 import { HeartbeatService } from './HeartbeatService.ts';
-import { getTagoSdkVersion } from '../sdkVersion.ts';
+import { getPackageVersion } from '../packageVersion.ts';
 import type { Session, ContainerState, SSEMessage, LogData } from './utils.ts';
 import type {
   Team,
@@ -156,7 +156,7 @@ export class SSEManager {
    * Uses centralized sdkVersion utility
    */
   getSdkVersion(): string {
-    return getTagoSdkVersion();
+    return getPackageVersion('@tago-io/sdk');
   }
 
   /**

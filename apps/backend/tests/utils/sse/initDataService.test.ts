@@ -36,8 +36,8 @@ vi.mock('../../../src/utils/logging/logger.ts', () => ({
   createChildLogger: vi.fn(() => sharedMockLogger),
 }));
 
-vi.mock('../../../src/utils/sdkVersion.ts', () => ({
-  getTagoSdkVersion: vi.fn(() => '1.0.0'),
+vi.mock('../../../src/utils/packageVersion.ts', () => ({
+  getPackageVersion: vi.fn(() => '1.0.0'),
 }));
 
 vi.mock('ms', () => ({
@@ -1028,9 +1028,9 @@ describe('InitDataService', () => {
           message: 'Ready',
         });
 
-        const { getTagoSdkVersion } =
-          await import('../../../src/utils/sdkVersion.ts');
-        (getTagoSdkVersion as unknown as MockInstance).mockReturnValue('1.2.3');
+        const { getPackageVersion } =
+          await import('../../../src/utils/packageVersion.ts');
+        (getPackageVersion as unknown as MockInstance).mockReturnValue('1.2.3');
 
         await service.sendStatusUpdate(client);
 

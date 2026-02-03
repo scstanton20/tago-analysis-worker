@@ -56,7 +56,12 @@ const ChangeTeamModalContent = ({ id, innerProps }) => {
         :
       </Text>
 
-      <ScrollArea h={300} offsetScrollbars>
+      <ScrollArea
+        h={300}
+        offsetScrollbars
+        scrollbarSize={8}
+        styles={{ thumb: { backgroundColor: 'var(--mantine-color-brand-6)' } }}
+      >
         <Stack gap="xs">
           {[...teams]
             .sort((a, b) => a.order - b.order)

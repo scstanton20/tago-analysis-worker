@@ -224,7 +224,14 @@ function AnalysisNotesModalContent({ id, innerProps }) {
             />
           </Suspense>
         ) : (
-          <ScrollArea h="100%" offsetScrollbars>
+          <ScrollArea
+            h="100%"
+            offsetScrollbars
+            scrollbarSize={8}
+            styles={{
+              thumb: { backgroundColor: 'var(--mantine-color-brand-6)' },
+            }}
+          >
             <TypographyStylesProvider>
               <Markdown
                 remarkPlugins={[remarkGfm]}

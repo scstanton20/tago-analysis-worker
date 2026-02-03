@@ -316,7 +316,12 @@ export default function TeamSidebar({ selectedTeam, onTeamSelect }) {
       </Box>
 
       {/* Team List */}
-      <ScrollArea style={{ flex: 1 }} p="md">
+      <ScrollArea
+        style={{ flex: 1 }}
+        p="md"
+        scrollbarSize={8}
+        styles={{ thumb: { backgroundColor: 'var(--mantine-color-brand-6)' } }}
+      >
         <Stack gap="xs">
           {!hasInitialData ? (
             <Text c="dimmed" size="sm" ta="center" py="md">

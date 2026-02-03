@@ -86,7 +86,7 @@ export const userService = {
   ),
 
   /**
-   * Get user teams for editing (admin only)
+   * Get user teams for editing
    * @param {string} userId - User ID
    * @returns {Promise<Object>} User's team memberships
    */

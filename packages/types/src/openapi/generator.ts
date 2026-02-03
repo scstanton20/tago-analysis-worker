@@ -94,18 +94,22 @@ export function generateOpenAPISchemas(): Record<string, unknown> {
 /**
  * Generate full OpenAPI document (for standalone use)
  *
- * @param info - OpenAPI info object
+ * @param config - OpenAPI document configuration
  * @returns Complete OpenAPI 3.1 specification
  */
-export function generateOpenAPIDocument(info: {
-  title: string;
-  version: string;
-  description?: string;
+export function generateOpenAPIDocument(config: {
+  info: {
+    title: string;
+    version: string;
+    description?: string;
+  };
+  servers?: Array<{ url: string; description?: string }>;
 }): Record<string, unknown> {
   const generator = new OpenApiGeneratorV31(registry.definitions);
   return generator.generateDocument({
     openapi: '3.1.0',
-    info,
+    info: config.info,
+    ...(config.servers && { servers: config.servers }),
   }) as unknown as Record<string, unknown>;
 }
 

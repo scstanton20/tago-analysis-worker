@@ -11,5 +11,5 @@
 // MachineQ API utilities
 export { default as mqAPI } from './mqAPI.ts';
 
-// Add more utilities here as needed:
-// export { default as anotherUtil } from './anotherUtil.ts';
+// Kafka client utilities
+export { default as kafkaClient } from './kafkaClient.ts';

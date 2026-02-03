@@ -111,8 +111,8 @@ vi.mock('../../../src/utils/sse/HeartbeatService.ts', () => {
   };
 });
 
-vi.mock('../../../src/utils/sdkVersion.ts', () => ({
-  getTagoSdkVersion: vi.fn(() => '5.0.0'),
+vi.mock('../../../src/utils/packageVersion.ts', () => ({
+  getPackageVersion: vi.fn(() => '5.0.0'),
 }));
 
 // Import after mocks

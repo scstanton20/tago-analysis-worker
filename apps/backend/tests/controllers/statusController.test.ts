@@ -17,10 +17,10 @@ vi.mock('../../src/utils/sse/index.ts', () => ({
   },
 }));
 
-// Mock sdkVersion module directly - this is the proper way to mock it
+// Mock packageVersion module directly - this is the proper way to mock it
 // since the module caches the version at import time
-vi.mock('../../src/utils/sdkVersion.ts', () => ({
-  getTagoSdkVersion: vi.fn(() => '12.4.0'),
+vi.mock('../../src/utils/packageVersion.ts', () => ({
+  getPackageVersion: vi.fn(() => '12.4.0'),
 }));
 
 // Mock ms module
@@ -49,9 +49,9 @@ type MockAnalysisService = {
 };
 
 // Import after mocks
-const { getTagoSdkVersion } =
-  (await import('../../src/utils/sdkVersion.ts')) as unknown as {
-    getTagoSdkVersion: Mock<() => string>;
+const { getPackageVersion } =
+  (await import('../../src/utils/packageVersion.ts')) as unknown as {
+    getPackageVersion: Mock<() => string>;
   };
 const { sseManager } =
   (await import('../../src/utils/sse/index.ts')) as unknown as {
@@ -70,7 +70,7 @@ describe('StatusController', () => {
     // Reset mock to default returning 1 running analysis
     analysisService.getRunningAnalysesCount.mockReturnValue(1);
     // Reset SDK version mock to default
-    getTagoSdkVersion.mockReturnValue('12.4.0');
+    getPackageVersion.mockReturnValue('12.4.0');
   });
 
   describe('getSystemStatus', () => {
@@ -160,7 +160,7 @@ describe('StatusController', () => {
       });
 
       // Mock SDK version as unknown
-      getTagoSdkVersion.mockReturnValue('unknown');
+      getPackageVersion.mockReturnValue('unknown');
 
       await StatusController.getSystemStatus(req, res);
 

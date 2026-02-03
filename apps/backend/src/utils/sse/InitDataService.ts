@@ -5,7 +5,7 @@
 
 import { createChildLogger } from '../logging/logger.ts';
 import { SSE_API_VERSION, type Session } from './utils.ts';
-import { getTagoSdkVersion } from '../sdkVersion.ts';
+import { getPackageVersion } from '../packageVersion.ts';
 import { getServerTime } from '../serverTime.ts';
 import {
   getAnalysisService,
@@ -214,7 +214,7 @@ export class InitDataService {
       }
 
       // Get Tago SDK version from centralized utility
-      const tagoVersion = getTagoSdkVersion();
+      const tagoVersion = getPackageVersion('@tago-io/sdk');
 
       const status = {
         type: 'statusUpdate',

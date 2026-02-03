@@ -4,7 +4,7 @@ import type { RequestWithLogger } from '../types/index.ts';
 import ms from 'ms';
 import { analysisService } from '../services/analysis/index.ts';
 import { sseManager } from '../utils/sse/index.ts';
-import { getTagoSdkVersion } from '../utils/sdkVersion.ts';
+import { getPackageVersion } from '../utils/packageVersion.ts';
 import { getServerTime } from '../utils/serverTime.ts';
 
 /** System status response */
@@ -52,7 +52,7 @@ export class StatusController {
       analysisService?.getRunningAnalysesCount() ?? 0;
 
     // Get Tago SDK version from centralized utility
-    const tagoVersion = getTagoSdkVersion();
+    const tagoVersion = getPackageVersion('@tago-io/sdk');
 
     // IMPORTANT: Get current container state from SSE manager
     const currentContainerState = sseManager.getContainerState();

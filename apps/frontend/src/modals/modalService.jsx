@@ -145,6 +145,10 @@ export const modalService = {
       size: '95%',
       centered: true,
       closeOnEscape: false,
+      styles: {
+        content: { height: '85vh' },
+        body: { overflow: 'hidden' },
+      },
       innerProps: {
         initialTab: options.initialTab,
         focusAnalysisId: options.focusAnalysisId,

@@ -1,38 +1,18 @@
-import swaggerJSDoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { generateOpenAPISchemas } from '@tago-analysis-worker/types/openapi';
+import {
+  registry,
+  generateOpenAPIDocument,
+} from '@tago-analysis-worker/types/openapi';
+import { registerAllPaths } from './paths/index.ts';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// Register all API paths on the shared registry
+registerAllPaths(registry);
 
-interface SwaggerOptions {
-  definition: {
-    openapi: string;
-    info: {
-      title: string;
-      version: string;
-      description: string;
-    };
-    servers: Array<{
-      url: string;
-      description: string;
-    }>;
-    components: {
-      schemas: Record<string, unknown>;
-    };
-  };
-  apis: string[];
-}
-
-const options: SwaggerOptions = {
-  definition: {
-    openapi: '3.1.0',
-    info: {
-      title: 'Tago Analysis Worker API',
-      version: '2.0.0',
-      description: `
+const specs = generateOpenAPIDocument({
+  info: {
+    title: 'Tago Analysis Worker API',
+    version: '2.0.0',
+    description: `
 API for managing and running Tago.io analysis scripts with real-time monitoring capabilities. Features Server-Sent Events (SSE) for real-time updates with simplified authentication.
 
 ## Authentication
@@ -73,32 +53,20 @@ The application uses a team-based permissions system with the following permissi
 | \`manage_departments\` | Manage teams/departments (admin only) |
 
 Users can have different permissions in different teams, and admin users have global access to all functionality.
-      `,
-    },
-    servers: [
-      {
-        url:
-          process.env.NODE_ENV === 'production'
-            ? '/api'
-            : 'http://localhost:5173/api',
-        description:
-          process.env.NODE_ENV === 'production'
-            ? 'Production server'
-            : 'Development server',
-      },
-    ],
-    components: {
-      // Generate schemas from Zod definitions in the shared types package
-      schemas: generateOpenAPISchemas(),
-    },
+    `,
   },
-  // Look for both .ts and .js files to support JSDoc comments in routes
-  apis: [
-    path.join(__dirname, '../routes/*.ts'),
-    path.join(__dirname, '../routes/*.js'),
+  servers: [
+    {
+      url:
+        process.env.NODE_ENV === 'production'
+          ? '/api'
+          : 'http://localhost:5173/api',
+      description:
+        process.env.NODE_ENV === 'production'
+          ? 'Production server'
+          : 'Development server',
+    },
   ],
-};
-
-const specs = swaggerJSDoc(options);
+});
 
 export { specs, swaggerUi };

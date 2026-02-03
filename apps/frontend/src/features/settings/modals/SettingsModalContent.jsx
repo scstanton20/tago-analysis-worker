@@ -1,5 +1,5 @@
 import { useState, lazy, Suspense } from 'react';
-import { Stack, Group, Text, Tabs, Box, ScrollArea } from '@mantine/core';
+import { Stack, Group, Text, Tabs, ScrollArea } from '@mantine/core';
 import {
   IconBook,
   IconTransfer,
@@ -14,19 +14,20 @@ const DNSCacheSettings = lazy(() => import('../components/DNSCacheSettings'));
 const MetricsDashboard = lazy(() => import('../components/MetricsDashboard'));
 const UtilsDocs = lazy(() => import('../components/UtilsDocs'));
 
-// Modal content height - accounts for modal header/padding
-const MODAL_CONTENT_HEIGHT = 'calc(85vh - 60px)';
+// ScrollArea height — modal is 85vh, minus header (~52px) and body padding (~32px)
+const SCROLL_HEIGHT = 'calc(85vh - 84px)';
+
+const scrollAreaStyles = {
+  thumb: { backgroundColor: 'var(--mantine-color-brand-6)' },
+};
 
 /**
  * SettingsModalContent
  *
  * Modal content for application settings with tabbed interface.
- * Provides access to API documentation, metrics dashboard, utilities documentation, and DNS cache settings.
- *
- * Architecture:
- * - Sidebar stays fixed in place (sticky positioning)
- * - Single ScrollArea wraps the content panels
- * - Individual tabs should NOT have their own ScrollAreas
+ * Uses Mantine vertical Tabs for the sidebar layout.
+ * Each tab panel wraps its content in a ScrollArea with a fixed height
+ * so the sidebar never scrolls.
  *
  * Props (via innerProps):
  * - initialTab: Initial tab to display ('api' | 'utils' | 'metrics' | 'dns')
@@ -36,7 +37,6 @@ const SettingsModalContent = ({ innerProps }) => {
   const { initialTab, focusAnalysisId } = innerProps || {};
   const { isAdmin } = usePermissions();
 
-  // Validate initialTab - non-admins can't access admin-only tabs (dns, utils)
   const adminOnlyTabs = ['dns', 'utils'];
   const validInitialTab =
     !isAdmin && adminOnlyTabs.includes(initialTab)
@@ -56,106 +56,129 @@ const SettingsModalContent = ({ innerProps }) => {
       orientation="vertical"
       color="brand"
     >
-      <Box
-        style={{
-          display: 'flex',
-          gap: 'var(--mantine-spacing-md)',
-          height: MODAL_CONTENT_HEIGHT,
-          width: '100%',
-        }}
-      >
-        {/* Sidebar - Sticky, does not scroll */}
-        <Box
-          style={{
-            minWidth: 100,
-            flexShrink: 0,
-            position: 'sticky',
-            top: 0,
-            alignSelf: 'flex-start',
-          }}
-        >
-          <Tabs.List>
-            <Tabs.Tab value="api" leftSection={<IconBook size={16} />}>
-              API Docs
-            </Tabs.Tab>
-            {isAdmin && (
-              <Tabs.Tab value="utils" leftSection={<IconCode size={16} />}>
-                Utils & Packages Docs
-              </Tabs.Tab>
-            )}
-            <Tabs.Tab value="metrics" leftSection={<IconChartBar size={16} />}>
-              Metrics
-            </Tabs.Tab>
-            {isAdmin && (
-              <Tabs.Tab value="dns" leftSection={<IconTransfer size={16} />}>
-                DNS Cache
-              </Tabs.Tab>
-            )}
-          </Tabs.List>
-        </Box>
+      <Tabs.List>
+        <Tabs.Tab value="api" leftSection={<IconBook size={16} />}>
+          API Docs
+        </Tabs.Tab>
+        {isAdmin && (
+          <Tabs.Tab value="utils" leftSection={<IconCode size={16} />}>
+            Utils & Packages Docs
+          </Tabs.Tab>
+        )}
+        <Tabs.Tab value="metrics" leftSection={<IconChartBar size={16} />}>
+          Metrics
+        </Tabs.Tab>
+        {isAdmin && (
+          <Tabs.Tab value="dns" leftSection={<IconTransfer size={16} />}>
+            DNS Cache
+          </Tabs.Tab>
+        )}
+      </Tabs.List>
 
-        {/* Content Area - Single ScrollArea for all tab content */}
+      <Tabs.Panel value="api" pl="md">
         <ScrollArea
-          style={{ flex: 1 }}
-          h="100%"
+          h={SCROLL_HEIGHT}
           type="scroll"
           scrollbarSize={8}
-          offsetScrollbars
+          styles={scrollAreaStyles}
         >
           <Suspense
             fallback={
               <LoadingState
-                loading={true}
+                loading
                 skeleton
                 pattern="content"
                 skeletonCount={4}
               />
             }
           >
-            {/* API tab - iframe with loading state */}
-            <Tabs.Panel value="api">
-              <Stack gap="md">
-                <Group justify="space-between" align="center">
-                  <Text size="lg" fw={600}>
-                    API Documentation
-                  </Text>
-                  <SecondaryButton
-                    size="sm"
-                    onClick={handleOpenApiDocs}
-                    leftSection={<IconBook size={16} />}
-                  >
-                    Open in New Tab
-                  </SecondaryButton>
-                </Group>
-                <PaperCard>
-                  <IframeLoader
-                    src={`${window.location.origin}/api/docs`}
-                    title="API Documentation"
-                    height="1000px"
-                  />
-                </PaperCard>
-              </Stack>
-            </Tabs.Panel>
-
-            {/* Lazy-loaded tabs */}
-            {isAdmin && (
-              <Tabs.Panel value="utils">
-                <UtilsDocs />
-              </Tabs.Panel>
-            )}
-
-            <Tabs.Panel value="metrics">
-              <MetricsDashboard />
-            </Tabs.Panel>
-
-            {isAdmin && (
-              <Tabs.Panel value="dns">
-                <DNSCacheSettings focusAnalysisId={focusAnalysisId} />
-              </Tabs.Panel>
-            )}
+            <Stack gap="md">
+              <Group justify="space-between" align="center">
+                <Text size="lg" fw={600}>
+                  API Documentation
+                </Text>
+                <SecondaryButton
+                  size="sm"
+                  onClick={handleOpenApiDocs}
+                  leftSection={<IconBook size={16} />}
+                >
+                  Open in New Tab
+                </SecondaryButton>
+              </Group>
+              <PaperCard>
+                <IframeLoader
+                  src={`${window.location.origin}/api/docs`}
+                  title="API Documentation"
+                  height="1000px"
+                />
+              </PaperCard>
+            </Stack>
           </Suspense>
         </ScrollArea>
-      </Box>
+      </Tabs.Panel>
+
+      {isAdmin && (
+        <Tabs.Panel value="utils" pl="md">
+          <Suspense
+            fallback={
+              <LoadingState
+                loading
+                skeleton
+                pattern="content"
+                skeletonCount={4}
+              />
+            }
+          >
+            <UtilsDocs scrollHeight={SCROLL_HEIGHT} />
+          </Suspense>
+        </Tabs.Panel>
+      )}
+
+      <Tabs.Panel value="metrics" pl="md">
+        <ScrollArea
+          h={SCROLL_HEIGHT}
+          type="scroll"
+          scrollbarSize={8}
+          styles={scrollAreaStyles}
+        >
+          <Suspense
+            fallback={
+              <LoadingState
+                loading
+                skeleton
+                pattern="content"
+                skeletonCount={4}
+              />
+            }
+          >
+            <MetricsDashboard />
+          </Suspense>
+        </ScrollArea>
+      </Tabs.Panel>
+
+      {isAdmin && (
+        <Tabs.Panel value="dns" pl="md">
+          <ScrollArea
+            h={SCROLL_HEIGHT}
+            type="scroll"
+            scrollbarSize={8}
+            styles={scrollAreaStyles}
+          >
+            <Suspense
+              fallback={
+                <LoadingState
+                  loading
+                  skeleton
+                  pattern="content"
+                  skeletonCount={4}
+                />
+              }
+            >
+              <DNSCacheSettings focusAnalysisId={focusAnalysisId} />
+            </Suspense>
+          </ScrollArea>
+        </Tabs.Panel>
+      )}
     </Tabs>
   );
 };

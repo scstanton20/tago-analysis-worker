@@ -1,7 +1,7 @@
 /**
- * Tests for sdkVersion utility
+ * Tests for packageVersion utility
  *
- * Tests the Tago SDK version extraction and caching functionality
+ * Tests the package version extraction and caching functionality
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -20,12 +20,11 @@ vi.mock('fs', () => ({
   readFileSync: mockReadFileSync,
 }));
 
-describe('sdkVersion utility', () => {
-  let getTagoSdkVersion: () => string;
-  let initSdkVersionCache: () => void;
+describe('packageVersion utility', () => {
+  let getPackageVersion: (packageName: string) => string;
 
   beforeEach(async () => {
-    // Clear module cache to reset cachedVersion between tests
+    // Clear module cache to reset caches between tests
     vi.resetModules();
     vi.clearAllMocks();
 
@@ -34,12 +33,11 @@ describe('sdkVersion utility', () => {
     mockReadFileSync.mockReturnValue('');
 
     // Import the module fresh each test
-    const module = await import('../../src/utils/sdkVersion.ts');
-    getTagoSdkVersion = module.getTagoSdkVersion;
-    initSdkVersionCache = module.initSdkVersionCache;
+    const module = await import('../../src/utils/packageVersion.ts');
+    getPackageVersion = module.getPackageVersion;
   });
 
-  describe('getTagoSdkVersion', () => {
+  describe('getPackageVersion', () => {
     describe('successful version extraction', () => {
       it('should extract version from pnpm-lock.yaml', () => {
         // Arrange
@@ -54,7 +52,7 @@ describe('sdkVersion utility', () => {
         mockReadFileSync.mockReturnValue(mockLockfileContent);
 
         // Act
-        const version = getTagoSdkVersion();
+        const version = getPackageVersion('@tago-io/sdk');
 
         // Assert
         expect(version).toBe('12.2.1');
@@ -73,7 +71,7 @@ describe('sdkVersion utility', () => {
         mockReadFileSync.mockReturnValue(mockLockfileContent);
 
         // Act
-        const version = getTagoSdkVersion();
+        const version = getPackageVersion('@tago-io/sdk');
 
         // Assert
         expect(version).toBe('13.0.0-beta.1');
@@ -90,29 +88,27 @@ describe('sdkVersion utility', () => {
         mockReadFileSync.mockReturnValue(mockLockfileContent);
 
         // Act
-        const version = getTagoSdkVersion();
+        const version = getPackageVersion('@tago-io/sdk');
 
         // Assert
         expect(version).toBe('12.0.0-rc.1');
       });
 
-      it('should return version successfully', () => {
-        // Arrange
+      it('should extract version for non-scoped packages (unquoted)', () => {
+        // Arrange - non-scoped packages are not quoted in pnpm-lock.yaml
         const mockLockfileContent = `packages:
-  '@tago-io/sdk':
-    specifier: ^12.2.1
-    version: 12.2.1`;
+      kafkajs:
+        specifier: ^2.2.4
+        version: 2.2.4`;
 
         mockExistsSync.mockReturnValue(true);
         mockReadFileSync.mockReturnValue(mockLockfileContent);
 
         // Act
-        const version = getTagoSdkVersion();
+        const version = getPackageVersion('kafkajs');
 
         // Assert
-        expect(version).toBe('12.2.1');
-        expect(mockExistsSync).toHaveBeenCalled();
-        expect(mockReadFileSync).toHaveBeenCalled();
+        expect(version).toBe('2.2.4');
       });
     });
 
@@ -128,11 +124,11 @@ describe('sdkVersion utility', () => {
         mockReadFileSync.mockReturnValue(mockLockfileContent);
 
         // Act - first call
-        const version1 = getTagoSdkVersion();
+        const version1 = getPackageVersion('@tago-io/sdk');
         const callCount1 = mockReadFileSync.mock.calls.length;
 
         // Act - second call
-        const version2 = getTagoSdkVersion();
+        const version2 = getPackageVersion('@tago-io/sdk');
         const callCount2 = mockReadFileSync.mock.calls.length;
 
         // Assert - second call should not read file again
@@ -153,9 +149,9 @@ describe('sdkVersion utility', () => {
         mockReadFileSync.mockReturnValue(mockLockfileContent);
 
         // Act
-        const v1 = getTagoSdkVersion();
-        const v2 = getTagoSdkVersion();
-        const v3 = getTagoSdkVersion();
+        const v1 = getPackageVersion('@tago-io/sdk');
+        const v2 = getPackageVersion('@tago-io/sdk');
+        const v3 = getPackageVersion('@tago-io/sdk');
 
         // Assert
         expect(v1).toBe(v2);
@@ -174,13 +170,36 @@ describe('sdkVersion utility', () => {
         mockReadFileSync.mockReturnValue(mockLockfileContent);
 
         // Act
-        const version1 = getTagoSdkVersion();
-        const version2 = getTagoSdkVersion();
+        const version1 = getPackageVersion('@tago-io/sdk');
+        const version2 = getPackageVersion('@tago-io/sdk');
 
         // Assert
         expect(version1).toBe('unknown');
         expect(version2).toBe('unknown');
         expect(mockReadFileSync).toHaveBeenCalledTimes(1);
+      });
+
+      it('should cache lockfile content and reuse for multiple packages', () => {
+        // Arrange - scoped packages are quoted, non-scoped are not
+        const mockLockfileContent = `packages:
+  '@tago-io/sdk':
+    specifier: ^12.2.1
+    version: 12.2.1
+      kafkajs:
+        specifier: ^2.2.4
+        version: 2.2.4`;
+
+        mockExistsSync.mockReturnValue(true);
+        mockReadFileSync.mockReturnValue(mockLockfileContent);
+
+        // Act
+        const sdkVersion = getPackageVersion('@tago-io/sdk');
+        const kafkaVersion = getPackageVersion('kafkajs');
+
+        // Assert
+        expect(sdkVersion).toBe('12.2.1');
+        expect(kafkaVersion).toBe('2.2.4');
+        expect(mockReadFileSync).toHaveBeenCalledTimes(1); // Only one file read
       });
     });
 
@@ -190,19 +209,7 @@ describe('sdkVersion utility', () => {
         mockExistsSync.mockReturnValue(false);
 
         // Act
-        const version = getTagoSdkVersion();
-
-        // Assert
-        expect(version).toBe('unknown');
-        expect(mockReadFileSync).not.toHaveBeenCalled();
-      });
-
-      it('should return unknown when lockfile not found', () => {
-        // Arrange
-        mockExistsSync.mockReturnValue(false);
-
-        // Act
-        const version = getTagoSdkVersion();
+        const version = getPackageVersion('@tago-io/sdk');
 
         // Assert
         expect(version).toBe('unknown');
@@ -217,7 +224,7 @@ describe('sdkVersion utility', () => {
         });
 
         // Act
-        const version = getTagoSdkVersion();
+        const version = getPackageVersion('@tago-io/sdk');
 
         // Assert
         expect(version).toBe('unknown');
@@ -232,7 +239,7 @@ describe('sdkVersion utility', () => {
         });
 
         // Act
-        const version = getTagoSdkVersion();
+        const version = getPackageVersion('@tago-io/sdk');
 
         // Assert
         expect(version).toBe('unknown');
@@ -246,8 +253,8 @@ describe('sdkVersion utility', () => {
         });
 
         // Act
-        const v1 = getTagoSdkVersion();
-        const v2 = getTagoSdkVersion();
+        const v1 = getPackageVersion('@tago-io/sdk');
+        const v2 = getPackageVersion('@tago-io/sdk');
 
         // Assert - should return cached "unknown"
         expect(v1).toBe('unknown');
@@ -274,7 +281,7 @@ describe('sdkVersion utility', () => {
         mockReadFileSync.mockReturnValue(mockLockfileContent);
 
         // Act
-        const version = getTagoSdkVersion();
+        const version = getPackageVersion('@tago-io/sdk');
 
         // Assert
         expect(version).toBe('12.2.1');
@@ -291,7 +298,7 @@ describe('sdkVersion utility', () => {
         mockReadFileSync.mockReturnValue(mockLockfileContent);
 
         // Act
-        const version = getTagoSdkVersion();
+        const version = getPackageVersion('@tago-io/sdk');
 
         // Assert
         expect(version).toBe('12.2.1');
@@ -308,7 +315,7 @@ describe('sdkVersion utility', () => {
         mockReadFileSync.mockReturnValue(mockLockfileContent);
 
         // Act
-        const version = getTagoSdkVersion();
+        const version = getPackageVersion('@tago-io/sdk');
 
         // Assert
         expect(version).toBe('unknown');
@@ -325,7 +332,7 @@ describe('sdkVersion utility', () => {
         mockReadFileSync.mockReturnValue(mockLockfileContent);
 
         // Act
-        const version = getTagoSdkVersion();
+        const version = getPackageVersion('@tago-io/sdk');
 
         // Assert
         expect(version).toBe('unknown');
@@ -337,7 +344,7 @@ describe('sdkVersion utility', () => {
         mockReadFileSync.mockReturnValue('');
 
         // Act
-        const version = getTagoSdkVersion();
+        const version = getPackageVersion('@tago-io/sdk');
 
         // Assert
         expect(version).toBe('unknown');
@@ -353,7 +360,7 @@ importers:
         mockReadFileSync.mockReturnValue(mockLockfileContent);
 
         // Act
-        const version = getTagoSdkVersion();
+        const version = getPackageVersion('@tago-io/sdk');
 
         // Assert
         expect(version).toBe('unknown');
@@ -376,7 +383,7 @@ importers:
         mockReadFileSync.mockReturnValue(mockLockfileContent);
 
         // Act
-        const version = getTagoSdkVersion();
+        const version = getPackageVersion('@tago-io/sdk');
 
         // Assert
         expect(version).toBe('12.2.1');
@@ -385,85 +392,13 @@ importers:
     });
   });
 
-  describe('initSdkVersionCache', () => {
-    it('should call getTagoSdkVersion to cache version', () => {
-      // Arrange
-      const mockLockfileContent = `packages:
-  '@tago-io/sdk':
-    specifier: ^12.2.1
-    version: 12.2.1`;
-
-      mockExistsSync.mockReturnValue(true);
-      mockReadFileSync.mockReturnValue(mockLockfileContent);
-
-      // Act
-      initSdkVersionCache();
-
-      // Assert
-      expect(mockExistsSync).toHaveBeenCalled();
-      expect(mockReadFileSync).toHaveBeenCalled();
-    });
-
-    it('should eagerly load version without errors', () => {
-      // Arrange
-      const mockLockfileContent = `packages:
-  '@tago-io/sdk':
-    specifier: ^12.2.1
-    version: 12.2.1`;
-
-      mockExistsSync.mockReturnValue(true);
-      mockReadFileSync.mockReturnValue(mockLockfileContent);
-
-      // Act & Assert - should not throw
-      expect(() => {
-        initSdkVersionCache();
-      }).not.toThrow();
-    });
-
-    it('should handle errors gracefully during initialization', () => {
-      // Arrange
-      mockExistsSync.mockReturnValue(true);
-      mockReadFileSync.mockImplementation(() => {
-        throw new Error('Cannot read file');
-      });
-
-      // Act & Assert - should not throw
-      expect(() => {
-        initSdkVersionCache();
-      }).not.toThrow();
-
-      // Verify that subsequent calls return "unknown"
-      const version = getTagoSdkVersion();
-      expect(version).toBe('unknown');
-    });
-  });
-
   describe('integration scenarios', () => {
-    it('should handle successful version caching flow', () => {
-      // Arrange
-      const mockLockfileContent = `packages:
-  '@tago-io/sdk':
-    specifier: ^12.2.1
-    version: 12.2.1`;
-
-      mockExistsSync.mockReturnValue(true);
-      mockReadFileSync.mockReturnValue(mockLockfileContent);
-
-      // Act
-      initSdkVersionCache();
-      const version = getTagoSdkVersion();
-
-      // Assert
-      expect(version).toBe('12.2.1');
-      expect(mockReadFileSync).toHaveBeenCalledTimes(1);
-    });
-
     it('should handle version check after failed initialization', () => {
       // Arrange - first call fails
       mockExistsSync.mockReturnValue(false);
 
       // Act - first call
-      const v1 = getTagoSdkVersion();
+      const v1 = getPackageVersion('@tago-io/sdk');
       expect(v1).toBe('unknown');
 
       // Arrange - now mock successful scenario
@@ -475,7 +410,7 @@ importers:
       mockReadFileSync.mockReturnValue(mockLockfileContent);
 
       // Act - second call should still return cached "unknown" (not re-read)
-      const v2 = getTagoSdkVersion();
+      const v2 = getPackageVersion('@tago-io/sdk');
 
       // Assert
       expect(v2).toBe('unknown');

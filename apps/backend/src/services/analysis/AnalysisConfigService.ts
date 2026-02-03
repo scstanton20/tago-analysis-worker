@@ -139,7 +139,9 @@ class AnalysisConfigService implements IAnalysisConfigService {
         id: analysisId,
         name: analysis.analysisName,
         enabled: analysis.enabled,
-        intendedState: analysis.intendedState || 'stopped',
+        intendedState: analysis.enabled
+          ? analysis.intendedState || 'stopped'
+          : 'stopped',
         lastStartTime: analysis.lastStartTime,
         teamId: analysis.teamId,
       };
