@@ -1,12 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { sseValidationSchemas as schemas } from '../../src/validation/sseSchemas.ts';
 
+/** Valid UUID for test data */
+const VALID_UUID_1 = '123e4567-e89b-12d3-a456-426614174000';
+const VALID_UUID_2 = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
+
 describe('sseSchemas', () => {
   describe('subscribe schema', () => {
     it('should validate valid subscription data', () => {
       const validData = {
         sessionId: 'abc123xyz',
-        analyses: ['analysis1.js', 'analysis2.js'],
+        analyses: [VALID_UUID_1, VALID_UUID_2],
       };
 
       const result = schemas.subscribe.body!.safeParse(validData);
@@ -18,7 +22,7 @@ describe('sseSchemas', () => {
     it('should validate subscription with single analysis', () => {
       const validData = {
         sessionId: 'session-id',
-        analyses: ['single-analysis.js'],
+        analyses: [VALID_UUID_1],
       };
 
       const result = schemas.subscribe.body!.safeParse(validData);
@@ -30,7 +34,11 @@ describe('sseSchemas', () => {
     it('should validate subscription with many analyses', () => {
       const validData = {
         sessionId: 'session-id',
-        analyses: Array.from({ length: 10 }, (_, i) => `analysis-${i}.js`),
+        analyses: Array.from(
+          { length: 10 },
+          (_, i) =>
+            `${i.toString(16).padStart(8, '0')}-0000-4000-a000-000000000000`,
+        ),
       };
 
       const result = schemas.subscribe.body!.safeParse(validData);
@@ -41,7 +49,7 @@ describe('sseSchemas', () => {
 
     it('should reject missing sessionId', () => {
       const invalidData = {
-        analyses: ['analysis1.js'],
+        analyses: [VALID_UUID_1],
       };
 
       const result = schemas.subscribe.body!.safeParse(invalidData);
@@ -94,20 +102,19 @@ describe('sseSchemas', () => {
     it('should reject analyses with empty string', () => {
       const invalidData = {
         sessionId: 'session-id',
-        analyses: ['analysis1.js', '', 'analysis2.js'],
+        analyses: [VALID_UUID_1, '', VALID_UUID_2],
       };
 
       const result = schemas.subscribe.body!.safeParse(invalidData);
 
       expect(result.success).toBe(false);
       expect(result.error?.issues[0].path).toEqual(['analyses', 1]);
-      expect(result.error?.issues[0].message).toBe('Analysis ID is required');
     });
 
     it('should reject analyses with non-string values', () => {
       const invalidData = {
         sessionId: 'session-id',
-        analyses: ['analysis1.js', 123, 'analysis2.js'],
+        analyses: [VALID_UUID_1, 123, VALID_UUID_2],
       };
 
       const result = schemas.subscribe.body!.safeParse(invalidData);
@@ -119,7 +126,7 @@ describe('sseSchemas', () => {
     it('should reject non-array analyses', () => {
       const invalidData = {
         sessionId: 'session-id',
-        analyses: 'analysis1.js',
+        analyses: VALID_UUID_1,
       };
 
       const result = schemas.subscribe.body!.safeParse(invalidData);
@@ -131,7 +138,7 @@ describe('sseSchemas', () => {
     it('should reject null sessionId', () => {
       const invalidData = {
         sessionId: null,
-        analyses: ['analysis1.js'],
+        analyses: [VALID_UUID_1],
       };
 
       const result = schemas.subscribe.body!.safeParse(invalidData);
@@ -155,17 +162,50 @@ describe('sseSchemas', () => {
     it('should reject extra unexpected fields', () => {
       const invalidData = {
         sessionId: 'session-id',
-        analyses: ['analysis1.js'],
+        analyses: [VALID_UUID_1],
         unexpectedField: 'value',
       };
 
       const result = schemas.subscribe.body!.safeParse(invalidData);
 
-      // Zod will strip unknown fields by default in strict mode
-      // If your schema uses .strict(), this would fail
-      // Otherwise it passes but strips the field
       expect(result.success).toBe(false);
       expect(result.error?.issues[0].code).toBe('unrecognized_keys');
+    });
+
+    it('should reject analysis IDs with path traversal characters', () => {
+      const pathTraversalAttempts = [
+        '../../etc/passwd',
+        '../secret',
+        'analysis/../../../etc/shadow',
+        'valid/../../escape',
+      ];
+
+      for (const maliciousId of pathTraversalAttempts) {
+        const result = schemas.subscribe.body!.safeParse({
+          sessionId: 'session-id',
+          analyses: [maliciousId],
+        });
+
+        expect(result.success).toBe(false);
+      }
+    });
+
+    it('should reject non-UUID analysis IDs', () => {
+      const invalidIds = [
+        'analysis1.js',
+        'not-a-uuid',
+        'my-analysis',
+        'some-random-string',
+      ];
+
+      for (const invalidId of invalidIds) {
+        const result = schemas.subscribe.body!.safeParse({
+          sessionId: 'session-id',
+          analyses: [invalidId],
+        });
+
+        expect(result.success).toBe(false);
+      }
     });
   });
 
@@ -173,7 +213,7 @@ describe('sseSchemas', () => {
     it('should validate valid unsubscription data', () => {
       const validData = {
         sessionId: 'abc123xyz',
-        analyses: ['analysis1.js', 'analysis2.js'],
+        analyses: [VALID_UUID_1, VALID_UUID_2],
       };
 
       const result = schemas.unsubscribe.body!.safeParse(validData);
@@ -185,7 +225,7 @@ describe('sseSchemas', () => {
     it('should validate unsubscription with single analysis', () => {
       const validData = {
         sessionId: 'session-id',
-        analyses: ['single-analysis.js'],
+        analyses: [VALID_UUID_1],
       };
 
       const result = schemas.unsubscribe.body!.safeParse(validData);
@@ -197,7 +237,11 @@ describe('sseSchemas', () => {
     it('should validate unsubscription with many analyses', () => {
       const validData = {
         sessionId: 'session-id',
-        analyses: Array.from({ length: 10 }, (_, i) => `analysis-${i}.js`),
+        analyses: Array.from(
+          { length: 10 },
+          (_, i) =>
+            `${i.toString(16).padStart(8, '0')}-0000-4000-a000-000000000000`,
+        ),
       };
 
       const result = schemas.unsubscribe.body!.safeParse(validData);
@@ -208,7 +252,7 @@ describe('sseSchemas', () => {
 
     it('should reject missing sessionId', () => {
       const invalidData = {
-        analyses: ['analysis1.js'],
+        analyses: [VALID_UUID_1],
       };
 
       const result = schemas.unsubscribe.body!.safeParse(invalidData);
@@ -261,20 +305,19 @@ describe('sseSchemas', () => {
     it('should reject analyses with empty string', () => {
       const invalidData = {
         sessionId: 'session-id',
-        analyses: ['analysis1.js', '', 'analysis2.js'],
+        analyses: [VALID_UUID_1, '', VALID_UUID_2],
       };
 
       const result = schemas.unsubscribe.body!.safeParse(invalidData);
 
       expect(result.success).toBe(false);
       expect(result.error?.issues[0].path).toEqual(['analyses', 1]);
-      expect(result.error?.issues[0].message).toBe('Analysis ID is required');
     });
 
     it('should reject analyses with non-string values', () => {
       const invalidData = {
         sessionId: 'session-id',
-        analyses: ['analysis1.js', 123, 'analysis2.js'],
+        analyses: [VALID_UUID_1, 123, VALID_UUID_2],
       };
 
       const result = schemas.unsubscribe.body!.safeParse(invalidData);
@@ -286,7 +329,7 @@ describe('sseSchemas', () => {
     it('should reject non-array analyses', () => {
       const invalidData = {
         sessionId: 'session-id',
-        analyses: 'analysis1.js',
+        analyses: VALID_UUID_1,
       };
 
       const result = schemas.unsubscribe.body!.safeParse(invalidData);
@@ -298,7 +341,7 @@ describe('sseSchemas', () => {
     it('should reject null sessionId', () => {
       const invalidData = {
         sessionId: null,
-        analyses: ['analysis1.js'],
+        analyses: [VALID_UUID_1],
       };
 
       const result = schemas.unsubscribe.body!.safeParse(invalidData);
@@ -322,17 +365,31 @@ describe('sseSchemas', () => {
     it('should reject extra unexpected fields', () => {
       const invalidData = {
         sessionId: 'session-id',
-        analyses: ['analysis1.js'],
+        analyses: [VALID_UUID_1],
         unexpectedField: 'value',
       };
 
       const result = schemas.unsubscribe.body!.safeParse(invalidData);
 
-      // Zod will strip unknown fields by default in strict mode
-      // If your schema uses .strict(), this would fail
-      // Otherwise it passes but strips the field
       expect(result.success).toBe(false);
       expect(result.error?.issues[0].code).toBe('unrecognized_keys');
+    });
+
+    it('should reject analysis IDs with path traversal characters', () => {
+      const pathTraversalAttempts = [
+        '../../etc/passwd',
+        '../secret',
+        'analysis/../../../etc/shadow',
+      ];
+
+      for (const maliciousId of pathTraversalAttempts) {
+        const result = schemas.unsubscribe.body!.safeParse({
+          sessionId: 'session-id',
+          analyses: [maliciousId],
+        });
+
+        expect(result.success).toBe(false);
+      }
     });
   });
 
@@ -340,7 +397,7 @@ describe('sseSchemas', () => {
     it('should have identical validation rules for subscribe and unsubscribe', () => {
       const testData = {
         sessionId: 'test-session',
-        analyses: ['test-analysis.js'],
+        analyses: [VALID_UUID_1],
       };
 
       const subscribeResult = schemas.subscribe.body!.safeParse(testData);

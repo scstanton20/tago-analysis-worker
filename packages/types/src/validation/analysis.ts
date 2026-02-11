@@ -6,8 +6,8 @@
 
 import { z } from 'zod';
 
-/** Analysis ID schema */
-export const analysisIdSchema = z.string().min(1, 'Analysis ID is required');
+/** Analysis ID schema - must be a valid UUID to prevent path traversal */
+export const analysisIdSchema = z.uuid('Analysis ID must be a valid UUID');
 
 /** Analysis name schema */
 export const analysisNameSchema = z
@@ -86,7 +86,7 @@ export const getLogsQuerySchema = z.object({
 /** Batch operation request schema */
 export const batchOperationSchema = z.object({
   analysisIds: z
-    .array(z.string().min(1))
+    .array(analysisIdSchema)
     .min(1, 'At least one analysis ID is required'),
 });
 
