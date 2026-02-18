@@ -79,6 +79,7 @@ function createMockAnalysisProcessState(
     maxMemoryLogs: 100,
     fileLogger: null,
     fileLoggerStream: null,
+    restartTimer: null,
     restartAttempts: 0,
     restartDelay: 100,
     maxRestartDelay: 10000,
