@@ -7,11 +7,12 @@
  * - Exit code processing and normalization
  * - Connection error restart with exponential backoff
  *
- * Exit Scenarios:
- * 1. Manual stop (isManualStop=true) → Code normalized to 0, no restart
- * 2. Unexpected exit (code !== 0) → No auto-restart (user must fix code errors)
- * 3. Connection error → Restart with exponential backoff
- * 4. Graceful exit (code=0, manual) → No restart
+ * Restart Decision:
+ * Only restarts when connectionErrorDetected AND intendedState is 'running'.
+ * - Manual stop sets intendedState='stopped' → no restart
+ * - Fatal API error (analysis not found) sets intendedState='stopped' → no restart
+ * - Transient connection loss sets connectionErrorDetected=true → restart with backoff
+ * - Code errors (non-zero exit without connection error) → no restart
  */
 
 import path from 'path';
@@ -26,7 +27,7 @@ import {
   formatForceStop,
   formatConnectionRestart,
 } from '../../utils/logging/index.ts';
-import { getServerTime } from '../../utils/serverTime.ts';
+import { getServerTime, formatCompactTime } from '../../utils/serverTime.ts';
 import { getSseManager, getDnsCache } from '../../utils/lazyLoader.ts';
 import type {
   AnalysisProcessState,
@@ -157,27 +158,6 @@ export class ProcessLifecycleManager {
   }
 
   /**
-   * Determine if process should auto-restart
-   *
-   * Restart conditions:
-   * - NOT a manual stop
-   * - intendedState is 'running'
-   * - Either: non-zero exit code OR connection error detected
-   *
-   * @private
-   * @param exitCode - Process exit code
-   * @returns True if should restart
-   */
-  private shouldRestart(exitCode: number | null): boolean {
-    const wasManualStop = this.analysisProcess.isManualStop;
-    const intendedRunning = this.analysisProcess.intendedState === 'running';
-    const errorExit = exitCode !== 0;
-    const connectionError = this.analysisProcess.connectionErrorDetected;
-
-    return !wasManualStop && intendedRunning && (errorExit || connectionError);
-  }
-
-  /**
    * Schedule restart after connection error with exponential backoff
    *
    * Used when SDK fails to establish initial connection.
@@ -193,29 +173,29 @@ export class ProcessLifecycleManager {
       this.analysisProcess.restartAttempts,
     );
 
+    const restartTime = formatCompactTime(Date.now() + delay);
+
     this.analysisProcess.logger.warn(
-      `Connection error detected, scheduling restart attempt ${this.analysisProcess.restartAttempts} in ${delay}ms`,
+      `Connection error detected, scheduling restart attempt ${this.analysisProcess.restartAttempts} at ${restartTime}`,
     );
     void this.analysisProcess.addLog(
       formatConnectionRestart(
         this.analysisProcess.restartAttempts,
-        delay / 1000,
+        restartTime,
       ),
     );
 
-    setTimeout(async () => {
-      // Reset connection error flag before restart
+    this.analysisProcess.restartTimer = setTimeout(async () => {
+      this.analysisProcess.restartTimer = null;
       this.analysisProcess.connectionErrorDetected = false;
       try {
         await this.analysisProcess.start();
-        // Reset attempts on successful start
         this.analysisProcess.restartAttempts = 0;
       } catch (error) {
         this.analysisProcess.logger.error(
           { err: error },
           'Failed to restart after connection error',
         );
-        // Will retry again on next exit
       }
     }, delay);
   }
@@ -325,6 +305,12 @@ export class ProcessLifecycleManager {
    * Throws on fork failure.
    */
   async start(): Promise<void> {
+    // Cancel any pending restart timer to prevent dual instances
+    if (this.analysisProcess.restartTimer) {
+      clearTimeout(this.analysisProcess.restartTimer);
+      this.analysisProcess.restartTimer = null;
+    }
+
     // Prevent race conditions - exit if already running or starting
     if (this.analysisProcess.process || this.analysisProcess.isStarting) {
       return;
@@ -460,6 +446,12 @@ export class ProcessLifecycleManager {
 
     await this.analysisProcess.addLog(formatStopping());
 
+    // Cancel any pending restart timer
+    if (this.analysisProcess.restartTimer) {
+      clearTimeout(this.analysisProcess.restartTimer);
+      this.analysisProcess.restartTimer = null;
+    }
+
     // Mark as manual stop for exit code normalization
     this.analysisProcess.isManualStop = true;
     this.analysisProcess.intendedState = 'stopped';
@@ -550,13 +542,9 @@ export class ProcessLifecycleManager {
    * 1. Flush any remaining output buffers
    * 2. Normalize exit code (manual stops return 0)
    * 3. Log exit event
-   * 4. Update status
-   * 5. Notify frontend via SSE
-   * 6. Save configuration
-   * 7. Decide whether to auto-restart
-   *    - Regular exit: restart if intendedState='running'
-   *    - Connection error: restart with exponential backoff
-   *    - Manual stop: don't restart
+   * 4. Update status and notify frontend via SSE
+   * 5. Save configuration
+   * 6. Auto-restart only if connectionErrorDetected AND intendedState='running'
    *
    * @private
    * @param code - Process exit code
@@ -623,16 +611,15 @@ export class ProcessLifecycleManager {
       delete this.analysisProcess._exitPromiseReject;
     }
 
-    // Decide whether to restart (only for connection errors with backoff)
-    if (
-      this.shouldRestart(code) &&
-      this.analysisProcess.connectionErrorDetected
-    ) {
-      this.scheduleConnectionRestart();
-    } else if (this.analysisProcess.connectionErrorDetected) {
-      // Reset connection error flag if not restarting
-      this.analysisProcess.connectionErrorDetected = false;
-      this.analysisProcess.restartAttempts = 0;
+    // Restart only for connection errors when the analysis should be running.
+    // Fatal errors and manual stops set intendedState='stopped', skipping this.
+    if (this.analysisProcess.connectionErrorDetected) {
+      if (this.analysisProcess.intendedState === 'running') {
+        this.scheduleConnectionRestart();
+      } else {
+        this.analysisProcess.connectionErrorDetected = false;
+        this.analysisProcess.restartAttempts = 0;
+      }
     }
   }
 }

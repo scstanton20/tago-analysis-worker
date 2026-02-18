@@ -156,6 +156,7 @@ export type AnalysisProcessState = {
   restartDelay: number;
   maxRestartDelay: number;
   connectionErrorDetected: boolean;
+  restartTimer: ReturnType<typeof setTimeout> | null;
 
   // Connection monitoring
   connectionGracePeriod: number;

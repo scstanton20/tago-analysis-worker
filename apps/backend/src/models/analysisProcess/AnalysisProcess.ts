@@ -78,6 +78,7 @@ export class AnalysisProcess {
   restartDelay: number;
   maxRestartDelay: number;
   connectionErrorDetected: boolean;
+  restartTimer: ReturnType<typeof setTimeout> | null;
 
   // Connection monitoring state
   connectionGracePeriod: number;
@@ -154,6 +155,7 @@ export class AnalysisProcess {
     this.restartDelay = ANALYSIS_PROCESS.INITIAL_RESTART_DELAY_MS;
     this.maxRestartDelay = ANALYSIS_PROCESS.MAX_RESTART_DELAY_MS;
     this.connectionErrorDetected = false;
+    this.restartTimer = null;
 
     // Connection monitoring state
     this.connectionGracePeriod = ANALYSIS_PROCESS.CONNECTION_GRACE_PERIOD_MS;

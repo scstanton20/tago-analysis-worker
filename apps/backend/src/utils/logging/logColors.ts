@@ -107,17 +107,17 @@ export function formatReconnectionAttempt(attempt: number): string {
 }
 
 /**
- * Format connection error restart message
+ * Format connection error restart message with target time
  * @param attempt - Restart attempt number
- * @param delaySeconds - Delay before restart in seconds
+ * @param restartTime - Formatted time string (HH:MM:SS) when restart will occur
  * @returns Yellow-colored restart message
  */
 export function formatConnectionRestart(
   attempt: number,
-  delaySeconds: number,
+  restartTime: string,
 ): string {
   return logColors.warn(
-    `Connection error - restart attempt ${attempt} in ${delaySeconds}s`,
+    `Connection error - restart attempt ${attempt} at ${restartTime}`,
   );
 }
 

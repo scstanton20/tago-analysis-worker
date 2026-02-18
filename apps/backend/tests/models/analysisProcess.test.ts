@@ -69,6 +69,7 @@ type AnalysisProcessInstance = {
   isConnected: boolean;
   connectionErrorDetected: boolean;
   connectionGraceTimer: NodeJS.Timeout | null;
+  restartTimer: NodeJS.Timeout | null;
   connectionGracePeriod: number;
   reconnectionAttempts: number;
   restartAttempts: number;
@@ -744,6 +745,73 @@ describe('AnalysisProcess', () => {
       vi.useRealTimers();
     });
 
+    it('should cancel pending restart timer when start is called manually', async () => {
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
+      analysis.process = createMockChildProcess();
+      analysis.status = 'running';
+      analysis.intendedState = 'running';
+      analysis.connectionErrorDetected = true;
+
+      // Mock start only for the handleExit-triggered restart scheduling
+      const startSpy = vi.spyOn(analysis, 'start').mockResolvedValue(undefined);
+
+      vi.useFakeTimers();
+
+      await analysis.handleExit(0);
+
+      expect(analysis.restartTimer).not.toBeNull();
+
+      // Restore real start so the cancellation logic runs
+      startSpy.mockRestore();
+
+      // Set process so the guard returns early after cancelling timer
+      analysis.process = createMockChildProcess();
+
+      await analysis.start();
+
+      expect(analysis.restartTimer).toBeNull();
+
+      vi.useRealTimers();
+    });
+
+    it('should cancel pending restart timer when stop is called', async () => {
+      const analysis = new AnalysisProcess(
+        'test-analysis-id',
+        'test-analysis',
+        mockService,
+      );
+      analysis.process = createMockChildProcess();
+      analysis.status = 'running';
+      analysis.intendedState = 'running';
+      analysis.connectionErrorDetected = true;
+
+      vi.spyOn(analysis, 'start').mockResolvedValue(undefined);
+
+      vi.useFakeTimers();
+
+      // Trigger exit which schedules a restart timer
+      await analysis.handleExit(0);
+
+      expect(analysis.restartTimer).not.toBeNull();
+
+      // Set up for stop
+      analysis.process = createMockChildProcess();
+      analysis.status = 'running';
+
+      // Simulate exit during stop
+      const stopProcess = analysis.stop();
+      await analysis.handleExit(null);
+      await stopProcess;
+
+      expect(analysis.restartTimer).toBeNull();
+
+      vi.useRealTimers();
+    });
+
     it('should not restart if intended state is stopped', async () => {
       const analysis = new AnalysisProcess(
         'test-analysis-id',
@@ -813,7 +881,7 @@ describe('AnalysisProcess', () => {
       );
     });
 
-    it('should not restart when manual stop flag is set', async () => {
+    it('should not restart when intendedState is stopped even with connection error detected', async () => {
       const analysis = new AnalysisProcess(
         'test-analysis-id',
         'test-analysis',
@@ -821,9 +889,9 @@ describe('AnalysisProcess', () => {
       );
       analysis.process = createMockChildProcess();
       analysis.status = 'running';
-      // Simulate what stop() does: set both isManualStop AND intendedState
       analysis.isManualStop = true;
-      analysis.intendedState = 'stopped'; // stop() explicitly sets this
+      analysis.intendedState = 'stopped';
+      analysis.connectionErrorDetected = true;
 
       vi.useFakeTimers();
       const startSpy = vi.spyOn(analysis, 'start');
@@ -832,8 +900,9 @@ describe('AnalysisProcess', () => {
 
       vi.advanceTimersByTime(10000);
 
-      expect(startSpy).not.toHaveBeenCalled(); // Should not restart
-      expect(analysis.isManualStop).toBe(false); // Flag should be reset
+      expect(startSpy).not.toHaveBeenCalled();
+      expect(analysis.connectionErrorDetected).toBe(false);
+      expect(analysis.restartAttempts).toBe(0);
 
       vi.useRealTimers();
     });
@@ -1060,7 +1129,7 @@ describe('AnalysisProcess', () => {
       vi.useRealTimers();
     });
 
-    it('should immediately kill on fatal analysis error', async () => {
+    it('should immediately kill and prevent restart when fatal analysis error is detected', async () => {
       const mockProcess = createMockChildProcess();
       const analysis = new AnalysisProcess(
         'test-analysis-id',
@@ -1069,6 +1138,7 @@ describe('AnalysisProcess', () => {
       );
       analysis.process = mockProcess;
       analysis.status = 'running';
+      analysis.intendedState = 'running';
 
       vi.useFakeTimers();
 
@@ -1079,7 +1149,11 @@ describe('AnalysisProcess', () => {
 
       // Should kill immediately for fatal errors
       expect(mockProcess.kill).toHaveBeenCalledWith('SIGTERM');
-      expect(analysis.connectionErrorDetected).toBe(true);
+
+      // Should use manual stop pattern to prevent restart
+      expect(analysis.isManualStop).toBe(true);
+      expect(analysis.intendedState).toBe('stopped');
+      expect(analysis.connectionErrorDetected).toBe(false);
 
       vi.useRealTimers();
     });

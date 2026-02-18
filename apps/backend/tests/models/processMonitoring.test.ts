@@ -80,6 +80,7 @@ function createMockAnalysisState(
     logFile: '/tmp/test.log',
     stdoutBuffer: '',
     stderrBuffer: '',
+    isManualStop: false,
     isConnected: false,
     reconnectionAttempts: 0,
     connectionErrorDetected: false,
@@ -264,7 +265,7 @@ describe('ProcessMonitor', () => {
   });
 
   describe('handleFatalError', () => {
-    it('should handle fatal error with grace timer active', () => {
+    it('should clear grace timer when fatal error occurs with active timer', () => {
       const mockTimer = setTimeout(() => {}, 30000);
       mockAnalysisState.connectionGraceTimer = mockTimer;
       mockAnalysisState.process = createMockProcess();
@@ -275,11 +276,38 @@ describe('ProcessMonitor', () => {
 
       processMonitor.handleOutput(false, data);
 
-      expect(mockAnalysisState.connectionErrorDetected).toBe(true);
       expect(mockAnalysisState.connectionGraceTimer).toBeNull();
     });
 
-    it('should kill process on fatal error', () => {
+    it('should set isManualStop and intendedState to stopped when fatal error is detected', () => {
+      mockAnalysisState.process = createMockProcess();
+      mockAnalysisState.intendedState = 'running';
+      mockAnalysisState.isManualStop = false;
+
+      const data = Buffer.from(
+        '¬ Error :: Analysis not found or not active.\n',
+      );
+
+      processMonitor.handleOutput(false, data);
+
+      expect(mockAnalysisState.isManualStop).toBe(true);
+      expect(mockAnalysisState.intendedState).toBe('stopped');
+    });
+
+    it('should not set connectionErrorDetected when fatal error is detected', () => {
+      mockAnalysisState.process = createMockProcess();
+      mockAnalysisState.connectionErrorDetected = false;
+
+      const data = Buffer.from(
+        '¬ Error :: Analysis not found or not active.\n',
+      );
+
+      processMonitor.handleOutput(false, data);
+
+      expect(mockAnalysisState.connectionErrorDetected).toBe(false);
+    });
+
+    it('should kill process when fatal error is detected', () => {
       const mockProcess = createMockProcess();
       mockAnalysisState.process = mockProcess;
 
@@ -292,7 +320,7 @@ describe('ProcessMonitor', () => {
       expect(mockProcess.kill).toHaveBeenCalledWith('SIGTERM');
     });
 
-    it('should not kill already killed process', () => {
+    it('should not kill already killed process when fatal error is detected', () => {
       const mockProcess = createMockProcess();
       (mockProcess as { killed: boolean }).killed = true;
       mockAnalysisState.process = mockProcess;
@@ -306,16 +334,16 @@ describe('ProcessMonitor', () => {
       expect(mockProcess.kill).not.toHaveBeenCalled();
     });
 
-    it('should handle fatal error without process', () => {
+    it('should not throw when fatal error occurs without a process', () => {
       mockAnalysisState.process = null;
 
       const data = Buffer.from(
         '¬ Error :: Analysis not found or not active.\n',
       );
 
-      // Should not throw
       expect(() => processMonitor.handleOutput(false, data)).not.toThrow();
-      expect(mockAnalysisState.connectionErrorDetected).toBe(true);
+      expect(mockAnalysisState.isManualStop).toBe(true);
+      expect(mockAnalysisState.intendedState).toBe('stopped');
     });
   });
 

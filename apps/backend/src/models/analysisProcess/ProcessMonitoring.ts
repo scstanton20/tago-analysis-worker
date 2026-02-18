@@ -155,7 +155,10 @@ export class ProcessMonitor {
     this.analysisProcess.logger.error(
       'Analysis not found or not active - fatal error',
     );
-    this.analysisProcess.connectionErrorDetected = true;
+
+    // Use the manual stop pattern to prevent restart.
+    this.analysisProcess.isManualStop = true;
+    this.analysisProcess.intendedState = 'stopped';
 
     // Clear grace timer if active
     if (this.analysisProcess.connectionGraceTimer) {

@@ -91,6 +91,10 @@ export class ProcessCleanupManager {
     this.analysisProcess.reconnectionAttempts = 0;
     this.analysisProcess.isConnected = false;
     this.analysisProcess.connectionErrorDetected = false;
+    if (this.analysisProcess.restartTimer) {
+      clearTimeout(this.analysisProcess.restartTimer);
+      this.analysisProcess.restartTimer = null;
+    }
   }
 
   /**
